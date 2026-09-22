@@ -39,6 +39,15 @@ pub enum Command {
     Tui,
     /// Generate shell completions.
     Completions { shell: clap_complete::Shell },
+    /// Rebuild and install the latest `mr` with cargo.
+    Update(UpdateArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct UpdateArgs {
+    /// Install even when the running binary is already the latest commit.
+    #[arg(short, long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]

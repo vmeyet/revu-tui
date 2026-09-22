@@ -10,4 +10,5 @@ pub mod mrref;
 pub mod render;
 pub mod review;
 pub mod tui;
+pub mod update;
 pub mod version;

@@ -1,7 +1,31 @@
-const GIT_HASH: &str = env!("GIT_HASH");
+use std::sync::LazyLock;
 
-/// `0.1.0 (a1b2c3d)`: the crate version and the commit the binary was built from.
+/// The commit this binary was built from, or [`UNKNOWN`] when built without git history.
+pub const COMMIT: &str = env!("GIT_HASH");
+
+pub const UNKNOWN: &str = "unknown";
+
+/// `0.1.0 (a1b2c3d)`, as shown by `mr --version`.
 pub fn label() -> &'static str {
-    static LABEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    LABEL.get_or_init(|| format!("{} ({})", env!("CARGO_PKG_VERSION"), &GIT_HASH[..GIT_HASH.len().min(7)]))
+    static LABEL: LazyLock<String> = LazyLock::new(|| format!("{} ({})", env!("CARGO_PKG_VERSION"), short(COMMIT)));
+    &LABEL
+}
+
+pub fn short(commit: &str) -> &str {
+    commit.get(..7).unwrap_or(commit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_keeps_the_first_seven_characters() {
+        assert_eq!(short("9731436a0e7c4d1b2f3a4b5c6d7e8f9a0b1c2d3e"), "9731436");
+    }
+
+    #[test]
+    fn short_leaves_an_unknown_commit_readable() {
+        assert_eq!(short(UNKNOWN), UNKNOWN);
+    }
 }

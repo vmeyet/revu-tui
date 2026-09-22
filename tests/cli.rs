@@ -61,3 +61,8 @@ fn write_commands_explain_themselves() {
 fn comment_needs_a_text() {
     mr().args(["--host", "localhost:1", "comment", "acme/widgets!42"]).env("GITLAB_TOKEN", "glpat-xxxx").assert().failure().code(2);
 }
+
+#[test]
+fn update_help_mentions_force() {
+    mr().args(["update", "--help"]).assert().success().stdout(predicate::str::contains("--force"));
+}

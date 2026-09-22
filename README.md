@@ -12,6 +12,8 @@ cargo install --path .
 ```
 
 Needs macOS (keychain) and Rust 1.88+.
+Update with `mr update`: it pulls this checkout (fast-forward only), and rebuilds when the commit moved; `-f` rebuilds anyway.
+`mr --version` prints the version and the commit it was built from.
 
 ## Log in
 

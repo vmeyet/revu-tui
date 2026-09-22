@@ -6,4 +6,5 @@ pub mod login;
 pub mod publish;
 pub mod show;
 pub mod target;
+pub mod update;
 pub mod whoami;
