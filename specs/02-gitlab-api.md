@@ -187,6 +187,7 @@ position[line_range][end][line_code]=…
 position[line_range][end][type]=…
 ```
 
+Live answers carry `old_line`, `new_line` and `type` in `start`/`end` but no `line_code` (it is `Option` in `types.rs`); the writer builds it.
 `line_code` is `sha1(file_path) + "_" + old_line + "_" + new_line`, with `0` for the missing side; hash the `new_path` for added/context lines and `old_path` for removed ones.
 A range must stay inside one file; crossing a hunk boundary is allowed.
 
