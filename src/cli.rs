@@ -27,7 +27,7 @@ pub enum Command {
     Login(LoginArgs),
     /// Forget a host: keychain entry, config and cache.
     Logout {
-        /// GitLab host, the configured one by default.
+        /// Forge host, the configured one by default.
         host: Option<String>,
     },
     /// Show who you are logged in as.
@@ -67,11 +67,14 @@ pub struct UpdateArgs {
 /// Flags of `mr login`.
 #[derive(Args, Debug)]
 pub struct LoginArgs {
-    /// GitLab host, `gitlab.com` by default.
+    /// The forge host: `gitlab.com`, `github.com`, or your own. By default the checkout's, then the configured one.
     pub host: Option<String>,
-    /// Read the token `glab` already holds instead of prompting.
-    #[arg(long)]
+    /// Read the token `glab` already holds instead of prompting (GitLab).
+    #[arg(long, conflicts_with = "from_gh")]
     pub from_glab: bool,
+    /// Read the token `gh` already holds instead of prompting (GitHub).
+    #[arg(long)]
+    pub from_gh: bool,
     /// Read the token from stdin (`-`) instead of prompting.
     #[arg(long, value_name = "-")]
     pub token: Option<String>,

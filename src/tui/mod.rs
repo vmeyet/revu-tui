@@ -62,7 +62,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         theme,
         host: ctx.forge.host().to_owned(),
         kind: ctx.forge.kind(),
-        me: ctx.config.username.clone().unwrap_or_default(),
+        me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
         project: ctx.project.clone(),
     };
     let mut app = App::new(settings);

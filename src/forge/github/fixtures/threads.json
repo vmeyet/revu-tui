@@ -1,0 +1,184 @@
+{
+ "data": {
+  "repository": {
+   "pullRequest": {
+    "id": "PR_42",
+    "baseRefOid": "aaaa",
+    "headRefOid": "bbbb",
+    "reviewThreads": {
+     "nodes": [
+      {
+       "id": "PRRT_1",
+       "isResolved": false,
+       "path": "src/pay/charge.rs",
+       "line": 57,
+       "originalLine": 57,
+       "startLine": null,
+       "originalStartLine": null,
+       "diffSide": "RIGHT",
+       "startDiffSide": null,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_1",
+          "fullDatabaseId": "101",
+          "body": "Should this retry on timeout?",
+          "createdAt": "2026-09-22T08:00:00Z",
+          "updatedAt": "2026-09-22T08:00:00Z",
+          "author": {
+           "login": "lea",
+           "name": "Lea",
+           "databaseId": 3
+          },
+          "state": "SUBMITTED"
+         },
+         {
+          "id": "PRRC_2",
+          "fullDatabaseId": "102",
+          "body": "Yes, keys are per card.",
+          "createdAt": "2026-09-22T08:30:00Z",
+          "updatedAt": "2026-09-22T08:30:00Z",
+          "author": {
+           "login": "omar",
+           "name": "Omar",
+           "databaseId": 3
+          },
+          "state": "SUBMITTED"
+         },
+         {
+          "id": "PRRC_3",
+          "fullDatabaseId": "103",
+          "body": "then add a test",
+          "createdAt": "2026-09-22T09:00:00Z",
+          "updatedAt": "2026-09-22T09:00:00Z",
+          "author": {
+           "login": "nina",
+           "name": "Nina",
+           "databaseId": 3
+          },
+          "state": "PENDING"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_2",
+       "isResolved": true,
+       "path": "src/pay/charge.rs",
+       "line": 13,
+       "originalLine": 13,
+       "startLine": 11,
+       "originalStartLine": 11,
+       "diffSide": "LEFT",
+       "startDiffSide": "LEFT",
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_4",
+          "fullDatabaseId": "104",
+          "body": "why drop this?",
+          "createdAt": "2026-09-21T08:00:00Z",
+          "updatedAt": "2026-09-21T08:00:00Z",
+          "author": {
+           "login": "lea",
+           "name": "Lea",
+           "databaseId": 3
+          },
+          "state": "SUBMITTED"
+         }
+        ]
+       }
+      },
+      {
+       "id": "PRRT_3",
+       "isResolved": false,
+       "path": "src/pay/mod.rs",
+       "line": 4,
+       "originalLine": 4,
+       "startLine": null,
+       "originalStartLine": null,
+       "diffSide": "RIGHT",
+       "startDiffSide": null,
+       "comments": {
+        "nodes": [
+         {
+          "id": "PRRC_5",
+          "fullDatabaseId": "105",
+          "body": "nit: unused import",
+          "createdAt": "2026-09-22T09:05:00Z",
+          "updatedAt": "2026-09-22T09:05:00Z",
+          "author": {
+           "login": "nina",
+           "name": "Nina",
+           "databaseId": 3
+          },
+          "state": "PENDING"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "reviews": {
+     "nodes": [
+      {
+       "id": "PRR_1",
+       "fullDatabaseId": "201",
+       "body": "Looks good overall.",
+       "createdAt": "2026-09-21T09:00:00Z",
+       "updatedAt": "2026-09-21T09:00:00Z",
+       "author": {
+        "login": "lea",
+        "name": "Lea",
+        "databaseId": 3
+       },
+       "state": "COMMENTED"
+      },
+      {
+       "id": "PRR_2",
+       "fullDatabaseId": "202",
+       "body": "",
+       "createdAt": "2026-09-21T10:00:00Z",
+       "updatedAt": "2026-09-21T10:00:00Z",
+       "author": {
+        "login": "lea",
+        "name": "Lea",
+        "databaseId": 3
+       },
+       "state": "APPROVED"
+      },
+      {
+       "id": "PRR_9",
+       "fullDatabaseId": "209",
+       "body": "Two nits.",
+       "createdAt": "2026-09-22T09:06:00Z",
+       "updatedAt": "2026-09-22T09:06:00Z",
+       "author": {
+        "login": "nina",
+        "name": "Nina",
+        "databaseId": 3
+       },
+       "state": "PENDING"
+      }
+     ]
+    },
+    "comments": {
+     "nodes": [
+      {
+       "id": "IC_1",
+       "fullDatabaseId": "301",
+       "body": "Deploy preview is up.",
+       "createdAt": "2026-09-20T12:00:00Z",
+       "updatedAt": "2026-09-20T12:00:00Z",
+       "author": {
+        "login": "omar",
+        "name": "Omar",
+        "databaseId": 3
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,79 @@
+{
+ "data": {
+  "viewer": {
+   "login": "nina"
+  },
+  "repository": {
+   "pullRequest": {
+    "number": 42,
+    "title": "feat: charge cards",
+    "body": null,
+    "state": "OPEN",
+    "isDraft": false,
+    "url": "https://github.com/acme/widgets/pull/42",
+    "updatedAt": "2026-09-22T09:12:00Z",
+    "baseRefName": "main",
+    "headRefName": "feat/checkout",
+    "baseRefOid": "aaaa",
+    "headRefOid": "bbbb",
+    "changedFiles": 9,
+    "mergeable": "CONFLICTING",
+    "author": {
+     "login": "omar",
+     "name": "Omar",
+     "databaseId": 5
+    },
+    "reviewDecision": "REVIEW_REQUIRED",
+    "reviewRequests": {
+     "nodes": [
+      {
+       "requestedReviewer": {
+        "login": "nina",
+        "name": "Nina",
+        "databaseId": 2
+       }
+      }
+     ]
+    },
+    "latestReviews": {
+     "nodes": [
+      {
+       "state": "APPROVED",
+       "author": {
+        "login": "lea",
+        "name": null,
+        "databaseId": 3
+       }
+      },
+      {
+       "state": "COMMENTED",
+       "author": {
+        "login": "nina",
+        "name": "Nina",
+        "databaseId": 2
+       }
+      }
+     ]
+    },
+    "labels": {
+     "nodes": [
+      {
+       "name": "payments"
+      }
+     ]
+    },
+    "commits": {
+     "nodes": [
+      {
+       "commit": {
+        "statusCheckRollup": {
+         "state": "SUCCESS"
+        }
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}
