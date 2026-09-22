@@ -179,7 +179,7 @@ This is the rule GitHub and delta use; it is cheap and looks right.
 ```rust
 pub struct FoldState {
     pub files: BTreeMap<String, Fold>,        // key new_path; missing = Open
-    pub hunks: BTreeMap<(String, usize), Fold>,
+    pub hunks: BTreeMap<String, BTreeMap<usize, Fold>>,   // path, then hunk index: JSON has no tuple keys
 }
 pub enum Fold { Open, Closed }
 ```
