@@ -246,7 +246,7 @@ impl Backend {
     fn queue_answer(&self, scope: Option<String>, queue: &Queue, cached: bool) -> Incoming {
         let sections = queue.sections(&self.watch_labels);
         let opened = self.opened_at(&sections);
-        Incoming::Queue { scope, sections, opened, cached }
+        Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
     }
 
     fn opened_at(&self, sections: &Sections) -> HashMap<MrKey, DateTime<Utc>> {

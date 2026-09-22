@@ -1,9 +1,9 @@
 # 07 · Forges
 
-`mr` reviews merge requests on GitLab and, next, pull requests on GitHub.
+`mr` reviews merge requests on GitLab and pull requests on GitHub.
 Everything above `src/forge/` speaks one neutral model; each forge converts its own wire shapes at its edge.
 Phase 1 (done 2026-09-22) put GitLab behind the seam with no behaviour change.
-Phase 2 adds `src/forge/github/` and a `Forge::GitHub` variant.
+Phase 2 (done 2026-09-22) added `src/forge/github/` and the `Forge::GitHub` variant, at parity with GitLab for every method.
 
 ## The seam
 
@@ -14,7 +14,7 @@ review/  tui/  commands/          neutral model only
 forge::Forge  (enum, static dispatch: one match per method)
         │
         ├── gitlab::Client   REST + GraphQL, wire types private to it
-        └── github::Client   phase 2
+        └── github::Client   GraphQL + REST, wire types private to it
 ```
 
 `Forge` is an enum, not a trait object: async methods stay plain `async fn`, and adding GitHub is a new variant plus one arm per method.
@@ -73,20 +73,20 @@ async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) ->
 
 ## GitLab ↔ GitHub
 
-| Concern | GitLab (done) | GitHub (phase 2) |
+| Concern | GitLab | GitHub |
 |---|---|---|
-| Queue | GraphQL `currentUser.{reviewRequested,authored,assigned}MergeRequests`, plus `project.mergeRequests` when scoped | GraphQL `search(type: ISSUE, query: "is:pr is:open review-requested:@me")`, `author:@me`, `assignee:@me`, plus `repo:<owner/repo> is:pr is:open` when scoped |
+| Queue | GraphQL `currentUser.{reviewRequested,authored,assigned}MergeRequests`, plus `project.mergeRequests` when scoped | One GraphQL call with four `search(type: ISSUE)` aliases: `review-requested:@me`, `author:@me`, `assignee:@me`, `reviewed-by:@me -author:@me` (feeds Done), each with ` repo:owner/repo` when scoped; plus `repository.pullRequests(states: OPEN)` in parallel for Open. Cost 3 points. |
 | Review state | `mergeRequestInteraction.reviewState` | `latestReviews` per reviewer: APPROVED, CHANGES_REQUESTED, COMMENTED, PENDING → `ReviewState` |
-| One MR | `GET projects/:path/merge_requests/:iid` + `/approvals` | `GET repos/:owner/:repo/pulls/:n` + `/reviews` |
+| One MR | `GET projects/:path/merge_requests/:iid` + `/approvals` | One GraphQL `pullRequest` query: reviews, requests, decision, checks rollup, `baseRefOid`/`headRefOid` |
 | Diffs | `GET …/diffs` (paged), body per file | `GET repos/…/pulls/:n/files` (paged), `patch` per file; no `patch` means binary or too large |
-| Threads | `GET …/discussions`, notes carry `position` | GraphQL `pullRequest.reviewThreads { isResolved comments { path line originalLine diffSide startLine } }` plus issue comments as unanchored threads |
+| Threads | `GET …/discussions`, notes carry `position` | One GraphQL query: `reviewThreads` (side, line, range, resolved; outdated ones fall back to `originalLine`), review summaries and PR comments as unanchored threads. Thread ids are node ids (`PRRT_…`). |
 | Position out | `base_sha`, `start_sha`, `head_sha`, `old_line`/`new_line`, `line_range` with `line_code = sha1(path)_old_new` | `commit_id = refs.head`, `path`, `side = RIGHT` when `line.new` exists else `LEFT`, `line = line.number()`, `start_line`/`start_side` from `start` |
-| Drafts | `…/draft_notes` CRUD, per user, survive sessions | The pending review: `POST pulls/:n/reviews` without `event` holds comments; list with `GET reviews/:id/comments`; one pending review per user |
-| Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked | `POST pulls/:n/reviews/:id/events` with `event: COMMENT` or `APPROVE` |
+| Drafts | `…/draft_notes` CRUD, per user, survive sessions | My pending review: `addPullRequestReview` opens it on the first draft; `addPullRequestReviewThread` (line drafts), `addPullRequestReviewThreadReply` (replies), the review body (drafts on the PR itself, appended); read back from the same `reviewThreads` query, where pending comments carry `state: PENDING`. Edits and deletes go by node id, looked up from the draft's database id. |
+| Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked | `submitPullRequestReview` with `COMMENT` or `APPROVE`, in one call |
 | Resolve | `PUT …/discussions/:id resolved=` | GraphQL `resolveReviewThread` / `unresolveReviewThread` |
-| Approve | `POST …/approve`, `…/unapprove` | Submit a review with `APPROVE`; taking it back is `PUT reviews/:id/dismissals` (needs rights) or a `REQUEST_CHANGES`/`COMMENT` review: the UI says which |
+| Approve | `POST …/approve`, `…/unapprove` | `POST pulls/:n/reviews` with `APPROVE`; there is no unapprove for the reviewer, the error says to request changes or dismiss from the web |
 | Suggestions | ```` ```suggestion:-0+0 ```` fence | ```` ```suggestion ```` fence over the commented lines; the range comes from `start`/`line` |
-| Line URL | `web_url/diffs#sha1(path)_old_new` | `web_url/files#diff-sha256(path)R<new>` or `L<old>` (phase 1 links to `web_url/files`) |
+| Line URL | `web_url/diffs#sha1(path)_old_new` | `web_url/files#diff-sha256(path)R<new>` or `L<old>` |
 | Sigil | `group/project!42` | `owner/repo#42` |
 
 ## Auth
@@ -100,10 +100,28 @@ Login borrows the token the forge's own CLI already holds:
 | GitHub | `mr login --from-gh` reads `gh auth token` | `repo` |
 
 Without the CLI and without `--token -`, login stops with one line naming the missing tool and the token page to create one.
-`GITLAB_TOKEN` stays the env override for GitLab; phase 2 reads `GITHUB_TOKEN` for GitHub hosts.
+`GITLAB_TOKEN` is the env override for GitLab hosts, `GITHUB_TOKEN` (else `GH_TOKEN`) for GitHub hosts.
+Without `--host`, a command inside a checkout talks to the host of its `origin` remote when a token is there for it (env or keychain), else to the configured host.
+Every host remembers its own username (`[hosts."<host>"] username`), so the TUI names me right on each; with only a token variable, the queue answer names me.
 
 ## What changed in phase 1 that a user can see
 
 Nothing on screen or in plain output: `mr list`, `list --all`, `show`, `diff` and the TUI frames are byte-identical on the same data.
 `--json` output speaks the neutral model: `number` instead of `iid`, `project` (the path) instead of `project_id`, no numeric `id`.
 Cache paths moved from `mr/<project_id>/<iid>/` to `mr/<group+project>/<number>/`; old entries are ignored, so saved folds and viewed files of MRs opened before the upgrade start fresh.
+
+## What differs on GitHub (phase 2)
+
+- **Drafts on the PR itself** live in the pending review's body: several of them read back as one draft, their texts joined.
+- **Resolve on publish** does not exist on GitHub: a draft's `resolve` flag is ignored.
+- **Moving a draft** is impossible on GitHub: an edit changes the text, the comment stays on its line (verified live).
+- **Unapprove** is refused with the way out; approving one's own PR is refused by GitHub, and the message says so.
+- **Files GitHub will not diff** (no `patch` with changes counted) read as too large; a file with no patch and no changes counted reads as binary.
+- **Deleted accounts** show as `ghost`, as on github.com.
+
+## Verified live (2026-09-22, private sandbox `owner/repo#1` on each forge)
+
+- `mr whoami`, scoped `mr list`, `mr show #1`, `mr diff #1`.
+- TUI: open the PR, a draft on an added line (RIGHT 3) and on a removed line (LEFT 6), edit one after a restart (its line stays), publish as one `COMMENTED` review, a reply draft in a thread then published, resolve and unresolve.
+- `mr comment #1 --at main.rs:5` lands on RIGHT 5; `mr comment #1 text` on the conversation; `mr approve` on my own PR and `--undo` fail with their messages.
+- GitLab unchanged: the same commands against the GitLab sandbox, from a GitLab checkout and from a GitHub checkout with no GitHub token.
