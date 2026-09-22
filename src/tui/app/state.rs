@@ -17,8 +17,6 @@ pub struct Settings {
     pub theme: Theme,
     pub host: String,
     pub me: String,
-    pub fold_globs: Vec<String>,
-    pub watch_labels: Vec<String>,
     /// The project of the checkout `mr` runs in; `None` outside one or with `--all`.
     pub project: Option<String>,
 }

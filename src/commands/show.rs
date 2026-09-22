@@ -11,18 +11,19 @@ use serde::Serialize;
 
 const BODY_W: usize = 80;
 
+/// Prints the MR header, its files and its unresolved threads.
 pub async fn run(ctx: &Ctx, args: RefArgs) -> Result<()> {
     let (project_id, iid) = target::resolve(&ctx.gitlab, args.mr.as_deref()).await?;
     let (mr, diffs, discussions) = fetch(ctx, project_id, iid).await?;
     if ctx.json {
-        return ctx.emit(&Shown { files: diffs.iter().map(FileStat::from).collect(), mr: &mr, discussions: &discussions });
+        return crate::ctx::emit(&Shown { files: diffs.iter().map(FileStat::from).collect(), mr: &mr, discussions: &discussions });
     }
-    print!("{}", text(&mr, &diffs, &discussions, &Theme::detect(), Utc::now()));
+    print!("{}", text(&mr, &diffs, &discussions, Theme::detect(), Utc::now()));
     Ok(())
 }
 
 /// The three answers together, written to the cache so the TUI opens the MR without waiting.
-pub async fn fetch(ctx: &Ctx, project_id: u64, iid: u64) -> Result<(Mr, Vec<DiffFile>, Vec<Discussion>)> {
+pub(crate) async fn fetch(ctx: &Ctx, project_id: u64, iid: u64) -> Result<(Mr, Vec<DiffFile>, Vec<Discussion>)> {
     let gitlab = &ctx.gitlab;
     let (mr, diffs, discussions) =
         tokio::try_join!(gitlab.mr(project_id, iid), gitlab.diffs(project_id, iid), gitlab.discussions(project_id, iid))?;
@@ -40,7 +41,7 @@ struct Shown<'a> {
 }
 
 #[derive(Serialize)]
-pub struct FileStat {
+pub(crate) struct FileStat {
     pub old_path: String,
     pub new_path: String,
     pub additions: usize,
@@ -59,9 +60,9 @@ impl From<&DiffFile> for FileStat {
     }
 }
 
-pub fn text(mr: &Mr, diffs: &[DiffFile], discussions: &[Discussion], theme: &Theme, now: DateTime<Utc>) -> String {
+pub(crate) fn text(mr: &Mr, diffs: &[DiffFile], discussions: &[Discussion], theme: Theme, now: DateTime<Utc>) -> String {
     let open: Vec<&Discussion> = discussions.iter().filter(|d| unresolved(d)).collect();
-    let files: Vec<Vec<Cell>> = diffs.iter().map(|f| file_row(f, FileStat::from(f))).collect();
+    let files: Vec<Vec<Cell>> = diffs.iter().map(|f| file_row(f, &FileStat::from(f))).collect();
     let threads: Vec<Vec<Cell>> = open.iter().filter_map(|d| thread_row(d, now)).collect();
     let header = format!(
         "{} {}\n{}\n{}\n",
@@ -109,7 +110,7 @@ fn meta(mr: &Mr, threads: usize, open: usize, now: DateTime<Utc>) -> String {
     .join(" · ")
 }
 
-fn file_row(file: &DiffFile, stat: FileStat) -> Vec<Cell> {
+fn file_row(file: &DiffFile, stat: &FileStat) -> Vec<Cell> {
     let state = match file {
         f if f.too_large => "too large",
         f if f.new_file => "new",
@@ -131,19 +132,18 @@ fn unresolved(discussion: &Discussion) -> bool {
     discussion.notes.first().is_some_and(|n| n.resolvable && n.resolved != Some(true))
 }
 
+/// `path:line` of a note on the diff, the path alone when it names no line.
+fn anchor_label(position: &crate::api::Position) -> String {
+    let path = position.new_path.as_deref().or(position.old_path.as_deref()).unwrap_or("?");
+    match position.new_line.or(position.old_line) {
+        Some(line) => format!("{path}:{line}"),
+        None => path.to_owned(),
+    }
+}
+
 fn thread_row(discussion: &Discussion, now: DateTime<Utc>) -> Option<Vec<Cell>> {
     let note: &Note = discussion.notes.iter().find(|n| !n.system)?;
-    let anchor = note
-        .position
-        .as_ref()
-        .map(|p| {
-            let path = p.new_path.as_deref().or(p.old_path.as_deref()).unwrap_or("?");
-            match p.new_line.or(p.old_line) {
-                Some(line) => format!("{path}:{line}"),
-                None => path.to_owned(),
-            }
-        })
-        .unwrap_or_else(|| "(mr)".to_owned());
+    let anchor = note.position.as_ref().map_or_else(|| "(mr)".to_owned(), anchor_label);
     Some(vec![
         cell(format!("  {anchor}"), Style::Accent),
         cell(&note.author.username, Style::Plain),
@@ -154,6 +154,7 @@ fn thread_row(discussion: &Discussion, now: DateTime<Utc>) -> Option<Vec<Cell>> 
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::api::types::from_fixture;
     use chrono::TimeZone;
@@ -188,7 +189,7 @@ mod tests {
             from_fixture(include_str!("../api/fixtures/diff_note.json")),
             from_fixture(include_str!("../api/fixtures/discussions.json")),
         ];
-        let out = text(&mr(), &diffs(), &discussions, &Theme::plain(), now);
+        let out = text(&mr(), &diffs(), &discussions, Theme::plain(), now);
         assert!(
             out.starts_with("!42 feat: charge cards at checkout\nomar · feat/checkout → main · 2h · pipeline success · approved by lea"),
             "{out}"

@@ -56,6 +56,7 @@ fn code_of(path: &str, line: &Line) -> LineCode {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::review::tests::review;
 

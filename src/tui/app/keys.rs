@@ -34,7 +34,7 @@ impl App {
             KeyCode::Char('?') => self.help = true,
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
-            KeyCode::Char('z') | KeyCode::Char('[') | KeyCode::Char(']') if self.focus != Focus::Side => self.pending = key.code.as_char(),
+            KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side => self.pending = key.code.as_char(),
             _ => {
                 return match self.focus {
                     Focus::Queue => self.handle_queue_key(key),
@@ -204,13 +204,11 @@ impl App {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.thread_scroll(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.thread_scroll(-HALF_PAGE),
             KeyCode::Char('u') => {
-                return match self.thread_link() {
-                    Some(url) => vec![Action::OpenUrl(url)],
-                    None => {
-                        self.toast("no link in this thread");
-                        vec![]
-                    }
+                let Some(url) = self.thread_link() else {
+                    self.toast("no link in this thread");
+                    return vec![];
                 };
+                return vec![Action::OpenUrl(url)];
             }
             KeyCode::Char('o') => {
                 let url = self.open.as_ref().and_then(|o| o.thread.as_ref().map(|id| note_url(&o.review.mr.web_url, &o.review, id)));

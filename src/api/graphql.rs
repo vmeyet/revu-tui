@@ -182,11 +182,13 @@ impl Queue {
     }
 
     /// A queue straight from a GraphQL answer body, for fixtures.
+    #[cfg(test)]
     pub fn from_json(body: &str) -> Result<Self> {
         Self::from_answers(serde_json::from_str(body)?, None)
     }
 
     /// The same, scoped to `project`: one body carries both answers, `currentUser` and `project`.
+    #[cfg(test)]
     pub fn from_json_in(body: &str, project: &str) -> Result<Self> {
         Self::from_answers(serde_json::from_str(body)?, Some((serde_json::from_str(body)?, project)))
     }
@@ -364,6 +366,7 @@ struct WireLabel {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::auth::Credentials;
     use wiremock::matchers::{body_partial_json, method, path};

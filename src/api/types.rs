@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,22 +229,23 @@ impl Position {
 /// GitLab answers errors as `{"message": …}` or `{"error": …}`; anything else is shown as is.
 pub fn error_message(body: &str) -> String {
     let parsed: Option<serde_json::Value> = serde_json::from_str(body).ok();
-    parsed
-        .as_ref()
-        .and_then(|v| v.get("message").or_else(|| v.get("error")))
-        .map(|m| match m {
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        })
-        .unwrap_or_else(|| body.trim().to_owned())
+    let found = parsed.as_ref().and_then(|v| v.get("message").or_else(|| v.get("error")));
+    match found {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(other) => other.to_string(),
+        None => body.trim().to_owned(),
+    }
 }
 
-pub fn from_fixture<T: DeserializeOwned>(json: &str) -> T {
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+pub fn from_fixture<T: serde::de::DeserializeOwned>(json: &str) -> T {
     serde_json::from_str(json).expect("fixture parses")
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

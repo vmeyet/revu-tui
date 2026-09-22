@@ -1,3 +1,5 @@
+//! End-to-end runs of the `mr` binary: arguments, help and failures that need no network.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use assert_cmd::Command;
 use predicates::prelude::*;
 

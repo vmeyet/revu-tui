@@ -43,11 +43,12 @@ impl Theme {
         Self { color: std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() }
     }
 
+    #[cfg(test)]
     pub fn plain() -> Self {
         Self { color: false }
     }
 
-    pub fn paint(&self, text: &str, style: Style) -> String {
+    pub fn paint(self, text: &str, style: Style) -> String {
         if !self.color {
             return text.to_owned();
         }
@@ -63,14 +64,14 @@ impl Theme {
     }
 
     /// Rows as aligned lines; every column is padded to its widest cell, the last one is not.
-    pub fn table(&self, rows: &[Vec<Cell>]) -> String {
+    pub fn table(self, rows: &[Vec<Cell>]) -> String {
         let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
         let widths: Vec<usize> =
             (0..columns).map(|c| rows.iter().filter_map(|r| r.get(c)).map(|cell| cell.text.width()).max().unwrap_or(0)).collect();
         rows.iter().map(|row| self.line(row, &widths)).collect()
     }
 
-    fn line(&self, row: &[Cell], widths: &[usize]) -> String {
+    fn line(self, row: &[Cell], widths: &[usize]) -> String {
         let last = row.len().saturating_sub(1);
         let mut out = String::new();
         for (i, cell) in row.iter().enumerate() {
@@ -130,6 +131,7 @@ pub fn truncate(text: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use chrono::TimeZone;
 

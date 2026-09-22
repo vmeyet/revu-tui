@@ -1,5 +1,5 @@
 use super::Client;
-use super::types::{Approvals, DiffFile, Discussion, DraftNote, Mr, NewDraft, Note, Position};
+use super::types::{Approvals, DiffFile, Discussion, DraftNote, Mr, NewDraft, Position};
 use anyhow::{Context, Result, anyhow};
 use reqwest::Method;
 use serde::Deserialize;
@@ -70,10 +70,6 @@ impl Client {
         self.delete(&format!("{}/draft_notes/{id}", mr_path(project_id, iid))).await
     }
 
-    pub async fn publish_draft(&self, project_id: u64, iid: u64, id: u64) -> Result<()> {
-        self.send_empty(Method::PUT, &format!("{}/draft_notes/{id}/publish", mr_path(project_id, iid)), None).await
-    }
-
     /// Every draft of mine on the MR becomes public at once, as one review.
     pub async fn publish_drafts(&self, project_id: u64, iid: u64) -> Result<()> {
         self.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(project_id, iid)), None).await
@@ -81,11 +77,6 @@ impl Client {
 
     pub async fn resolve(&self, project_id: u64, iid: u64, discussion_id: &str, resolved: bool) -> Result<Discussion> {
         self.put_json(&format!("{}/discussions/{discussion_id}", mr_path(project_id, iid)), &json!({"resolved": resolved})).await
-    }
-
-    /// A public reply in an existing thread.
-    pub async fn reply(&self, project_id: u64, iid: u64, discussion_id: &str, body: &str) -> Result<Note> {
-        self.post_json(&format!("{}/discussions/{discussion_id}/notes", mr_path(project_id, iid)), &json!({"body": body})).await
     }
 
     /// A public new thread, on a line when `position` is given.
@@ -117,6 +108,7 @@ fn url_encode(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::api::types::from_fixture;
     use crate::auth::Credentials;
@@ -124,7 +116,7 @@ mod tests {
     use wiremock::matchers::{body_partial_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    async fn client(server: &MockServer) -> Client {
+    fn client(server: &MockServer) -> Client {
         Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap()
     }
 
@@ -158,7 +150,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(json!([{"iid": 42, "title": "x"}])))
             .mount(&server)
             .await;
-        let client = client(&server).await;
+        let client = client(&server);
         assert_eq!(client.project("acme/widgets").await.unwrap().id, 7);
         assert_eq!(client.mr_for_branch(7, "feat/checkout").await.unwrap(), Some(42));
     }
@@ -179,7 +171,7 @@ mod tests {
             })))
             .mount(&server)
             .await;
-        let mr = client(&server).await.mr(7, 42).await.unwrap();
+        let mr = client(&server).mr(7, 42).await.unwrap();
         assert_eq!((mr.iid, mr.changes_count.as_deref(), mr.labels.as_slice()), (42, Some("9"), &["payments".to_owned()][..]));
         assert_eq!(mr.head_pipeline.as_ref().map(|p| p.status.as_str()), Some("success"));
         assert!(mr.approvals.approved && mr.approvals.user_can_approve);
@@ -207,7 +199,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(page(1)).insert_header("Link", next.as_str()))
             .mount(&server)
             .await;
-        let files = client(&server).await.diffs(7, 42).await.unwrap();
+        let files = client(&server).diffs(7, 42).await.unwrap();
         assert_eq!(files.iter().map(|f| f.new_path.as_str()).collect::<Vec<_>>(), ["f1", "f2"]);
         assert!(files[0].new_file);
     }
@@ -239,37 +231,28 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("DELETE")).and(path(format!("{base}/2"))).respond_with(ResponseTemplate::new(204)).mount(&server).await;
-        Mock::given(method("PUT")).and(path(format!("{base}/1/publish"))).respond_with(ResponseTemplate::new(204)).mount(&server).await;
         Mock::given(method("POST")).and(path(format!("{base}/bulk_publish"))).respond_with(ResponseTemplate::new(204)).mount(&server).await;
-        let client = client(&server).await;
-        let refs = crate::api::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
+        let client = client(&server);
+        let refs = crate::api::types::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
         let draft = NewDraft { note: "nit".into(), position: Some(Position::line(&refs, "x", "x", None, Some(13))), ..NewDraft::default() };
         assert_eq!(client.draft_notes(7, 42).await.unwrap()[0].id, 1);
         assert_eq!(client.create_draft(7, 42, &draft).await.unwrap().id, 2);
         let renamed = NewDraft { note: "nit: renamed".into(), ..draft.clone() };
         assert_eq!(client.update_draft(7, 42, 2, &renamed).await.unwrap().id, 2);
         client.delete_draft(7, 42, 2).await.unwrap();
-        client.publish_draft(7, 42, 1).await.unwrap();
         client.publish_drafts(7, 42).await.unwrap();
-        assert_eq!(server.received_requests().await.unwrap().len(), 6);
+        assert_eq!(server.received_requests().await.unwrap().len(), 5);
     }
 
     #[tokio::test]
-    async fn threads_are_resolved_replied_to_and_opened() {
+    async fn threads_are_resolved_and_opened() {
         let server = MockServer::start().await;
         let base = "/api/v4/projects/7/merge_requests/42/discussions";
         let discussion: serde_json::Value = serde_json::from_str(include_str!("fixtures/discussions.json")).unwrap();
-        let note = discussion["notes"][0].clone();
         Mock::given(method("PUT"))
             .and(path(format!("{base}/6a9c1750")))
             .and(body_partial_json(json!({"resolved": true})))
             .respond_with(ResponseTemplate::new(200).set_body_json(&discussion))
-            .mount(&server)
-            .await;
-        Mock::given(method("POST"))
-            .and(path(format!("{base}/6a9c1750/notes")))
-            .and(body_partial_json(json!({"body": "done"})))
-            .respond_with(ResponseTemplate::new(201).set_body_json(&note))
             .mount(&server)
             .await;
         Mock::given(method("POST"))
@@ -278,10 +261,9 @@ mod tests {
             .respond_with(ResponseTemplate::new(201).set_body_json(&discussion))
             .mount(&server)
             .await;
-        let client = client(&server).await;
-        let refs = crate::api::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
+        let client = client(&server);
+        let refs = crate::api::types::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
         assert_eq!(client.resolve(7, 42, "6a9c1750", true).await.unwrap().id, discussion["id"]);
-        assert_eq!(client.reply(7, 42, "6a9c1750", "done").await.unwrap().body, note["body"]);
         let position = Position::line(&refs, "x", "x", None, Some(3));
         assert_eq!(client.comment(7, 42, "why?", Some(&position)).await.unwrap().id, discussion["id"]);
     }
@@ -296,7 +278,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(404).set_body_json(json!({"message": "404 Not found"})))
             .mount(&server)
             .await;
-        let client = client(&server).await;
+        let client = client(&server);
         let err = client.approve(7, 42).await.unwrap_err().to_string();
         assert!(err.contains("cannot approve"), "{err}");
         let err = client.unapprove(7, 42).await.unwrap_err().to_string();
@@ -312,7 +294,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string(body).insert_header("Content-Type", "application/json"))
             .mount(&server)
             .await;
-        let discussions = client(&server).await.discussions(7, 42).await.unwrap();
+        let discussions = client(&server).discussions(7, 42).await.unwrap();
         let expected: Discussion = from_fixture(include_str!("fixtures/diff_note.json"));
         assert_eq!(discussions.len(), 2);
         assert_eq!(discussions[1], expected);

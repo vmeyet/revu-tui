@@ -18,6 +18,7 @@ pub struct Draft {
 
 impl Draft {
     /// A fresh note on a line, or on the MR when `anchor` is None.
+    #[cfg(test)]
     pub fn new(anchor: Option<Anchor>, body: impl Into<String>) -> Self {
         Self { id: None, anchor, position: None, reply_to: None, body: body.into(), resolve: false }
     }
@@ -52,6 +53,7 @@ impl Draft {
         self.body == other.body && self.reply_to == other.reply_to && self.anchor == other.anchor
     }
 
+    #[cfg(test)]
     pub fn with_id(self, id: u64) -> Self {
         Self { id: Some(id), ..self }
     }
@@ -64,6 +66,7 @@ impl Draft {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::api::Discussion;
     use crate::api::types::from_fixture;

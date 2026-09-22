@@ -1,6 +1,8 @@
 pub mod store;
 
-pub use store::{MemoryStore, SecretStore, SecurityCli};
+#[cfg(test)]
+pub use store::MemoryStore;
+pub use store::{SecretStore, SecurityCli};
 
 use crate::config::Config;
 use anyhow::{Result, bail};
@@ -61,6 +63,7 @@ pub fn pick_host(env: &Env, config: &Config, host: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

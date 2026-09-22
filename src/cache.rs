@@ -141,14 +141,11 @@ pub mod keys {
     pub fn state(project_id: u64, iid: u64) -> String {
         format!("mr/{project_id}/{iid}/state.json")
     }
-
-    pub fn ai(project_id: u64, iid: u64, head_sha: &str, hash: &str) -> String {
-        format!("ai/{project_id}/{iid}/{head_sha}/{hash}.json")
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use chrono::TimeDelta;
 
@@ -226,7 +223,6 @@ mod tests {
 
     #[test]
     fn keys_are_stable() {
-        assert_eq!(keys::ai(7, 42, "abc", "h1"), "ai/7/42/abc/h1.json");
         assert_eq!(keys::discussions(7, 42), "mr/7/42/discussions.json");
     }
 

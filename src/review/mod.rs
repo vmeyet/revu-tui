@@ -129,7 +129,7 @@ pub struct Review {
 }
 
 impl Review {
-    pub fn new(mr: Mr, diffs: Vec<DiffFile>, discussions: Vec<Discussion>, fold_globs: &[String]) -> Self {
+    pub fn new(mr: Mr, diffs: &[DiffFile], discussions: Vec<Discussion>, fold_globs: &[String]) -> Self {
         let files: Vec<File> = diffs.iter().map(File::from_diff).collect();
         let threads = threads_of(discussions, &files);
         let metas: Vec<FileMeta> = files.iter().map(File::meta).collect();
@@ -247,6 +247,7 @@ fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
 
 #[cfg(test)]
 pub(super) mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::api::types::from_fixture;
     use serde_json::json;
@@ -295,7 +296,7 @@ pub(super) mod tests {
     }
 
     pub(super) fn review() -> Review {
-        Review::new(mr(), vec![charge(), lock()], discussions(), &["*.lock".into()])
+        Review::new(mr(), &[charge(), lock()], discussions(), &["*.lock".into()])
     }
 
     #[test]

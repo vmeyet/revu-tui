@@ -14,6 +14,7 @@ impl Field {
         Self { cursor: text.len(), text }
     }
 
+    #[cfg(test)]
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -98,6 +99,7 @@ impl Field {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// The text with the cursor drawn in it, so a test reads as what the row shows.
