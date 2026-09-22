@@ -17,20 +17,25 @@ Update with `mr update`: it pulls this checkout (fast-forward only), and rebuild
 
 ## Log in
 
+`mr` reviews GitLab merge requests and GitHub pull requests; the host says which.
+
 ```sh
-mr login                 # prompts for a personal access token with the `api` scope, stores it in the keychain
-mr login --from-glab     # reuses the token glab already holds
+mr login                        # the checkout's host, else gitlab.com: prompts for a token, stores it in the keychain
+mr login --from-glab            # reuses the token glab already holds (GitLab, scope `api`)
+mr login github.com --from-gh   # reuses the token gh already holds (GitHub, scope `repo`)
 mr whoami
-mr logout
+mr logout github.com
 ```
 
-`GITLAB_TOKEN` and `GITLAB_HOST` override the keychain and the config, for scripts.
+Inside a checkout, `mr` talks to the host of its `origin` remote when it holds a token for it; elsewhere to the first host you logged in to.
+`GITLAB_TOKEN` (GitLab) and `GITHUB_TOKEN` or `GH_TOKEN` (GitHub) override the keychain, for scripts; `GITLAB_HOST` or `--host` pick the host.
+A GitHub Enterprise host needs one line of config: `[hosts."git.acme.dev"] forge = "github"`.
 
 ## Commands
 
 ```sh
 mr list                        # the MRs waiting on you, yours, the ones you watch, and the rest of the repo's (`--cached` skips the network)
-mr show acme/widgets!42        # header, files, unresolved threads
+mr show acme/widgets!42        # header, files, unresolved threads (`owner/repo#42` on GitHub)
 mr diff !42                    # the coloured diff through $PAGER (`!42` takes the project from the origin remote)
 mr show                        # the open MR of the current branch
 mr comment !42 --at src/a.rs:13 looks racy   # a public comment, on a line with --at

@@ -16,7 +16,7 @@ struct Whoami<'a> {
 pub async fn run(ctx: &Ctx) -> Result<()> {
     let me = ctx.forge.me().await?;
     let token_source = match ctx.source {
-        Source::Env => "GITLAB_TOKEN",
+        Source::Env => crate::auth::token_variable(ctx.forge.kind()),
         Source::Keychain => "keychain",
     };
     if ctx.json {

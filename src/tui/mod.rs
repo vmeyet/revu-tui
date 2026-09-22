@@ -62,7 +62,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         theme,
         host: ctx.forge.host().to_owned(),
         kind: ctx.forge.kind(),
-        me: ctx.config.username.clone().unwrap_or_default(),
+        me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
         project: ctx.project.clone(),
     };
     let mut app = App::new(settings);
@@ -246,7 +246,7 @@ impl Backend {
     fn queue_answer(&self, scope: Option<String>, queue: &Queue, cached: bool) -> Incoming {
         let sections = queue.sections(&self.watch_labels);
         let opened = self.opened_at(&sections);
-        Incoming::Queue { scope, sections, opened, cached }
+        Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
     }
 
     fn opened_at(&self, sections: &Sections) -> HashMap<MrKey, DateTime<Utc>> {

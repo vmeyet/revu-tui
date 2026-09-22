@@ -1,6 +1,6 @@
 # 00 · Vision
 
-`mr` is merge request review in the terminal, as yourself: GitLab today, GitHub pull requests next (`07-forges.md`).
+`mr` is merge request review in the terminal, as yourself: GitLab merge requests and GitHub pull requests (`07-forges.md`).
 One Rust binary, ~10 ms startup, keyboard first, gorgeous.
 The binary stays `mr` on every forge; the crate keeps its name, `gitlabmr`.
 

@@ -5,6 +5,10 @@ impl App {
     pub fn apply(&mut self, incoming: Incoming) {
         match incoming {
             Incoming::Queue { scope, .. } if scope != self.scope() => {}
+            Incoming::Queue { ref me, .. } if self.me.is_empty() && !me.is_empty() => {
+                self.me.clone_from(me);
+                self.apply(incoming);
+            }
             Incoming::Queue { sections, opened, cached: true, .. } => {
                 if self.sections.is_none() {
                     self.sections = Some(sections);

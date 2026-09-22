@@ -1,0 +1,14 @@
+[
+ {
+  "filename": "src/pay/charge.rs",
+  "status": "modified",
+  "changes": 3,
+  "patch": "@@ -12,3 +12,4 @@ pub async fn charge\n context\n-    old\n+    new\n+    added"
+ },
+ {
+  "filename": "src/pay/key.rs",
+  "status": "added",
+  "changes": 2,
+  "patch": "@@ -0,0 +1,2 @@\n+pub fn key() {}\n+"
+ }
+]

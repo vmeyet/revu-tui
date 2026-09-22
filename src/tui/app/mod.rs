@@ -123,6 +123,8 @@ pub enum Incoming {
     /// `cached` answers only paint while the fresh one is on its way.
     Queue {
         scope: Option<String>,
+        /// Who the forge says I am: it names me when no login stored my name, as with a token variable.
+        me: String,
         sections: Sections,
         opened: HashMap<MrKey, DateTime<Utc>>,
         cached: bool,

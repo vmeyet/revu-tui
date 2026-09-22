@@ -1,0 +1,394 @@
+{
+ "data": {
+  "viewer": {
+   "login": "nina"
+  },
+  "requested": {
+   "nodes": [
+    {
+     "number": 42,
+     "title": "feat: charge cards",
+     "body": "## Why\nfeat: charge cards",
+     "isDraft": false,
+     "url": "https://github.com/acme/widgets/pull/42",
+     "updatedAt": "2026-09-22T09:12:00Z",
+     "createdAt": "2026-09-20T09:12:00Z",
+     "headRefName": "feat/42",
+     "baseRefName": "main",
+     "mergeable": "MERGEABLE",
+     "repository": {
+      "nameWithOwner": "acme/widgets"
+     },
+     "author": {
+      "login": "omar",
+      "name": "Omar",
+      "databaseId": 5
+     },
+     "reviewDecision": null,
+     "latestReviews": {
+      "nodes": []
+     },
+     "reviewRequests": {
+      "nodes": [
+       {
+        "requestedReviewer": {
+         "login": "nina"
+        }
+       }
+      ]
+     },
+     "commits": {
+      "nodes": [
+       {
+        "commit": {
+         "statusCheckRollup": {
+          "state": "FAILURE"
+         }
+        }
+       }
+      ]
+     },
+     "additions": 120,
+     "deletions": 4,
+     "changedFiles": 3,
+     "reviewThreads": {
+      "nodes": [
+       {
+        "isResolved": false
+       }
+      ]
+     },
+     "labels": {
+      "nodes": []
+     },
+     "comments": {
+      "totalCount": 2
+     }
+    },
+    {},
+    {
+     "number": 40,
+     "title": "refactor: rename Invoice",
+     "body": "## Why\nrefactor: rename Invoice",
+     "isDraft": false,
+     "url": "https://github.com/acme/widgets/pull/40",
+     "updatedAt": "2026-09-22T09:12:00Z",
+     "createdAt": "2026-09-20T09:12:00Z",
+     "headRefName": "feat/40",
+     "baseRefName": "main",
+     "mergeable": "MERGEABLE",
+     "repository": {
+      "nameWithOwner": "acme/widgets"
+     },
+     "author": {
+      "login": "omar",
+      "name": "Omar",
+      "databaseId": 5
+     },
+     "reviewDecision": null,
+     "latestReviews": {
+      "nodes": [
+       {
+        "state": "APPROVED",
+        "author": {
+         "login": "nina"
+        }
+       }
+      ]
+     },
+     "reviewRequests": {
+      "nodes": [
+       {
+        "requestedReviewer": {
+         "login": "nina"
+        }
+       }
+      ]
+     },
+     "commits": {
+      "nodes": [
+       {
+        "commit": {
+         "statusCheckRollup": {
+          "state": "SUCCESS"
+         }
+        }
+       }
+      ]
+     },
+     "additions": 120,
+     "deletions": 4,
+     "changedFiles": 3,
+     "reviewThreads": {
+      "nodes": [
+       {
+        "isResolved": false
+       }
+      ]
+     },
+     "labels": {
+      "nodes": []
+     },
+     "comments": {
+      "totalCount": 2
+     }
+    }
+   ]
+  },
+  "authored": {
+   "nodes": [
+    {
+     "number": 41,
+     "title": "fix: flaky cache test",
+     "body": "## Why\nfix: flaky cache test",
+     "isDraft": false,
+     "url": "https://github.com/acme/widgets/pull/41",
+     "updatedAt": "2026-09-22T09:12:00Z",
+     "createdAt": "2026-09-20T09:12:00Z",
+     "headRefName": "feat/41",
+     "baseRefName": "main",
+     "mergeable": "MERGEABLE",
+     "repository": {
+      "nameWithOwner": "acme/widgets"
+     },
+     "author": {
+      "login": "nina",
+      "name": "Nina",
+      "databaseId": 5
+     },
+     "reviewDecision": "APPROVED",
+     "latestReviews": {
+      "nodes": [
+       {
+        "state": "APPROVED",
+        "author": {
+         "login": "lea"
+        }
+       }
+      ]
+     },
+     "reviewRequests": {
+      "nodes": []
+     },
+     "commits": {
+      "nodes": [
+       {
+        "commit": {
+         "statusCheckRollup": {
+          "state": "SUCCESS"
+         }
+        }
+       }
+      ]
+     },
+     "additions": 120,
+     "deletions": 4,
+     "changedFiles": 3,
+     "reviewThreads": {
+      "nodes": [
+       {
+        "isResolved": false
+       }
+      ]
+     },
+     "labels": {
+      "nodes": []
+     },
+     "comments": {
+      "totalCount": 2
+     }
+    }
+   ]
+  },
+  "assigned": {
+   "nodes": [
+    {
+     "number": 35,
+     "title": "infra: new runner",
+     "body": "## Why\ninfra: new runner",
+     "isDraft": false,
+     "url": "https://github.com/acme/infra/pull/35",
+     "updatedAt": "2026-09-22T09:12:00Z",
+     "createdAt": "2026-09-20T09:12:00Z",
+     "headRefName": "feat/35",
+     "baseRefName": "main",
+     "mergeable": "MERGEABLE",
+     "repository": {
+      "nameWithOwner": "acme/infra"
+     },
+     "author": {
+      "login": "lea",
+      "name": "Lea",
+      "databaseId": 5
+     },
+     "reviewDecision": null,
+     "latestReviews": {
+      "nodes": []
+     },
+     "reviewRequests": {
+      "nodes": []
+     },
+     "commits": {
+      "nodes": [
+       {
+        "commit": {
+         "statusCheckRollup": {
+          "state": "PENDING"
+         }
+        }
+       }
+      ]
+     },
+     "additions": 120,
+     "deletions": 4,
+     "changedFiles": 3,
+     "reviewThreads": {
+      "nodes": [
+       {
+        "isResolved": false
+       }
+      ]
+     },
+     "labels": {
+      "nodes": []
+     },
+     "comments": {
+      "totalCount": 2
+     }
+    }
+   ]
+  },
+  "reviewed": {
+   "nodes": [
+    {
+     "number": 39,
+     "title": "chore: bump rustls",
+     "body": "## Why\nchore: bump rustls",
+     "isDraft": false,
+     "url": "https://github.com/acme/widgets/pull/39",
+     "updatedAt": "2026-09-22T09:12:00Z",
+     "createdAt": "2026-09-20T09:12:00Z",
+     "headRefName": "feat/39",
+     "baseRefName": "main",
+     "mergeable": "CONFLICTING",
+     "repository": {
+      "nameWithOwner": "acme/widgets"
+     },
+     "author": {
+      "login": "omar",
+      "name": "Omar",
+      "databaseId": 5
+     },
+     "reviewDecision": null,
+     "latestReviews": {
+      "nodes": [
+       {
+        "state": "COMMENTED",
+        "author": {
+         "login": "nina"
+        }
+       }
+      ]
+     },
+     "reviewRequests": {
+      "nodes": []
+     },
+     "commits": {
+      "nodes": [
+       {
+        "commit": {
+         "statusCheckRollup": {
+          "state": "SUCCESS"
+         }
+        }
+       }
+      ]
+     },
+     "additions": 120,
+     "deletions": 4,
+     "changedFiles": 3,
+     "reviewThreads": {
+      "nodes": [
+       {
+        "isResolved": false
+       }
+      ]
+     },
+     "labels": {
+      "nodes": []
+     },
+     "comments": {
+      "totalCount": 2
+     }
+    },
+    {
+     "number": 40,
+     "title": "refactor: rename Invoice",
+     "body": "## Why\nrefactor: rename Invoice",
+     "isDraft": false,
+     "url": "https://github.com/acme/widgets/pull/40",
+     "updatedAt": "2026-09-22T09:12:00Z",
+     "createdAt": "2026-09-20T09:12:00Z",
+     "headRefName": "feat/40",
+     "baseRefName": "main",
+     "mergeable": "MERGEABLE",
+     "repository": {
+      "nameWithOwner": "acme/widgets"
+     },
+     "author": {
+      "login": "omar",
+      "name": "Omar",
+      "databaseId": 5
+     },
+     "reviewDecision": null,
+     "latestReviews": {
+      "nodes": [
+       {
+        "state": "APPROVED",
+        "author": {
+         "login": "nina"
+        }
+       }
+      ]
+     },
+     "reviewRequests": {
+      "nodes": [
+       {
+        "requestedReviewer": {
+         "login": "nina"
+        }
+       }
+      ]
+     },
+     "commits": {
+      "nodes": [
+       {
+        "commit": {
+         "statusCheckRollup": {
+          "state": "SUCCESS"
+         }
+        }
+       }
+      ]
+     },
+     "additions": 120,
+     "deletions": 4,
+     "changedFiles": 3,
+     "reviewThreads": {
+      "nodes": [
+       {
+        "isResolved": false
+       }
+      ]
+     },
+     "labels": {
+      "nodes": []
+     },
+     "comments": {
+      "totalCount": 2
+     }
+    }
+   ]
+  }
+ }
+}

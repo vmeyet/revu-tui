@@ -30,6 +30,9 @@ pub struct Config {
 pub struct Host {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forge: Option<Kind>,
+    /// Who I am there, from the last login.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
 }
 
 /// Which MRs the queue shows beyond the ones GitLab lists for me.
@@ -100,6 +103,12 @@ impl Ai {
 }
 
 impl Config {
+    /// Who I am on `host`: its own entry, else the top-level name when it is the configured host.
+    pub fn username_for(&self, host: &str) -> Option<String> {
+        let own = self.hosts.get(host).and_then(|h| h.username.clone());
+        own.or_else(|| (self.host.as_deref() == Some(host)).then(|| self.username.clone()).flatten())
+    }
+
     pub fn path() -> PathBuf {
         dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("gitlabmr").join("config.toml")
     }
@@ -142,7 +151,7 @@ mod tests {
             review: Review { fold: vec!["*.lock".into()] },
             tui: Tui { theme: Some("nord".into()), ascii: false },
             ai: Ai::default(),
-            hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub) })]),
+            hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })]),
         };
         let text = toml::to_string_pretty(&config).unwrap();
         assert!(text.contains("forge = \"github\""), "{text}");

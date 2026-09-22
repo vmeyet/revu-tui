@@ -52,7 +52,7 @@ fn sections() -> Sections {
 
 fn with_queue() -> App {
     let mut app = app();
-    app.apply(Incoming::Queue { scope: None, sections: sections(), opened: HashMap::new(), cached: false });
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
     app
 }
 
@@ -207,7 +207,7 @@ fn r_refreshes_once_and_o_y_take_the_mr_url() {
     let mut app = with_queue();
     assert_eq!(press(&mut app, "r"), vec![Action::LoadQueue { scope: None, from_cache: false }]);
     assert_eq!(press(&mut app, "r"), vec![], "not while one is in flight");
-    app.apply(Incoming::Queue { scope: None, sections: sections(), opened: HashMap::new(), cached: false });
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
     let url = "https://gitlab.com/acme/widgets/-/merge_requests/42".to_owned();
     assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(url.clone())]);
     assert_eq!(press(&mut app, "y"), vec![Action::Yank(url)]);
@@ -401,7 +401,7 @@ fn snapshot_queue_loading_and_empty() {
     app.queue_loading = false;
     app.now = app.started;
     insta::assert_snapshot!("queue_loading", render(&mut app, 100, 14));
-    app.apply(Incoming::Queue { scope: None, sections: Sections::default(), opened: HashMap::new(), cached: false });
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: Sections::default(), opened: HashMap::new(), cached: false });
     insta::assert_snapshot!("queue_empty", render(&mut app, 100, 14));
 }
 
@@ -786,7 +786,7 @@ fn scoped_sections() -> Sections {
 }
 
 fn queue_answer(scope: Option<&str>, sections: Sections, cached: bool) -> Incoming {
-    Incoming::Queue { scope: scope.map(str::to_owned), sections, opened: HashMap::new(), cached }
+    Incoming::Queue { scope: scope.map(str::to_owned), me: "nina".into(), sections, opened: HashMap::new(), cached }
 }
 
 #[test]
@@ -892,4 +892,13 @@ fn every_recorded_link_sits_on_the_text_it_names_and_a_modal_hides_them() {
     press(&mut app, "i");
     cells(&mut app, 120, 24);
     assert!(app.links.is_empty(), "no link may print over a modal");
+}
+
+#[test]
+fn the_queue_names_me_when_no_login_did() {
+    let mut app = App::new(Settings { me: String::new(), ..settings() });
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    assert_eq!(app.me, "nina");
+    app.apply(Incoming::Queue { scope: None, me: "someone".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    assert_eq!(app.me, "nina", "a stored name is never replaced");
 }

@@ -1,6 +1,6 @@
 //! The seam between the app and the forge that hosts the code: one neutral model, one enum that
-//! sends each call to the backend of the host. Only `gitlab` exists today; `github` slots in as a
-//! second variant with the same methods.
+//! sends each call to the backend of the host.
+pub mod github;
 pub mod gitlab;
 mod model;
 mod queue;
@@ -10,7 +10,7 @@ pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
 use crate::auth::Credentials;
 use crate::config::Config;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// Which forge a host runs.
@@ -41,7 +41,7 @@ impl Kind {
     pub fn line_url(self, web_url: &str, path: &str, line: LineRef) -> String {
         match self {
             Kind::GitLab => gitlab::line_url(web_url, path, line),
-            Kind::GitHub => format!("{web_url}/files"),
+            Kind::GitHub => github::line_url(web_url, path, line),
         }
     }
 }
@@ -50,6 +50,7 @@ impl Kind {
 #[derive(Clone, Debug)]
 pub enum Forge {
     GitLab(gitlab::Client),
+    GitHub(github::Client),
 }
 
 impl Forge {
@@ -57,25 +58,28 @@ impl Forge {
     pub fn connect(kind: Kind, credentials: &Credentials) -> Result<Self> {
         match kind {
             Kind::GitLab => Ok(Forge::GitLab(gitlab::Client::new(credentials)?)),
-            Kind::GitHub => bail!("{} is a GitHub host: GitHub support is coming, only GitLab works today", credentials.host),
+            Kind::GitHub => Ok(Forge::GitHub(github::Client::new(credentials)?)),
         }
     }
 
     pub fn kind(&self) -> Kind {
         match self {
             Forge::GitLab(_) => Kind::GitLab,
+            Forge::GitHub(_) => Kind::GitHub,
         }
     }
 
     pub fn host(&self) -> &str {
         match self {
             Forge::GitLab(client) => client.host(),
+            Forge::GitHub(client) => client.host(),
         }
     }
 
     pub async fn me(&self) -> Result<User> {
         match self {
             Forge::GitLab(client) => client.me().await,
+            Forge::GitHub(client) => client.me().await,
         }
     }
 
@@ -83,6 +87,7 @@ impl Forge {
     pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
         match self {
             Forge::GitLab(client) => client.queue(project).await,
+            Forge::GitHub(client) => client.queue(project).await,
         }
     }
 
@@ -90,6 +95,7 @@ impl Forge {
     pub async fn project_path(&self, id: u64) -> Result<String> {
         match self {
             Forge::GitLab(client) => client.project_path(id).await,
+            Forge::GitHub(client) => client.project_path(id).await,
         }
     }
 
@@ -97,24 +103,28 @@ impl Forge {
     pub async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>> {
         match self {
             Forge::GitLab(client) => client.mr_for_branch(project, branch).await,
+            Forge::GitHub(client) => client.mr_for_branch(project, branch).await,
         }
     }
 
     pub async fn mr(&self, key: &MrKey) -> Result<Mr> {
         match self {
             Forge::GitLab(client) => client.mr(key).await,
+            Forge::GitHub(client) => client.mr(key).await,
         }
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         match self {
             Forge::GitLab(client) => client.diffs(key).await,
+            Forge::GitHub(client) => client.diffs(key).await,
         }
     }
 
     pub async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
         match self {
             Forge::GitLab(client) => client.discussions(key).await,
+            Forge::GitHub(client) => client.discussions(key).await,
         }
     }
 
@@ -122,12 +132,14 @@ impl Forge {
     pub async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>> {
         match self {
             Forge::GitLab(client) => client.drafts(key).await,
+            Forge::GitHub(client) => client.drafts(key).await,
         }
     }
 
     pub async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft> {
         match self {
             Forge::GitLab(client) => client.create_draft(key, draft).await,
+            Forge::GitHub(client) => client.create_draft(key, draft).await,
         }
     }
 
@@ -135,12 +147,14 @@ impl Forge {
     pub async fn update_draft(&self, key: &MrKey, id: u64, draft: &NewDraft) -> Result<Draft> {
         match self {
             Forge::GitLab(client) => client.update_draft(key, id, draft).await,
+            Forge::GitHub(client) => client.update_draft(key, id, draft).await,
         }
     }
 
     pub async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.delete_draft(key, id).await,
+            Forge::GitHub(client) => client.delete_draft(key, id).await,
         }
     }
 
@@ -148,12 +162,14 @@ impl Forge {
     pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.publish(key, approve).await,
+            Forge::GitHub(client) => client.publish(key, approve).await,
         }
     }
 
     pub async fn resolve(&self, key: &MrKey, discussion: &str, resolved: bool) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.resolve(key, discussion, resolved).await,
+            Forge::GitHub(client) => client.resolve(discussion, resolved).await,
         }
     }
 
@@ -161,6 +177,7 @@ impl Forge {
     pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.approve(key, approve).await,
+            Forge::GitHub(client) => client.approve(key, approve).await,
         }
     }
 
@@ -168,6 +185,7 @@ impl Forge {
     pub async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
         match self {
             Forge::GitLab(client) => client.comment(key, body, position).await,
+            Forge::GitHub(client) => client.comment(key, body, position).await,
         }
     }
 }
@@ -184,15 +202,15 @@ mod tests {
         assert_eq!(Kind::for_host("github.com", &config), Kind::GitHub);
         assert_eq!(Kind::for_host("gitlab.com", &config), Kind::GitLab);
         assert_eq!(Kind::for_host("git.acme.dev", &config), Kind::GitLab);
-        let config = Config { hosts: [("git.acme.dev".into(), Host { forge: Some(Kind::GitHub) })].into(), ..Config::default() };
+        let config =
+            Config { hosts: [("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })].into(), ..Config::default() };
         assert_eq!(Kind::for_host("git.acme.dev", &config), Kind::GitHub);
     }
 
     #[test]
-    fn a_github_host_says_it_is_not_supported_yet() {
+    fn each_kind_connects_its_own_backend() {
         let credentials = Credentials { host: "github.com".into(), token: "ghp_xxxx".into() };
-        let err = Forge::connect(Kind::GitHub, &credentials).unwrap_err().to_string();
-        assert!(err.contains("GitHub support is coming"), "{err}");
+        assert_eq!(Forge::connect(Kind::GitHub, &credentials).unwrap().kind(), Kind::GitHub);
         assert_eq!(Forge::connect(Kind::GitLab, &Credentials { host: "gitlab.com".into(), ..credentials }).unwrap().kind(), Kind::GitLab);
     }
 
