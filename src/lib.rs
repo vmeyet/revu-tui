@@ -6,5 +6,7 @@ pub mod commands;
 pub mod config;
 pub mod ctx;
 pub mod diff;
+pub mod mrref;
+pub mod render;
 pub mod tui;
 pub mod version;

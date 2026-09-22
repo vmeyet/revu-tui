@@ -1,12 +1,37 @@
 use super::Client;
 use super::types::{Approvals, DiffFile, Discussion, Mr};
-use anyhow::Result;
+use anyhow::{Context, Result};
+use serde::Deserialize;
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct Project {
+    pub id: u64,
+    pub path_with_namespace: String,
+}
+
+#[derive(Deserialize)]
+struct MrIid {
+    iid: u64,
+}
 
 fn mr_path(project_id: u64, iid: u64) -> String {
     format!("projects/{project_id}/merge_requests/{iid}")
 }
 
 impl Client {
+    /// A project by its `group/project` path.
+    pub async fn project(&self, path: &str) -> Result<Project> {
+        let encoded = path.replace('/', "%2F");
+        self.get(&format!("projects/{encoded}")).await.with_context(|| format!("project {path}"))
+    }
+
+    /// The open MR whose source is `branch`, if any.
+    pub async fn mr_for_branch(&self, project_id: u64, branch: &str) -> Result<Option<u64>> {
+        let path = format!("projects/{project_id}/merge_requests?state=opened&source_branch={}", url_encode(branch));
+        let found: Vec<MrIid> = self.get(&path).await?;
+        Ok(found.first().map(|m| m.iid))
+    }
+
     /// The MR with its approvals folded in; the two requests run together.
     pub async fn mr(&self, project_id: u64, iid: u64) -> Result<Mr> {
         let path = mr_path(project_id, iid);
@@ -25,6 +50,10 @@ impl Client {
     pub async fn discussions(&self, project_id: u64, iid: u64) -> Result<Vec<Discussion>> {
         self.get_all(&format!("{}/discussions", mr_path(project_id, iid))).await
     }
+}
+
+fn url_encode(text: &str) -> String {
+    url::form_urlencoded::byte_serialize(text.as_bytes()).collect()
 }
 
 #[cfg(test)]
@@ -54,6 +83,25 @@ mod tests {
             "reviewers": [{"id": 2, "username": "nina", "name": "Nina", "avatar_url": null}],
             "labels": ["payments"]
         })
+    }
+
+    #[tokio::test]
+    async fn project_paths_are_encoded_and_branches_looked_up() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": 7, "path_with_namespace": "acme/widgets"})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/7/merge_requests"))
+            .and(query_param("source_branch", "feat/checkout"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{"iid": 42, "title": "x"}])))
+            .mount(&server)
+            .await;
+        let client = client(&server).await;
+        assert_eq!(client.project("acme/widgets").await.unwrap().id, 7);
+        assert_eq!(client.mr_for_branch(7, "feat/checkout").await.unwrap(), Some(42));
     }
 
     #[tokio::test]

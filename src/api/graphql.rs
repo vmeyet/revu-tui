@@ -86,7 +86,7 @@ pub enum ReviewState {
 }
 
 /// The queue sorted into the sidebar sections, each MR in exactly one.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Sections {
     pub to_review: Vec<QueueMr>,
     pub mine: Vec<QueueMr>,

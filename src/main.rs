@@ -29,6 +29,9 @@ async fn run(cli: Cli) -> Result<()> {
     let ctx = Ctx::open(cli.host.as_deref(), cli.json)?;
     match cli.command {
         Some(Command::Whoami) => commands::whoami::run(&ctx).await,
+        Some(Command::List(args)) => commands::list::run(&ctx, args).await,
+        Some(Command::Show(args)) => commands::show::run(&ctx, args).await,
+        Some(Command::Diff(args)) => commands::diff::run(&ctx, args).await,
         Some(Command::Tui) | None => gitlabmr::tui::run(ctx).await,
         Some(Command::Login(_) | Command::Logout { .. } | Command::Completions { .. }) => unreachable!("handled above"),
     }

@@ -35,3 +35,17 @@ fn login_refuses_a_token_in_argv() {
 fn completions_render_for_zsh() {
     mr().args(["completions", "zsh"]).assert().success().stdout(predicate::str::contains("_mr"));
 }
+
+#[test]
+fn list_help_mentions_the_cached_flag() {
+    mr().args(["list", "--help"]).assert().success().stdout(predicate::str::contains("--cached"));
+}
+
+#[test]
+fn show_rejects_a_reference_before_touching_the_network() {
+    mr().args(["--host", "localhost:1", "show", "nonsense"])
+        .env("GITLAB_TOKEN", "glpat-xxxx")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("group/project!42"));
+}

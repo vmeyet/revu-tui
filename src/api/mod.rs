@@ -3,6 +3,7 @@ pub mod rest;
 pub mod types;
 
 pub use graphql::{Queue, QueueMr, ReviewState, Sections};
+pub use rest::Project;
 pub use types::{Approvals, DiffFile, DiffRefs, Discussion, Mr, Note, Pipeline, Position, User};
 
 use crate::auth::Credentials;

@@ -9,10 +9,31 @@ pub struct Config {
     pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Queue::is_default")]
+    pub queue: Queue,
     #[serde(default, skip_serializing_if = "Tui::is_default")]
     pub tui: Tui,
     #[serde(default, skip_serializing_if = "Ai::is_default")]
     pub ai: Ai,
+}
+
+/// Which MRs the queue shows beyond the ones GitLab lists for me.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Queue {
+    #[serde(default)]
+    pub groups: Vec<String>,
+    #[serde(default)]
+    pub projects: Vec<String>,
+    /// MRs carrying one of these labels land in Watching.
+    #[serde(default)]
+    pub watch_labels: Vec<String>,
+}
+
+impl Queue {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -86,6 +107,7 @@ mod tests {
         let config = Config {
             host: Some("gitlab.com".into()),
             username: Some("nina".into()),
+            queue: Queue { watch_labels: vec!["infra".into()], ..Queue::default() },
             tui: Tui { theme: Some("nord".into()), ascii: false },
             ai: Ai::default(),
         };
