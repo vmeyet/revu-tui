@@ -74,6 +74,18 @@ impl Theme {
         }
     }
 
+    /// The ground nudged `pct` percent toward `to`, for the surface under a changed line.
+    /// Falls back to `surface` when the base is not an RGB colour, so nothing paints black.
+    pub fn tint(&self, to: Color, pct: u32) -> Color {
+        match (self.base, to) {
+            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
+                let channel = |a: u8, b: u8| ((u32::from(a) * (100 - pct) + u32::from(b) * pct) / 100) as u8;
+                Color::Rgb(channel(r1, r2), channel(g1, g2), channel(b1, b2))
+            }
+            _ => self.surface,
+        }
+    }
+
     pub fn user(&self, name: &str) -> Color {
         let idx = name.trim().bytes().fold(7usize, |h, b| h.wrapping_mul(33).wrapping_add(b as usize)) % self.users.len();
         self.users[idx]
@@ -272,6 +284,15 @@ mod tests {
     }
 
     #[test]
+    fn tint_walks_from_the_base_and_survives_a_non_rgb_base() {
+        let theme = Theme::named("dracula").unwrap();
+        assert_eq!(theme.tint(theme.base, 50), theme.base);
+        assert_ne!(theme.tint(theme.success, 8), theme.base);
+        let plain = Theme::default();
+        assert_eq!(plain.tint(plain.success, 8), plain.surface, "the default theme does not know its ground");
+    }
+
+    #[test]
     fn user_colors_are_stable_and_spread() {
         let theme = Theme::default();
         assert_eq!(theme.user("nina"), theme.user(" nina "));
@@ -283,7 +304,19 @@ mod tests {
     /// The whole point of a theme: no pane paints a color the theme did not choose.
     #[test]
     fn no_raw_colors_outside_the_theme() {
-        let sources = [("ui.rs", include_str!("ui.rs")), ("app.rs", include_str!("app.rs")), ("mod.rs", include_str!("mod.rs"))];
+        let sources = [
+            ("ui.rs", include_str!("ui.rs")),
+            ("diff_view.rs", include_str!("diff_view.rs")),
+            ("thread_view.rs", include_str!("thread_view.rs")),
+            ("mod.rs", include_str!("mod.rs")),
+            ("app/mod.rs", include_str!("app/mod.rs")),
+            ("app/state.rs", include_str!("app/state.rs")),
+            ("app/keys.rs", include_str!("app/keys.rs")),
+            ("app/incoming.rs", include_str!("app/incoming.rs")),
+            ("app/queue.rs", include_str!("app/queue.rs")),
+            ("app/review.rs", include_str!("app/review.rs")),
+            ("app/feedback.rs", include_str!("app/feedback.rs")),
+        ];
         let raw = ["Color::", ".cyan()", ".yellow()", ".green()", ".magenta()", ".blue()", ".red()", ".black()", ".on_yellow()", ".dim()"];
         let leaks: Vec<String> = sources
             .iter()
