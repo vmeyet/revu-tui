@@ -121,6 +121,11 @@ impl Review {
         Self { viewed, ..self.clone() }
     }
 
+    /// The same diff with fresh threads, for the cheap discussions poll.
+    pub fn with_discussions(&self, discussions: Vec<Discussion>) -> Self {
+        Self { threads: threads_of(discussions, &self.files), ..self.clone() }
+    }
+
     pub fn unresolved(&self) -> usize {
         self.threads.iter().filter(|t| t.resolvable && !t.resolved).count()
     }
@@ -311,6 +316,15 @@ mod tests {
         assert!(rows.contains(&Row::Outdated { file: 0 }));
         assert_eq!(rows.last(), Some(&Row::File { index: 1, open: false }), "the lock file starts folded");
         assert_eq!(rows.iter().filter(|r| matches!(r, Row::Gap)).count(), 2);
+    }
+
+    #[test]
+    fn fresh_discussions_keep_the_files_and_folds() {
+        let review = review();
+        let refreshed = review.with_discussions(vec![from_fixture(include_str!("../api/fixtures/diff_note.json"))]);
+        assert_eq!(refreshed.threads.len(), 1);
+        assert_eq!(refreshed.files, review.files);
+        assert_eq!(refreshed.fold, review.fold);
     }
 
     #[test]

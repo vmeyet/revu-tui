@@ -1,0 +1,20 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 16)"
+---
+╭ Queue ─────────────────────────╮╭ Review ────────────────────────────────────────────────────────╮
+│   TO REVIEW                  1 ││                                                                │
+│ ▎ !42 feat: charge cards at…   ││                                                                │
+│   MINE                       1 ││                                                                │
+│   !41 fix: flaky cache test  ● ││                                                                │
+│   WATCHING                   1 ││                                                                │
+│   !35 infra: new runner      ⠋ ││                      open a merge request                      │
+│   DONE ▸                     1 ││                      to read its diff here                     │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                           ? help

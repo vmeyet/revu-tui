@@ -124,6 +124,12 @@ impl Queue {
 impl Client {
     pub async fn queue(&self) -> Result<Queue> {
         let answer: Answer = self.post_json("graphql", &json!({"query": QUERY})).await?;
+        Queue::from_answer(answer)
+    }
+}
+
+impl Queue {
+    fn from_answer(answer: Answer) -> Result<Self> {
         if let Some(errors) = answer.errors.filter(|e| !e.is_empty()) {
             bail!("GraphQL: {}", errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join("; "));
         }
@@ -134,6 +140,11 @@ impl Client {
             authored: convert(user.authored)?,
             assigned: convert(user.assigned)?,
         })
+    }
+
+    /// A queue straight from a GraphQL answer body, for fixtures.
+    pub fn from_json(body: &str) -> Result<Self> {
+        Self::from_answer(serde_json::from_str(body)?)
     }
 }
 
@@ -301,14 +312,7 @@ mod tests {
     const FIXTURE: &str = include_str!("fixtures/queue.json");
 
     fn queue() -> Queue {
-        let answer: Answer = serde_json::from_str(FIXTURE).unwrap();
-        let user = answer.data.unwrap().current_user.unwrap();
-        Queue {
-            me: user.username,
-            review_requested: convert(user.review_requested).unwrap(),
-            authored: convert(user.authored).unwrap(),
-            assigned: convert(user.assigned).unwrap(),
-        }
+        Queue::from_json(FIXTURE).unwrap()
     }
 
     fn iids(mrs: &[QueueMr]) -> Vec<u64> {

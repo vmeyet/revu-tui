@@ -1,0 +1,18 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 14)"
+---
+╭ Queue ─────────────────────────╮╭ Review ────────────────────────────────────────────────────────╮
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                ✓               ││                                                                │
+│                                ││                      open a merge request                      │
+│      nothing waits on you      ││                      to read its diff here                     │
+│   r to refresh · / to filter   ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                           ? help

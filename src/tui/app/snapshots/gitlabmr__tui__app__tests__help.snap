@@ -1,0 +1,32 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 28)"
+---
+╭ Queue ─────────────────────────╮╭ Review ────────────────────────────────────────────────────────╮
+│   TO REVIEW       ╭ keys ────────────────────────────────────────────────────╮                   │
+│ ▎ !42 feat: charge│        j k  move                                         │                   │
+│   MINE            │        g G  first, last                                  │                   │
+│   !41 fix: flaky c│      ^d ^u  half page                                    │                   │
+│   WATCHING        │        h l  focus the pane to the left, right            │                   │
+│   !35 infra: new r│      enter  open the MR, the thread, or toggle the fold  │                   │
+│   DONE ▸          │        esc  back: close the thread, then the queue       │                   │
+│                   │          /  filter the queue                             │                   │
+│                   │          r  refresh                                      │                   │
+│                   │          o  open in the browser (the line, in a diff)    │                   │
+│                   │          y  copy the URL                                 │                   │
+│                   │  tab S-tab  next, previous file                          │                   │
+│                   │      ]c [c  next, previous hunk                          │                   │
+│                   │      ]n [n  next, previous thread                        │                   │
+│                   │      ]f [f  next, previous file with an open thread      │                   │
+│                   │         za  toggle the fold under the cursor             │                   │
+│                   │      zc zo  close, open                                  │                   │
+│                   │      zM zR  fold, unfold every file                      │                   │
+│                   │         zo  in the queue: show the done section          │                   │
+│                   │          u  in a thread: open its first link             │                   │
+│                   │          ?  this help                                    │                   │
+│                   │          q  quit                                         │                   │
+│                   │         ^c  quit, always                                 │                   │
+│                   ╰──────────────────────────────────────────────────────────╯                   │
+│                                ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                           ? help

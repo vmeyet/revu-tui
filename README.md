@@ -43,10 +43,26 @@ mr
 
 | Key | Action |
 |---|---|
+| `j` `k` / arrows, `g` `G`, `ctrl-d` `ctrl-u` | Move |
 | `h` `l` | Focus the pane to the left, right |
+| `enter` | Open the MR, open the thread, or toggle the fold under the cursor |
+| `esc` | Back: close the thread, then the queue |
+| `/` | Filter the queue by title, author or iid |
 | `r` | Refresh |
-| `?` | Help |
+| `o` / `y` | Open in the browser / copy the URL (the line, inside a diff) |
+| `tab` `S-tab` | Next, previous file |
+| `]c` `[c` | Next, previous hunk |
+| `]n` `[n` | Next, previous thread |
+| `]f` `[f` | Next, previous file with an unresolved thread |
+| `za` `zc` `zo` | Toggle, close, open the fold under the cursor |
+| `zM` `zR` | Fold, unfold every file |
+| `zo` (queue) | Show the done section |
+| `u` (thread) | Open the first link of the thread |
+| `?` | Every key |
 | `q` | Quit |
+
+Read-only for now (M1): the queue, the diff with folds, the threads. Comments and approvals come with M2.
+The queue refreshes every minute and the open MR every 30 s; an MR that moved since you last opened it shows `●`.
 
 The full key grammar planned for the review is in `specs/03-ui-ux.md`.
 

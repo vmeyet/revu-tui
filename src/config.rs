@@ -11,6 +11,8 @@ pub struct Config {
     pub username: Option<String>,
     #[serde(default, skip_serializing_if = "Queue::is_default")]
     pub queue: Queue,
+    #[serde(default, skip_serializing_if = "Review::is_default")]
+    pub review: Review,
     #[serde(default, skip_serializing_if = "Tui::is_default")]
     pub tui: Tui,
     #[serde(default, skip_serializing_if = "Ai::is_default")]
@@ -31,6 +33,21 @@ pub struct Queue {
 }
 
 impl Queue {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// How a diff opens.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Review {
+    /// Glob patterns of files that open folded: lockfiles, snapshots, generated code.
+    #[serde(default)]
+    pub fold: Vec<String>,
+}
+
+impl Review {
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -108,6 +125,7 @@ mod tests {
             host: Some("gitlab.com".into()),
             username: Some("nina".into()),
             queue: Queue { watch_labels: vec!["infra".into()], ..Queue::default() },
+            review: Review { fold: vec!["*.lock".into()] },
             tui: Tui { theme: Some("nord".into()), ascii: false },
             ai: Ai::default(),
         };
