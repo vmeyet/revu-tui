@@ -1,5 +1,6 @@
 use crate::api::Client;
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli};
+use crate::cache::Cache;
 use crate::cli::LoginArgs;
 use crate::config::Config;
 use anyhow::{Context, Result, bail};
@@ -36,9 +37,7 @@ pub fn logout(host: Option<String>) -> Result<()> {
         config.username = None;
         config.save()?;
     }
-    if let Some(cache) = dirs::cache_dir().map(|d| d.join("gitlabmr").join(&host)).filter(|d| d.exists()) {
-        std::fs::remove_dir_all(&cache).with_context(|| format!("removing {}", cache.display()))?;
-    }
+    Cache::for_host(&host).clear()?;
     println!("logged out of {host}");
     Ok(())
 }

@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 clap_complete = "4.5"
 crossterm = { version = "0.29", features = ["event-stream"] }
@@ -22,6 +23,7 @@ ratatui = "0.30"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
+tempfile = "3.20"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "fs", "sync", "io-util"] }
 toml = "1.1"
 url = "2.5"
