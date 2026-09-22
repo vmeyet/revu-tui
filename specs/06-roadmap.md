@@ -44,7 +44,9 @@ Acceptance:
 - Threads show under their line with author, age and body; outdated ones in the file tail.
 - Every key in `03-ui-ux.md` marked M1 works and is in `?`.
 
-## M2 · Write
+## M2 · Write (done 2026-09-22)
+
+Verified live: a draft created from the TUI lands on GitLab with its position, the modal counts it, `d` deletes it there. Publish, resolve, reply and approve are covered by wiremock and App tests only; the first real publish is the M3 acceptance run.
 
 Spec: `02` (draft notes, positions, resolve, approve), `03` (comment flow, publish modal, drafts badge).
 
