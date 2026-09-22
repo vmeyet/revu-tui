@@ -146,6 +146,10 @@ fn row_line<'a>(review: &Review, row: &Row, selected: bool, width: usize, theme:
                 spans.extend(thread_spans(thread, body, theme, today, me));
             }
         }
+        Row::Draft { index } => {
+            let first = review.drafts[*index].body.lines().next().unwrap_or_default();
+            spans.push(Span::styled(format!("{INDENT}◇ you · {first}"), Style::default().fg(theme.warn)));
+        }
         Row::Outdated { file } => {
             let count = review.outdated(&review.files[*file].new_path).len();
             spans.push(Span::styled(format!("{INDENT}outdated · {count} thread{}", plural(count)), Style::default().fg(theme.faded)));

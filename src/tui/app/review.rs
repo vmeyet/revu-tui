@@ -48,6 +48,10 @@ impl Open {
                 let path = self.review.thread(id)?.anchor.as_ref()?.path.clone();
                 self.review.files.iter().position(|f| f.new_path == path || f.old_path == path)
             }
+            Row::Draft { index } => {
+                let path = self.review.drafts.get(*index)?.anchor.as_ref()?.path.clone();
+                self.review.files.iter().position(|f| f.new_path == path || f.old_path == path)
+            }
             Row::Header | Row::Gap => None,
         }
     }
