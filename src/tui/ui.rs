@@ -1,6 +1,6 @@
 use super::app::{App, Badge, Focus, QueueRow};
 use super::theme::Theme;
-use super::{diff_view, thread_view};
+use super::{diff_view, publish_view, thread_view};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -16,7 +16,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 22] = [
+pub const HELP: [(&str, &str); 32] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -35,14 +35,24 @@ pub const HELP: [(&str, &str); 22] = [
     ("zc zo", "close, open"),
     ("zM zR", "fold, unfold every file"),
     ("zo", "in the queue: show the done section"),
+    ("c", "comment on the line, as a draft"),
+    ("V", "select lines: c comments on them, y copies them"),
+    ("E", "write the comment in $EDITOR"),
+    ("s", "suggestion in the editor, prefilled with the lines"),
+    ("enter d", "on a draft: edit, delete"),
+    ("P", "publish the drafts (a to also approve)"),
+    ("A", "approve, unapprove"),
+    ("r", "in a thread: reply, as a draft"),
+    ("R", "in a thread: resolve, unresolve"),
     ("u", "in a thread: open its first link"),
+    ("esc", "drop the selection, close the input"),
     ("?", "this help"),
     ("q", "quit"),
     ("^c", "quit, always"),
 ];
 
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let input_rows = u16::from(app.filtering);
+    let input_rows = u16::from(app.filtering || app.input.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.thread.is_some());
@@ -54,11 +64,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if side_open {
         thread_view::draw(f, app, side);
     }
-    if app.filtering {
+    if app.input.is_some() {
+        draw_input(f, app, input);
+    } else if app.filtering {
         draw_filter(f, app, input);
     }
     draw_status(f, app, status);
-    let modal = app.help;
+    let modal = app.help || app.publish.is_some();
     if app.focus != Focus::Queue || modal {
         fade(f, queue, app.theme.faded);
     }
@@ -67,6 +79,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if side_open && (app.focus != Focus::Side || modal) {
         fade(f, side, app.theme.faded);
+    }
+    if let Some(publish) = app.publish.clone() {
+        publish_view::draw(f, app, &publish, main);
     }
     if app.help {
         draw_help(f, app, main);
@@ -179,6 +194,20 @@ fn draw_filter(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(line), area);
 }
 
+fn draw_input(f: &mut Frame, app: &App, area: Rect) {
+    let theme = app.theme;
+    let (before, under, after) = app.buffer.split();
+    let caret = if under.is_empty() { " " } else { under };
+    let line = Line::from(vec![
+        Span::styled(format!(" {} ", app.input_label()), Style::default().fg(theme.accent)),
+        Span::raw(before.to_owned()),
+        Span::styled(caret.to_owned(), Style::default().add_modifier(Modifier::REVERSED)),
+        Span::raw(after.to_owned()),
+        Span::styled("  enter save · esc cancel", Style::default().fg(theme.faded)),
+    ]);
+    f.render_widget(Paragraph::new(line), area);
+}
+
 fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme;
     let muted = Style::default().fg(theme.muted);
@@ -204,6 +233,19 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
                 if unresolved > 0 {
                     spans.push(dot.clone());
                     spans.push(Span::styled(format!("{unresolved} unresolved"), Style::default().fg(theme.warn)));
+                }
+                let drafts = open.review.drafts.len();
+                if drafts > 0 {
+                    spans.push(dot.clone());
+                    spans.push(Span::styled(
+                        format!("{drafts} draft{}", if drafts == 1 { "" } else { "s" }),
+                        Style::default().fg(theme.warn),
+                    ));
+                    let unsaved = app.unsaved_drafts();
+                    if unsaved > 0 {
+                        spans.push(Span::styled(format!(" ({unsaved} unsaved)"), Style::default().fg(theme.danger)));
+                    }
+                    spans.push(Span::styled(" · P to publish", muted));
                 }
             }
             Line::from(spans)
@@ -236,7 +278,7 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
     let height = (lines.len() as u16 + 2).min(area.height);
-    let width = 60.min(area.width);
+    let width = 68.min(area.width);
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
     let block = pane(theme, "keys", true);
     f.render_widget(Clear, popup);

@@ -60,9 +60,18 @@ mr
 | `za` `zc` `zo` | Toggle, close, open the fold under the cursor |
 | `zM` `zR` | Fold, unfold every file |
 | `zo` (queue) | Show the done section |
+| `c` | Comment on the line, as a draft |
+| `V` | Select lines: `c` comments on them, `y` copies them, `esc` drops them |
+| `E` / `s` | Write the comment in `$EDITOR` / as a suggestion prefilled with the lines |
+| `enter` / `d` (draft) | Edit / delete the draft under the cursor |
+| `P` | Publish every draft in one review (`a` in the modal also approves) |
+| `A` | Approve, unapprove |
+| `r` / `R` (thread) | Reply as a draft / resolve, unresolve |
 | `u` (thread) | Open the first link of the thread |
 | `?` | Every key |
 | `q` | Quit |
+
+Comments are GitLab draft notes until `P`: they survive a restart, show up in the web UI as pending, and nothing is public before you publish.
 
 Read-only for now (M1): the queue, the diff with folds, the threads. Comments and approvals come with M2.
 The queue refreshes every minute and the open MR every 30 s; an MR that moved since you last opened it shows `●`.

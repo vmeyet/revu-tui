@@ -14,6 +14,12 @@ impl App {
             self.help = false;
             return vec![];
         }
+        if self.input.is_some() {
+            return self.handle_input_key(key);
+        }
+        if self.publish.is_some() {
+            return self.handle_publish_key(key);
+        }
         if self.filtering {
             return self.handle_filter_key(key);
         }
@@ -107,6 +113,11 @@ impl App {
             }
             return vec![];
         }
+        if !key.modifiers.contains(KeyModifiers::CONTROL)
+            && let Some(actions) = self.handle_write_key(key)
+        {
+            return actions;
+        }
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.review_move(1),
             KeyCode::Char('k') | KeyCode::Up => self.review_move(-1),
@@ -126,11 +137,12 @@ impl App {
         vec![]
     }
 
+    /// A refresh also posts again every draft GitLab does not hold yet.
     fn refresh_open(&mut self) -> Vec<Action> {
-        match self.open.as_ref().map(|o| o.key) {
-            Some(key) => vec![Action::RefreshMr(key)],
-            None => vec![],
-        }
+        let Some(key) = self.open.as_ref().map(|o| o.key) else { return vec![] };
+        let mut actions = vec![Action::RefreshMr(key)];
+        actions.extend(self.retry_unsaved());
+        actions
     }
 
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
@@ -182,6 +194,9 @@ impl App {
                 let url = self.open.as_ref().and_then(|o| o.thread.as_ref().map(|id| note_url(&o.review.mr.web_url, &o.review, id)));
                 return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default();
             }
+            KeyCode::Char('r') => self.reply_here(),
+            KeyCode::Char('R') => return self.toggle_resolved(),
+            KeyCode::Char('P') => self.open_publish(),
             KeyCode::Esc => self.close_thread(),
             _ => {}
         }

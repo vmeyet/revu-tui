@@ -1,0 +1,28 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 120, 24)"
+---
+╭ Queue ─────────────────────────╮╭ acme/widgets!42 · feat: cha… ────────╮╭ charge.rs:-13 ─────────────────────────────╮
+│   TO REVIEW                  1 ││  omar · 2h · +5 −3 · 2 files · ✓ suc ││ src/pay/charge.rs  resolved ✓              │
+│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 un ││                                            │
+│   MINE                       1 ││                                      ││ you · 2h                                   │
+│   !41 fix: flaky cache test  D ││                                      ││ Why drop the plain client?                 │
+│   WATCHING                   1 ││  ▾ src/pay/charge.rs       +4 −2  ◆2 ││                                            │
+│   !35 infra: new runner      ⠋ ││     ▾ @@ -12,4 +12,5 @@ pub async…   ││ ◇ you · draft                              │
+│   DONE ▸                     1 ││    12   12  pub async fn charge(car… ││ agreed, keys are per card                  │
+│                                ││    13      -    let client = Client… ││                                            │
+│                                ││ ▎   ✓ you · Why drop the plain… · 2h ││                                            │
+│                                ││         13 +    let client = Client… ││                                            │
+│                                ││         14 +    let attempt = Attem… ││                                            │
+│                                ││    14   15      let response = clie… ││                                            │
+│                                ││    15   16      audit::record(&resp… ││                                            │
+│                                ││     ▾ @@ -40,3 +41,4 @@ fn idempo…   ││                                            │
+│                                ││    40   41  fn idempotency_key(card… ││                                            │
+│                                ││    41      -    Key::from(card.numb… ││                                            │
+│                                ││         42 +    Key::from((card.num… ││                                            │
+│                                ││         43 +    // hunk two, line 4… ││                                            │
+│                                ││    42   44  }                        ││                                            │
+│                                ││     outdated · 1 thread              ││                                            │
+│                                ││                                      ││                                            │
+╰────────────────────────────────╯╰──────────────────────────────────────╯╰────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved · 1 draft · P to publish                                                       ? help

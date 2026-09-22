@@ -21,8 +21,25 @@ impl App {
                 }
             }
             Incoming::Done(text) => self.toast(text),
+            Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(key, index, id),
+            Incoming::Published { key, approved, count } => self.apply_published(key, approved, count),
+            Incoming::Resolved { key, thread, resolved } => self.apply_resolved(key, thread, resolved),
+            Incoming::Approved { key, approve } => {
+                self.set_approved(key, approve);
+                self.toast(if approve { "approved" } else { "approval removed" });
+            }
+            Incoming::Composed { input, text } => {
+                if let Some(text) = text {
+                    self.composed = self.submit(input, text);
+                }
+            }
             Incoming::Failed { what, message } => self.apply_failure(what, message),
         }
+    }
+
+    /// Actions an `Incoming` produced, taken by the loop right after `apply`.
+    pub fn take_actions(&mut self) -> Vec<super::Action> {
+        std::mem::take(&mut self.composed)
     }
 
     fn apply_review(&mut self, key: super::MrKey, review: Review, cached: Option<std::time::Duration>) {
@@ -64,6 +81,7 @@ impl App {
                 self.back_off();
             }
             Failure::Local => self.warn(message),
+            other => self.apply_write_failure(other, message),
         }
     }
 }

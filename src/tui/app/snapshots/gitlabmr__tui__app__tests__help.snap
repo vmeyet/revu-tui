@@ -1,32 +1,44 @@
 ---
 source: src/tui/app/tests.rs
-expression: "render(&mut app, 100, 28)"
+expression: "render(&mut app, 100, 40)"
 ---
 ╭ Queue ─────────────────────────╮╭ Review ────────────────────────────────────────────────────────╮
-│   TO REVIEW       ╭ keys ────────────────────────────────────────────────────╮                   │
-│ ▎ !42 feat: charge│        j k  move                                         │                   │
-│   MINE            │        g G  first, last                                  │                   │
-│   !41 fix: flaky c│      ^d ^u  half page                                    │                   │
-│   WATCHING        │        h l  focus the pane to the left, right            │                   │
-│   !35 infra: new r│      enter  open the MR, the thread, or toggle the fold  │                   │
-│   DONE ▸          │        esc  back: close the thread, then the queue       │                   │
-│                   │          /  filter the queue                             │                   │
-│                   │          r  refresh                                      │                   │
-│                   │          o  open in the browser (the line, in a diff)    │                   │
-│                   │          y  copy the URL                                 │                   │
-│                   │  tab S-tab  next, previous file                          │                   │
-│                   │      ]c [c  next, previous hunk                          │                   │
-│                   │      ]n [n  next, previous thread                        │                   │
-│                   │      ]f [f  next, previous file with an open thread      │                   │
-│                   │         za  toggle the fold under the cursor             │                   │
-│                   │      zc zo  close, open                                  │                   │
-│                   │      zM zR  fold, unfold every file                      │                   │
-│                   │         zo  in the queue: show the done section          │                   │
-│                   │          u  in a thread: open its first link             │                   │
-│                   │          ?  this help                                    │                   │
-│                   │          q  quit                                         │                   │
-│                   │         ^c  quit, always                                 │                   │
-│                   ╰──────────────────────────────────────────────────────────╯                   │
+│   TO REVIEW                  1 ││                                                                │
+│ ▎ !42 feat: ch╭ keys ────────────────────────────────────────────────────────────╮               │
+│   MINE        │        j k  move                                                 │               │
+│   !41 fix: fla│        g G  first, last                                          │               │
+│   WATCHING    │      ^d ^u  half page                                            │               │
+│   !35 infra: n│        h l  focus the pane to the left, right                    │               │
+│   DONE ▸      │      enter  open the MR, the thread, or toggle the fold          │               │
+│               │        esc  back: close the thread, then the queue               │               │
+│               │          /  filter the queue                                     │               │
+│               │          r  refresh                                              │               │
+│               │          o  open in the browser (the line, in a diff)            │               │
+│               │          y  copy the URL                                         │               │
+│               │  tab S-tab  next, previous file                                  │               │
+│               │      ]c [c  next, previous hunk                                  │               │
+│               │      ]n [n  next, previous thread                                │               │
+│               │      ]f [f  next, previous file with an open thread              │               │
+│               │         za  toggle the fold under the cursor                     │               │
+│               │      zc zo  close, open                                          │               │
+│               │      zM zR  fold, unfold every file                              │               │
+│               │         zo  in the queue: show the done section                  │               │
+│               │          c  comment on the line, as a draft                      │               │
+│               │          V  select lines: c comments on them, y copies them      │               │
+│               │          E  write the comment in $EDITOR                         │               │
+│               │          s  suggestion in the editor, prefilled with the lines   │               │
+│               │    enter d  on a draft: edit, delete                             │               │
+│               │          P  publish the drafts (a to also approve)               │               │
+│               │          A  approve, unapprove                                   │               │
+│               │          r  in a thread: reply, as a draft                       │               │
+│               │          R  in a thread: resolve, unresolve                      │               │
+│               │          u  in a thread: open its first link                     │               │
+│               │        esc  drop the selection, close the input                  │               │
+│               │          ?  this help                                            │               │
+│               │          q  quit                                                 │               │
+│               │         ^c  quit, always                                         │               │
+│               ╰──────────────────────────────────────────────────────────────────╯               │
+│                                ││                                                                │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina                                                                           ? help

@@ -422,7 +422,7 @@ fn snapshot_thread_open() {
 fn snapshot_help() {
     let mut app = with_queue();
     press(&mut app, "?");
-    insta::assert_snapshot!("help", render(&mut app, 100, 28));
+    insta::assert_snapshot!("help", render(&mut app, 100, 40));
 }
 
 #[test]
@@ -432,4 +432,285 @@ fn snapshot_offline_and_filter() {
     app.open.as_mut().unwrap().cached = Some((app.now - Duration::from_secs(60), Duration::from_secs(120)));
     press(&mut app, "h/pay");
     insta::assert_snapshot!("offline_filter", render(&mut app, 100, 12));
+}
+
+fn on_line(app: &mut App) {
+    press(app, "]cj");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })));
+}
+
+fn type_text(app: &mut App, text: &str) -> Vec<Action> {
+    press(app, text);
+    app.handle_key(code(KeyCode::Enter))
+}
+
+fn draft_rows(app: &App) -> Vec<usize> {
+    app.open.as_ref().unwrap().rows.iter().filter_map(|r| if let Row::Draft { index } = r { Some(*index) } else { None }).collect()
+}
+
+fn with_saved_draft() -> App {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    type_text(&mut app, "nit");
+    app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
+    app
+}
+
+#[test]
+fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
+    let mut app = with_review();
+    assert_eq!(press(&mut app, "c"), vec![], "the cursor is on a file row");
+    assert!(app.input.is_none() && app.live_toast().is_some());
+    on_line(&mut app);
+    press(&mut app, "c");
+    assert_eq!(app.input_label(), "comment charge.rs:12");
+    let actions = type_text(&mut app, "nit: rename");
+    let [Action::SaveDraft { key: KEY, index: 0, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(draft.body, "nit: rename");
+    assert_eq!(draft.position.as_ref().and_then(|p| p.new_line), Some(12));
+    assert_eq!(draft.id, None);
+    assert!(app.input.is_none());
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(draft_rows(&app), [0]);
+    assert!(matches!(open.rows[open.selected + 1], Row::Draft { index: 0 }), "the draft row follows the line");
+    assert_eq!(app.unsaved_drafts(), 1);
+    app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
+    assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
+    assert_eq!(app.unsaved_drafts(), 0);
+}
+
+#[test]
+fn the_input_row_edits_in_place_and_esc_cancels() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "cab");
+    app.handle_key(code(KeyCode::Left));
+    press(&mut app, "x");
+    assert_eq!(app.buffer.text(), "axb");
+    app.handle_key(ctrl('a'));
+    app.handle_key(code(KeyCode::Delete));
+    assert_eq!(app.buffer.text(), "xb");
+    app.handle_key(code(KeyCode::Esc));
+    assert!(app.input.is_none() && app.buffer.text().is_empty());
+    press(&mut app, "c");
+    assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![], "an empty comment is dropped");
+    assert!(app.input.is_none());
+}
+
+#[test]
+fn v_selects_a_range_for_c_y_and_esc() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "Vj");
+    let actions = press(&mut app, "y");
+    let [Action::Yank(text)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(text, " pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {\n-    let client = Client::new();");
+    assert_eq!(app.open.as_ref().unwrap().select_from, None, "copying drops the selection");
+    press(&mut app, "k");
+    press(&mut app, "Vjjj");
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(open.selection().count(), 4, "three lines and the thread row between them");
+    assert!(open.is_selected(open.selected - 1));
+    press(&mut app, "c");
+    let actions = type_text(&mut app, "fold these");
+    let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    let position = draft.position.as_ref().unwrap();
+    assert_eq!(position.new_line, Some(13));
+    let range = position.line_range.as_ref().expect("a range");
+    assert_eq!((range.start.old_line, range.end.new_line), (Some(12), Some(13)));
+    assert_eq!(app.open.as_ref().unwrap().select_from, None, "sending drops the selection");
+    press(&mut app, "Vj");
+    app.handle_key(code(KeyCode::Esc));
+    assert_eq!(app.open.as_ref().unwrap().select_from, None);
+    assert_eq!(app.focus, Focus::Review, "esc dropped the selection, nothing else");
+}
+
+#[test]
+fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
+    let mut app = with_review();
+    press(&mut app, "]n");
+    app.handle_key(code(KeyCode::Enter));
+    press(&mut app, "r");
+    assert_eq!(app.input_label(), "reply");
+    let actions = type_text(&mut app, "agreed");
+    let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"));
+    assert!(draft_rows(&app).is_empty());
+    assert_eq!(app.focus, Focus::Side);
+    assert!(render(&mut app, 120, 24).contains("◇ you · unsaved"));
+}
+
+#[test]
+fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
+    let mut app = with_review();
+    press(&mut app, "]n");
+    app.handle_key(code(KeyCode::Enter));
+    let id = "c0ffee00c0ffee00".to_owned();
+    assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
+    let actions = press(&mut app, "R");
+    assert_eq!(actions, vec![Action::Resolve { key: KEY, thread: id.clone(), resolved: false }]);
+    assert!(!app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
+    app.apply(Incoming::Failed { what: Failure::Resolve { thread: id.clone(), resolved: false }, message: "HTTP 403".into() });
+    assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved, "back to resolved");
+    assert!(app.live_toast().unwrap().danger);
+    press(&mut app, "R");
+    app.apply(Incoming::Resolved { key: KEY, thread: id.clone(), resolved: false });
+    assert!(!app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
+}
+
+#[test]
+fn enter_edits_a_draft_and_d_deletes_it() {
+    let mut app = with_saved_draft();
+    press(&mut app, "j");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Draft { index: 0 })));
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!((app.input_label(), app.buffer.text()), ("edit draft".to_owned(), "nit"));
+    let actions = type_text(&mut app, " (typo)");
+    assert_eq!(actions, vec![Action::UpdateDraft { key: KEY, id: 9, body: "nit (typo)".into() }]);
+    assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit (typo)");
+    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: KEY, id: 9 }]);
+    assert!(draft_rows(&app).is_empty());
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })), "the cursor lands on the next row");
+}
+
+#[test]
+fn an_unsaved_draft_is_posted_again_by_r_and_deleted_without_a_request() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    type_text(&mut app, "nit");
+    app.apply(Incoming::Failed { what: Failure::Draft { index: 0 }, message: "offline".into() });
+    assert!(app.live_toast().unwrap().text.contains("r to retry"));
+    let actions = press(&mut app, "r");
+    assert!(matches!(actions.as_slice(), [Action::RefreshMr(KEY), Action::SaveDraft { index: 0, .. }]), "{actions:?}");
+    press(&mut app, "j");
+    assert_eq!(press(&mut app, "d"), vec![], "GitLab never had it");
+    assert_eq!(app.draft_count(), 0);
+}
+
+#[test]
+fn the_publish_modal_walks_the_drafts_toggles_approve_and_publishes() {
+    let mut app = with_saved_draft();
+    press(&mut app, "jjc");
+    type_text(&mut app, "second");
+    app.apply(Incoming::DraftSaved { key: KEY, index: 1, id: 10 });
+    press(&mut app, "P");
+    let publish = app.publish.clone().unwrap();
+    assert_eq!((publish.selected, publish.approve, publish.busy), (0, false, false));
+    press(&mut app, "jjj");
+    assert_eq!(app.publish.as_ref().unwrap().selected, 2, "stops on the publish row");
+    press(&mut app, "a");
+    assert!(app.publish.as_ref().unwrap().approve);
+    let actions = app.handle_key(code(KeyCode::Enter));
+    assert_eq!(actions, vec![Action::Publish { key: KEY, approve: true, count: 2 }]);
+    assert!(app.publish.as_ref().unwrap().busy);
+    assert_eq!(press(&mut app, "a"), vec![], "keys wait for the answer");
+    app.apply(Incoming::Published { key: KEY, approved: true, count: 2 });
+    assert_eq!(app.publish, None);
+    assert_eq!(app.draft_count(), 0);
+    assert!(app.open.as_ref().unwrap().review.mr.approvals.user_has_approved);
+    assert_eq!(app.poll.discussions_due, Some(app.now), "threads refresh at once");
+    assert_eq!(app.live_toast().unwrap().text, "published 2 comments and approved");
+}
+
+#[test]
+fn the_publish_modal_edits_deletes_and_survives_a_failure() {
+    let mut app = with_saved_draft();
+    press(&mut app, "P");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.input_label(), "edit draft");
+    assert!(app.publish.is_some(), "the modal stays under the input row");
+    type_text(&mut app, "!");
+    press(&mut app, "p");
+    app.apply(Incoming::Failed { what: Failure::Publish, message: "HTTP 500".into() });
+    assert!(!app.publish.as_ref().unwrap().busy);
+    assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit!");
+    assert!(app.live_toast().unwrap().text.contains("not published"));
+    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: KEY, id: 9 }]);
+    assert_eq!(app.draft_count(), 0);
+    app.handle_key(code(KeyCode::Esc));
+    assert_eq!(app.publish, None);
+    press(&mut app, "P");
+    assert_eq!(app.publish, None);
+    assert_eq!(app.live_toast().unwrap().text, "no drafts");
+}
+
+#[test]
+fn publishing_waits_for_unsaved_drafts() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    type_text(&mut app, "nit");
+    press(&mut app, "P");
+    assert_eq!(press(&mut app, "p"), vec![]);
+    assert!(app.live_toast().unwrap().danger);
+    assert!(!app.publish.as_ref().unwrap().busy);
+}
+
+#[test]
+fn big_a_approves_then_unapproves() {
+    let mut app = with_review();
+    assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: KEY, approve: true }]);
+    app.apply(Incoming::Approved { key: KEY, approve: true });
+    assert_eq!(app.live_toast().unwrap().text, "approved");
+    assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: KEY, approve: false }]);
+    app.apply(Incoming::Failed { what: Failure::Approve, message: "you cannot approve this MR".into() });
+    assert!(app.live_toast().unwrap().danger);
+}
+
+#[test]
+fn big_e_and_s_open_the_editor_and_what_comes_back_is_a_draft() {
+    let mut app = with_review();
+    on_line(&mut app);
+    let actions = press(&mut app, "E");
+    let [Action::Compose { input: Input::Comment { position }, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert!(draft.is_empty() && position.new_line == Some(12));
+    let actions = press(&mut app, "Vjs");
+    let [Action::Compose { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(
+        draft,
+        "```suggestion:-0+1\npub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {\n    let client = Client::new();\n```\n"
+    );
+    let input = Input::Comment { position: position.clone() };
+    app.apply(Incoming::Composed { input: input.clone(), text: None });
+    assert_eq!(app.take_actions(), vec![]);
+    assert_eq!(app.draft_count(), 0);
+    app.apply(Incoming::Composed { input, text: Some("from the editor".into()) });
+    let actions = app.take_actions();
+    assert!(matches!(actions.as_slice(), [Action::SaveDraft { index: 0, .. }]), "{actions:?}");
+    assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "from the editor");
+    press(&mut app, "k");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Draft { index: 0 })));
+    let actions = press(&mut app, "E");
+    assert!(matches!(actions.as_slice(), [Action::Compose { input: Input::EditDraft { index: 0 }, draft }] if draft == "from the editor"));
+}
+
+#[test]
+fn snapshot_review_with_a_draft_and_the_input_row() {
+    let mut app = with_saved_draft();
+    press(&mut app, "jjVjc");
+    press(&mut app, "fold the");
+    insta::assert_snapshot!("input_comment", render(&mut app, 120, 24));
+}
+
+#[test]
+fn snapshot_publish_modal() {
+    let mut app = with_saved_draft();
+    press(&mut app, "jjc");
+    type_text(&mut app, "second one, a bit longer so the modal cuts it with an ellipsis");
+    press(&mut app, "Pja");
+    app.now = app.started;
+    insta::assert_snapshot!("publish_modal", render(&mut app, 120, 24));
+}
+
+#[test]
+fn snapshot_thread_with_a_draft_reply() {
+    let mut app = with_review();
+    press(&mut app, "]n");
+    app.handle_key(code(KeyCode::Enter));
+    press(&mut app, "r");
+    type_text(&mut app, "agreed, keys are per card");
+    app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
+    insta::assert_snapshot!("thread_draft_reply", render(&mut app, 120, 24));
 }

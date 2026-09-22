@@ -308,6 +308,7 @@ mod tests {
             ("ui.rs", include_str!("ui.rs")),
             ("diff_view.rs", include_str!("diff_view.rs")),
             ("thread_view.rs", include_str!("thread_view.rs")),
+            ("publish_view.rs", include_str!("publish_view.rs")),
             ("mod.rs", include_str!("mod.rs")),
             ("app/mod.rs", include_str!("app/mod.rs")),
             ("app/state.rs", include_str!("app/state.rs")),
@@ -316,6 +317,8 @@ mod tests {
             ("app/queue.rs", include_str!("app/queue.rs")),
             ("app/review.rs", include_str!("app/review.rs")),
             ("app/feedback.rs", include_str!("app/feedback.rs")),
+            ("app/input.rs", include_str!("app/input.rs")),
+            ("app/write.rs", include_str!("app/write.rs")),
         ];
         let raw = ["Color::", ".cyan()", ".yellow()", ".green()", ".magenta()", ".blue()", ".red()", ".black()", ".on_yellow()", ".dim()"];
         let leaks: Vec<String> = sources
