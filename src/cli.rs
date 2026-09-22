@@ -22,6 +22,13 @@ pub enum Command {
     Logout { host: Option<String> },
     /// Show who you are logged in as.
     Whoami,
+    /// The merge requests waiting on you, yours, and the ones you watch.
+    #[command(visible_alias = "ls")]
+    List(ListArgs),
+    /// One merge request: header, files, unresolved threads.
+    Show(RefArgs),
+    /// The coloured diff of a merge request, through your pager.
+    Diff(RefArgs),
     /// Interactive review client.
     Tui,
     /// Generate shell completions.
@@ -38,4 +45,17 @@ pub struct LoginArgs {
     /// Read the token from stdin (`-`) instead of prompting.
     #[arg(long, value_name = "-")]
     pub token: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ListArgs {
+    /// Print the last fetched queue without touching the network.
+    #[arg(long)]
+    pub cached: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct RefArgs {
+    /// `group/project!42`, `!42` (project from the origin remote), an MR URL, or nothing for the current branch.
+    pub mr: Option<String>,
 }

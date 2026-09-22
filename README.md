@@ -24,6 +24,17 @@ mr logout
 
 `GITLAB_TOKEN` and `GITLAB_HOST` override the keychain and the config, for scripts.
 
+## Commands
+
+```sh
+mr list                        # the MRs waiting on you, yours, the ones you watch (`--cached` skips the network)
+mr show acme/widgets!42        # header, files, unresolved threads
+mr diff !42                    # the coloured diff through $PAGER (`!42` takes the project from the origin remote)
+mr show                        # the open MR of the current branch
+```
+
+Every command takes `--json`. An MR is `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
+
 ## TUI
 
 ```sh
@@ -45,6 +56,9 @@ The full key grammar planned for the review is in `specs/03-ui-ux.md`.
 
 ```toml
 host = "gitlab.com"
+
+[queue]
+watch_labels = ["infra"]   # MRs with these labels land in Watching
 
 [tui]
 theme = "tokyonight"   # default, dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
