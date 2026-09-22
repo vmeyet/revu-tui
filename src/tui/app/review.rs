@@ -38,7 +38,9 @@ impl Open {
     }
 
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
+    /// The reader's inline or split choice outlives the refresh.
     pub fn with_review(&self, review: Review) -> Self {
+        let review = Review { split: self.review.split, ..review };
         let rows = review.rows();
         let selected = self
             .row()
@@ -61,7 +63,7 @@ impl Open {
     fn file_of(&self, row: &Row) -> Option<usize> {
         match row {
             Row::File { index, .. } | Row::Outdated { file: index } => Some(*index),
-            Row::Hunk { file, .. } | Row::Line { file, .. } => Some(*file),
+            Row::Hunk { file, .. } | Row::Line { file, .. } | Row::Pair { file, .. } => Some(*file),
             Row::Thread { id } => {
                 let path = self.review.thread(id)?.anchor.as_ref()?.path.clone();
                 self.review.files.iter().position(|f| f.new_path == path || f.old_path == path)
@@ -107,14 +109,22 @@ impl Open {
         let file = &self.review.files[self.file_of(row)?];
         let hunk = match row {
             Row::Hunk { index, .. } => Some(*index),
-            Row::Line { hunk, .. } => Some(*hunk),
+            Row::Line { hunk, .. } | Row::Pair { hunk, .. } => Some(*hunk),
             _ => None,
         };
         Some((file.new_path.clone(), hunk))
     }
 
     fn with_fold(&self, fold: FoldState) -> Self {
-        let review = self.review.with_fold(fold);
+        self.relaid(self.review.with_fold(fold))
+    }
+
+    fn with_split(&self, split: bool) -> Self {
+        self.relaid(self.review.with_split(split))
+    }
+
+    /// The same review laid out again, the cursor kept on what it pointed at.
+    fn relaid(&self, review: Review) -> Self {
         let rows = review.rows();
         let anchor = self.row().cloned();
         let selected =
@@ -125,9 +135,12 @@ impl Open {
     /// The web page of the line under the cursor, the MR's page anywhere else.
     pub fn line_url(&self, kind: Kind) -> String {
         let mr = &self.review.mr;
-        let Some(Row::Line { file, hunk, index }) = self.row() else { return mr.web_url.clone() };
-        let file = &self.review.files[*file];
-        let line = &file.hunks[*hunk].lines[*index];
+        let (file, hunk, index) = match self.row() {
+            Some(Row::Line { file, hunk, index } | Row::Pair { file, hunk, added: index, .. }) => (*file, *hunk, *index),
+            _ => return mr.web_url.clone(),
+        };
+        let file = &self.review.files[file];
+        let line = &file.hunks[hunk].lines[index];
         kind.line_url(&mr.web_url, &file.new_path, LineRef { old: line.old, new: line.new })
     }
 }
@@ -146,6 +159,10 @@ fn same_place(before: &Row, after: &Row) -> bool {
     match (before, after) {
         (Row::File { index: was, .. }, Row::File { index: is, .. }) => was == is,
         (Row::Hunk { file: file_was, index: was, .. }, Row::Hunk { file: file_is, index: is, .. }) => file_was == file_is && was == is,
+        (Row::Pair { file, hunk, removed, added }, Row::Line { file: line_file, hunk: line_hunk, index })
+        | (Row::Line { file: line_file, hunk: line_hunk, index }, Row::Pair { file, hunk, removed, added }) => {
+            file == line_file && hunk == line_hunk && (index == removed || index == added)
+        }
         _ => before == after,
     }
 }
@@ -216,8 +233,22 @@ impl App {
 
     fn apply_fold(&mut self, fold: FoldState) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let next = open.with_fold(fold);
-        let action = Action::SaveState { key: next.key.clone(), fold: next.review.fold.clone(), viewed: next.review.viewed.clone() };
+        self.keep(open.with_fold(fold))
+    }
+
+    /// `D`: changed words inline, or every changed line on its own row.
+    pub(super) fn toggle_split(&mut self) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let next = open.with_split(!open.review.split);
+        self.toast(if next.review.split { "split diff" } else { "inline diff" });
+        self.keep(next)
+    }
+
+    /// Shows `next` and saves what the reader chose in it: folds, viewed files, split.
+    fn keep(&mut self, next: Open) -> Vec<Action> {
+        let review = &next.review;
+        let action =
+            Action::SaveState { key: next.key.clone(), fold: review.fold.clone(), viewed: review.viewed.clone(), split: review.split };
         self.open = Some(next);
         vec![action]
     }

@@ -2,15 +2,14 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────╮
-│   TO REVIEW   ╭ keys ────────────────────────────────────────────────────────────╮               │
-│ ▎ !42 feat: ch│        j k  move                                                 │               │
-│   MINE        │        g G  first, last                                          │               │
-│   !41 fix: fla│      ^d ^u  half page                                            │               │
-│   WATCHING    │        h l  pane to the left; open the MR, pane to the right     │               │
-│   !35 infra: n│      enter  open the MR, the thread, or toggle the fold          │               │
-│   DONE ▸      │        esc  back: close the thread, then the queue               │               │
-│               │          /  filter the queue                                     │               │
+╭ Queue · all ──╭ keys ────────────────────────────────────────────────────────────╮───────────────╮
+│   TO REVIEW   │        j k  move                                                 │               │
+│ ▎ !42 feat: ch│        g G  first, last                                          │               │
+│   MINE        │      ^d ^u  half page                                            │               │
+│   !41 fix: fla│        h l  pane to the left; open the MR, pane to the right     │               │
+│   WATCHING    │      enter  open the MR, the thread, or toggle the fold          │               │
+│   !35 infra: n│        esc  back: close the thread, then the queue               │               │
+│   DONE ▸      │          /  filter the queue                                     │               │
 │               │          *  in the queue: this repo only, or every project       │               │
 │               │          i  the MR description                                   │               │
 │               │          r  refresh                                              │               │
@@ -22,10 +21,12 @@ expression: "render(&mut app, 100, 40)"
 │               │      ]n [n  next, previous thread                                │               │
 │               │      ]f [f  next, previous file with an open thread              │               │
 │               │         za  toggle the fold under the cursor                     │               │
+│               │          D  changed words inline, or every line split            │               │
 │               │      zc zo  close, open                                          │               │
 │               │      zM zR  fold, unfold every file                              │               │
 │               │         zo  in the queue: show the done section                  │               │
 │               │          c  comment on the line, as a draft                      │               │
+│               │          C  on a changed pair: comment on the old side           │               │
 │               │          V  select lines: c comments on them, y copies them      │               │
 │               │          E  write the comment in $EDITOR                         │               │
 │               │          s  suggestion in the editor, prefilled with the lines   │               │
@@ -39,6 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │          ?  this help                                            │               │
 │               │          q  quit                                                 │               │
 │               │         ^c  quit, always                                         │               │
-│               ╰──────────────────────────────────────────────────────────────────╯               │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

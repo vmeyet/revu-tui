@@ -2,6 +2,7 @@
 use super::app::{App, Focus, Open};
 use super::theme::Theme;
 use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
+use crate::diff::words::{Segment, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::Kind;
 use crate::review::{File, FileKind, Review, Row, Thread};
@@ -159,6 +160,10 @@ fn row_line<'a>(
             let line = &review.files[*file].hunks[*hunk].lines[*index];
             spans.extend(line_spans(line, selected || in_range, body, theme));
         }
+        Row::Pair { file, hunk, removed, added } => {
+            let lines = &review.files[*file].hunks[*hunk].lines;
+            spans.extend(pair_spans(&lines[*removed], &lines[*added], selected || in_range, body, theme));
+        }
         Row::Thread { id } => {
             if let Some(thread) = review.thread(id) {
                 spans.extend(thread_spans(thread, body, theme, today, me));
@@ -297,33 +302,62 @@ fn text_spans<'a>(line: &DiffLine, room: usize, base: Style, word: Option<Style>
     let changed = line.kind != LineKind::Context;
     let trimmed = line.text.trim_end_matches([' ', '\t']);
     let trailing = line.text.len() - trimmed.len();
-    let mut spans = vec![];
-    let mut used = 0;
+    let mut parts: Vec<(&str, Style)> = vec![];
     let mut cursor = 0;
-    let mut push = |text: &str, style: Style, spans: &mut Vec<Span<'a>>| {
-        let shown = text.replace('\t', TAB);
-        if used >= room {
-            return;
-        }
-        let cut = truncate(&shown, room - used);
-        used += cut.width();
-        spans.push(Span::styled(cut, style));
-    };
     for range in &line.words {
         if range.start > cursor {
-            push(&trimmed[cursor..range.start.min(trimmed.len())], base, &mut spans);
+            parts.push((&trimmed[cursor..range.start.min(trimmed.len())], base));
         }
         let end = range.end.min(trimmed.len());
         if range.start < end {
-            push(&trimmed[range.start..end], word.unwrap_or(base), &mut spans);
+            parts.push((&trimmed[range.start..end], word.unwrap_or(base)));
         }
         cursor = end.max(cursor);
     }
     if cursor < trimmed.len() {
-        push(&trimmed[cursor..], base, &mut spans);
+        parts.push((&trimmed[cursor..], base));
     }
+    let dots = "·".repeat(trailing);
     if changed && trailing > 0 {
-        push(&"·".repeat(trailing), base.fg(theme.warn), &mut spans);
+        parts.push((&dots, base.fg(theme.warn)));
+    }
+    fit(parts, room)
+}
+
+/// A removed line and its added twin on one row: the kept text plain, each old word struck
+/// through in the removed colours, then its replacement in the added colours.
+fn pair_spans<'a>(old: &DiffLine, new: &DiffLine, selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
+    let gutter = Style::default().fg(if selected { theme.muted } else { theme.faded });
+    let number = |n: Option<u32>| n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"));
+    let with_fill = |style: Style, fill: Option<Color>| fill.map_or(style, |f| style.bg(f));
+    let dropped = with_fill(Style::default().fg(theme.danger).add_modifier(Modifier::CROSSED_OUT), theme.removed_word);
+    let added = with_fill(Style::default().fg(theme.success), theme.added_word);
+    let parts = segments(&old.text, &new.text);
+    let styled: Vec<(&str, Style)> = parts
+        .iter()
+        .map(|part| match part {
+            Segment::Same(text) => (text.as_str(), Style::default()),
+            Segment::Old(text) => (text.as_str(), dropped),
+            Segment::New(text) => (text.as_str(), added),
+        })
+        .collect();
+    let mut spans =
+        vec![Span::styled(format!("{} {} ", number(old.old), number(new.new)), gutter), Span::styled("~", Style::default().fg(theme.warn))];
+    spans.extend(fit(styled, width.saturating_sub(GUTTER_W * 2 + 3)));
+    spans
+}
+
+/// Styled pieces laid end to end, tabs made visible, cut to `room` columns.
+fn fit<'a>(parts: Vec<(&str, Style)>, room: usize) -> Vec<Span<'a>> {
+    let mut spans = vec![];
+    let mut used = 0;
+    for (text, style) in parts {
+        if used >= room {
+            break;
+        }
+        let cut = truncate(&text.replace('\t', TAB), room - used);
+        used += cut.width();
+        spans.push(Span::styled(cut, style));
     }
     spans
 }

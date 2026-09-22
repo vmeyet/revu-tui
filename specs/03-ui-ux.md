@@ -123,6 +123,20 @@ Between two hunks the elided lines show as `· · ·  38 lines` in `faded`; `+` 
 - `W` hides whitespace-only changes (the line shows as context with a `≈` sign).
 - The selected line has the `▎` bar and, if the theme has `highlight`, the fill.
 
+### Inline pairs
+
+A removed line and its added twin read as one row when the change is small:
+
+```
+ old  new   text
+   3    3 ~    let b = 2;20;
+```
+
+- The rule: the pair comes from an equal run of `-` and `+` lines (the word-diff pairing), each side changes at most `[review] inline_max_words` runs of words (default 2), and both lines keep at least `[review] inline_min_same` percent of their bytes (default 60). Anything bigger stays split, so a rewrite never turns into a puzzle.
+- Both gutters show, the sign is `~` in `warn`, the kept text is plain, each old word is struck through in the removed colours and followed by its replacement in the added colours (the theme's word fills behind them on RGB themes).
+- `c` comments on the new side, `C` on the old side; `V` counts the pair as its added line. Threads and drafts on either line hang under the pair.
+- `D` switches between inline and split, remembered per MR like folds; inline is the default.
+
 ### Anchors in the flow
 
 A thread renders as one collapsed row under its line: `◆ author · first line of the note · n replies`, `resolved` ones in `faded` with `✓`.

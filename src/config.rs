@@ -1,3 +1,4 @@
+use crate::diff::words::InlineRule;
 use crate::forge::Kind;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -55,17 +56,41 @@ impl Queue {
 }
 
 /// How a diff opens.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Review {
     /// Glob patterns of files that open folded: lockfiles, snapshots, generated code.
     #[serde(default)]
     pub fold: Vec<String>,
+    /// A changed pair reads as one row when each side changes at most this many words…
+    #[serde(default = "inline_max_words")]
+    pub inline_max_words: usize,
+    /// …and both lines keep at least this share of their text, in percent.
+    #[serde(default = "inline_min_same")]
+    pub inline_min_same: u8,
+}
+
+impl Default for Review {
+    fn default() -> Self {
+        Self { fold: vec![], inline_max_words: inline_max_words(), inline_min_same: inline_min_same() }
+    }
+}
+
+fn inline_max_words() -> usize {
+    InlineRule::default().max_words
+}
+
+fn inline_min_same() -> u8 {
+    InlineRule::default().min_same
 }
 
 impl Review {
     fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    pub fn inline(&self) -> InlineRule {
+        InlineRule { max_words: self.inline_max_words, min_same: self.inline_min_same }
     }
 }
 
@@ -148,7 +173,7 @@ mod tests {
             host: Some("gitlab.com".into()),
             username: Some("nina".into()),
             queue: Queue { watch_labels: vec!["infra".into()], ..Queue::default() },
-            review: Review { fold: vec!["*.lock".into()] },
+            review: Review { fold: vec!["*.lock".into()], ..Review::default() },
             tui: Tui { theme: Some("nord".into()), ascii: false },
             ai: Ai::default(),
             hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })]),

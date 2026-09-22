@@ -17,6 +17,7 @@ impl App {
     pub(super) fn handle_write_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
         let actions = match key.code {
             KeyCode::Char('c') => self.comment_here(),
+            KeyCode::Char('C') => self.comment_old_side(),
             KeyCode::Char('V') => {
                 self.start_select();
                 vec![]
@@ -51,9 +52,22 @@ impl App {
         vec![]
     }
 
+    /// `C` on a changed pair: the note goes on the removed line instead of the added one.
+    fn comment_old_side(&mut self) -> Vec<Action> {
+        let place = self.open.as_ref().filter(|o| o.select_from.is_none()).and_then(|open| match open.row() {
+            Some(Row::Pair { file, hunk, removed, .. }) => position::for_line(&open.review, *file, *hunk, *removed),
+            _ => None,
+        });
+        match place {
+            Some(position) => self.open_input(Input::Comment { position: Box::new(position) }, ""),
+            None => self.toast("C comments on the old side of a changed pair"),
+        }
+        vec![]
+    }
+
     fn start_select(&mut self) {
         let Some(open) = &self.open else { return };
-        if !matches!(open.row(), Some(Row::Line { .. })) {
+        if !matches!(open.row(), Some(Row::Line { .. } | Row::Pair { .. })) {
             self.toast("move onto a line first");
             return;
         }
@@ -72,7 +86,7 @@ impl App {
         let lines: Vec<(usize, usize, usize)> = open
             .selection()
             .filter_map(|i| match open.rows.get(i) {
-                Some(Row::Line { file, hunk, index }) => Some((*file, *hunk, *index)),
+                Some(Row::Line { file, hunk, index } | Row::Pair { file, hunk, added: index, .. }) => Some((*file, *hunk, *index)),
                 _ => None,
             })
             .collect();
@@ -89,7 +103,7 @@ impl App {
         let Some(open) = &self.open else { return vec![] };
         open.selection()
             .filter_map(|i| match open.rows.get(i) {
-                Some(Row::Line { file, hunk, index }) => {
+                Some(Row::Line { file, hunk, index } | Row::Pair { file, hunk, added: index, .. }) => {
                     let line = &open.review.files[*file].hunks[*hunk].lines[*index];
                     let sign = match line.kind {
                         crate::diff::LineKind::Added => '+',

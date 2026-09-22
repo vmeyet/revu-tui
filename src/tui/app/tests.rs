@@ -902,3 +902,157 @@ fn the_queue_names_me_when_no_login_did() {
     app.apply(Incoming::Queue { scope: None, me: "someone".into(), sections: sections(), opened: HashMap::new(), cached: false });
     assert_eq!(app.me, "nina", "a stored name is never replaced");
 }
+
+fn sum_review() -> Review {
+    let file = DiffFile {
+        diff: include_str!("../../review/fixtures/sum.diff").to_owned(),
+        old_path: "src/sum.rs".into(),
+        new_path: "src/sum.rs".into(),
+        a_mode: "100644".into(),
+        b_mode: "100644".into(),
+        ..DiffFile::default()
+    };
+    let on_new_line_three = json!({
+        "id": "d3", "individual_note": false,
+        "notes": [{
+            "id": 900, "type": "DiffNote", "body": "Why twenty?",
+            "author": {"id": 3, "username": "lea", "name": "Léa"},
+            "created_at": "2026-09-22T10:05:00Z", "updated_at": "2026-09-22T10:05:00Z",
+            "system": false, "resolvable": true, "resolved": false,
+            "position": {"base_sha": "aaaa", "head_sha": "bbbb", "start_sha": "aaaa", "position_type": "text",
+                         "old_path": "src/sum.rs", "new_path": "src/sum.rs", "old_line": null, "new_line": 3}
+        }]
+    });
+    Review::new(mr(), &[file], vec![fixture::discussion(&on_new_line_three.to_string())], &[])
+}
+
+fn with_sum_review() -> App {
+    let mut app = with_queue();
+    app.queue_move(0);
+    app.handle_key(code(KeyCode::Enter));
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(sum_review()), cached: None });
+    app
+}
+
+/// Moves the cursor down until it sits on a row `wanted` accepts.
+fn walk_to(app: &mut App, wanted: impl Fn(&Row) -> bool) {
+    for _ in 0..40 {
+        if app.open.as_ref().unwrap().row().is_some_and(&wanted) {
+            return;
+        }
+        press(app, "j");
+    }
+    panic!("no such row");
+}
+
+fn on_pair(app: &mut App) {
+    walk_to(app, |r| matches!(r, Row::Pair { .. }));
+}
+
+#[test]
+fn a_one_word_change_reads_as_one_row_with_its_thread_under_it() {
+    let app = with_sum_review();
+    let rows = &app.open.as_ref().unwrap().rows;
+    let pair = rows.iter().position(|r| matches!(r, Row::Pair { removed: 2, added: 3, .. })).expect("the b line pairs up");
+    assert!(matches!(&rows[pair + 1], Row::Thread { id } if id == "d3"), "the thread on the added line sits under the pair");
+    let lines: Vec<usize> = rows.iter().filter_map(|r| if let Row::Line { index, .. } = r { Some(*index) } else { None }).collect();
+    assert_eq!(lines, vec![0, 1, 4, 5, 6, 7], "the rewritten d line stays split");
+}
+
+#[test]
+fn big_d_splits_and_joins_again_keeping_the_cursor_and_saving_the_choice() {
+    let mut app = with_sum_review();
+    on_pair(&mut app);
+    let actions = press(&mut app, "D");
+    assert!(matches!(actions.as_slice(), [Action::SaveState { split: true, .. }]), "{actions:?}");
+    let open = app.open.as_ref().unwrap();
+    assert!(!open.rows.iter().any(|r| matches!(r, Row::Pair { .. })));
+    assert!(matches!(open.row(), Some(Row::Line { index: 2 | 3, .. })), "the cursor stays on the b line: {:?}", open.row());
+    let actions = press(&mut app, "D");
+    assert!(matches!(actions.as_slice(), [Action::SaveState { split: false, .. }]));
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Pair { .. })));
+}
+
+#[test]
+fn a_refresh_keeps_the_split_choice() {
+    let mut app = with_sum_review();
+    press(&mut app, "D");
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(sum_review()), cached: None });
+    assert!(app.open.as_ref().unwrap().review.split);
+}
+
+#[test]
+fn c_on_a_pair_comments_the_new_side_and_big_c_the_old_side() {
+    let mut app = with_sum_review();
+    on_pair(&mut app);
+    press(&mut app, "c");
+    assert_eq!(app.input_label(), "comment sum.rs:3");
+    app.handle_key(code(KeyCode::Esc));
+    press(&mut app, "C");
+    assert_eq!(app.input_label(), "comment sum.rs:-3");
+    app.handle_key(code(KeyCode::Esc));
+    press(&mut app, "k");
+    press(&mut app, "C");
+    assert_eq!(app.input_label(), "", "C only means something on a pair");
+}
+
+#[test]
+fn v_treats_a_pair_as_its_added_line() {
+    let mut app = with_sum_review();
+    walk_to(&mut app, |r| matches!(r, Row::Line { index: 1, .. }));
+    press(&mut app, "Vjjjc");
+    let Some(Input::Comment { position }) = &app.input else { panic!("no comment input") };
+    let start = position.start.expect("a range");
+    assert_eq!((start.new, position.line.new), (Some(2), Some(4)), "from line 2 through the pair to line 4");
+}
+
+#[test]
+fn moving_and_jumping_step_over_pair_rows_like_lines() {
+    let mut app = with_sum_review();
+    on_pair(&mut app);
+    press(&mut app, "j");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Thread { .. })));
+    press(&mut app, "kk");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { index: 1, .. })));
+    press(&mut app, "[c");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { .. })));
+}
+
+#[test]
+fn snapshot_review_inline() {
+    let mut app = with_sum_review();
+    on_pair(&mut app);
+    insta::assert_snapshot!("review_inline", render(&mut app, 100, 18));
+}
+
+/// The cells holding the first character of `text` on screen.
+fn cell_of(buffer: &ratatui::buffer::Buffer, text: &str) -> ratatui::buffer::Cell {
+    let area = buffer.area;
+    (0..area.height)
+        .find_map(|y| {
+            let row: Vec<String> = (0..area.width).map(|x| buffer[(x, y)].symbol().to_owned()).collect();
+            let joined: String = row.concat();
+            joined.find(text).map(|byte| {
+                let x = joined[..byte].chars().count();
+                buffer[(x as u16, y)].clone()
+            })
+        })
+        .expect("the text is on screen")
+}
+
+#[test]
+fn the_old_word_is_struck_through_in_red_and_the_new_one_green() {
+    let mut app = with_sum_review();
+    let buffer = cells(&mut app, 100, 18);
+    let row = cell_of(&buffer, "let b = 2;20;");
+    assert_eq!(row.fg, Color::Reset, "the kept text reads like context");
+    let old = cell_of(&buffer, "2;20;");
+    assert_eq!(old.fg, Color::Red);
+    assert!(old.modifier.contains(ratatui::style::Modifier::CROSSED_OUT));
+    let new = cell_of(&buffer, "20;");
+    assert_eq!(new.fg, Color::Green);
+    assert!(!new.modifier.contains(ratatui::style::Modifier::CROSSED_OUT));
+    app.theme = Theme::named("tokyonight").unwrap();
+    let buffer = cells(&mut app, 100, 18);
+    assert_eq!(cell_of(&buffer, "20;").bg, app.theme.added_word.unwrap(), "RGB themes fill the new word");
+}

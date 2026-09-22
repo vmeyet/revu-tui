@@ -12,6 +12,7 @@ mod ui;
 use crate::cache::{Cache, Entry, keys};
 use crate::ctx::Ctx;
 use crate::diff::fold::FoldState;
+use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
@@ -35,6 +36,8 @@ struct MrState {
     viewed: BTreeSet<String>,
     #[serde(default)]
     opened_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    split: bool,
 }
 
 #[derive(Clone)]
@@ -43,6 +46,7 @@ struct Backend {
     cache: Cache,
     fold_globs: Vec<String>,
     watch_labels: Vec<String>,
+    inline: InlineRule,
 }
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out.
@@ -57,6 +61,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         cache: ctx.cache.clone(),
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
+        inline: ctx.config.review.inline(),
     };
     let settings = Settings {
         theme,
@@ -144,8 +149,8 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             }
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::SaveState { key, fold, viewed } => {
-                if let Err(e) = backend.save_state(&key, fold, viewed) {
+            Action::SaveState { key, fold, viewed, split } => {
+                if let Err(e) = backend.save_state(&key, fold, viewed, split) {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -315,11 +320,16 @@ impl Backend {
         let state = self.state(key);
         let review = Review::new(mr, diffs, discussions, &self.fold_globs);
         let fold = merged_fold(review.fold.clone(), state.fold);
-        review.with_fold(fold).with_viewed(state.viewed).with_drafts(drafts.iter().map(Draft::held).collect())
+        review
+            .with_fold(fold)
+            .with_viewed(state.viewed)
+            .with_inline(self.inline)
+            .with_split(state.split)
+            .with_drafts(drafts.iter().map(Draft::held).collect())
     }
 
-    fn save_state(&self, key: &MrKey, fold: FoldState, viewed: BTreeSet<String>) -> Result<()> {
-        let state = MrState { fold, viewed, ..self.state(key) };
+    fn save_state(&self, key: &MrKey, fold: FoldState, viewed: BTreeSet<String>, split: bool) -> Result<()> {
+        let state = MrState { fold, viewed, split, ..self.state(key) };
         self.cache.write(&keys::state(key), &state)
     }
 }
@@ -384,9 +394,10 @@ mod tests {
         assert_eq!(state, MrState::default());
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
-        let backend = Backend { forge: test_forge(), cache, fold_globs: vec![], watch_labels: vec![] };
-        backend.save_state(&key(), FoldState::default(), BTreeSet::from(["a.rs".to_owned()])).unwrap();
-        assert_eq!(backend.state(&key()).viewed, BTreeSet::from(["a.rs".to_owned()]));
+        let backend = Backend { forge: test_forge(), cache, fold_globs: vec![], watch_labels: vec![], inline: InlineRule::default() };
+        backend.save_state(&key(), FoldState::default(), BTreeSet::from(["a.rs".to_owned()]), true).unwrap();
+        let state = backend.state(&key());
+        assert_eq!((state.viewed, state.split), (BTreeSet::from(["a.rs".to_owned()]), true), "the split choice is remembered per MR");
     }
 
     fn test_forge() -> Forge {
@@ -405,7 +416,7 @@ mod tests {
         let creds = crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
         let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap());
         let dir = tempfile::tempdir().unwrap();
-        Backend { forge, cache: Cache::in_dir(dir.path()), fold_globs: vec![], watch_labels: vec![] }
+        Backend { forge, cache: Cache::in_dir(dir.path()), fold_globs: vec![], watch_labels: vec![], inline: InlineRule::default() }
     }
 
     fn draft_at(new_line: u32, body: &str) -> Draft {

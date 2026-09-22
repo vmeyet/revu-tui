@@ -8,6 +8,7 @@ pub use draft::Draft;
 pub use thread::{Anchor, Side, Thread};
 
 use crate::diff::fold::{FileMeta, FoldState};
+use crate::diff::words::{self, InlineRule};
 use crate::diff::{self, Hunk, LineKind};
 use crate::forge::{DiffFile, Discussion, Mr};
 use std::collections::BTreeSet;
@@ -105,6 +106,13 @@ pub enum Row {
         hunk: usize,
         index: usize,
     },
+    /// A removed line and its added twin read as one row, the changed words side by side.
+    Pair {
+        file: usize,
+        hunk: usize,
+        removed: usize,
+        added: usize,
+    },
     Thread {
         id: String,
     },
@@ -126,6 +134,10 @@ pub struct Review {
     pub drafts: Vec<Draft>,
     pub viewed: BTreeSet<String>,
     pub fold: FoldState,
+    /// Which changed pairs read as one row.
+    pub inline: InlineRule,
+    /// Every changed line on its own row, `D` in the TUI.
+    pub split: bool,
 }
 
 impl Review {
@@ -134,7 +146,15 @@ impl Review {
         let threads = threads_of(discussions, &files);
         let metas: Vec<FileMeta> = files.iter().map(File::meta).collect();
         let fold = FoldState::initial(&metas, fold_globs);
-        Self { mr, files, threads, drafts: vec![], viewed: BTreeSet::new(), fold }
+        Self { mr, files, threads, drafts: vec![], viewed: BTreeSet::new(), fold, inline: InlineRule::default(), split: false }
+    }
+
+    pub fn with_inline(&self, inline: InlineRule) -> Self {
+        Self { inline, ..self.clone() }
+    }
+
+    pub fn with_split(&self, split: bool) -> Self {
+        Self { split, ..self.clone() }
     }
 
     pub fn with_fold(&self, fold: FoldState) -> Self {
@@ -205,10 +225,18 @@ impl Review {
             if !open {
                 continue;
             }
+            let pairs = if self.split { vec![] } else { words::inline_pairs(hunk, self.inline) };
             for (line_index, line) in hunk.lines.iter().enumerate() {
-                rows.push(Row::Line { file: index, hunk: hunk_index, index: line_index });
-                rows.extend(self.threads_on(file, line).into_iter().map(|t| Row::Thread { id: t.id.clone() }));
-                rows.extend(self.drafts_on(file, line).into_iter().map(|index| Row::Draft { index }));
+                if pairs.iter().any(|&(_, added)| added == line_index) {
+                    continue;
+                }
+                if let Some(&(removed, added)) = pairs.iter().find(|&&(removed, _)| removed == line_index) {
+                    rows.push(Row::Pair { file: index, hunk: hunk_index, removed, added });
+                    self.push_anchors(rows, file, &hunk.lines[added]);
+                } else {
+                    rows.push(Row::Line { file: index, hunk: hunk_index, index: line_index });
+                }
+                self.push_anchors(rows, file, line);
             }
         }
         if !self.outdated(&file.new_path).is_empty() {
@@ -225,6 +253,12 @@ impl Review {
 }
 
 impl Review {
+    /// The threads, then the drafts, hung on one line.
+    fn push_anchors(&self, rows: &mut Vec<Row>, file: &File, line: &diff::Line) {
+        rows.extend(self.threads_on(file, line).into_iter().map(|t| Row::Thread { id: t.id.clone() }));
+        rows.extend(self.drafts_on(file, line).into_iter().map(|index| Row::Draft { index }));
+    }
+
     fn drafts_on(&self, file: &File, line: &diff::Line) -> Vec<usize> {
         let new = line.new.map(|n| self.drafts_at(&file.new_path, Side::New, n)).unwrap_or_default();
         let old = line.old.map(|n| self.drafts_at(&file.old_path, Side::Old, n)).unwrap_or_default();
