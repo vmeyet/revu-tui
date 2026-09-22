@@ -9,13 +9,13 @@ mod theme;
 mod thread_view;
 mod ui;
 
-use crate::api::{Client, DraftNote, NewDraft, Queue};
 use crate::cache::{Cache, Entry, keys};
 use crate::ctx::Ctx;
 use crate::diff::fold::FoldState;
+use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
-use app::{Action, App, Failure, Incoming, Input, MrKey, Settings};
+use app::{Action, App, Failure, Incoming, Input, Settings};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
@@ -39,7 +39,7 @@ struct MrState {
 
 #[derive(Clone)]
 struct Backend {
-    gitlab: Client,
+    forge: Forge,
     cache: Cache,
     fold_globs: Vec<String>,
     watch_labels: Vec<String>,
@@ -53,14 +53,15 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         None => theme::Theme::default(),
     };
     let backend = Backend {
-        gitlab: ctx.gitlab.clone(),
+        forge: ctx.forge.clone(),
         cache: ctx.cache.clone(),
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
     };
     let settings = Settings {
         theme,
-        host: ctx.gitlab.host().to_owned(),
+        host: ctx.forge.host().to_owned(),
+        kind: ctx.forge.kind(),
         me: ctx.config.username.clone().unwrap_or_default(),
         project: ctx.project.clone(),
     };
@@ -136,7 +137,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, &e)));
             }
             Action::Open(key) => {
-                if let Some(cached) = backend.open_cached(key) {
+                if let Some(cached) = backend.open_cached(&key) {
                     send(cached);
                 }
                 send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Open, &e)));
@@ -144,7 +145,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::SaveState { key, fold, viewed } => {
-                if let Err(e) = backend.save_state(key, fold, viewed) {
+                if let Err(e) = backend.save_state(&key, fold, viewed) {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -156,25 +157,24 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
             }
             Action::UpdateDraft { key, id, draft } => {
-                if let Err(e) = backend.gitlab.update_draft(key.0, key.1, id, &new_draft(&draft)).await {
+                if let Err(e) = backend.forge.update_draft(&key, id, &draft.payload()).await {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::DeleteDraft { key, id } => {
-                if let Err(e) = backend.gitlab.delete_draft(key.0, key.1, id).await {
+                if let Err(e) = backend.forge.delete_draft(&key, id).await {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::Publish { key, approve, count } => {
                 send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }
-            Action::Resolve { key, thread, resolved } => send(backend.gitlab.resolve(key.0, key.1, &thread, resolved).await.map_or_else(
+            Action::Resolve { key, thread, resolved } => send(backend.forge.resolve(&key, &thread, resolved).await.map_or_else(
                 |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
-                |_| Incoming::Resolved { key, thread: thread.clone(), resolved },
+                |()| Incoming::Resolved { key, thread: thread.clone(), resolved },
             )),
             Action::Approve { key, approve } => {
-                let outcome =
-                    if approve { backend.gitlab.approve(key.0, key.1).await } else { backend.gitlab.unapprove(key.0, key.1).await };
+                let outcome = backend.forge.approve(&key, approve).await;
                 send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
             }
             Action::Compose { .. } => unreachable!("the loop runs the editor itself"),
@@ -233,7 +233,7 @@ fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
 
 impl Backend {
     async fn load_queue(&self, scope: Option<String>) -> Result<Incoming> {
-        let queue = self.gitlab.queue(scope.as_deref()).await?;
+        let queue = self.forge.queue(scope.as_deref()).await?;
         let _ = self.cache.write_entry(&keys::queue(scope.as_deref()), &queue);
         Ok(self.queue_answer(scope, &queue, false))
     }
@@ -249,106 +249,78 @@ impl Backend {
         Incoming::Queue { scope, sections, opened, cached }
     }
 
-    fn opened_at(&self, sections: &crate::api::Sections) -> HashMap<MrKey, DateTime<Utc>> {
+    fn opened_at(&self, sections: &Sections) -> HashMap<MrKey, DateTime<Utc>> {
         [&sections.to_review, &sections.mine, &sections.watching, &sections.open, &sections.done]
             .into_iter()
             .flatten()
             .filter_map(|mr| {
-                let key = (mr.project_id, mr.iid);
-                let state: MrState = self.cache.read(&keys::state(key.0, key.1))?;
+                let key = mr.key();
+                let state: MrState = self.cache.read(&keys::state(&key))?;
                 Some((key, state.opened_at?))
             })
             .collect()
     }
 
-    fn state(&self, key: MrKey) -> MrState {
-        self.cache.read(&keys::state(key.0, key.1)).unwrap_or_default()
+    fn state(&self, key: &MrKey) -> MrState {
+        self.cache.read(&keys::state(key)).unwrap_or_default()
     }
 
-    fn open_cached(&self, key: MrKey) -> Option<Incoming> {
-        let mr: Entry<crate::api::Mr> = self.cache.read_entry(&keys::mr(key.0, key.1))?;
-        let diffs: Vec<crate::api::DiffFile> = self.cache.read(&keys::diffs(key.0, key.1, &mr.value.diff_refs.head_sha))?;
-        let discussions: Vec<crate::api::Discussion> = self.cache.read(&keys::discussions(key.0, key.1)).unwrap_or_default();
-        let drafts: Vec<DraftNote> = self.cache.read(&keys::drafts(key.0, key.1)).unwrap_or_default();
+    fn open_cached(&self, key: &MrKey) -> Option<Incoming> {
+        let mr: Entry<Mr> = self.cache.read_entry(&keys::mr(key))?;
+        let diffs: Vec<DiffFile> = self.cache.read(&keys::diffs(key, &mr.value.refs.head))?;
+        let discussions: Vec<Discussion> = self.cache.read(&keys::discussions(key)).unwrap_or_default();
+        let drafts: Vec<HeldDraft> = self.cache.read(&keys::drafts(key)).unwrap_or_default();
         let age = mr.age(Utc::now());
         let review = self.build(key, mr.value, &diffs, discussions, &drafts);
-        Some(Incoming::Review { key, review: Box::new(review), cached: Some(age) })
+        Some(Incoming::Review { key: key.clone(), review: Box::new(review), cached: Some(age) })
     }
 
     async fn fetch_review(&self, key: MrKey) -> Result<Incoming> {
-        let (project_id, iid) = key;
-        let (mr, diffs, discussions, drafts) = tokio::try_join!(
-            self.gitlab.mr(project_id, iid),
-            self.gitlab.diffs(project_id, iid),
-            self.gitlab.discussions(project_id, iid),
-            self.gitlab.draft_notes(project_id, iid)
-        )?;
-        let _ = self.cache.write_entry(&keys::mr(project_id, iid), &mr);
-        let _ = self.cache.write(&keys::diffs(project_id, iid, &mr.diff_refs.head_sha), &diffs);
-        let _ = self.cache.write(&keys::discussions(project_id, iid), &discussions);
-        let _ = self.cache.write(&keys::drafts(project_id, iid), &drafts);
-        let state = MrState { opened_at: Some(Utc::now()), ..self.state(key) };
-        let _ = self.cache.write(&keys::state(project_id, iid), &state);
-        let review = self.build(key, mr, &diffs, discussions, &drafts);
+        let forge = &self.forge;
+        let (mr, diffs, discussions, drafts) =
+            tokio::try_join!(forge.mr(&key), forge.diffs(&key), forge.discussions(&key), forge.drafts(&key))?;
+        let _ = self.cache.write_entry(&keys::mr(&key), &mr);
+        let _ = self.cache.write(&keys::diffs(&key, &mr.refs.head), &diffs);
+        let _ = self.cache.write(&keys::discussions(&key), &discussions);
+        let _ = self.cache.write(&keys::drafts(&key), &drafts);
+        let state = MrState { opened_at: Some(Utc::now()), ..self.state(&key) };
+        let _ = self.cache.write(&keys::state(&key), &state);
+        let review = self.build(&key, mr, &diffs, discussions, &drafts);
         Ok(Incoming::Review { key, review: Box::new(review), cached: None })
     }
 
-    /// Posts the draft unless GitLab already lists it: a retry after a lost answer never doubles a note.
+    /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
     async fn save_draft(&self, key: MrKey, index: usize, draft: &Draft) -> Result<Incoming> {
-        let (project_id, iid) = key;
-        let held = self.gitlab.draft_notes(project_id, iid).await?;
-        let id = match held.iter().find(|note| draft.same_as(&to_draft(note))) {
+        let held = self.forge.drafts(&key).await?;
+        let id = match held.iter().find(|note| draft.same_as(&Draft::held(note))) {
             Some(note) => note.id,
-            None => self.gitlab.create_draft(project_id, iid, &new_draft(draft)).await?.id,
+            None => self.forge.create_draft(&key, &draft.payload()).await?.id,
         };
         Ok(Incoming::DraftSaved { key, index, id })
     }
 
     async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
-        self.gitlab.publish_drafts(key.0, key.1).await?;
-        let _ = self.cache.write(&keys::drafts(key.0, key.1), &Vec::<DraftNote>::new());
-        if approve {
-            self.gitlab.approve(key.0, key.1).await?;
-        }
+        self.forge.publish(&key, approve).await?;
+        let _ = self.cache.write(&keys::drafts(&key), &Vec::<HeldDraft>::new());
         Ok(Incoming::Published { key, approved: approve, count })
     }
 
     async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
-        let discussions = self.gitlab.discussions(key.0, key.1).await?;
-        let _ = self.cache.write(&keys::discussions(key.0, key.1), &discussions);
+        let discussions = self.forge.discussions(&key).await?;
+        let _ = self.cache.write(&keys::discussions(&key), &discussions);
         Ok(Incoming::Discussions { key, discussions })
     }
 
-    fn build(
-        &self,
-        key: MrKey,
-        mr: crate::api::Mr,
-        diffs: &[crate::api::DiffFile],
-        discussions: Vec<crate::api::Discussion>,
-        drafts: &[DraftNote],
-    ) -> Review {
+    fn build(&self, key: &MrKey, mr: Mr, diffs: &[DiffFile], discussions: Vec<Discussion>, drafts: &[HeldDraft]) -> Review {
         let state = self.state(key);
         let review = Review::new(mr, diffs, discussions, &self.fold_globs);
         let fold = merged_fold(review.fold.clone(), state.fold);
-        review.with_fold(fold).with_viewed(state.viewed).with_drafts(drafts.iter().map(to_draft).collect())
+        review.with_fold(fold).with_viewed(state.viewed).with_drafts(drafts.iter().map(Draft::held).collect())
     }
 
-    fn save_state(&self, key: MrKey, fold: FoldState, viewed: BTreeSet<String>) -> Result<()> {
+    fn save_state(&self, key: &MrKey, fold: FoldState, viewed: BTreeSet<String>) -> Result<()> {
         let state = MrState { fold, viewed, ..self.state(key) };
-        self.cache.write(&keys::state(key.0, key.1), &state)
-    }
-}
-
-fn to_draft(note: &DraftNote) -> Draft {
-    Draft::from_note(note.id, note.note.clone(), note.position.as_ref(), note.discussion_id.clone(), note.resolve_discussion)
-}
-
-fn new_draft(draft: &Draft) -> NewDraft {
-    NewDraft {
-        note: draft.body.clone(),
-        position: draft.position.clone(),
-        in_reply_to_discussion_id: draft.reply_to.clone(),
-        resolve_discussion: draft.resolve,
+        self.cache.write(&keys::state(key), &state)
     }
 }
 
@@ -379,6 +351,9 @@ fn copy(text: &str) -> Result<()> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::forge::gitlab::Client;
+    use crate::forge::gitlab::fixture::key;
+    use crate::forge::{LineRef, Position, Refs};
 
     #[test]
     fn a_link_prints_only_where_its_text_is_still_on_screen() {
@@ -409,13 +384,13 @@ mod tests {
         assert_eq!(state, MrState::default());
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
-        let backend = Backend { gitlab: test_client(), cache, fold_globs: vec![], watch_labels: vec![] };
-        backend.save_state((7, 42), FoldState::default(), BTreeSet::from(["a.rs".to_owned()])).unwrap();
-        assert_eq!(backend.state((7, 42)).viewed, BTreeSet::from(["a.rs".to_owned()]));
+        let backend = Backend { forge: test_forge(), cache, fold_globs: vec![], watch_labels: vec![] };
+        backend.save_state(&key(), FoldState::default(), BTreeSet::from(["a.rs".to_owned()])).unwrap();
+        assert_eq!(backend.state(&key()).viewed, BTreeSet::from(["a.rs".to_owned()]));
     }
 
-    fn test_client() -> Client {
-        Client::new(&crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() }).unwrap()
+    fn test_forge() -> Forge {
+        Forge::GitLab(Client::new(&crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() }).unwrap())
     }
 
     fn held_note(id: u64, note: &str, new_line: u32) -> serde_json::Value {
@@ -428,36 +403,37 @@ mod tests {
 
     fn backend_on(server: &wiremock::MockServer) -> Backend {
         let creds = crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
-        let gitlab = Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap();
+        let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap());
         let dir = tempfile::tempdir().unwrap();
-        Backend { gitlab, cache: Cache::in_dir(dir.path()), fold_globs: vec![], watch_labels: vec![] }
+        Backend { forge, cache: Cache::in_dir(dir.path()), fold_globs: vec![], watch_labels: vec![] }
     }
 
     fn draft_at(new_line: u32, body: &str) -> Draft {
-        let refs = crate::api::types::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
-        Draft::on(crate::api::Position::line(&refs, "src/a.rs", "src/a.rs", None, Some(new_line)), body)
+        let refs = Refs { base: "a".into(), start: "a".into(), head: "b".into() };
+        let line = LineRef { old: None, new: Some(new_line) };
+        Draft::on(Position { refs, old_path: "src/a.rs".into(), new_path: "src/a.rs".into(), line, start: None }, body)
     }
 
     #[tokio::test]
-    async fn a_draft_gitlab_already_holds_is_not_posted_twice() {
+    async fn a_draft_the_forge_already_holds_is_not_posted_twice() {
         use wiremock::matchers::{method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/api/v4/projects/7/merge_requests/42/draft_notes"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/draft_notes"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([held_note(5, "nit", 12)])))
             .mount(&server)
             .await;
         Mock::given(method("POST"))
-            .and(path("/api/v4/projects/7/merge_requests/42/draft_notes"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/draft_notes"))
             .respond_with(ResponseTemplate::new(201).set_body_json(held_note(6, "other", 13)))
             .expect(1)
             .mount(&server)
             .await;
         let backend = backend_on(&server);
-        let same = backend.save_draft((7, 42), 0, &draft_at(12, "nit")).await.unwrap();
-        assert_eq!(same, Incoming::DraftSaved { key: (7, 42), index: 0, id: 5 });
-        let fresh = backend.save_draft((7, 42), 1, &draft_at(13, "other")).await.unwrap();
-        assert_eq!(fresh, Incoming::DraftSaved { key: (7, 42), index: 1, id: 6 });
+        let same = backend.save_draft(key(), 0, &draft_at(12, "nit")).await.unwrap();
+        assert_eq!(same, Incoming::DraftSaved { key: key(), index: 0, id: 5 });
+        let fresh = backend.save_draft(key(), 1, &draft_at(13, "other")).await.unwrap();
+        assert_eq!(fresh, Incoming::DraftSaved { key: key(), index: 1, id: 6 });
     }
 }

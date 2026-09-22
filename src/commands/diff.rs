@@ -1,7 +1,7 @@
 use super::target;
-use crate::api::DiffFile;
 use crate::cli::RefArgs;
 use crate::ctx::Ctx;
+use crate::forge::DiffFile;
 use crate::render::{Style, Theme};
 use anyhow::{Context, Result};
 use std::io::{IsTerminal, Write};
@@ -9,8 +9,8 @@ use std::process::{Command, Stdio};
 
 /// Prints the coloured diff, through the pager on a terminal.
 pub async fn run(ctx: &Ctx, args: RefArgs) -> Result<()> {
-    let (project_id, iid) = target::resolve(&ctx.gitlab, args.mr.as_deref()).await?;
-    let (_, diffs, _) = super::show::fetch(ctx, project_id, iid).await?;
+    let key = target::resolve(&ctx.forge, args.mr.as_deref()).await?;
+    let (_, diffs, _) = super::show::fetch(ctx, &key).await?;
     let out = text(&diffs, Theme::detect());
     if std::io::stdout().is_terminal() { page(&out) } else { print_all(&out) }
 }

@@ -1,10 +1,13 @@
-pub mod graphql;
-pub mod rest;
-pub mod types;
+//! The GitLab backend: REST for one MR, GraphQL for the queue. Wire shapes live in `wire` and
+//! turn into the neutral model at this edge.
+mod graphql;
+mod rest;
+mod wire;
 
-pub use graphql::{Queue, QueueMr, Sections};
-pub use types::{DiffFile, Discussion, DraftNote, Mr, NewDraft, Note, Position, User};
+#[cfg(test)]
+pub(crate) use wire::fixture;
 
+use super::{LineRef, User};
 use crate::auth::Credentials;
 use anyhow::{Context, Result, bail};
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -54,33 +57,33 @@ impl Client {
         &self.host
     }
 
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+    async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let response = self.send(Method::GET, self.url(path)?, None).await?;
         response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
     }
 
     /// `path` is relative to `/api/v4/` except `graphql`, which lives beside it.
-    pub async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+    async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(Method::POST, self.url(path)?, Some(body)).await?;
         response.json().await.map_err(scrub).with_context(|| format!("POST {path}: unreadable answer"))
     }
 
-    pub async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+    async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(Method::PUT, self.url(path)?, Some(body)).await?;
         response.json().await.map_err(scrub).with_context(|| format!("PUT {path}: unreadable answer"))
     }
 
     /// A request whose answer body does not matter: `204`s, publishes, approvals.
-    pub async fn send_empty(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<()> {
+    async fn send_empty(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<()> {
         self.send(method, self.url(path)?, body).await.map(|_| ())
     }
 
-    pub async fn delete(&self, path: &str) -> Result<()> {
+    async fn delete(&self, path: &str) -> Result<()> {
         self.send_empty(Method::DELETE, path, None).await
     }
 
     /// Every page of a list, following `Link: rel="next"` until it stops.
-    pub async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
+    async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
         let mut url = self.url(path)?;
         url.query_pairs_mut().append_pair("per_page", PAGE_SIZE);
         let mut items = Vec::new();
@@ -97,7 +100,7 @@ impl Client {
     }
 
     pub async fn me(&self) -> Result<User> {
-        self.get("user").await
+        self.get::<wire::User>("user").await.map(User::from)
     }
 
     /// One request with the token, retried once after the wait GitLab asks for on 429.
@@ -147,7 +150,12 @@ async fn checked(response: Response, method: &Method, url: &Url) -> Result<Respo
         return Ok(response);
     }
     let message = response.text().await.unwrap_or_default();
-    bail!("{method} {}: HTTP {} {}", url.path(), status.as_u16(), types::error_message(&message))
+    bail!("{method} {}: HTTP {} {}", url.path(), status.as_u16(), wire::error_message(&message))
+}
+
+/// GitLab's page for one diff line: the MR's diffs, scrolled to `sha1(path)_old_new`.
+pub fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
+    format!("{web_url}/diffs#{}", wire::line_code(path, line.old, line.new))
 }
 
 /// `Retry-After` in seconds, else `Ratelimit-Reset` as a unix time, else one second.

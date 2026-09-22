@@ -18,15 +18,13 @@ pub use review::Open;
 pub use state::{App, Settings};
 pub use write::Publish;
 
-use crate::api::{Discussion, Sections};
 use crate::diff::fold::FoldState;
+pub use crate::forge::MrKey;
+use crate::forge::{Discussion, Position, Sections};
 use crate::review::{Draft, Review};
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeSet, HashMap};
 use std::time::Duration;
-
-/// `(project_id, iid)`: the one way an MR is addressed inside the app.
-pub type MrKey = (u64, u64);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Focus {
@@ -98,7 +96,7 @@ pub enum Action {
 pub enum Input {
     /// A new note on the line (or range) `position` names.
     Comment {
-        position: Box<crate::api::Position>,
+        position: Box<Position>,
     },
     Reply {
         thread: String,

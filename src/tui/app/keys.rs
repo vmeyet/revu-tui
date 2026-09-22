@@ -152,8 +152,8 @@ impl App {
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
             KeyCode::Char('i') => self.brief = self.open.as_ref().map(|o| Brief::of_review(&o.review)),
-            KeyCode::Char('o') => return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url())]).unwrap_or_default(),
-            KeyCode::Char('y') => return self.open.as_ref().map(|o| vec![Action::Yank(o.line_url())]).unwrap_or_default(),
+            KeyCode::Char('o') => return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.kind))]).unwrap_or_default(),
+            KeyCode::Char('y') => return self.open.as_ref().map(|o| vec![Action::Yank(o.line_url(self.kind))]).unwrap_or_default(),
             _ => {}
         }
         vec![]
@@ -161,7 +161,7 @@ impl App {
 
     /// A refresh also posts again every draft GitLab does not hold yet.
     fn refresh_open(&mut self) -> Vec<Action> {
-        let Some(key) = self.open.as_ref().map(|o| o.key) else { return vec![] };
+        let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
         let mut actions = vec![Action::RefreshMr(key)];
         actions.extend(self.retry_unsaved());
         actions

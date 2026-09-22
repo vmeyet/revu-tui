@@ -1,7 +1,7 @@
-use crate::api::{Queue, QueueMr, Sections};
 use crate::cache::keys;
 use crate::cli::ListArgs;
 use crate::ctx::Ctx;
+use crate::forge::{Kind, Queue, QueueMr, Sections};
 use crate::render::{self, Cell, Style, Theme, cell, right};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -15,7 +15,7 @@ pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     if ctx.json {
         return crate::ctx::emit(&sections);
     }
-    print!("{}", text(&sections, ctx.project.as_deref(), Theme::detect(), Utc::now()));
+    print!("{}", text(ctx.forge.kind(), &sections, ctx.project.as_deref(), Theme::detect(), Utc::now()));
     Ok(())
 }
 
@@ -25,13 +25,13 @@ fn cached(ctx: &Ctx) -> Result<Queue> {
 }
 
 async fn fetched(ctx: &Ctx) -> Result<Queue> {
-    let queue = ctx.gitlab.queue(ctx.project.as_deref()).await?;
+    let queue = ctx.forge.queue(ctx.project.as_deref()).await?;
     ctx.cache.write_entry(&keys::queue(ctx.project.as_deref()), &queue)?;
     Ok(queue)
 }
 
 /// `project` is the scope, named on a first line so a short list never reads as "nothing else is open".
-pub(crate) fn text(sections: &Sections, project: Option<&str>, theme: Theme, now: DateTime<Utc>) -> String {
+pub(crate) fn text(kind: Kind, sections: &Sections, project: Option<&str>, theme: Theme, now: DateTime<Utc>) -> String {
     let scope = project.map(|p| format!("{}\n\n", theme.paint(&format!("{p} · --all for every project"), Style::Dim))).unwrap_or_default();
     let groups = [
         ("TO REVIEW", &sections.to_review),
@@ -48,17 +48,17 @@ pub(crate) fn text(sections: &Sections, project: Option<&str>, theme: Theme, now
         .iter()
         .map(|(name, mrs)| {
             let header = format!("{} {}\n", theme.paint(name, Style::Bold), theme.paint(&mrs.len().to_string(), Style::Dim));
-            let rows: Vec<Vec<Cell>> = mrs.iter().map(|mr| row(mr, now)).collect();
+            let rows: Vec<Vec<Cell>> = mrs.iter().map(|mr| row(kind, mr, now)).collect();
             format!("{header}{}\n", theme.table(&rows))
         })
         .collect();
     format!("{scope}{blocks}")
 }
 
-fn row(mr: &QueueMr, now: DateTime<Utc>) -> Vec<Cell> {
+fn row(kind: Kind, mr: &QueueMr, now: DateTime<Utc>) -> Vec<Cell> {
     let title = if mr.draft { format!("Draft: {}", mr.title) } else { mr.title.clone() };
     vec![
-        cell(format!("  !{}", mr.iid), Style::Accent),
+        cell(format!("  {}{}", kind.sigil(), mr.number), Style::Accent),
         cell(render::truncate(&title, TITLE_W), Style::Plain),
         cell(&mr.author, Style::Plain),
         right(render::age(mr.updated_at, now), Style::Dim),
@@ -88,8 +88,8 @@ fn badges(mr: &QueueMr) -> String {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::api::Client;
     use crate::auth::Credentials;
+    use crate::forge::gitlab::{Client, fixture};
     use chrono::TimeZone;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -98,7 +98,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/api/graphql"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(include_str!("../api/fixtures/queue.json")))
+            .respond_with(ResponseTemplate::new(200).set_body_string(include_str!("../forge/gitlab/fixtures/queue.json")))
             .mount(&server)
             .await;
         let client =
@@ -109,7 +109,7 @@ mod tests {
     #[tokio::test]
     async fn sections_print_as_headed_aligned_blocks() {
         let now = Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap();
-        let out = text(&sections().await, None, Theme::plain(), now);
+        let out = text(Kind::GitLab, &sections().await, None, Theme::plain(), now);
         assert!(out.starts_with("TO REVIEW 1\n  !42  "), "{out}");
         assert!(out.contains("\nMINE 1\n") && out.contains("\nWATCHING 1\n") && out.contains("\nDONE 1\n"), "{out}");
         assert!(out.contains("+412") && out.contains("−38") && out.contains("acme/widgets"), "{out}");
@@ -117,13 +117,13 @@ mod tests {
 
     #[test]
     fn an_empty_queue_says_so() {
-        assert_eq!(text(&Sections::default(), None, Theme::plain(), Utc::now()), "nothing open\n");
+        assert_eq!(text(Kind::GitLab, &Sections::default(), None, Theme::plain(), Utc::now()), "nothing open\n");
     }
 
     #[test]
     fn a_scoped_list_names_its_project_and_shows_the_open_section() {
-        let sections = Queue::from_json_in(include_str!("../api/fixtures/queue_scoped.json"), "acme/widgets").unwrap().sections(&[]);
-        let out = text(&sections, Some("acme/widgets"), Theme::plain(), Utc::now());
+        let sections = fixture::queue_in(include_str!("../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets").sections(&[]);
+        let out = text(Kind::GitLab, &sections, Some("acme/widgets"), Theme::plain(), Utc::now());
         assert!(out.starts_with("acme/widgets · --all for every project\n\nTO REVIEW 1\n"), "{out}");
         let open = out.find("\nOPEN 2\n").expect("an OPEN section");
         assert!(out.find("\nMINE 1\n").unwrap() < open && open < out.find("\nDONE 1\n").unwrap(), "{out}");

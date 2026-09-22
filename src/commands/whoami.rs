@@ -14,14 +14,14 @@ struct Whoami<'a> {
 
 /// Prints the signed-in user and where the token came from.
 pub async fn run(ctx: &Ctx) -> Result<()> {
-    let me = ctx.gitlab.me().await?;
+    let me = ctx.forge.me().await?;
     let token_source = match ctx.source {
         Source::Env => "GITLAB_TOKEN",
         Source::Keychain => "keychain",
     };
     if ctx.json {
-        return crate::ctx::emit(&Whoami { host: ctx.gitlab.host(), username: &me.username, name: &me.name, id: me.id, token_source });
+        return crate::ctx::emit(&Whoami { host: ctx.forge.host(), username: &me.username, name: &me.name, id: me.id, token_source });
     }
-    println!("{} ({}) on {} · token from {token_source}", me.username, me.name, ctx.gitlab.host());
+    println!("{} ({}) on {} · token from {token_source}", me.username, me.name, ctx.forge.host());
     Ok(())
 }

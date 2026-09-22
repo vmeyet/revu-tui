@@ -1,6 +1,6 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving.
 use super::{Action, App, Failure, Input, MrKey, Open};
-use crate::api::Position;
+use crate::forge::Position;
 use crate::review::{Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -124,7 +124,7 @@ impl App {
             self.publish = Some(Publish { selected: publish.selected.min(self.draft_count()), ..publish.clone() });
         }
         match draft.id {
-            Some(id) => vec![Action::DeleteDraft { key: open.key, id }],
+            Some(id) => vec![Action::DeleteDraft { key: open.key.clone(), id }],
             None => vec![],
         }
     }
@@ -162,7 +162,7 @@ impl App {
     fn toggle_approval(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let approve = !open.review.mr.approvals.user_has_approved;
-        vec![Action::Approve { key: open.key, approve }]
+        vec![Action::Approve { key: open.key.clone(), approve }]
     }
 
     pub(super) fn draft_count(&self) -> usize {
@@ -208,7 +208,7 @@ impl App {
             self.warn("some drafts are not saved yet · r to retry");
             return vec![];
         }
-        let action = Action::Publish { key: open.key, approve: publish.approve, count: open.review.drafts.len() };
+        let action = Action::Publish { key: open.key.clone(), approve: publish.approve, count: open.review.drafts.len() };
         self.publish = Some(Publish { busy: true, ..publish.clone() });
         vec![action]
     }
@@ -221,7 +221,7 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(_, d)| d.id.is_none())
-            .map(|(index, draft)| Action::SaveDraft { key: open.key, index, draft: Box::new(draft.clone()) })
+            .map(|(index, draft)| Action::SaveDraft { key: open.key.clone(), index, draft: Box::new(draft.clone()) })
             .collect()
     }
 
@@ -240,11 +240,11 @@ impl App {
         }
         let resolved = !thread.resolved;
         self.open = Some(open.with_review(open.review.with_resolved(&thread.id, resolved)));
-        vec![Action::Resolve { key: open.key, thread: thread.id, resolved }]
+        vec![Action::Resolve { key: open.key.clone(), thread: thread.id, resolved }]
     }
 
-    pub(super) fn apply_draft_saved(&mut self, key: MrKey, index: usize, id: u64) {
-        let Some(open) = self.open.clone().filter(|o| o.key == key) else { return };
+    pub(super) fn apply_draft_saved(&mut self, key: &MrKey, index: usize, id: u64) {
+        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
         let mut drafts = open.review.drafts.clone();
         match drafts.get_mut(index) {
             Some(draft) if draft.id.is_none() => draft.id = Some(id),
@@ -253,8 +253,8 @@ impl App {
         self.open = Some(open.with_review(open.review.with_drafts(drafts)));
     }
 
-    pub(super) fn apply_published(&mut self, key: MrKey, approved: bool, count: usize) {
-        let Some(open) = self.open.clone().filter(|o| o.key == key) else { return };
+    pub(super) fn apply_published(&mut self, key: &MrKey, approved: bool, count: usize) {
+        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
         let review = open.review.with_drafts(vec![]);
         self.open = Some(Open { thread: open.thread.clone(), ..open.with_review(review) });
         self.publish = None;
@@ -266,13 +266,13 @@ impl App {
         }
     }
 
-    pub(super) fn apply_resolved(&mut self, key: MrKey, thread: &str, resolved: bool) {
-        let Some(open) = self.open.clone().filter(|o| o.key == key) else { return };
+    pub(super) fn apply_resolved(&mut self, key: &MrKey, thread: &str, resolved: bool) {
+        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
         self.open = Some(open.with_review(open.review.with_resolved(thread, resolved)));
     }
 
-    pub(super) fn set_approved(&mut self, key: MrKey, approve: bool) {
-        let Some(open) = self.open.clone().filter(|o| o.key == key) else { return };
+    pub(super) fn set_approved(&mut self, key: &MrKey, approve: bool) {
+        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
         let mut review = open.review.clone();
         review.mr.approvals.user_has_approved = approve;
         self.open = Some(open.with_review(review));

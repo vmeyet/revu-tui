@@ -1,8 +1,8 @@
-use crate::api::Client;
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli};
 use crate::cache::Cache;
 use crate::cli::LoginArgs;
 use crate::config::Config;
+use crate::forge::{Forge, Kind};
 use anyhow::{Context, Result, bail};
 use std::io::{IsTerminal, Read, Write};
 use std::process::Command;
@@ -13,7 +13,8 @@ pub async fn run(args: LoginArgs, host_flag: Option<&str>, json: bool) -> Result
     let host = auth::pick_host(&Env::from_process(), &config, args.host.as_deref().or(host_flag));
     let token = read_token(&args, &host)?;
     let credentials = Credentials { host: host.clone(), token };
-    let me = Client::new(&credentials)?.me().await.context("token rejected: it needs the `api` scope")?;
+    let forge = Forge::connect(Kind::for_host(&host, &config), &credentials)?;
+    let me = forge.me().await.context("token rejected: it needs the `api` scope")?;
     SecurityCli::new(auth::SERVICE).set(&host, &credentials.token)?;
     config.host = Some(host.clone());
     config.username = Some(me.username.clone());

@@ -1,7 +1,8 @@
 # 00 · Vision
 
-`mr` is GitLab merge request review in the terminal, as yourself.
+`mr` is merge request review in the terminal, as yourself: GitLab today, GitHub pull requests next (`07-forges.md`).
 One Rust binary, ~10 ms startup, keyboard first, gorgeous.
+The binary stays `mr` on every forge; the crate keeps its name, `gitlabmr`.
 
 It is the sibling of `slack` (`~/Code/slack`, public as `vmeyet/slack-tui`).
 Same shape: a TUI plus scriptable subcommands, same event loop, same keychain trick, same theme engine.
@@ -74,12 +75,13 @@ One word per concept, used in code, docs and UI:
 |---|---|
 | queue | The list of MRs on the left, grouped in sections |
 | section | `To review`, `Mine`, `Watching` |
-| MR | One merge request, addressed as `group/project!iid` |
+| MR | One merge request (a pull request on GitHub), addressed as `group/project!42` or `owner/repo#42`; in code an `MrKey { project, number }` |
+| forge | The host's code platform: GitLab or GitHub |
 | file | One changed file in the MR diff |
 | hunk | One `@@` block inside a file |
 | line | One diff row with an old and/or new number |
-| thread | One GitLab discussion (resolvable or not) |
+| thread | One discussion (resolvable or not) |
 | note | One comment inside a thread |
-| draft | A note written locally or as a GitLab draft note, not yet published |
+| draft | A note written locally, or held by the forge (GitLab draft note, GitHub pending review comment), not yet published |
 | review | The set of drafts, published together with `P` |
 | viewed | A file the reviewer marked as read; it folds |
