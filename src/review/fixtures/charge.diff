@@ -1,0 +1,13 @@
+@@ -12,4 +12,5 @@ pub async fn charge
+ pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {
+-    let client = Client::new();
++    let client = Client::with_key(idempotency_key(card));
++    let attempt = Attempt::first();
+     let response = client.charge(amount).await?;
+     audit::record(&response);
+@@ -40,3 +41,4 @@ fn idempotency_key
+ fn idempotency_key(card: &Card) -> Key {
+-    Key::from(card.number())
++    Key::from((card.number(), card.expiry()))
++    // hunk two, line 43 is new
+ }
