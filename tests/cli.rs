@@ -49,3 +49,15 @@ fn show_rejects_a_reference_before_touching_the_network() {
         .failure()
         .stderr(predicate::str::contains("group/project!42"));
 }
+
+#[test]
+fn write_commands_explain_themselves() {
+    mr().args(["comment", "--help"]).assert().success().stdout(predicate::str::contains("--at"));
+    mr().args(["approve", "--help"]).assert().success().stdout(predicate::str::contains("--undo"));
+    mr().args(["publish", "--help"]).assert().success().stdout(predicate::str::contains("draft"));
+}
+
+#[test]
+fn comment_needs_a_text() {
+    mr().args(["--host", "localhost:1", "comment", "acme/widgets!42"]).env("GITLAB_TOKEN", "glpat-xxxx").assert().failure().code(2);
+}

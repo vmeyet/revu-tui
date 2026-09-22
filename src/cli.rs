@@ -29,6 +29,12 @@ pub enum Command {
     Show(RefArgs),
     /// The coloured diff of a merge request, through your pager.
     Diff(RefArgs),
+    /// Post a public comment on a merge request, on a line with `--at path:line`.
+    Comment(CommentArgs),
+    /// Approve a merge request (`--undo` takes it back).
+    Approve(ApproveArgs),
+    /// Publish every draft comment you hold on a merge request as one review.
+    Publish(RefArgs),
     /// Interactive review client.
     Tui,
     /// Generate shell completions.
@@ -58,4 +64,25 @@ pub struct ListArgs {
 pub struct RefArgs {
     /// `group/project!42`, `!42` (project from the origin remote), an MR URL, or nothing for the current branch.
     pub mr: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct CommentArgs {
+    /// `group/project!42`, `!42`, or an MR URL.
+    pub mr: String,
+    /// Anchor the comment on a line of the new file: `src/a.rs:13`.
+    #[arg(long, value_name = "PATH:LINE")]
+    pub at: Option<String>,
+    /// The comment, markdown.
+    #[arg(required = true, trailing_var_arg = true)]
+    pub text: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ApproveArgs {
+    /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
+    pub mr: Option<String>,
+    /// Remove your approval instead.
+    #[arg(long)]
+    pub undo: bool,
 }

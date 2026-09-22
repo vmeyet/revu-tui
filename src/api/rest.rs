@@ -1,7 +1,9 @@
 use super::Client;
-use super::types::{Approvals, DiffFile, Discussion, Mr};
-use anyhow::{Context, Result};
+use super::types::{Approvals, DiffFile, Discussion, DraftNote, Mr, NewDraft, Note, Position};
+use anyhow::{Context, Result, anyhow};
+use reqwest::Method;
 use serde::Deserialize;
+use serde_json::json;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Project {
@@ -50,6 +52,62 @@ impl Client {
     pub async fn discussions(&self, project_id: u64, iid: u64) -> Result<Vec<Discussion>> {
         self.get_all(&format!("{}/discussions", mr_path(project_id, iid))).await
     }
+
+    pub async fn draft_notes(&self, project_id: u64, iid: u64) -> Result<Vec<DraftNote>> {
+        self.get_all(&format!("{}/draft_notes", mr_path(project_id, iid))).await
+    }
+
+    pub async fn create_draft(&self, project_id: u64, iid: u64, draft: &NewDraft) -> Result<DraftNote> {
+        self.post_json(&format!("{}/draft_notes", mr_path(project_id, iid)), &serde_json::to_value(draft)?).await
+    }
+
+    pub async fn update_draft(&self, project_id: u64, iid: u64, id: u64, note: &str) -> Result<DraftNote> {
+        self.put_json(&format!("{}/draft_notes/{id}", mr_path(project_id, iid)), &json!({"note": note})).await
+    }
+
+    pub async fn delete_draft(&self, project_id: u64, iid: u64, id: u64) -> Result<()> {
+        self.delete(&format!("{}/draft_notes/{id}", mr_path(project_id, iid))).await
+    }
+
+    pub async fn publish_draft(&self, project_id: u64, iid: u64, id: u64) -> Result<()> {
+        self.send_empty(Method::PUT, &format!("{}/draft_notes/{id}/publish", mr_path(project_id, iid)), None).await
+    }
+
+    /// Every draft of mine on the MR becomes public at once, as one review.
+    pub async fn publish_drafts(&self, project_id: u64, iid: u64) -> Result<()> {
+        self.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(project_id, iid)), None).await
+    }
+
+    pub async fn resolve(&self, project_id: u64, iid: u64, discussion_id: &str, resolved: bool) -> Result<Discussion> {
+        self.put_json(&format!("{}/discussions/{discussion_id}", mr_path(project_id, iid)), &json!({"resolved": resolved})).await
+    }
+
+    /// A public reply in an existing thread.
+    pub async fn reply(&self, project_id: u64, iid: u64, discussion_id: &str, body: &str) -> Result<Note> {
+        self.post_json(&format!("{}/discussions/{discussion_id}/notes", mr_path(project_id, iid)), &json!({"body": body})).await
+    }
+
+    /// A public new thread, on a line when `position` is given.
+    pub async fn comment(&self, project_id: u64, iid: u64, body: &str, position: Option<&Position>) -> Result<Discussion> {
+        let payload = match position {
+            Some(position) => json!({"body": body, "position": position}),
+            None => json!({"body": body}),
+        };
+        self.post_json(&format!("{}/discussions", mr_path(project_id, iid)), &payload).await
+    }
+
+    pub async fn approve(&self, project_id: u64, iid: u64) -> Result<()> {
+        self.send_empty(Method::POST, &format!("{}/approve", mr_path(project_id, iid)), None).await.map_err(cannot_approve)
+    }
+
+    pub async fn unapprove(&self, project_id: u64, iid: u64) -> Result<()> {
+        self.send_empty(Method::POST, &format!("{}/unapprove", mr_path(project_id, iid)), None).await.map_err(cannot_approve)
+    }
+}
+
+/// GitLab answers 401 to an approval the token owner is not allowed to give (own MR, approval rules).
+fn cannot_approve(err: anyhow::Error) -> anyhow::Error {
+    if err.to_string().contains("HTTP 401") { anyhow!("you cannot approve this MR (own MR or approval rules)") } else { err }
 }
 
 fn url_encode(text: &str) -> String {
@@ -62,7 +120,7 @@ mod tests {
     use crate::api::types::from_fixture;
     use crate::auth::Credentials;
     use serde_json::json;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{body_partial_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn client(server: &MockServer) -> Client {
@@ -151,6 +209,96 @@ mod tests {
         let files = client(&server).await.diffs(7, 42).await.unwrap();
         assert_eq!(files.iter().map(|f| f.new_path.as_str()).collect::<Vec<_>>(), ["f1", "f2"]);
         assert!(files[0].new_file);
+    }
+
+    fn draft_json(id: u64) -> serde_json::Value {
+        json!({"id": id, "author_id": 2, "merge_request_id": 1042, "note": "nit", "discussion_id": null,
+               "resolve_discussion": false, "line_code": null, "position": null})
+    }
+
+    #[tokio::test]
+    async fn drafts_are_listed_created_updated_deleted_and_published() {
+        let server = MockServer::start().await;
+        let base = "/api/v4/projects/7/merge_requests/42/draft_notes";
+        Mock::given(method("GET"))
+            .and(path(base))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([draft_json(1)])))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(base))
+            .and(body_partial_json(json!({"note": "nit", "position": {"new_line": 13, "position_type": "text"}})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(draft_json(2)))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path(format!("{base}/2")))
+            .and(body_partial_json(json!({"note": "nit: renamed"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(draft_json(2)))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE")).and(path(format!("{base}/2"))).respond_with(ResponseTemplate::new(204)).mount(&server).await;
+        Mock::given(method("PUT")).and(path(format!("{base}/1/publish"))).respond_with(ResponseTemplate::new(204)).mount(&server).await;
+        Mock::given(method("POST")).and(path(format!("{base}/bulk_publish"))).respond_with(ResponseTemplate::new(204)).mount(&server).await;
+        let client = client(&server).await;
+        let refs = crate::api::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
+        let draft = NewDraft { note: "nit".into(), position: Some(Position::line(&refs, "x", "x", None, Some(13))), ..NewDraft::default() };
+        assert_eq!(client.draft_notes(7, 42).await.unwrap()[0].id, 1);
+        assert_eq!(client.create_draft(7, 42, &draft).await.unwrap().id, 2);
+        assert_eq!(client.update_draft(7, 42, 2, "nit: renamed").await.unwrap().id, 2);
+        client.delete_draft(7, 42, 2).await.unwrap();
+        client.publish_draft(7, 42, 1).await.unwrap();
+        client.publish_drafts(7, 42).await.unwrap();
+        assert_eq!(server.received_requests().await.unwrap().len(), 6);
+    }
+
+    #[tokio::test]
+    async fn threads_are_resolved_replied_to_and_opened() {
+        let server = MockServer::start().await;
+        let base = "/api/v4/projects/7/merge_requests/42/discussions";
+        let discussion: serde_json::Value = serde_json::from_str(include_str!("fixtures/discussions.json")).unwrap();
+        let note = discussion["notes"][0].clone();
+        Mock::given(method("PUT"))
+            .and(path(format!("{base}/6a9c1750")))
+            .and(body_partial_json(json!({"resolved": true})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&discussion))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(format!("{base}/6a9c1750/notes")))
+            .and(body_partial_json(json!({"body": "done"})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(&note))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(base))
+            .and(body_partial_json(json!({"body": "why?", "position": {"old_path": "x", "new_path": "x", "new_line": 3}})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(&discussion))
+            .mount(&server)
+            .await;
+        let client = client(&server).await;
+        let refs = crate::api::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
+        assert_eq!(client.resolve(7, 42, "6a9c1750", true).await.unwrap().id, discussion["id"]);
+        assert_eq!(client.reply(7, 42, "6a9c1750", "done").await.unwrap().body, note["body"]);
+        let position = Position::line(&refs, "x", "x", None, Some(3));
+        assert_eq!(client.comment(7, 42, "why?", Some(&position)).await.unwrap().id, discussion["id"]);
+    }
+
+    #[tokio::test]
+    async fn approve_explains_a_401_and_unapprove_passes_other_errors_through() {
+        let server = MockServer::start().await;
+        let base = "/api/v4/projects/7/merge_requests/42";
+        Mock::given(method("POST")).and(path(format!("{base}/approve"))).respond_with(ResponseTemplate::new(401)).mount(&server).await;
+        Mock::given(method("POST"))
+            .and(path(format!("{base}/unapprove")))
+            .respond_with(ResponseTemplate::new(404).set_body_json(json!({"message": "404 Not found"})))
+            .mount(&server)
+            .await;
+        let client = client(&server).await;
+        let err = client.approve(7, 42).await.unwrap_err().to_string();
+        assert!(err.contains("cannot approve"), "{err}");
+        let err = client.unapprove(7, 42).await.unwrap_err().to_string();
+        assert!(err.contains("HTTP 404"), "{err}");
     }
 
     #[tokio::test]

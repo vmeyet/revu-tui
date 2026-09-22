@@ -1,6 +1,9 @@
+pub mod approve;
+pub mod comment;
 pub mod diff;
 pub mod list;
 pub mod login;
+pub mod publish;
 pub mod show;
 pub mod target;
 pub mod whoami;

@@ -31,6 +31,9 @@ mr list                        # the MRs waiting on you, yours, the ones you wat
 mr show acme/widgets!42        # header, files, unresolved threads
 mr diff !42                    # the coloured diff through $PAGER (`!42` takes the project from the origin remote)
 mr show                        # the open MR of the current branch
+mr comment !42 --at src/a.rs:13 looks racy   # a public comment, on a line with --at
+mr approve !42                 # or --undo
+mr publish !42                 # every draft you hold on the MR, as one review
 ```
 
 Every command takes `--json`. An MR is `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
