@@ -8,7 +8,7 @@ TDD order inside each milestone is given; write the failing test first.
 
 1. Read `AGENTS.md`, then the spec files this milestone names.
 2. `cargo build && cargo test` must be green before and after.
-3. Run against the real thing with ``mr login --from-glab` once, then `cargo run -- <cmd>``; never paste output that names a private project into the repo.
+3. Run against the real thing with `mr login --from-glab` once, then `cargo run -- <cmd>`; never paste output that names a private project into the repo.
 4. Snapshot changes (`cargo insta review`) are reviewed by eye: a snapshot is a design decision.
 5. Every new key goes in the `?` help and in `README.md` in the same MR.
 
