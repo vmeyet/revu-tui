@@ -10,6 +10,9 @@ pub struct Cli {
     /// Print machine-readable JSON instead of the pretty output.
     #[arg(long, global = true)]
     pub json: bool,
+    /// Queue every project, not only the one of the checkout you are in.
+    #[arg(long, global = true)]
+    pub all: bool,
     #[command(subcommand)]
     pub command: Option<Command>,
 }

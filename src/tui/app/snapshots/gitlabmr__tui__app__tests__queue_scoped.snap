@@ -1,0 +1,24 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 120, 20)"
+---
+╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
+│   TO REVIEW                  1 ││                                                                                    │
+│ ▎ !42 feat: charge cards at…   ││                                                                                    │
+│   MINE                       1 ││                                                                                    │
+│   !41 fix: flaky cache test  D ││                                                                                    │
+│   WATCHING                   0 ││                                                                                    │
+│   OPEN                       2 ││                                                                                    │
+│   !50 feat: refunds          D ││                                                                                    │
+│   !51 chore: bump deps         ││                                open a merge request                                │
+│   DONE ▸                     1 ││                                to read its diff here                               │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                               ? help

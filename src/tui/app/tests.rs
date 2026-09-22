@@ -34,7 +34,14 @@ fn today() -> DateTime<Utc> {
 }
 
 fn settings() -> Settings {
-    Settings { theme: Theme::default(), host: "gitlab.com".into(), me: "nina".into(), fold_globs: vec![], watch_labels: vec![] }
+    Settings {
+        theme: Theme::default(),
+        host: "gitlab.com".into(),
+        me: "nina".into(),
+        fold_globs: vec![],
+        watch_labels: vec![],
+        project: None,
+    }
 }
 
 fn app() -> App {
@@ -49,7 +56,7 @@ fn sections() -> Sections {
 
 fn with_queue() -> App {
     let mut app = app();
-    app.apply(Incoming::Queue { sections: sections(), opened: HashMap::new() });
+    app.apply(Incoming::Queue { scope: None, sections: sections(), opened: HashMap::new(), cached: false });
     app
 }
 
@@ -123,7 +130,7 @@ fn render(app: &mut App, width: u16, height: u16) -> String {
 
 #[test]
 fn starts_by_loading_the_queue() {
-    assert_eq!(app().start(), vec![Action::LoadQueue]);
+    assert_eq!(app().start(), vec![Action::LoadQueue { scope: None, from_cache: true }]);
 }
 
 #[test]
@@ -202,9 +209,9 @@ fn badges_follow_the_spec_order() {
 #[test]
 fn r_refreshes_once_and_o_y_take_the_mr_url() {
     let mut app = with_queue();
-    assert_eq!(press(&mut app, "r"), vec![Action::LoadQueue]);
+    assert_eq!(press(&mut app, "r"), vec![Action::LoadQueue { scope: None, from_cache: false }]);
     assert_eq!(press(&mut app, "r"), vec![], "not while one is in flight");
-    app.apply(Incoming::Queue { sections: sections(), opened: HashMap::new() });
+    app.apply(Incoming::Queue { scope: None, sections: sections(), opened: HashMap::new(), cached: false });
     let url = "https://gitlab.com/acme/widgets/-/merge_requests/42".to_owned();
     assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(url.clone())]);
     assert_eq!(press(&mut app, "y"), vec![Action::Yank(url)]);
@@ -355,7 +362,10 @@ fn polling_fires_once_per_due_date_and_backs_off_on_failure() {
     assert_eq!(app.tick(), vec![]);
     app.now += Duration::from_secs(30);
     let actions = app.tick();
-    assert!(actions.contains(&Action::LoadQueue) && actions.contains(&Action::RefreshMr(KEY)), "{actions:?}");
+    assert!(
+        actions.contains(&Action::LoadQueue { scope: None, from_cache: false }) && actions.contains(&Action::RefreshMr(KEY)),
+        "{actions:?}"
+    );
     app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
     assert!(app.offline.is_some());
     app.now += Duration::from_secs(120);
@@ -392,7 +402,7 @@ fn snapshot_queue_loading_and_empty() {
     app.queue_loading = false;
     app.now = app.started;
     insta::assert_snapshot!("queue_loading", render(&mut app, 100, 14));
-    app.apply(Incoming::Queue { sections: Sections::default(), opened: HashMap::new() });
+    app.apply(Incoming::Queue { scope: None, sections: Sections::default(), opened: HashMap::new(), cached: false });
     insta::assert_snapshot!("queue_empty", render(&mut app, 100, 14));
 }
 
@@ -762,4 +772,123 @@ fn removed_lines_read_on_every_theme_and_fill_the_row_where_the_theme_knows_its_
     let (text, edge) = removed_line_cells(&mut app);
     assert_eq!((text.fg, text.bg), (Color::Reset, app.theme.removed_fill.unwrap()), "the terminal's own text on the theme's fill");
     assert_eq!(edge.bg, app.theme.removed_fill.unwrap(), "the fill reaches the edge of the pane");
+}
+
+fn scoped_app() -> App {
+    let mut app = App::new(Settings { project: Some("acme/widgets".into()), ..settings() });
+    app.today = today();
+    app
+}
+
+fn scoped_sections() -> Sections {
+    Queue::from_json_in(include_str!("../../api/fixtures/queue_scoped.json"), "acme/widgets").unwrap().sections(&[])
+}
+
+fn queue_answer(scope: Option<&str>, sections: Sections, cached: bool) -> Incoming {
+    Incoming::Queue { scope: scope.map(str::to_owned), sections, opened: HashMap::new(), cached }
+}
+
+#[test]
+fn in_a_checkout_the_queue_starts_on_its_project_and_star_widens_it() {
+    let mut app = scoped_app();
+    let scope = Some("acme/widgets".to_owned());
+    assert_eq!(app.start(), vec![Action::LoadQueue { scope: scope.clone(), from_cache: true }]);
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", count: 2, .. })));
+    assert_eq!(press(&mut app, "*"), vec![Action::LoadQueue { scope: None, from_cache: true }]);
+    assert_eq!(app.sections, None, "the project's list is gone before the wider one paints");
+    assert_eq!(press(&mut app, "*"), vec![Action::LoadQueue { scope, from_cache: true }]);
+}
+
+#[test]
+fn an_answer_for_the_other_scope_is_dropped_and_a_cached_one_never_hides_a_fresh_one() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(None, sections(), false));
+    assert_eq!(app.sections, None, "the answer to a scope we left");
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), true));
+    assert!(app.sections.is_some() && app.queue_loading, "the cache paints while the fetch runs");
+    app.apply(queue_answer(Some("acme/widgets"), Sections::default(), false));
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), true));
+    assert_eq!(app.sections, Some(Sections::default()), "a late cache answer never replaces a fresh one");
+    assert!(!app.queue_loading);
+}
+
+#[test]
+fn star_outside_a_checkout_says_why_it_does_nothing() {
+    let mut app = with_queue();
+    assert_eq!(press(&mut app, "*"), vec![]);
+    assert!(app.live_toast().unwrap().text.contains("checkout"));
+}
+
+#[test]
+fn i_opens_the_description_from_the_queue_and_the_review_and_closes_on_esc() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    press(&mut app, "Gk");
+    press(&mut app, "i");
+    let brief = app.brief.clone().unwrap();
+    assert_eq!((brief.iid, brief.description.as_str()), (50, "Adds the refund flow."));
+    assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(brief.web_url)]);
+    app.handle_key(code(KeyCode::Esc));
+    assert_eq!(app.brief, None);
+    let mut app = with_review();
+    press(&mut app, "i");
+    assert_eq!(app.brief.as_ref().map(|b| b.iid), Some(42));
+    press(&mut app, "q");
+    assert!(app.brief.is_none() && !app.should_quit, "q closes the modal, it does not quit");
+}
+
+#[test]
+fn the_description_scrolls_and_the_view_stops_it_at_the_last_page() {
+    let mut app = with_review();
+    let long: String = (1..=80).map(|n| format!("line {n}\n")).collect();
+    app.open = app.open.clone().map(|o| {
+        let mut review = o.review.clone();
+        review.mr.description = long.clone();
+        o.with_review(review)
+    });
+    press(&mut app, "ijjj");
+    assert_eq!(app.brief.as_ref().unwrap().scroll, 3);
+    press(&mut app, "kg");
+    assert_eq!(app.brief.as_ref().unwrap().scroll, 0);
+    press(&mut app, "G");
+    render(&mut app, 100, 30);
+    let bottom = app.brief.as_ref().unwrap().scroll;
+    assert!(bottom > 0 && bottom < 80, "clamped to the last page, got {bottom}");
+    press(&mut app, "k");
+    assert_eq!(app.brief.as_ref().unwrap().scroll, bottom - 1, "one step up from the bottom, not from usize::MAX");
+}
+
+#[test]
+fn snapshot_description_modal() {
+    let mut app = with_review();
+    app.open = app.open.clone().map(|o| {
+        let mut review = o.review.clone();
+        review.mr.description = "## Why\n\nCards were charged twice.\n\n- retry with `idempotency_key`\n- log the attempt".into();
+        o.with_review(review)
+    });
+    press(&mut app, "i");
+    insta::assert_snapshot!("description_modal", render(&mut app, 100, 24));
+}
+
+#[test]
+fn snapshot_queue_scoped_with_open() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    insta::assert_snapshot!("queue_scoped", render(&mut app, 120, 20));
+}
+
+#[test]
+fn every_recorded_link_sits_on_the_text_it_names_and_a_modal_hides_them() {
+    let mut app = with_review();
+    let buffer = cells(&mut app, 120, 24);
+    let texts: Vec<&str> = app.links.iter().map(|l| l.text.as_str()).collect();
+    assert!(texts.contains(&"!42") && texts.contains(&"acme/widgets!42"), "{texts:?}");
+    for link in &app.links {
+        let drawn: String = (0..link.text.chars().count() as u16).map(|i| buffer[(link.x + i, link.y)].symbol().to_owned()).collect();
+        assert_eq!(drawn, link.text, "{link:?}");
+    }
+    press(&mut app, "i");
+    cells(&mut app, 120, 24);
+    assert!(app.links.is_empty(), "no link may print over a modal");
 }

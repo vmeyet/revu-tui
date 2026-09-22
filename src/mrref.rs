@@ -79,6 +79,24 @@ fn local_project(dir: &Path) -> Option<String> {
     project_from_remote(&git(dir, ["remote", "get-url", "origin"])?)
 }
 
+/// The project of the checkout under `dir`, when its origin lives on `host`.
+pub fn checkout_project(dir: &Path, host: &str) -> Option<String> {
+    let remote = git(dir, ["remote", "get-url", "origin"])?;
+    (remote_host(&remote)? == host).then(|| project_from_remote(&remote)).flatten()
+}
+
+/// `git@host:group/project.git`, `ssh://git@host:22/…` or `https://user@host/…` → `host`.
+pub fn remote_host(url: &str) -> Option<&str> {
+    let url = url.trim();
+    let authority = match url.split_once("://") {
+        Some((_, rest)) => rest.split('/').next()?,
+        None => url.split_once(':')?.0,
+    };
+    let host = authority.rsplit('@').next()?;
+    let host = host.split(':').next()?;
+    (!host.is_empty()).then_some(host)
+}
+
 fn current_branch(dir: &Path) -> Option<String> {
     git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| b != "HEAD")
 }
@@ -140,6 +158,19 @@ mod tests {
         ];
         for (url, expected) in cases {
             assert_eq!(project_from_remote(url).as_deref(), expected, "{url}");
+        }
+    }
+
+    #[test]
+    fn remote_hosts_come_from_every_remote_shape() {
+        for (url, host) in [
+            ("git@gitlab.com:acme/widgets.git", Some("gitlab.com")),
+            ("ssh://git@gitlab.acme.dev:2222/acme/widgets.git", Some("gitlab.acme.dev")),
+            ("https://oauth2:tok@gitlab.com/acme/widgets", Some("gitlab.com")),
+            ("https://gitlab.com/acme/widgets.git", Some("gitlab.com")),
+            ("/local/path", None),
+        ] {
+            assert_eq!(remote_host(url), host, "{url}");
         }
     }
 }

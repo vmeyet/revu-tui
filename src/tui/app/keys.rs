@@ -1,4 +1,4 @@
-use super::{Action, App, Focus};
+use super::{Action, App, Brief, Focus};
 use crate::review::Row;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -19,6 +19,9 @@ impl App {
         }
         if self.publish.is_some() {
             return self.handle_publish_key(key);
+        }
+        if self.brief.is_some() {
+            return self.handle_brief_key(key);
         }
         if self.filtering {
             return self.handle_filter_key(key);
@@ -87,6 +90,8 @@ impl App {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(-HALF_PAGE),
             KeyCode::Char('/') => self.filtering = true,
+            KeyCode::Char('*') => return self.toggle_scope(),
+            KeyCode::Char('i') => self.brief = self.selected_mr().map(Brief::of_queue),
             KeyCode::Enter => return self.open_selected(),
             KeyCode::Char('r') => return self.refresh_queue(),
             KeyCode::Char('o') => return self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
@@ -105,7 +110,21 @@ impl App {
             return vec![];
         }
         self.queue_loading = true;
-        vec![Action::LoadQueue]
+        vec![Action::LoadQueue { scope: self.scope(), from_cache: false }]
+    }
+
+    /// Between the checkout's project and every project; the other list paints from its cache.
+    fn toggle_scope(&mut self) -> Vec<Action> {
+        if self.project.is_none() {
+            self.toast("not in a GitLab checkout: the queue already shows every project");
+            return vec![];
+        }
+        self.everywhere = !self.everywhere;
+        self.sections = None;
+        self.queue_selected = 0;
+        self.queue_scroll = 0;
+        self.queue_loading = true;
+        vec![Action::LoadQueue { scope: self.scope(), from_cache: true }]
     }
 
     fn handle_review_key(&mut self, key: KeyEvent) -> Vec<Action> {
@@ -132,6 +151,7 @@ impl App {
             KeyCode::Enter => return self.enter_review_row(),
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
+            KeyCode::Char('i') => self.brief = self.open.as_ref().map(|o| Brief::of_review(&o.review)),
             KeyCode::Char('o') => return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url())]).unwrap_or_default(),
             KeyCode::Char('y') => return self.open.as_ref().map(|o| vec![Action::Yank(o.line_url())]).unwrap_or_default(),
             _ => {}

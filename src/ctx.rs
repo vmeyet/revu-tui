@@ -13,19 +13,28 @@ pub struct Ctx {
     pub config: Config,
     pub cache: Cache,
     pub json: bool,
+    /// The project of the checkout the command runs in: the queue shows only it unless `--all`.
+    pub project: Option<String>,
 }
 
 impl Ctx {
     pub fn open(host: Option<&str>, json: bool) -> Result<Self> {
         let config = Config::load()?;
         let store = SecurityCli::new(auth::SERVICE);
-        Self::build(&Env::from_process(), &store, config, host, json)
+        let ctx = Self::build(&Env::from_process(), &store, config, host, json)?;
+        let project = std::env::current_dir().ok().and_then(|dir| crate::mrref::checkout_project(&dir, &ctx.credentials.host));
+        Ok(Self { project, ..ctx })
+    }
+
+    /// `--all`: every project, wherever the command runs.
+    pub fn everywhere(self, all: bool) -> Self {
+        if all { Self { project: None, ..self } } else { self }
     }
 
     pub fn build(env: &Env, store: &dyn SecretStore, config: Config, host: Option<&str>, json: bool) -> Result<Self> {
         let (credentials, source) = auth::resolve(env, store, &config, host)?;
         let cache = Cache::for_host(&credentials.host);
-        Ok(Self { gitlab: Client::new(&credentials)?, credentials, source, config, cache, json })
+        Ok(Self { gitlab: Client::new(&credentials)?, credentials, source, config, cache, json, project: None })
     }
 
     pub fn emit<T: Serialize>(&self, value: &T) -> Result<()> {

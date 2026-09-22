@@ -1,6 +1,6 @@
 use super::app::{App, Badge, Focus, QueueRow};
 use super::theme::Theme;
-use super::{diff_view, publish_view, thread_view};
+use super::{brief_view, diff_view, publish_view, thread_view};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -16,7 +16,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 32] = [
+pub const HELP: [(&str, &str); 35] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -24,9 +24,12 @@ pub const HELP: [(&str, &str); 32] = [
     ("enter", "open the MR, the thread, or toggle the fold"),
     ("esc", "back: close the thread, then the queue"),
     ("/", "filter the queue"),
+    ("*", "in the queue: this repo only, or every project"),
+    ("i", "the MR description"),
     ("r", "refresh"),
     ("o", "open in the browser (the line, in a diff)"),
     ("y", "copy the URL"),
+    ("click !42", "open the MR, in terminals that follow links"),
     ("tab S-tab", "next, previous file"),
     ("]c [c", "next, previous hunk"),
     ("]n [n", "next, previous thread"),
@@ -51,7 +54,17 @@ pub const HELP: [(&str, &str); 32] = [
     ("^c", "quit, always"),
 ];
 
+/// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Link {
+    pub x: u16,
+    pub y: u16,
+    pub text: String,
+    pub url: String,
+}
+
 pub fn draw(f: &mut Frame, app: &mut App) {
+    app.links.clear();
     let input_rows = u16::from(app.filtering || app.input.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
@@ -70,7 +83,10 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_filter(f, app, input);
     }
     draw_status(f, app, status);
-    let modal = app.help || app.publish.is_some();
+    let modal = app.help || app.publish.is_some() || app.brief.is_some();
+    if modal {
+        app.links.clear();
+    }
     if app.focus != Focus::Queue || modal {
         fade(f, queue, app.theme.faded);
     }
@@ -82,6 +98,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if let Some(publish) = app.publish.clone() {
         publish_view::draw(f, app, &publish, main);
+    }
+    if app.brief.is_some() {
+        brief_view::draw(f, app, main);
     }
     if app.help {
         draw_help(f, app, main);
@@ -100,7 +119,9 @@ pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
 
 fn draw_queue(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
-    let block = pane(theme, "Queue", app.focus == Focus::Queue);
+    let scope = app.scope().unwrap_or_else(|| "all".to_owned());
+    let title = truncate(&format!("Queue · {scope}"), area.width.saturating_sub(4) as usize);
+    let block = pane(theme, &title, app.focus == Focus::Queue);
     let inner = block.inner(area);
     f.render_widget(block, area);
     if app.sections.is_none() {
@@ -119,7 +140,24 @@ fn draw_queue(f: &mut Frame, app: &mut App, area: Rect) {
         .take(height)
         .map(|(i, row)| queue_line(app, row, i == app.queue_selected, inner.width as usize))
         .collect();
+    let links = queue_links(&rows, app.queue_scroll, inner);
     f.render_widget(Paragraph::new(lines), inner);
+    app.links.extend(links);
+}
+
+/// Where each visible `!iid` lands: two cells in, after the cursor bar.
+pub fn queue_links(rows: &[QueueRow<'_>], scroll: usize, inner: Rect) -> Vec<Link> {
+    rows.iter()
+        .enumerate()
+        .skip(scroll)
+        .take(inner.height as usize)
+        .filter_map(|(i, row)| match row {
+            QueueRow::Mr(mr) => {
+                Some(Link { x: inner.x + 2, y: inner.y + (i - scroll) as u16, text: format!("!{}", mr.iid), url: mr.web_url.clone() })
+            }
+            QueueRow::Section { .. } => None,
+        })
+        .collect()
 }
 
 fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -> Line<'a> {
@@ -167,7 +205,7 @@ fn badge_span<'a>(app: &App, badge: Badge) -> Span<'a> {
 fn draw_skeleton(f: &mut Frame, theme: Theme, area: Rect) {
     let faded = Style::default().fg(theme.faded);
     let mut lines = vec![];
-    for name in ["TO REVIEW", "MINE", "WATCHING"] {
+    for name in ["TO REVIEW", "MINE", "WATCHING", "OPEN"] {
         lines.push(Line::from(Span::styled(format!("  {name}"), faded)));
         for _ in 0..SKELETON_ROWS {
             lines.push(Line::from(Span::styled("   ▁▁▁ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", faded)));
@@ -366,5 +404,22 @@ mod tests {
         assert_eq!(short_age(Duration::from_secs(600)), "10m");
         assert_eq!(short_age(Duration::from_secs(7200)), "2h");
         assert_eq!(short_age(Duration::from_secs(200_000)), "2d");
+    }
+
+    #[test]
+    fn queue_links_point_at_each_visible_iid() {
+        let sections = crate::api::Queue::from_json(include_str!("../api/fixtures/queue.json")).unwrap().sections(&[]);
+        let rows = vec![
+            QueueRow::Section { name: "TO REVIEW", count: 1, open: true },
+            QueueRow::Mr(&sections.to_review[0]),
+            QueueRow::Section { name: "MINE", count: 1, open: true },
+            QueueRow::Mr(&sections.mine[0]),
+        ];
+        let inner = Rect { x: 2, y: 1, width: 30, height: 3 };
+        let links = queue_links(&rows, 1, inner);
+        assert_eq!(links.len(), 2, "sections carry no link and the window stops at the height");
+        assert_eq!((links[0].x, links[0].y, links[0].text.as_str()), (4, 1, "!42"));
+        assert_eq!(links[0].url, "https://gitlab.com/acme/widgets/-/merge_requests/42");
+        assert_eq!((links[1].y, links[1].text.as_str()), (3, "!41"));
     }
 }

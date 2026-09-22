@@ -369,6 +369,8 @@ mod tests {
             ("diff_view.rs", include_str!("diff_view.rs")),
             ("thread_view.rs", include_str!("thread_view.rs")),
             ("publish_view.rs", include_str!("publish_view.rs")),
+            ("brief_view.rs", include_str!("brief_view.rs")),
+            ("app/brief.rs", include_str!("app/brief.rs")),
             ("mod.rs", include_str!("mod.rs")),
             ("app/mod.rs", include_str!("app/mod.rs")),
             ("app/state.rs", include_str!("app/state.rs")),

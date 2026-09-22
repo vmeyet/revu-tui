@@ -26,7 +26,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
         _ => {}
     }
-    let ctx = Ctx::open(cli.host.as_deref(), cli.json)?;
+    let ctx = Ctx::open(cli.host.as_deref(), cli.json)?.everywhere(cli.all);
     match cli.command {
         Some(Command::Whoami) => commands::whoami::run(&ctx).await,
         Some(Command::List(args)) => commands::list::run(&ctx, args).await,

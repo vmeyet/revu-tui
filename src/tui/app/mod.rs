@@ -1,4 +1,5 @@
 //! The pure state machine: keys in, actions out, incoming answers applied. No clock, no network.
+mod brief;
 mod feedback;
 mod incoming;
 mod input;
@@ -10,6 +11,7 @@ mod state;
 mod tests;
 mod write;
 
+pub use brief::Brief;
 pub use feedback::Toast;
 pub use queue::{Badge, QueueRow};
 pub use review::Open;
@@ -36,7 +38,12 @@ pub enum Focus {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
-    LoadQueue,
+    /// The queue for `scope` (a project path, or `None` for every project); `from_cache` paints
+    /// the last answer for that scope first, so a switch never shows the other list.
+    LoadQueue {
+        scope: Option<String>,
+        from_cache: bool,
+    },
     /// Paint from the cache at once, then fetch the MR, its diffs and its discussions.
     Open(MrKey),
     RefreshMr(MrKey),
@@ -115,9 +122,12 @@ pub enum Failure {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Incoming {
+    /// `cached` answers only paint while the fresh one is on its way.
     Queue {
+        scope: Option<String>,
         sections: Sections,
         opened: HashMap<MrKey, DateTime<Utc>>,
+        cached: bool,
     },
     /// `cached` is how old the cache entry was; `None` means it just came from GitLab.
     Review {

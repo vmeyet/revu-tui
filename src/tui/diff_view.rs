@@ -24,6 +24,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         None => "Review".to_owned(),
     };
     let block = pane(theme, &title, app.focus == Focus::Review);
+    if let Some(open) = &app.open {
+        app.links.push(title_link(&open.review, area));
+    }
     let inner = block.inner(area);
     f.render_widget(block, area);
     if app.open.is_none() {
@@ -51,6 +54,11 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         .collect();
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
+}
+
+/// The `group/project!42` at the start of the pane title, one cell past the border and its space.
+pub fn title_link(review: &Review, area: Rect) -> super::ui::Link {
+    super::ui::Link { x: area.x + 2, y: area.y, text: mr_ref(review), url: review.mr.web_url.clone() }
 }
 
 pub fn mr_ref(review: &Review) -> String {

@@ -1,4 +1,4 @@
-use super::{Action, Focus, Input, MrKey, Open, Publish, Toast};
+use super::{Action, Brief, Focus, Input, MrKey, Open, Publish, Toast};
 use crate::api::Sections;
 use crate::tui::field::Field;
 use crate::tui::theme::Theme;
@@ -19,6 +19,8 @@ pub struct Settings {
     pub me: String,
     pub fold_globs: Vec<String>,
     pub watch_labels: Vec<String>,
+    /// The project of the checkout `mr` runs in; `None` outside one or with `--all`.
+    pub project: Option<String>,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -35,6 +37,9 @@ pub struct App {
     pub host: String,
     pub me: String,
     pub focus: Focus,
+    /// The checkout's project; the queue shows only it unless `everywhere`.
+    pub project: Option<String>,
+    pub everywhere: bool,
     pub sections: Option<Sections>,
     /// When each MR was last opened here, so the queue can mark what moved since.
     pub opened: HashMap<MrKey, DateTime<Utc>>,
@@ -54,6 +59,10 @@ pub struct App {
     pub input: Option<Input>,
     pub buffer: Field,
     pub publish: Option<Publish>,
+    /// The MR description modal.
+    pub brief: Option<Brief>,
+    /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
+    pub links: Vec<crate::tui::ui::Link>,
     /// What the editor's text turned into; the loop drains it after `apply`.
     pub composed: Vec<Action>,
     pub help: bool,
@@ -77,6 +86,8 @@ impl App {
             host: settings.host,
             me: settings.me,
             focus: Focus::default(),
+            everywhere: settings.project.is_none(),
+            project: settings.project,
             sections: None,
             opened: HashMap::new(),
             queue_selected: 0,
@@ -91,6 +102,8 @@ impl App {
             input: None,
             buffer: Field::default(),
             publish: None,
+            brief: None,
+            links: vec![],
             composed: vec![],
             help: false,
             toast: None,
@@ -104,7 +117,12 @@ impl App {
     }
 
     pub fn start(&self) -> Vec<Action> {
-        vec![Action::LoadQueue]
+        vec![Action::LoadQueue { scope: self.scope(), from_cache: true }]
+    }
+
+    /// The project the queue is limited to, `None` for every project.
+    pub fn scope(&self) -> Option<String> {
+        self.project.clone().filter(|_| !self.everywhere)
     }
 
     /// Called on every tick: what the clock says is due, at most once per due date.
@@ -113,7 +131,7 @@ impl App {
         if self.poll.queue_due.is_some_and(|due| self.now >= due) && !self.queue_loading {
             self.queue_loading = true;
             self.poll.queue_due = None;
-            actions.push(Action::LoadQueue);
+            actions.push(Action::LoadQueue { scope: self.scope(), from_cache: false });
         }
         let Some(key) = self.open.as_ref().map(|o| o.key) else { return actions };
         if self.poll.mr_due.is_some_and(|due| self.now >= due) {
