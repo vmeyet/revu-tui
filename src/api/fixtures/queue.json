@@ -1,0 +1,141 @@
+{
+  "data": {
+    "currentUser": {
+      "username": "nina",
+      "reviewRequested": {
+        "nodes": [
+          {
+            "id": "gid://gitlab/MergeRequest/1042",
+            "iid": "42",
+            "title": "feat: charge cards at checkout",
+            "draft": false,
+            "webUrl": "https://gitlab.com/acme/widgets/-/merge_requests/42",
+            "updatedAt": "2026-09-22T09:12:00Z",
+            "createdAt": "2026-09-21T15:00:00Z",
+            "sourceBranch": "feat/checkout",
+            "targetBranch": "main",
+            "conflicts": false,
+            "project": { "id": "gid://gitlab/Project/7", "fullPath": "acme/widgets" },
+            "author": { "username": "omar", "name": "Omar", "avatarUrl": null },
+            "approved": false,
+            "approvedBy": { "nodes": [] },
+            "reviewers": {
+              "nodes": [
+                { "username": "nina", "mergeRequestInteraction": { "reviewState": "UNREVIEWED" } },
+                { "username": "lea", "mergeRequestInteraction": { "reviewState": "APPROVED" } }
+              ]
+            },
+            "headPipeline": { "status": "SUCCESS", "detailedStatus": { "label": "passed" } },
+            "diffStatsSummary": { "additions": 412, "deletions": 38, "fileCount": 9 },
+            "resolvableDiscussionsCount": 3,
+            "resolvedDiscussionsCount": 2,
+            "labels": { "nodes": [{ "title": "payments" }] },
+            "userNotesCount": 5
+          },
+          {
+            "id": "gid://gitlab/MergeRequest/1040",
+            "iid": "40",
+            "title": "refactor: rename Invoice to Bill",
+            "draft": false,
+            "webUrl": "https://gitlab.com/acme/widgets/-/merge_requests/40",
+            "updatedAt": "2026-09-21T09:12:00Z",
+            "createdAt": "2026-09-20T15:00:00Z",
+            "sourceBranch": "refactor/bill",
+            "targetBranch": "main",
+            "conflicts": true,
+            "project": { "id": "gid://gitlab/Project/7", "fullPath": "acme/widgets" },
+            "author": { "username": "lea", "name": "Léa", "avatarUrl": null },
+            "approved": true,
+            "approvedBy": { "nodes": [{ "username": "nina" }] },
+            "reviewers": {
+              "nodes": [{ "username": "nina", "mergeRequestInteraction": { "reviewState": "APPROVED" } }]
+            },
+            "headPipeline": { "status": "FAILED", "detailedStatus": { "label": "failed" } },
+            "diffStatsSummary": { "additions": 10, "deletions": 10, "fileCount": 2 },
+            "resolvableDiscussionsCount": 0,
+            "resolvedDiscussionsCount": 0,
+            "labels": { "nodes": [] },
+            "userNotesCount": 0
+          }
+        ]
+      },
+      "authored": {
+        "nodes": [
+          {
+            "id": "gid://gitlab/MergeRequest/1041",
+            "iid": "41",
+            "title": "fix: flaky cache test",
+            "draft": true,
+            "webUrl": "https://gitlab.com/acme/widgets/-/merge_requests/41",
+            "updatedAt": "2026-09-22T08:00:00Z",
+            "createdAt": "2026-09-22T07:00:00Z",
+            "sourceBranch": "fix/cache",
+            "targetBranch": "main",
+            "conflicts": false,
+            "project": { "id": "gid://gitlab/Project/7", "fullPath": "acme/widgets" },
+            "author": { "username": "nina", "name": "Nina", "avatarUrl": null },
+            "approved": false,
+            "approvedBy": { "nodes": [] },
+            "reviewers": { "nodes": [] },
+            "headPipeline": null,
+            "diffStatsSummary": { "additions": 3, "deletions": 1, "fileCount": 1 },
+            "resolvableDiscussionsCount": 0,
+            "resolvedDiscussionsCount": 0,
+            "labels": { "nodes": [] },
+            "userNotesCount": 0
+          }
+        ]
+      },
+      "assigned": {
+        "nodes": [
+          {
+            "id": "gid://gitlab/MergeRequest/1035",
+            "iid": "35",
+            "title": "infra: new runner",
+            "draft": false,
+            "webUrl": "https://gitlab.com/acme/infra/-/merge_requests/35",
+            "updatedAt": "2026-09-20T08:00:00Z",
+            "createdAt": "2026-09-19T07:00:00Z",
+            "sourceBranch": "infra/runner",
+            "targetBranch": "main",
+            "conflicts": false,
+            "project": { "id": "gid://gitlab/Project/9", "fullPath": "acme/infra" },
+            "author": { "username": "omar", "name": "Omar", "avatarUrl": null },
+            "approved": false,
+            "approvedBy": { "nodes": [] },
+            "reviewers": { "nodes": [] },
+            "headPipeline": { "status": "RUNNING", "detailedStatus": { "label": "running" } },
+            "diffStatsSummary": null,
+            "resolvableDiscussionsCount": 1,
+            "resolvedDiscussionsCount": 0,
+            "labels": { "nodes": [{ "title": "infra" }] },
+            "userNotesCount": 2
+          },
+          {
+            "id": "gid://gitlab/MergeRequest/1041",
+            "iid": "41",
+            "title": "fix: flaky cache test",
+            "draft": true,
+            "webUrl": "https://gitlab.com/acme/widgets/-/merge_requests/41",
+            "updatedAt": "2026-09-22T08:00:00Z",
+            "createdAt": "2026-09-22T07:00:00Z",
+            "sourceBranch": "fix/cache",
+            "targetBranch": "main",
+            "conflicts": false,
+            "project": { "id": "gid://gitlab/Project/7", "fullPath": "acme/widgets" },
+            "author": { "username": "nina", "name": "Nina", "avatarUrl": null },
+            "approved": false,
+            "approvedBy": { "nodes": [] },
+            "reviewers": { "nodes": [] },
+            "headPipeline": null,
+            "diffStatsSummary": { "additions": 3, "deletions": 1, "fileCount": 1 },
+            "resolvableDiscussionsCount": 0,
+            "resolvedDiscussionsCount": 0,
+            "labels": { "nodes": [] },
+            "userNotesCount": 0
+          }
+        ]
+      }
+    }
+  }
+}
