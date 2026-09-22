@@ -29,7 +29,7 @@ mr logout
 ## Commands
 
 ```sh
-mr list                        # the MRs waiting on you, yours, the ones you watch (`--cached` skips the network)
+mr list                        # the MRs waiting on you, yours, the ones you watch, and the rest of the repo's (`--cached` skips the network)
 mr show acme/widgets!42        # header, files, unresolved threads
 mr diff !42                    # the coloured diff through $PAGER (`!42` takes the project from the origin remote)
 mr show                        # the open MR of the current branch
@@ -38,6 +38,7 @@ mr approve !42                 # or --undo
 mr publish !42                 # every draft you hold on the MR, as one review
 ```
 
+Inside a GitLab checkout, `mr` and `mr list` show that project only, plus an `OPEN` section with its other open MRs; `--all` shows every project.
 Every command takes `--json`. An MR is `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
 
 ## TUI
@@ -53,6 +54,9 @@ mr
 | `enter` | Open the MR, open the thread, or toggle the fold under the cursor |
 | `esc` | Back: close the thread, then the queue |
 | `/` | Filter the queue by title, author or iid |
+| `*` | Queue: this repo only, or every project |
+| `i` | The MR description, in a modal |
+| click `!42` | Open the MR, in terminals that follow links (Ghostty, iTerm2, Kitty, WezTerm) |
 | `r` | Refresh |
 | `o` / `y` | Open in the browser / copy the URL (the line, inside a diff) |
 | `tab` `S-tab` | Next, previous file |

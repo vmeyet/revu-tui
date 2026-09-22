@@ -53,6 +53,10 @@ Focus moves with `h` `l` between the three panes, like slack-tui's channels, mes
 
 ## The queue
 
+Inside a GitLab checkout the queue shows that project only, named in the pane title (`Queue · acme/widgets`); outside one, or after `*`, it shows every project (`Queue · all`).
+Each scope has its own cache file, so a switch paints the right list at once and never the other one.
+Scoped, an `OPEN` section lists the project's other open MRs, between `WATCHING` and `DONE`.
+
 Sections are uppercase `faded` headers with a right aligned count.
 A row is `▎` bar when selected, `!iid` in `muted`, the title, then one badge column at the right edge:
 
@@ -66,7 +70,9 @@ A row is `▎` bar when selected, `!iid` in `muted`, the title, then one badge c
 | `D` muted | draft MR |
 
 Rows sort by `updated_at` desc inside a section; M4 adds the Jev urgency sort in `To review`.
-`Done` is a fourth section, folded, with a count; `zo` on its header opens it.
+`Done` is the last section, folded, with a count; `zo` on its header opens it.
+Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
+`i` opens the description modal: `!iid title`, author, branches, labels, then the description as light markdown; `j k ^d ^u g G` scroll, `o` opens the MR, `esc` `i` `q` close.
 The filter `/` narrows rows by title, author and iid, live.
 
 Empty queue:
@@ -175,6 +181,8 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `y` | copy the URL (line URL in the review) | M1 |
 | `r` | refresh | M1 |
 | `/` | filter (queue) or search text (review) | M1 |
+| `*` | queue: this checkout's project, or every project | M3 |
+| `i` | the MR description, in a modal | M3 |
 | `:` | command line | M3 |
 | `ctrl-k` | jump to an MR or a file | M3 |
 | `z` | reading mode | M3 |

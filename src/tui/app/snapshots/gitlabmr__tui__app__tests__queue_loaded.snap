@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 16)"
 ---
-╭ Queue ─────────────────────────╮╭ Review ────────────────────────────────────────────────────────╮
+╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────╮
 │   TO REVIEW                  1 ││                                                                │
 │ ▎ !42 feat: charge cards at…   ││                                                                │
 │   MINE                       1 ││                                                                │

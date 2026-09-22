@@ -2,19 +2,21 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue ─────────────────────────╮╭ Review ────────────────────────────────────────────────────────╮
-│   TO REVIEW                  1 ││                                                                │
-│ ▎ !42 feat: ch╭ keys ────────────────────────────────────────────────────────────╮               │
-│   MINE        │        j k  move                                                 │               │
-│   !41 fix: fla│        g G  first, last                                          │               │
-│   WATCHING    │      ^d ^u  half page                                            │               │
-│   !35 infra: n│        h l  pane to the left; open the MR, pane to the right     │               │
-│   DONE ▸      │      enter  open the MR, the thread, or toggle the fold          │               │
-│               │        esc  back: close the thread, then the queue               │               │
+╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────╮
+│   TO REVIEW   ╭ keys ────────────────────────────────────────────────────────────╮               │
+│ ▎ !42 feat: ch│        j k  move                                                 │               │
+│   MINE        │        g G  first, last                                          │               │
+│   !41 fix: fla│      ^d ^u  half page                                            │               │
+│   WATCHING    │        h l  pane to the left; open the MR, pane to the right     │               │
+│   !35 infra: n│      enter  open the MR, the thread, or toggle the fold          │               │
+│   DONE ▸      │        esc  back: close the thread, then the queue               │               │
 │               │          /  filter the queue                                     │               │
+│               │          *  in the queue: this repo only, or every project       │               │
+│               │          i  the MR description                                   │               │
 │               │          r  refresh                                              │               │
 │               │          o  open in the browser (the line, in a diff)            │               │
 │               │          y  copy the URL                                         │               │
+│               │  click !42  open the MR, in terminals that follow links          │               │
 │               │  tab S-tab  next, previous file                                  │               │
 │               │      ]c [c  next, previous hunk                                  │               │
 │               │      ]n [n  next, previous thread                                │               │
@@ -38,7 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │          q  quit                                                 │               │
 │               │         ^c  quit, always                                         │               │
 │               ╰──────────────────────────────────────────────────────────────────╯               │
-│                                ││                                                                │
-│                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina                                                                           ? help

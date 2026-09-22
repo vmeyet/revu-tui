@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 120, 24)"
 ---
-╭ Queue ─────────────────────────╮╭ acme/widgets!42 · feat: cha… ────────╮╭ charge.rs:-13 ─────────────────────────────╮
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: cha… ────────╮╭ charge.rs:-13 ─────────────────────────────╮
 │   TO REVIEW                  1 ││  omar · 2h · +5 −3 · 2 files · ✓ suc ││ src/pay/charge.rs  resolved ✓              │
 │ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 un ││                                            │
 │   MINE                       1 ││                                      ││ you · 2h                                   │

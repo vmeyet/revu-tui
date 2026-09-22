@@ -1,4 +1,5 @@
 pub mod app;
+pub mod brief_view;
 pub mod compose;
 pub mod diff_view;
 pub mod field;
@@ -7,7 +8,7 @@ pub mod theme;
 pub mod thread_view;
 pub mod ui;
 
-use crate::api::{Client, DraftNote, NewDraft};
+use crate::api::{Client, DraftNote, NewDraft, Queue};
 use crate::cache::{Cache, Entry, keys};
 use crate::ctx::Ctx;
 use crate::diff::fold::FoldState;
@@ -61,6 +62,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         me: ctx.config.username.clone().unwrap_or_default(),
         fold_globs: backend.fold_globs.clone(),
         watch_labels: backend.watch_labels.clone(),
+        project: ctx.project.clone(),
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -77,7 +79,9 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, back
         spawn(action, backend, tx.clone());
     }
     while !app.should_quit {
-        terminal.draw(|f| ui::draw(f, app))?;
+        let frame = terminal.draw(|f| ui::draw(f, app))?;
+        let links = hyperlinks(frame.buffer, &app.links);
+        print_links(&links);
         let actions = tokio::select! {
             Some(event) = events.next() => match event? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => app.handle_key(key),
@@ -125,7 +129,12 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             let _ = tx.send(incoming);
         };
         match action {
-            Action::LoadQueue => send(backend.load_queue().await.unwrap_or_else(|e| failed(Failure::Queue, e))),
+            Action::LoadQueue { scope, from_cache } => {
+                if let Some(cached) = backend.cached_queue(scope.clone()).filter(|_| from_cache) {
+                    send(cached);
+                }
+                send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, e)));
+            }
             Action::Open(key) => {
                 if let Some(cached) = backend.open_cached(key) {
                     send(cached);
@@ -177,21 +186,75 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
     });
 }
 
+/// A link as the terminal will print it: only where the drawn cells still spell its text,
+/// in the colours they were drawn with.
+struct Hyperlink {
+    link: ui::Link,
+    fg: ratatui::style::Color,
+    bg: ratatui::style::Color,
+}
+
+fn hyperlinks(buffer: &ratatui::buffer::Buffer, links: &[ui::Link]) -> Vec<Hyperlink> {
+    links
+        .iter()
+        .filter(|link| {
+            link.text
+                .chars()
+                .enumerate()
+                .all(|(i, c)| buffer.cell((link.x + i as u16, link.y)).is_some_and(|cell| cell.symbol().chars().eq(std::iter::once(c))))
+        })
+        .filter_map(|link| {
+            let cell = buffer.cell((link.x, link.y))?;
+            Some(Hyperlink { link: link.clone(), fg: cell.fg, bg: cell.bg })
+        })
+        .collect()
+}
+
+/// OSC 8 over the text ratatui drew; terminals without it show the same text, unchanged.
+fn print_links(links: &[Hyperlink]) {
+    use ratatui::backend::IntoCrossterm;
+    use ratatui::crossterm::{cursor, queue, style};
+    use std::io::Write;
+    let mut out = std::io::stdout();
+    for Hyperlink { link, fg, bg } in links {
+        let _ = queue!(
+            out,
+            cursor::SavePosition,
+            cursor::MoveTo(link.x, link.y),
+            style::SetForegroundColor(fg.into_crossterm()),
+            style::SetBackgroundColor(bg.into_crossterm()),
+            style::Print(format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", link.url, link.text)),
+            style::ResetColor,
+            cursor::RestorePosition,
+        );
+    }
+    let _ = out.flush();
+}
+
 fn failed(what: Failure, err: anyhow::Error) -> Incoming {
     Incoming::Failed { what, message: err.to_string() }
 }
 
 impl Backend {
-    async fn load_queue(&self) -> Result<Incoming> {
-        let queue = self.gitlab.queue().await?;
-        let _ = self.cache.write_entry(&keys::queue(), &queue);
+    async fn load_queue(&self, scope: Option<String>) -> Result<Incoming> {
+        let queue = self.gitlab.queue(scope.as_deref()).await?;
+        let _ = self.cache.write_entry(&keys::queue(scope.as_deref()), &queue);
+        Ok(self.queue_answer(scope, &queue, false))
+    }
+
+    fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
+        let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_deref()))?.value;
+        Some(self.queue_answer(scope, &queue, true))
+    }
+
+    fn queue_answer(&self, scope: Option<String>, queue: &Queue, cached: bool) -> Incoming {
         let sections = queue.sections(&self.watch_labels);
         let opened = self.opened_at(&sections);
-        Ok(Incoming::Queue { sections, opened })
+        Incoming::Queue { scope, sections, opened, cached }
     }
 
     fn opened_at(&self, sections: &crate::api::Sections) -> HashMap<MrKey, DateTime<Utc>> {
-        [&sections.to_review, &sections.mine, &sections.watching, &sections.done]
+        [&sections.to_review, &sections.mine, &sections.watching, &sections.open, &sections.done]
             .into_iter()
             .flatten()
             .filter_map(|mr| {
@@ -319,6 +382,17 @@ fn copy(text: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_link_prints_only_where_its_text_is_still_on_screen() {
+        let mut buffer = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 10, 2));
+        buffer.set_string(1, 0, "!42 x", ratatui::style::Style::default());
+        buffer.set_string(1, 1, "!4…", ratatui::style::Style::default());
+        let link = |y| ui::Link { x: 1, y, text: "!42".into(), url: "https://gitlab.com/acme/widgets/-/merge_requests/42".into() };
+        let printed = hyperlinks(&buffer, &[link(0), link(1)]);
+        assert_eq!(printed.len(), 1, "the clipped `!4…` stays plain text");
+        assert_eq!(printed[0].link.y, 0);
+    }
     use crate::diff::fold::Fold;
 
     #[test]

@@ -21,16 +21,18 @@ impl App {
     /// Sections and their rows after the filter; a section with no match still shows its header.
     pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
-        let groups: [(&'static str, &Vec<QueueMr>, bool); 4] = [
+        let groups: [(&'static str, &Vec<QueueMr>, bool); 5] = [
             ("TO REVIEW", &sections.to_review, true),
             ("MINE", &sections.mine, true),
             ("WATCHING", &sections.watching, true),
+            ("OPEN", &sections.open, true),
             ("DONE", &sections.done, self.done_open),
         ];
         let mut rows = Vec::new();
         for (name, mrs, open) in groups {
             let matching: Vec<&QueueMr> = mrs.iter().filter(|mr| self.matches_filter(mr)).collect();
-            if name == "DONE" && matching.is_empty() && self.filter.is_empty() {
+            let unscoped = name == "OPEN" && mrs.is_empty();
+            if unscoped || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;
             }
             rows.push(QueueRow::Section { name, count: matching.len(), open });

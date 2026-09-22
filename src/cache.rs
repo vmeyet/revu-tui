@@ -114,8 +114,12 @@ fn root() -> PathBuf {
 
 /// The one place cache paths are spelled.
 pub mod keys {
-    pub fn queue() -> String {
-        "queue.json".into()
+    /// One file per scope, so switching between a repo and every project never shows the other list.
+    pub fn queue(project: Option<&str>) -> String {
+        match project {
+            Some(path) => format!("queue.{}.json", path.replace('/', "+")),
+            None => "queue.json".into(),
+        }
     }
 
     pub fn mr(project_id: u64, iid: u64) -> String {
@@ -168,10 +172,10 @@ mod tests {
     #[test]
     fn corrupt_file_is_a_miss_and_is_removed() {
         let (dir, cache) = cache();
-        let path = dir.path().join("gitlab.com").join(keys::queue());
+        let path = dir.path().join("gitlab.com").join(keys::queue(None));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, b"{nope").unwrap();
-        assert_eq!(cache.read::<Vec<u32>>(&keys::queue()), None);
+        assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
         assert!(!path.exists());
     }
 
@@ -203,17 +207,17 @@ mod tests {
     #[test]
     fn clear_is_idempotent() {
         let (_dir, cache) = cache();
-        cache.write(&keys::queue(), &"x").unwrap();
+        cache.write(&keys::queue(None), &"x").unwrap();
         cache.clear().unwrap();
         cache.clear().unwrap();
-        assert_eq!(cache.read::<String>(&keys::queue()), None);
+        assert_eq!(cache.read::<String>(&keys::queue(None)), None);
     }
 
     #[test]
     fn entries_remember_when_they_were_fetched() {
         let (_dir, cache) = cache();
-        cache.write_entry(&keys::queue(), &"x").unwrap();
-        let entry = cache.read_entry::<String>(&keys::queue()).unwrap();
+        cache.write_entry(&keys::queue(None), &"x").unwrap();
+        let entry = cache.read_entry::<String>(&keys::queue(None)).unwrap();
         assert_eq!(entry.value, "x");
         let later = entry.fetched_at + TimeDelta::minutes(3);
         assert_eq!(entry.age(later), Duration::from_secs(180));
@@ -224,5 +228,11 @@ mod tests {
     fn keys_are_stable() {
         assert_eq!(keys::ai(7, 42, "abc", "h1"), "ai/7/42/abc/h1.json");
         assert_eq!(keys::discussions(7, 42), "mr/7/42/discussions.json");
+    }
+
+    #[test]
+    fn queue_keys_differ_per_scope() {
+        assert_eq!(keys::queue(None), "queue.json");
+        assert_eq!(keys::queue(Some("acme/sub/widgets")), "queue.acme+sub+widgets.json");
     }
 }

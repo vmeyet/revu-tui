@@ -1,4 +1,6 @@
 //! The queue in one call. Wire shapes stay private; callers get `Queue` and its `Sections`.
+//! Scoped to a project, a second call in parallel lists every open MR of that project: one query
+//! for both scores over GitLab's complexity limit of 250.
 use super::Client;
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
@@ -6,18 +8,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
 
-const QUERY: &str = r"
-query Queue {
+const MINE: &str = r"
   currentUser {
     username
     reviewRequested: reviewRequestedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { ...list }
     authored: authoredMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { ...list }
     assigned: assignedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { ...list }
-  }
-}
+  }";
+
+const PROJECT: &str = r"
+  project(fullPath: $project) {
+    mergeRequests(state: opened, first: 100, sort: UPDATED_DESC) { ...list }
+  }";
+
+const FRAGMENT: &str = r"
 fragment list on MergeRequestConnection {
   nodes {
-    id iid title draft webUrl updatedAt createdAt
+    id iid title description draft webUrl updatedAt createdAt
     sourceBranch targetBranch conflicts
     project { id fullPath }
     author { username name avatarUrl }
@@ -31,12 +38,26 @@ fragment list on MergeRequestConnection {
   }
 }";
 
+fn mine_query() -> String {
+    format!("query Queue {{{MINE}\n}}{FRAGMENT}")
+}
+
+fn project_query() -> String {
+    format!("query Open($project: ID!) {{{PROJECT}\n}}{FRAGMENT}")
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Queue {
     pub me: String,
+    /// The project the queue is scoped to; `None` for every project.
+    #[serde(default)]
+    pub project: Option<String>,
     pub review_requested: Vec<QueueMr>,
     pub authored: Vec<QueueMr>,
     pub assigned: Vec<QueueMr>,
+    /// Every open MR of `project`, mine or not.
+    #[serde(default)]
+    pub open: Vec<QueueMr>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +67,8 @@ pub struct QueueMr {
     pub project_id: u64,
     pub project: String,
     pub title: String,
+    #[serde(default)]
+    pub description: String,
     pub draft: bool,
     pub web_url: String,
     pub updated_at: DateTime<Utc>,
@@ -91,6 +114,8 @@ pub struct Sections {
     pub to_review: Vec<QueueMr>,
     pub mine: Vec<QueueMr>,
     pub watching: Vec<QueueMr>,
+    /// The rest of the project's open MRs, only when the queue is scoped to one.
+    pub open: Vec<QueueMr>,
     pub done: Vec<QueueMr>,
 }
 
@@ -111,41 +136,67 @@ impl QueueMr {
 impl Queue {
     pub fn sections(&self, watch_labels: &[String]) -> Sections {
         let me = self.me.as_str();
-        let (done, to_review): (Vec<_>, Vec<_>) = self.review_requested.iter().cloned().partition(|mr| mr.reviewed_by(me));
-        let mine = self.authored.clone();
-        let placed: HashSet<(u64, u64)> = to_review.iter().chain(&mine).chain(&done).map(QueueMr::key).collect();
+        let in_scope = |mr: &&QueueMr| self.project.as_ref().is_none_or(|p| &mr.project == p);
+        let (done, to_review): (Vec<_>, Vec<_>) = self.review_requested.iter().filter(in_scope).cloned().partition(|mr| mr.reviewed_by(me));
+        let mine: Vec<QueueMr> = self.authored.iter().filter(in_scope).cloned().collect();
+        let mut seen: HashSet<(u64, u64)> = to_review.iter().chain(&mine).chain(&done).map(QueueMr::key).collect();
         let labelled = self.review_requested.iter().chain(&self.authored).filter(|mr| mr.labels.iter().any(|l| watch_labels.contains(l)));
-        let mut seen = placed.clone();
-        let watching = self.assigned.iter().chain(labelled).filter(|mr| seen.insert(mr.key())).cloned().collect();
-        Sections { to_review, mine, watching, done }
+        let watching = self.assigned.iter().chain(labelled).filter(in_scope).filter(|mr| seen.insert(mr.key())).cloned().collect();
+        let open = self.open.iter().filter(|mr| seen.insert(mr.key())).cloned().collect();
+        Sections { to_review, mine, watching, open, done }
     }
 }
 
 impl Client {
-    pub async fn queue(&self) -> Result<Queue> {
-        let answer: Answer = self.post_json("graphql", &json!({"query": QUERY})).await?;
-        Queue::from_answer(answer)
+    /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
+    pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
+        let mine_body = json!({"query": mine_query()});
+        let mine = self.post_json::<Answer>("graphql", &mine_body);
+        let Some(path) = project else { return Queue::from_answers(mine.await?, None) };
+        let open_body = json!({"query": project_query(), "variables": {"project": path}});
+        let (mine, open) = tokio::try_join!(mine, self.post_json::<Answer>("graphql", &open_body))?;
+        Queue::from_answers(mine, Some((open, path)))
     }
 }
 
 impl Queue {
-    fn from_answer(answer: Answer) -> Result<Self> {
-        if let Some(errors) = answer.errors.filter(|e| !e.is_empty()) {
-            bail!("GraphQL: {}", errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join("; "));
-        }
-        let user = answer.data.and_then(|d| d.current_user).context("GraphQL answered without currentUser")?;
+    /// `open` is the project answer and the path it was asked for, when the queue is scoped.
+    fn from_answers(mine: Answer, open: Option<(Answer, &str)>) -> Result<Self> {
+        let user = data_of(mine)?.current_user.context("GraphQL answered without currentUser")?;
+        let (project, open) = match open {
+            Some((answer, path)) => {
+                let found =
+                    data_of(answer)?.project.with_context(|| format!("project {path} not found, or not visible with this token"))?;
+                (Some(path.to_owned()), convert(found.merge_requests)?)
+            }
+            None => (None, vec![]),
+        };
         Ok(Queue {
             me: user.username,
+            project,
             review_requested: convert(user.review_requested)?,
             authored: convert(user.authored)?,
             assigned: convert(user.assigned)?,
+            open,
         })
     }
 
     /// A queue straight from a GraphQL answer body, for fixtures.
     pub fn from_json(body: &str) -> Result<Self> {
-        Self::from_answer(serde_json::from_str(body)?)
+        Self::from_answers(serde_json::from_str(body)?, None)
     }
+
+    /// The same, scoped to `project`: one body carries both answers, `currentUser` and `project`.
+    pub fn from_json_in(body: &str, project: &str) -> Result<Self> {
+        Self::from_answers(serde_json::from_str(body)?, Some((serde_json::from_str(body)?, project)))
+    }
+}
+
+fn data_of(answer: Answer) -> Result<Data> {
+    if let Some(errors) = answer.errors.filter(|e| !e.is_empty()) {
+        bail!("GraphQL: {}", errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join("; "));
+    }
+    answer.data.context("GraphQL answered without data")
 }
 
 fn convert(connection: Connection<WireMr>) -> Result<Vec<QueueMr>> {
@@ -163,6 +214,7 @@ impl TryFrom<WireMr> for QueueMr {
             project_id: gid(&w.project.id)?,
             project: w.project.full_path,
             title: w.title,
+            description: w.description.unwrap_or_default(),
             draft: w.draft,
             web_url: w.web_url,
             updated_at: w.updated_at,
@@ -211,6 +263,13 @@ struct GraphqlError {
 #[serde(rename_all = "camelCase")]
 struct Data {
     current_user: Option<WireUser>,
+    project: Option<WireProjectMrs>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WireProjectMrs {
+    merge_requests: Connection<WireMr>,
 }
 
 #[derive(Deserialize)]
@@ -233,6 +292,7 @@ struct WireMr {
     id: String,
     iid: String,
     title: String,
+    description: Option<String>,
     draft: bool,
     web_url: String,
     updated_at: DateTime<Utc>,
@@ -324,13 +384,13 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/api/graphql"))
-            .and(body_partial_json(json!({"query": QUERY})))
+            .and(body_partial_json(json!({"query": mine_query()})))
             .respond_with(ResponseTemplate::new(200).set_body_string(FIXTURE))
             .mount(&server)
             .await;
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
-        let queue = client.queue().await.unwrap();
+        let queue = client.queue(None).await.unwrap();
         assert_eq!(queue.me, "nina");
         assert_eq!(iids(&queue.review_requested), [42, 40]);
         let first = &queue.review_requested[0];
@@ -351,7 +411,7 @@ mod tests {
             .await;
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
-        let err = client.queue().await.unwrap_err().to_string();
+        let err = client.queue(None).await.unwrap_err().to_string();
         assert!(err.contains("doesn't exist"), "{err}");
     }
 
@@ -373,6 +433,50 @@ mod tests {
         let sections = queue().sections(&["payments".into()]);
         assert_eq!(iids(&sections.to_review), [42], "a label never moves an MR out of To review");
         assert_eq!(iids(&sections.watching), [35]);
+    }
+
+    const SCOPED: &str = include_str!("fixtures/queue_scoped.json");
+
+    #[tokio::test]
+    async fn a_scoped_queue_sends_the_project_and_reads_its_open_mrs() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .and(body_partial_json(json!({"query": project_query(), "variables": {"project": "acme/widgets"}})))
+            .respond_with(ResponseTemplate::new(200).set_body_string(SCOPED))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .and(body_partial_json(json!({"query": mine_query()})))
+            .respond_with(ResponseTemplate::new(200).set_body_string(FIXTURE))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client =
+            Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
+        let queue = client.queue(Some("acme/widgets")).await.unwrap();
+        assert_eq!(queue.project.as_deref(), Some("acme/widgets"));
+        assert_eq!(iids(&queue.open), [42, 50, 51]);
+        assert_eq!(queue.open[1].description, "Adds the refund flow.");
+    }
+
+    #[test]
+    fn a_scoped_queue_keeps_its_project_and_lists_the_rest_as_open() {
+        let sections = Queue::from_json_in(SCOPED, "acme/widgets").unwrap().sections(&[]);
+        assert_eq!(iids(&sections.to_review), [42]);
+        assert_eq!(iids(&sections.mine), [41]);
+        assert_eq!(iids(&sections.done), [40]);
+        assert_eq!(iids(&sections.watching), [] as [u64; 0], "the assigned MR lives in another project");
+        assert_eq!(iids(&sections.open), [50, 51], "42 is already in To review");
+    }
+
+    #[test]
+    fn an_unknown_project_is_an_error_not_an_empty_queue() {
+        let body = FIXTURE.replacen("\"data\": {", "\"data\": {\"project\": null, ", 1);
+        let err = Queue::from_json_in(&body, "acme/gone").unwrap_err().to_string();
+        assert!(err.contains("acme/gone"), "{err}");
     }
 
     #[test]

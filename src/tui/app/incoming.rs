@@ -4,7 +4,15 @@ use crate::review::Review;
 impl App {
     pub fn apply(&mut self, incoming: Incoming) {
         match incoming {
-            Incoming::Queue { sections, opened } => {
+            Incoming::Queue { scope, .. } if scope != self.scope() => {}
+            Incoming::Queue { sections, opened, cached: true, .. } => {
+                if self.sections.is_none() {
+                    self.sections = Some(sections);
+                    self.opened = opened;
+                    self.queue_settle();
+                }
+            }
+            Incoming::Queue { sections, opened, .. } => {
                 self.sections = Some(sections);
                 self.opened = opened;
                 self.queue_loading = false;

@@ -31,6 +31,11 @@ REST lists answer with a `Link: <…>; rel="next"` header and `X-Total`, `X-Next
 
 ## The queue (GraphQL, one call)
 
+Run inside a git checkout whose `origin` lives on the configured host, the queue is scoped to that project (`mr --all` or `*` in the TUI widens it to every project).
+Scoped, a second query runs in parallel, `project(fullPath: $project) { mergeRequests(state: opened, first: 100, sort: UPDATED_DESC) { ...list } }`, and the four sections below keep only that project's MRs.
+One query for both is refused: it scores 359 against GitLab's complexity limit of 250 (the project query alone scores 114, verified 2026-09-22).
+The fragment also asks for `description`, so the description modal opens from the queue without a request.
+
 Verified: `currentUser.reviewRequestedMergeRequests`, `assignedMergeRequests`, `authoredMergeRequests` exist and accept `state: opened`.
 
 ```graphql
@@ -69,6 +74,7 @@ Sections are derived client side:
 | To review | in `reviewRequested` and my `reviewState` is not `APPROVED` or `REVIEWED` |
 | Mine | in `authored` |
 | Watching | in `assigned` or carries a `queue.watch_labels` label, and not above |
+| Open | scoped only: every other open MR of the project, whoever wrote or reviews it |
 | Done | in `reviewRequested` and already approved or reviewed by me (folded by default) |
 
 Fallback if GraphQL is unavailable (self-hosted with it disabled): `GET /merge_requests?scope=all&state=opened&reviewer_username=<me>` and `author_username=<me>`, which was also verified to answer.
