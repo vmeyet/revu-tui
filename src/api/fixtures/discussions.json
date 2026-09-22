@@ -1,0 +1,18 @@
+{
+  "id": "6a9c1750b2d6e4f0",
+  "individual_note": true,
+  "notes": [
+    {
+      "id": 501,
+      "type": null,
+      "body": "Looks good overall, one question inline.",
+      "author": { "id": 3, "username": "lea", "name": "Léa", "avatar_url": null },
+      "created_at": "2026-09-22T10:00:00Z",
+      "updated_at": "2026-09-22T10:00:00Z",
+      "system": false,
+      "resolvable": false,
+      "resolved": null,
+      "position": null
+    }
+  ]
+}
