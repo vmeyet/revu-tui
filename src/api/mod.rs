@@ -4,7 +4,7 @@ pub mod types;
 
 pub use graphql::{Queue, QueueMr, ReviewState, Sections};
 pub use rest::Project;
-pub use types::{Approvals, DiffFile, DiffRefs, Discussion, Mr, Note, Pipeline, Position, User};
+pub use types::{Approvals, DiffFile, DiffRefs, Discussion, DraftNote, Mr, NewDraft, Note, Pipeline, Position, User};
 
 use crate::auth::Credentials;
 use anyhow::{Context, Result, bail};
@@ -71,6 +71,20 @@ impl Client {
     pub async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(Method::POST, self.url(path)?, Some(body)).await?;
         response.json().await.map_err(scrub).with_context(|| format!("POST {path}: unreadable answer"))
+    }
+
+    pub async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+        let response = self.send(Method::PUT, self.url(path)?, Some(body)).await?;
+        response.json().await.map_err(scrub).with_context(|| format!("PUT {path}: unreadable answer"))
+    }
+
+    /// A request whose answer body does not matter: `204`s, publishes, approvals.
+    pub async fn send_empty(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<()> {
+        self.send(method, self.url(path)?, body).await.map(|_| ())
+    }
+
+    pub async fn delete(&self, path: &str) -> Result<()> {
+        self.send_empty(Method::DELETE, path, None).await
     }
 
     /// Every page of a list, following `Link: rel="next"` until it stops.

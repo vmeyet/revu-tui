@@ -172,6 +172,61 @@ pub struct LineCode {
     pub new_line: Option<u32>,
 }
 
+/// One of my unpublished review comments, as `GET …/draft_notes` returns it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DraftNote {
+    pub id: u64,
+    pub author_id: u64,
+    pub merge_request_id: u64,
+    pub note: String,
+    #[serde(default)]
+    pub discussion_id: Option<String>,
+    #[serde(default)]
+    pub resolve_discussion: bool,
+    #[serde(default)]
+    pub line_code: Option<String>,
+    /// GitLab sends a position of nulls for a note on the MR itself; that reads as `None`.
+    #[serde(default, deserialize_with = "anchored_position")]
+    pub position: Option<Position>,
+}
+
+fn anchored_position<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Position>, D::Error> {
+    let raw = serde_json::Value::deserialize(d)?;
+    if raw.get("head_sha").is_none_or(serde_json::Value::is_null) {
+        return Ok(None);
+    }
+    serde_json::from_value(raw).map(Some).map_err(serde::de::Error::custom)
+}
+
+/// What `POST …/draft_notes` needs; `position` anchors it to a line, `in_reply_to_discussion_id` to a thread.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct NewDraft {
+    pub note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<Position>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_reply_to_discussion_id: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub resolve_discussion: bool,
+}
+
+impl Position {
+    /// A single-line anchor on the current diff of `refs`; context lines carry both numbers.
+    pub fn line(refs: &DiffRefs, old_path: &str, new_path: &str, old_line: Option<u32>, new_line: Option<u32>) -> Self {
+        Self {
+            base_sha: refs.base_sha.clone(),
+            head_sha: refs.head_sha.clone(),
+            start_sha: refs.start_sha.clone(),
+            position_type: "text".into(),
+            old_path: Some(old_path.to_owned()),
+            new_path: Some(new_path.to_owned()),
+            old_line,
+            new_line,
+            line_range: None,
+        }
+    }
+}
+
 /// GitLab answers errors as `{"message": …}` or `{"error": …}`; anything else is shown as is.
 pub fn error_message(body: &str) -> String {
     let parsed: Option<serde_json::Value> = serde_json::from_str(body).ok();
@@ -206,6 +261,29 @@ mod tests {
             r#"{"approved": true, "approvals_left": 0, "approved_by": [{"user": {"id": 2, "username": "nina", "name": "Nina"}, "approved_at": "2026-09-22T10:00:00Z"}]}"#,
         );
         assert_eq!(approvals.approved_by.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), ["nina"]);
+    }
+
+    #[test]
+    fn draft_note_with_a_null_position_is_unanchored() {
+        let drafts: Vec<DraftNote> = from_fixture(include_str!("fixtures/draft_notes.json"));
+        assert_eq!(drafts[0].position, None);
+        assert_eq!(drafts[0].discussion_id.as_deref(), Some("6a9c1750"));
+        let anchored = drafts[1].position.as_ref().unwrap();
+        assert_eq!((anchored.new_path.as_deref(), anchored.new_line), (Some("src/pay/charge.rs"), Some(13)));
+        assert_eq!(drafts[1].line_code.as_deref(), Some("2f1d_0_13"));
+    }
+
+    #[test]
+    fn new_draft_serialises_only_what_is_set() {
+        let plain = serde_json::to_value(NewDraft { note: "hi".into(), ..NewDraft::default() }).unwrap();
+        assert_eq!(plain, serde_json::json!({"note": "hi"}));
+        let refs = DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
+        let anchored =
+            NewDraft { note: "hi".into(), position: Some(Position::line(&refs, "x", "x", None, Some(3))), ..NewDraft::default() };
+        let json = serde_json::to_value(anchored).unwrap();
+        assert_eq!(json["position"]["new_line"], 3);
+        assert_eq!(json["position"]["old_line"], serde_json::Value::Null);
+        assert_eq!(json["position"]["position_type"], "text");
     }
 
     #[test]

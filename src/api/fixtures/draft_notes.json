@@ -1,0 +1,44 @@
+[
+  {
+    "id": 501,
+    "author_id": 2,
+    "merge_request_id": 1042,
+    "resolve_discussion": false,
+    "discussion_id": "6a9c1750",
+    "note": "Agreed, keys are per card and amount.",
+    "commit_id": null,
+    "line_code": null,
+    "position": {
+      "base_sha": null,
+      "start_sha": null,
+      "head_sha": null,
+      "old_path": null,
+      "new_path": null,
+      "position_type": "text",
+      "old_line": null,
+      "new_line": null,
+      "line_range": null
+    }
+  },
+  {
+    "id": 502,
+    "author_id": 2,
+    "merge_request_id": 1042,
+    "resolve_discussion": false,
+    "discussion_id": null,
+    "note": "nit: `with_key` reads better as `keyed`.",
+    "commit_id": null,
+    "line_code": "2f1d_0_13",
+    "position": {
+      "base_sha": "aaaa",
+      "start_sha": "aaaa",
+      "head_sha": "bbbb",
+      "old_path": "src/pay/charge.rs",
+      "new_path": "src/pay/charge.rs",
+      "position_type": "text",
+      "old_line": null,
+      "new_line": 13,
+      "line_range": null
+    }
+  }
+]
