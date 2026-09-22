@@ -1,6 +1,10 @@
 //! The value the TUI edits: one MR, its files as parsed hunks, its threads hung on lines, and what is folded.
+pub mod draft;
+pub mod position;
+pub mod suggestion;
 pub mod thread;
 
+pub use draft::Draft;
 pub use thread::{Anchor, Side, Thread};
 
 use crate::api::{DiffFile, Discussion, Mr};
@@ -87,11 +91,30 @@ fn kind_of(diff: &DiffFile) -> FileKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Row {
     Header,
-    File { index: usize, open: bool },
-    Hunk { file: usize, index: usize, open: bool },
-    Line { file: usize, hunk: usize, index: usize },
-    Thread { id: String },
-    Outdated { file: usize },
+    File {
+        index: usize,
+        open: bool,
+    },
+    Hunk {
+        file: usize,
+        index: usize,
+        open: bool,
+    },
+    Line {
+        file: usize,
+        hunk: usize,
+        index: usize,
+    },
+    Thread {
+        id: String,
+    },
+    /// An unpublished note on a line; the index points into `Review::drafts`.
+    Draft {
+        index: usize,
+    },
+    Outdated {
+        file: usize,
+    },
     Gap,
 }
 
@@ -100,6 +123,7 @@ pub struct Review {
     pub mr: Mr,
     pub files: Vec<File>,
     pub threads: Vec<Thread>,
+    pub drafts: Vec<Draft>,
     pub viewed: BTreeSet<String>,
     pub fold: FoldState,
 }
@@ -110,7 +134,7 @@ impl Review {
         let threads = threads_of(discussions, &files);
         let metas: Vec<FileMeta> = files.iter().map(File::meta).collect();
         let fold = FoldState::initial(&metas, fold_globs);
-        Self { mr, files, threads, viewed: BTreeSet::new(), fold }
+        Self { mr, files, threads, drafts: vec![], viewed: BTreeSet::new(), fold }
     }
 
     pub fn with_fold(&self, fold: FoldState) -> Self {
@@ -119,6 +143,10 @@ impl Review {
 
     pub fn with_viewed(&self, viewed: BTreeSet<String>) -> Self {
         Self { viewed, ..self.clone() }
+    }
+
+    pub fn with_drafts(&self, drafts: Vec<Draft>) -> Self {
+        Self { drafts, ..self.clone() }
     }
 
     /// The same diff with fresh threads, for the cheap discussions poll.
@@ -140,6 +168,11 @@ impl Review {
             .filter(|t| !t.outdated)
             .filter(|t| t.anchor.as_ref().is_some_and(|a| a.path == path && a.side == side && a.line == line))
             .collect()
+    }
+
+    /// Drafts hung on a line, with their index in `drafts`; replies never hang anywhere.
+    pub fn drafts_at(&self, path: &str, side: Side, line: u32) -> Vec<(usize, &Draft)> {
+        self.drafts.iter().enumerate().filter(|(_, d)| d.is_at(path, side, line)).collect()
     }
 
     pub fn outdated(&self, path: &str) -> Vec<&Thread> {
@@ -169,6 +202,7 @@ impl Review {
             for (line_index, line) in hunk.lines.iter().enumerate() {
                 rows.push(Row::Line { file: index, hunk: hunk_index, index: line_index });
                 rows.extend(self.threads_on(file, line).into_iter().map(|t| Row::Thread { id: t.id.clone() }));
+                rows.extend(self.drafts_on(file, line).into_iter().map(|index| Row::Draft { index }));
             }
         }
         if !self.outdated(&file.new_path).is_empty() {
@@ -181,6 +215,14 @@ impl Review {
         let new = line.new.map(|n| self.threads_at(&file.new_path, Side::New, n)).unwrap_or_default();
         let old = line.old.map(|n| self.threads_at(&file.old_path, Side::Old, n)).unwrap_or_default();
         new.into_iter().chain(old).collect()
+    }
+}
+
+impl Review {
+    fn drafts_on(&self, file: &File, line: &diff::Line) -> Vec<usize> {
+        let new = line.new.map(|n| self.drafts_at(&file.new_path, Side::New, n)).unwrap_or_default();
+        let old = line.old.map(|n| self.drafts_at(&file.old_path, Side::Old, n)).unwrap_or_default();
+        new.into_iter().chain(old).map(|(index, _)| index).collect()
     }
 }
 
@@ -198,7 +240,7 @@ fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::api::types::from_fixture;
     use serde_json::json;
@@ -246,7 +288,7 @@ mod tests {
         ]
     }
 
-    fn review() -> Review {
+    pub(super) fn review() -> Review {
         Review::new(mr(), vec![charge(), lock()], discussions(), &["*.lock".into()])
     }
 
@@ -336,6 +378,21 @@ mod tests {
         assert_eq!(rows[4], Row::Hunk { file: 0, index: 1, open: true });
         assert!(!rows.contains(&Row::Thread { id: "c0ffee00c0ffee00".into() }));
         assert!(rows.contains(&Row::Line { file: 0, hunk: 1, index: 0 }));
+    }
+
+    #[test]
+    fn drafts_hang_after_the_threads_of_their_line_and_replies_hang_nowhere() {
+        let on_line =
+            Draft::new(Some(Anchor { path: "src/pay/charge.rs".into(), side: Side::Old, line: 13 }), "why drop the default client?");
+        let reply = Draft::reply("c0ffee00c0ffee00", "agreed");
+        let on_mr = Draft::new(None, "overall fine");
+        let review = review().with_drafts(vec![reply, on_line, on_mr]);
+        let rows = review.rows();
+        let thread_at = rows.iter().position(|r| *r == Row::Thread { id: "c0ffee00c0ffee00".into() }).unwrap();
+        assert_eq!(rows[thread_at + 1], Row::Draft { index: 1 });
+        assert_eq!(rows.iter().filter(|r| matches!(r, Row::Draft { .. })).count(), 1);
+        assert_eq!(review.drafts_at("src/pay/charge.rs", Side::Old, 13).len(), 1);
+        assert!(review.drafts_at("src/pay/charge.rs", Side::New, 13).is_empty());
     }
 
     #[test]

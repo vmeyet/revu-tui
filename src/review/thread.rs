@@ -50,7 +50,7 @@ impl Thread {
     }
 }
 
-fn anchor_of(position: &Position) -> Option<Anchor> {
+pub(super) fn anchor_of(position: &Position) -> Option<Anchor> {
     if position.position_type != "text" {
         return None;
     }
