@@ -5,7 +5,7 @@ pub const COMMIT: &str = env!("GIT_HASH");
 
 pub const UNKNOWN: &str = "unknown";
 
-/// `0.1.0 (a1b2c3d)`, as shown by `mr --version`.
+/// `0.1.0 (a1b2c3d)`, as shown by `revu --version`.
 pub fn label() -> &'static str {
     static LABEL: LazyLock<String> = LazyLock::new(|| format!("{} ({})", env!("CARGO_PKG_VERSION"), short(COMMIT)));
     &LABEL

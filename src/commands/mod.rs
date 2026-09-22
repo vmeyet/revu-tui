@@ -1,20 +1,20 @@
 //! One module per subcommand, each with a `run` the binary calls.
-/// `mr approve`.
+/// `revu approve`.
 pub mod approve;
-/// `mr comment`.
+/// `revu comment`.
 pub mod comment;
-/// `mr diff`.
+/// `revu diff`.
 pub mod diff;
-/// `mr list`.
+/// `revu list`.
 pub mod list;
-/// `mr login` and `mr logout`.
+/// `revu login` and `revu logout`.
 pub mod login;
-/// `mr publish`.
+/// `revu publish`.
 pub mod publish;
-/// `mr show`.
+/// `revu show`.
 pub mod show;
 mod target;
-/// `mr update`.
+/// `revu update`.
 pub mod update;
-/// `mr whoami`.
+/// `revu whoami`.
 pub mod whoami;

@@ -19,7 +19,7 @@ pub struct Settings {
     /// Which forge `host` runs: how an MR is named and how a line is linked.
     pub kind: Kind,
     pub me: String,
-    /// The project of the checkout `mr` runs in; `None` outside one or with `--all`.
+    /// The project of the checkout `revu` runs in; `None` outside one or with `--all`.
     pub project: Option<String>,
 }
 

@@ -1,6 +1,6 @@
 # 07 · Forges
 
-`mr` reviews merge requests on GitLab and pull requests on GitHub.
+`revu` reviews merge requests on GitLab and pull requests on GitHub.
 Everything above `src/forge/` speaks one neutral model; each forge converts its own wire shapes at its edge.
 Phase 1 (done 2026-09-22) put GitLab behind the seam with no behaviour change.
 Phase 2 (done 2026-09-22) added `src/forge/github/` and the `Forge::GitHub` variant, at parity with GitLab for every method.
@@ -96,8 +96,8 @@ Login borrows the token the forge's own CLI already holds:
 
 | Forge | Seed | Scope |
 |---|---|---|
-| GitLab | `mr login --from-glab` reads `glab auth status --show-token` | `api` |
-| GitHub | `mr login --from-gh` reads `gh auth token` | `repo` |
+| GitLab | `revu login --from-glab` reads `glab auth status --show-token` | `api` |
+| GitHub | `revu login --from-gh` reads `gh auth token` | `repo` |
 
 Without the CLI and without `--token -`, login stops with one line naming the missing tool and the token page to create one.
 `GITLAB_TOKEN` is the env override for GitLab hosts, `GITHUB_TOKEN` (else `GH_TOKEN`) for GitHub hosts.
@@ -106,7 +106,7 @@ Every host remembers its own username (`[hosts."<host>"] username`), so the TUI 
 
 ## What changed in phase 1 that a user can see
 
-Nothing on screen or in plain output: `mr list`, `list --all`, `show`, `diff` and the TUI frames are byte-identical on the same data.
+Nothing on screen or in plain output: `revu list`, `list --all`, `show`, `diff` and the TUI frames are byte-identical on the same data.
 `--json` output speaks the neutral model: `number` instead of `iid`, `project` (the path) instead of `project_id`, no numeric `id`.
 Cache paths moved from `mr/<project_id>/<iid>/` to `mr/<group+project>/<number>/`; old entries are ignored, so saved folds and viewed files of MRs opened before the upgrade start fresh.
 
@@ -121,7 +121,7 @@ Cache paths moved from `mr/<project_id>/<iid>/` to `mr/<group+project>/<number>/
 
 ## Verified live (2026-09-22, private sandbox `owner/repo#1` on each forge)
 
-- `mr whoami`, scoped `mr list`, `mr show #1`, `mr diff #1`.
+- `revu whoami`, scoped `revu list`, `revu show #1`, `revu diff #1`.
 - TUI: open the PR, a draft on an added line (RIGHT 3) and on a removed line (LEFT 6), edit one after a restart (its line stays), publish as one `COMMENTED` review, a reply draft in a thread then published, resolve and unresolve.
-- `mr comment #1 --at main.rs:5` lands on RIGHT 5; `mr comment #1 text` on the conversation; `mr approve` on my own PR and `--undo` fail with their messages.
+- `revu comment #1 --at main.rs:5` lands on RIGHT 5; `revu comment #1 text` on the conversation; `revu approve` on my own PR and `--undo` fail with their messages.
 - GitLab unchanged: the same commands against the GitLab sandbox, from a GitLab checkout and from a GitHub checkout with no GitHub token.

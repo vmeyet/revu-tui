@@ -58,7 +58,7 @@ impl Client {
         let http = reqwest::Client::builder()
             .default_headers(headers)
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("gitlabmr/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let rest = Url::parse(rest).context("host is not a hostname")?;
         let graphql = Url::parse(graphql).context("host is not a hostname")?;

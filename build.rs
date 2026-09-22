@@ -1,4 +1,4 @@
-//! Embeds the git commit the binary was built from, so `mr update` knows what it runs.
+//! Embeds the git commit the binary was built from, so `revu update` knows what it runs.
 use std::path::Path;
 use std::process::Command;
 

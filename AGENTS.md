@@ -1,6 +1,6 @@
 # Working in this repo
 
-`mr` is a Rust TUI and CLI for reviewing GitLab merge requests.
+`revu` is a Rust TUI and CLI for reviewing GitLab merge requests.
 The design lives in `specs/`; read `specs/06-roadmap.md` first, it says what to build next and which spec files to open.
 
 ## Ground rules

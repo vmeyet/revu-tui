@@ -1,107 +1,109 @@
-# gitlabmr
+# revu
 
-GitLab merge request review in your terminal, as yourself.
-One Rust binary called `mr`: a TUI for reading diffs, commenting, and publishing reviews, plus scriptable commands.
+Review merge requests in your terminal: GitLab MRs and GitHub PRs, one keyboard, no browser tab.
+One Rust binary called `revu`: a TUI to read diffs, comment and publish reviews, plus scriptable commands.
 
-> Status: bootstrap (M0). The design is in `specs/`, the roadmap in `specs/06-roadmap.md`.
+> [!IMPORTANT]
+> **macOS only** for now (keychain, `open`, `pbcopy`).
+>
+> **Vibe coded** for personal use; use it at your own risk.
 
 ## Install
 
 ```sh
-cargo install --path .
+cargo install --git https://github.com/vmeyet/revu-tui
 ```
 
-Needs macOS (keychain) and Rust 1.88+.
-Update with `mr update`: it pulls this checkout (fast-forward only), and rebuilds when the commit moved; `-f` rebuilds anyway.
-`mr --version` prints the version and the commit it was built from.
+That is all: `revu` is now on your path.
+You need macOS and Rust 1.88+ (`curl -sSf https://sh.rustup.rs | sh`).
+
+Update with `revu update` (a no-op when you already run the latest commit, `-f` to rebuild anyway).
+`revu --version` prints the version and the commit it was built from.
 
 ## Log in
 
-`mr` reviews GitLab merge requests and GitHub pull requests; the host says which.
-
 ```sh
-mr login                        # the checkout's host, else gitlab.com: prompts for a token, stores it in the keychain
-mr login --from-glab            # reuses the token glab already holds (GitLab, scope `api`)
-mr login github.com --from-gh   # reuses the token gh already holds (GitHub, scope `repo`)
-mr whoami
-mr logout github.com
+revu login --from-glab            # reuse the token glab already holds (GitLab, scope `api`)
+revu login github.com --from-gh   # reuse the token gh already holds (GitHub, scope `repo`)
+revu login                        # or paste a token; it goes to the keychain
+revu whoami
 ```
 
-Inside a checkout, `mr` talks to the host of its `origin` remote when it holds a token for it; elsewhere to the first host you logged in to.
-`GITLAB_TOKEN` (GitLab) and `GITHUB_TOKEN` or `GH_TOKEN` (GitHub) override the keychain, for scripts; `GITLAB_HOST` or `--host` pick the host.
-A GitHub Enterprise host needs one line of config: `[hosts."git.acme.dev"] forge = "github"`.
+The host picks the forge: `github.com` is GitHub, anything else GitLab.
+Inside a checkout, `revu` talks to the host of its `origin` remote.
 
-## Commands
-
-```sh
-mr list                        # the MRs waiting on you, yours, the ones you watch, and the rest of the repo's (`--cached` skips the network)
-mr show acme/widgets!42        # header, files, unresolved threads (`owner/repo#42` on GitHub)
-mr diff !42                    # the coloured diff through $PAGER (`!42` takes the project from the origin remote)
-mr show                        # the open MR of the current branch
-mr comment !42 --at src/a.rs:13 looks racy   # a public comment, on a line with --at
-mr approve !42                 # or --undo
-mr publish !42                 # every draft you hold on the MR, as one review
-```
-
-Inside a GitLab checkout, `mr` and `mr list` show that project only, plus an `OPEN` section with its other open MRs; `--all` shows every project.
-Every command takes `--json`. An MR is `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
-
-## TUI
+## Review
 
 ```sh
-mr
+revu
 ```
+
+Three panes, like a chat client: the queue of MRs, the diff, the thread.
+Inside a checkout the queue shows that repo only: what waits on you, yours, what you watch, and every other open MR.
+`*` widens it to every project.
 
 | Key | Action |
 |---|---|
-| `j` `k` / arrows, `g` `G`, `ctrl-d` `ctrl-u` | Move |
-| `h` `l` | Pane to the left; open the selected MR, pane to the right |
-| `enter` | Open the MR, open the thread, or toggle the fold under the cursor |
-| `esc` | Back: close the thread, then the queue |
-| `/` | Filter the queue by title, author or iid |
-| `*` | Queue: this repo only, or every project |
-| `i` | The MR description, in a modal |
-| click `!42` | Open the MR, in terminals that follow links (Ghostty, iTerm2, Kitty, WezTerm) |
-| `r` | Refresh |
-| `o` / `y` | Open in the browser / copy the URL (the line, inside a diff) |
-| `tab` `S-tab` | Next, previous file |
-| `]c` `[c` | Next, previous hunk |
-| `]n` `[n` | Next, previous thread |
-| `]f` `[f` | Next, previous file with an unresolved thread |
-| `za` `zc` `zo` | Toggle, close, open the fold under the cursor |
-| `zM` `zR` | Fold, unfold every file |
-| `zo` (queue) | Show the done section |
-| `c` | Comment on the line, as a draft |
-| `V` | Select lines: `c` comments on them, `y` copies them, `esc` drops them |
-| `E` / `s` | Write the comment in `$EDITOR` / as a suggestion prefilled with the lines |
-| `enter` / `d` (draft) | Edit / delete the draft under the cursor |
-| `P` | Publish every draft in one review (`a` in the modal also approves) |
-| `A` | Approve, unapprove |
-| `r` / `R` (thread) | Reply as a draft / resolve, unresolve |
-| `u` (thread) | Open the first link of the thread |
+| `j` `k`, `g` `G` | Move |
+| `enter` / `l` | Open the MR, the thread, or toggle a fold |
+| `tab`, `]c`, `]n` | Next file, hunk, thread |
+| `za`, `zM` `zR` | Fold one, fold all, unfold all |
+| `i` | The MR description |
+| `c` | Comment on the line (`V` first for a range, `s` for a suggestion) |
+| `r` / `R` | Reply / resolve, in a thread |
+| `P` | Publish every draft as one review, optionally approving |
+| `o` / `y` | Open in the browser / copy the link |
 | `?` | Every key |
-| `q` | Quit |
 
-Comments are GitLab draft notes until `P`: they survive a restart, show up in the web UI as pending, and nothing is public before you publish.
+Comments stay drafts until `P`: GitLab draft notes, or your pending review on GitHub.
+They survive a restart, and nothing is public before you publish.
 
-Read-only for now (M1): the queue, the diff with folds, the threads. Comments and approvals come with M2.
-The queue refreshes every minute and the open MR every 30 s; an MR that moved since you last opened it shows `●`.
+## Commands
 
-The full key grammar planned for the review is in `specs/03-ui-ux.md`.
+Every command takes `--json`, for scripts and agents.
 
-## Config
+```sh
+revu list                              # the queue, as a table
+revu show acme/widgets!42              # header, files, open threads (owner/repo#42 on GitHub)
+revu diff !42                          # the coloured diff in $PAGER; !42 takes the repo from origin
+revu comment !42 --at src/a.rs:13 "looks racy"
+revu approve !42
+revu publish !42                       # every draft you hold, as one review
+```
 
-`~/.config/gitlabmr/config.toml`:
+## Settings
+
+`~/Library/Application Support/revu/config.toml`, every key optional:
 
 ```toml
-host = "gitlab.com"
-
 [queue]
-watch_labels = ["infra"]   # MRs with these labels land in Watching
+watch_labels = ["infra"]      # MRs with these labels land in Watching
 
 [review]
 fold = ["*.lock", "*.snap"]   # files that open folded
 
 [tui]
-theme = "tokyonight"   # default, dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
+theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
+
+[hosts."git.acme.dev"]
+forge = "github"              # a GitHub Enterprise host
 ```
+
+## Security
+
+Tokens live in the macOS login keychain (service `revu`), never on disk in clear.
+Each token goes to its own host only, and redirects are refused.
+`GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` override the keychain for scripts.
+
+## Development
+
+```sh
+cargo test                   # unit, snapshots, and HTTP against mock servers
+cargo test -- --ignored      # also the real keychain round trip
+```
+
+The design lives in [`specs/`](specs), the roadmap in [`specs/06-roadmap.md`](specs/06-roadmap.md).
+
+## License
+
+[MIT](LICENSE)

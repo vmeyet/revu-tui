@@ -38,7 +38,7 @@ impl Client {
         let http = reqwest::Client::builder()
             .default_headers(headers)
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("gitlabmr/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let base = Url::parse(&format!("https://{}/api/v4/", credentials.host)).context("host is not a hostname")?;
         Ok(Self { http, host: credentials.host.clone(), base })

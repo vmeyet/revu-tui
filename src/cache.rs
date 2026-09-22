@@ -1,4 +1,4 @@
-//! Cached answers under `~/.cache/gitlabmr/<host>/`, one JSON file per key. The files hold MR
+//! Cached answers under `~/.cache/revu/<host>/`, one JSON file per key. The files hold MR
 //! content, so directories are 0700 and files 0600; writes go through a temp name then a rename.
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -106,10 +106,10 @@ fn private(_mode: u32) -> std::fs::Permissions {
 }
 
 fn root() -> PathBuf {
-    std::env::var_os("GITLABMR_CACHE_DIR")
+    std::env::var_os("REVU_CACHE_DIR")
         .map(PathBuf::from)
-        .or_else(|| dirs::cache_dir().map(|d| d.join("gitlabmr")))
-        .unwrap_or_else(|| PathBuf::from(".gitlabmr-cache"))
+        .or_else(|| dirs::cache_dir().map(|d| d.join("revu")))
+        .unwrap_or_else(|| PathBuf::from(".revu-cache"))
 }
 
 /// The one place cache paths are spelled.

@@ -21,7 +21,7 @@ pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
 
 fn cached(ctx: &Ctx) -> Result<Queue> {
     let key = keys::queue(ctx.project.as_deref());
-    ctx.cache.read_entry::<Queue>(&key).map(|e| e.value).context("nothing cached yet: run `mr list` without --cached")
+    ctx.cache.read_entry::<Queue>(&key).map(|e| e.value).context("nothing cached yet: run `revu list` without --cached")
 }
 
 async fn fetched(ctx: &Ctx) -> Result<Queue> {

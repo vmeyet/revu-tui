@@ -9,7 +9,7 @@ use crate::forge::Kind;
 use anyhow::{Result, bail};
 use std::fmt;
 
-pub const SERVICE: &str = "gitlabmr";
+pub const SERVICE: &str = "revu";
 pub const DEFAULT_HOST: &str = "gitlab.com";
 
 #[derive(Clone, PartialEq, Eq)]
@@ -83,7 +83,7 @@ pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, host: Option
     }
     match store.get(&host)? {
         Some(token) => Ok((Credentials { host, token }, Source::Keychain)),
-        None => bail!("no token for {host}: run `mr login {host}` or set {}", token_variable(kind)),
+        None => bail!("no token for {host}: run `revu login {host}` or set {}", token_variable(kind)),
     }
 }
 
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn missing_token_names_the_login_command() {
         let err = resolve(&Env::default(), &MemoryStore::default(), &Config::default(), Some("gl.acme.dev")).unwrap_err();
-        assert!(err.to_string().contains("mr login gl.acme.dev"), "{err}");
+        assert!(err.to_string().contains("revu login gl.acme.dev"), "{err}");
     }
 
     #[test]
@@ -138,7 +138,7 @@ mod tests {
         let (gitlab, _) = resolve(&env, &store, &Config::default(), Some("gitlab.com")).unwrap();
         assert_eq!(gitlab.token, "glpat-env");
         let err = resolve(&Env::default(), &store, &Config::default(), Some("github.com")).unwrap_err().to_string();
-        assert!(err.contains("GITHUB_TOKEN") && err.contains("mr login github.com"), "{err}");
+        assert!(err.contains("GITHUB_TOKEN") && err.contains("revu login github.com"), "{err}");
     }
 
     #[test]

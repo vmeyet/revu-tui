@@ -230,7 +230,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 ## Toasts and errors
 
 A toast is one line in the status area, `accent` for success, `danger` for failure, 4 s, replaced by the next.
-Failure toasts end with the key that retries (`r`) or the command that fixes it (`mr login`).
+Failure toasts end with the key that retries (`r`) or the command that fixes it (`revu login`).
 A network failure while browsing does not clear the screen: the stale view stays, the status line says `offline · last refresh 3m ago`.
 
 ## Performance budgets
@@ -255,9 +255,9 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
 
 ## DX for the person running it
 
-- `mr` with no subcommand opens the TUI.
-- `mr list` and `mr show <ref>` print aligned tables, `--json` for scripts; `mr diff <ref>` prints the coloured diff to a pager (`$PAGER`, default `less -R`).
-- `mr comment <ref> <path>:<line> <text>` and `mr approve <ref>` for scripts and other agents.
+- `revu` with no subcommand opens the TUI.
+- `revu list` and `revu show <ref>` print aligned tables, `--json` for scripts; `revu diff <ref>` prints the coloured diff to a pager (`$PAGER`, default `less -R`).
+- `revu comment <ref> <path>:<line> <text>` and `revu approve <ref>` for scripts and other agents.
 - `<ref>` accepts `group/project!42`, `!42` (current repo from `git remote`), an MR URL, or nothing (current branch).
 - Error lines are `✗ message` plus dimmed causes, same as slack-tui.
-- `mr --version` prints the crate version and the commit; `mr update` rebuilds from the repo.
+- `revu --version` prints the crate version and the commit; `revu update` rebuilds from the repo.

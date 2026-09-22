@@ -45,7 +45,7 @@ fn remember(config: &mut Config, host: &str, username: &str) {
 pub fn logout(host: Option<&str>) -> Result<()> {
     let mut config = Config::load()?;
     let host = auth::pick_host(&Env::default(), &config, host, |_| true);
-    SecurityCli::new(auth::SERVICE).delete(&host)?;
+    crate::legacy::Keychain::open().delete(&host)?;
     if let Some(entry) = config.hosts.get_mut(&host) {
         entry.username = None;
     }
@@ -92,7 +92,7 @@ fn forge_cli(program: &str, args: &[&str], host: &str) -> Result<std::process::O
     match Command::new(program).args(args).output() {
         Err(err) if err.kind() == ErrorKind::NotFound => {
             bail!(
-                "{program} is not installed: install it and log in with it, or run `mr login {host}` to paste a token (`--token -` reads stdin)"
+                "{program} is not installed: install it and log in with it, or run `revu login {host}` to paste a token (`--token -` reads stdin)"
             )
         }
         other => other.with_context(|| format!("running {program}")),
@@ -129,7 +129,7 @@ fn prompt(host: &str, kind: Kind) -> Result<String> {
     if !std::io::stdin().is_terminal() {
         bail!("no terminal to prompt on: pipe the token with `--token -`, or use `{borrow}`");
     }
-    eprintln!("Create a token with the `{}` scope at {page} (or run `mr login {borrow}`)", scope(kind));
+    eprintln!("Create a token with the `{}` scope at {page} (or run `revu login {borrow}`)", scope(kind));
     eprint!("Token (hidden): ");
     std::io::stderr().flush()?;
     let token = read_hidden()?;
@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn a_missing_cli_says_how_to_go_on_without_it() {
         let err = forge_cli("mr-no-such-cli", &[], "github.com").unwrap_err().to_string();
-        assert!(err.contains("not installed") && err.contains("mr login github.com") && err.contains("--token -"), "{err}");
+        assert!(err.contains("not installed") && err.contains("revu login github.com") && err.contains("--token -"), "{err}");
     }
 
     #[test]

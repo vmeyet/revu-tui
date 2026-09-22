@@ -1,14 +1,15 @@
 [package]
-name = "gitlabmr"
+name = "revu"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "GitLab merge request review in your terminal: a TUI plus scriptable commands."
+description = "Review GitLab merge requests and GitHub pull requests from your terminal: a TUI plus scriptable commands."
 license = "MIT"
+repository = "https://github.com/vmeyet/revu-tui"
 readme = "README.md"
 
 [[bin]]
-name = "mr"
+name = "revu"
 path = "src/main.rs"
 
 [dependencies]

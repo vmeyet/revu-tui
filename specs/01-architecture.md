@@ -1,6 +1,6 @@
 # 01 · Architecture
 
-Crate `gitlabmr`, binary `mr`, edition 2024, Rust 1.88+.
+Crate `revu`, binary `revu`, edition 2024, Rust 1.88+.
 `cargo install --git <repo>` is the only install path, as for slack-tui.
 
 ## Crate layout
@@ -11,10 +11,10 @@ src/
   lib.rs             pub mod list
   cli.rs             clap: login, logout, whoami, list, show, diff, comment, approve, tui, completions, update
   ctx.rs             Ctx { forge: Forge, config, cache, json, project } opened once per command
-  config.rs          ~/.config/gitlabmr/config.toml
-  cache.rs           ~/.cache/gitlabmr/<host>/…  json files, atomic writes
-  version.rs         `mr --version` = crate version + git hash from build.rs
-  update.rs          `mr update`, copied from slack-tui
+  config.rs          ~/.config/revu/config.toml
+  cache.rs           ~/.cache/revu/<host>/…  json files, atomic writes
+  version.rs         `revu --version` = crate version + git hash from build.rs
+  update.rs          `revu update`, copied from slack-tui
   auth/
     mod.rs           SERVICE, Credentials { host, token }, resolve(env, store, config, host)
     store.rs         SecretStore trait, SecurityCli, MemoryStore   (copied from slack-tui)
@@ -192,7 +192,7 @@ The fold state is saved in the cache per MR and head sha, so reopening an MR res
 
 ## Cache
 
-`dirs::cache_dir()/gitlabmr/<host>/` (`~/Library/Caches/gitlabmr` on macOS, `~/.cache/gitlabmr` elsewhere; `GITLABMR_CACHE_DIR` overrides):
+`dirs::cache_dir()/revu/<host>/` (`~/Library/Caches/revu` on macOS, `~/.cache/revu` elsewhere; `REVU_CACHE_DIR` overrides):
 
 ```
 queue.json                          last queue answer + fetched_at, every project
@@ -219,10 +219,10 @@ No websocket: GitLab has none for this. Polling at these rates stays far under t
 
 ## Config
 
-`~/.config/gitlabmr/config.toml`:
+`~/.config/revu/config.toml`:
 
 ```toml
-host = "gitlab.com"          # default host; `mr --host` and GITLAB_HOST override
+host = "gitlab.com"          # default host; `revu --host` and GITLAB_HOST override
 
 [queue]
 groups = ["acme"]            # limit the queue to these groups (optional)

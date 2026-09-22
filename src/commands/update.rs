@@ -1,31 +1,24 @@
 use crate::cli::UpdateArgs;
 use crate::render::{Style, Theme};
-use crate::update::{Decision, Source, decide};
+use crate::update::{self, Decision, REPO, decide};
 use crate::version;
 use anyhow::Result;
 
-/// Rebuilds and installs `mr` when its source moved past the running commit.
+/// Rebuilds and installs `revu` when the repo moved past the running commit.
 pub fn run(args: &UpdateArgs) -> Result<()> {
     let theme = Theme::detect();
-    let source = Source::find()?;
-    let latest = if args.force { None } else { latest(&source, theme) };
+    let latest = if args.force { None } else { latest(theme) };
     match decide(version::COMMIT, latest.as_deref(), args.force) {
         Decision::UpToDate => println!("{} already up to date ({})", theme.paint("✓", Style::Ok), version::label()),
-        Decision::Install => install(&source, theme)?,
+        Decision::Install => {
+            println!("{} installing the latest revu from {REPO}…", theme.paint("→", Style::Accent));
+            update::install()?;
+            println!("{} updated, run `revu --version` to see it", theme.paint("✓", Style::Ok));
+        }
     }
     Ok(())
 }
 
-fn latest(source: &Source, theme: Theme) -> Option<String> {
-    source.latest().inspect_err(|err| eprintln!("{} could not check the latest version: {err}", theme.paint("!", Style::Warn))).ok()
-}
-
-fn install(source: &Source, theme: Theme) -> Result<()> {
-    if source.dirty() {
-        eprintln!("{} {source} has uncommitted changes; they go into this build", theme.paint("!", Style::Warn));
-    }
-    println!("{} installing mr from {source}…", theme.paint("→", Style::Accent));
-    source.install()?;
-    println!("{} updated, run `mr --version` to see it", theme.paint("✓", Style::Ok));
-    Ok(())
+fn latest(theme: Theme) -> Option<String> {
+    update::latest().inspect_err(|err| eprintln!("{} could not check the latest version: {err}", theme.paint("!", Style::Warn))).ok()
 }

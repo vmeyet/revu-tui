@@ -902,37 +902,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gitlabmr"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "chrono",
- "clap",
- "clap_complete",
- "crossterm",
- "dirs",
- "futures-util",
- "glob",
- "insta",
- "owo-colors",
- "predicates",
- "ratatui",
- "reqwest",
- "serde",
- "serde_json",
- "sha1_smol",
- "sha2",
- "similar",
- "tempfile",
- "tokio",
- "toml",
- "unicode-width",
- "url",
- "wiremock",
-]
-
-[[package]]
 name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2171,6 +2140,37 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "revu"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "crossterm",
+ "dirs",
+ "futures-util",
+ "glob",
+ "insta",
+ "owo-colors",
+ "predicates",
+ "ratatui",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha1_smol",
+ "sha2",
+ "similar",
+ "tempfile",
+ "tokio",
+ "toml",
+ "unicode-width",
+ "url",
+ "wiremock",
 ]
 
 [[package]]

@@ -8,15 +8,15 @@ TDD order inside each milestone is given; write the failing test first.
 
 1. Read `AGENTS.md`, then the spec files this milestone names.
 2. `cargo build && cargo test` must be green before and after.
-3. Run against the real thing with `mr login --from-glab` once, then `cargo run -- <cmd>`; never paste output that names a private project into the repo.
+3. Run against the real thing with `revu login --from-glab` once, then `cargo run -- <cmd>`; never paste output that names a private project into the repo.
 4. Snapshot changes (`cargo insta review`) are reviewed by eye: a snapshot is a design decision.
 5. Every new key goes in the `?` help and in `README.md` in the same MR.
 
 ## M0 · Bootstrap (done 2026-09-22)
 
-- `mr login`, `mr logout`, `mr whoami`, `mr tui` (empty shell), `mr completions`.
+- `revu login`, `revu logout`, `revu whoami`, `revu tui` (empty shell), `revu completions`.
 - Keychain store, config, API client with `GET /user`, theme, event loop.
-- Acceptance: `cargo test` green; `mr whoami` prints the username with a token in the keychain or `GITLAB_TOKEN`.
+- Acceptance: `cargo test` green; `revu whoami` prints the username with a token in the keychain or `GITLAB_TOKEN`.
 
 ## M1 · Read-only review (done 2026-09-22)
 
@@ -29,12 +29,12 @@ TDD order:
 1. `diff::parse` fixtures → parser.
 2. `diff::words` pairs → word ranges.
 3. `api::graphql` queue query with wiremock → `Queue` type and sections.
-4. `api::rest` `mr`, `diffs` (two pages), `discussions` with wiremock.
+4. `api::rest` `revu`, `diffs` (two pages), `discussions` with wiremock.
 5. `review::Review::from(mr, files, threads)`: anchors threads to lines, marks outdated.
 6. `tui::app` tests: `j/k` in the queue, `enter` opens (returns `Action::Open`), `apply(Incoming::Review)`, `Tab`, `[c ]c`, `za zM zR`, `t`, `z`, `?`.
 7. `tui::ui` snapshots: queue empty, queue loaded, MR open with one folded and one open file, thread pane open.
 8. Cache: paint from cache then refresh; head sha change test.
-9. `mr list` and `mr show <ref>` subcommands (plain and `--json`).
+9. `revu list` and `revu show <ref>` subcommands (plain and `--json`).
 
 Acceptance:
 
@@ -58,7 +58,7 @@ TDD order:
 4. Draft sync: a local draft gets its GitLab id on the first successful POST; a retry first lists `GET draft_notes` and re-posts only what is absent, so a network blip never duplicates a draft.
 5. `E` compose in `$EDITOR` for long comments; `s` suggestion prefill.
 6. Snapshots: line with a draft, publish modal, thread with a reply in flight.
-7. `mr comment <ref> <path>:<line> <text>` and `mr approve <ref>` subcommands.
+7. `revu comment <ref> <path>:<line> <text>` and `revu approve <ref>` subcommands.
 
 Acceptance:
 
@@ -77,7 +77,7 @@ Spec: `03` in full.
 - Live polling with `●` markers, rate-limit backoff in the status line.
 - Reading mode `z`, wrap `w`, whitespace toggle `W`, expand context `+`.
 - Empty states and the loading skeleton.
-- `mr update`.
+- `revu update`.
 
 Acceptance: the designer test in `03-ui-ux.md` ("the screenshot test") passes on Ghostty and iTerm2 in a dark and a light theme.
 
@@ -89,7 +89,7 @@ Spec: `05`.
 - `anthropic.rs` streaming client, prompt caching, refusal handling.
 - Context builder with its budget rules.
 - `a` menu, answer pane, `c` to draft from an answer, cache.
-- `mr ai login anthropic`, `[ai]` config, `:ai off`.
+- `revu ai login anthropic`, `[ai]` config, `:ai off`.
 
 Acceptance: `a s` on an open MR streams a summary in under two seconds to the first token; a second `a e` on the same file reports cache reads in the debug log.
 

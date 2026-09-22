@@ -110,7 +110,7 @@ impl Config {
     }
 
     pub fn path() -> PathBuf {
-        dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("gitlabmr").join("config.toml")
+        dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("revu").join("config.toml")
     }
 
     pub fn load() -> Result<Self> {

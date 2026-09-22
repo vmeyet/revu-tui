@@ -1,8 +1,8 @@
 # 00 · Vision
 
-`mr` is merge request review in the terminal, as yourself: GitLab merge requests and GitHub pull requests (`07-forges.md`).
+`revu` is merge request review in the terminal, as yourself: GitLab merge requests and GitHub pull requests (`07-forges.md`).
 One Rust binary, ~10 ms startup, keyboard first, gorgeous.
-The binary stays `mr` on every forge; the crate keeps its name, `gitlabmr`.
+The binary stays `revu` on every forge; the crate keeps its name, `revu`.
 
 It is the sibling of `slack` (`~/Code/slack`, public as `vmeyet/slack-tui`).
 Same shape: a TUI plus scriptable subcommands, same event loop, same keychain trick, same theme engine.

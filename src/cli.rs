@@ -1,10 +1,10 @@
-//! The command line `mr` parses, with the help text each flag shows.
+//! The command line `revu` parses, with the help text each flag shows.
 use crate::version;
 use clap::{Args, Parser, Subcommand};
 
 /// The command line: global flags, then one subcommand.
 #[derive(Parser, Debug)]
-#[command(name = "mr", version = version::label(), about = "GitLab merge requests from your terminal.", propagate_version = true)]
+#[command(name = "revu", version = version::label(), about = "Review GitLab merge requests and GitHub pull requests from your terminal.", propagate_version = true)]
 pub struct Cli {
     /// GitLab host. Defaults to the config, then gitlab.com.
     #[arg(long, global = true, env = "GITLAB_HOST")]
@@ -20,7 +20,7 @@ pub struct Cli {
     pub command: Option<Command>,
 }
 
-/// Every subcommand `mr` knows.
+/// Every subcommand `revu` knows.
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Store a personal access token (scope `api`) in the keychain.
@@ -52,11 +52,11 @@ pub enum Command {
         /// The shell to write the script for.
         shell: clap_complete::Shell,
     },
-    /// Rebuild and install the latest `mr` with cargo.
+    /// Rebuild and install the latest `revu` with cargo.
     Update(UpdateArgs),
 }
 
-/// Flags of `mr update`.
+/// Flags of `revu update`.
 #[derive(Args, Debug)]
 pub struct UpdateArgs {
     /// Install even when the running binary is already the latest commit.
@@ -64,7 +64,7 @@ pub struct UpdateArgs {
     pub force: bool,
 }
 
-/// Flags of `mr login`.
+/// Flags of `revu login`.
 #[derive(Args, Debug)]
 pub struct LoginArgs {
     /// The forge host: `gitlab.com`, `github.com`, or your own. By default the checkout's, then the configured one.
@@ -80,7 +80,7 @@ pub struct LoginArgs {
     pub token: Option<String>,
 }
 
-/// Flags of `mr list`.
+/// Flags of `revu list`.
 #[derive(Args, Debug)]
 pub struct ListArgs {
     /// Print the last fetched queue without touching the network.
@@ -95,7 +95,7 @@ pub struct RefArgs {
     pub mr: Option<String>,
 }
 
-/// Arguments of `mr comment`.
+/// Arguments of `revu comment`.
 #[derive(Args, Debug)]
 pub struct CommentArgs {
     /// `group/project!42`, `!42`, or an MR URL.
@@ -108,7 +108,7 @@ pub struct CommentArgs {
     pub text: Vec<String>,
 }
 
-/// Arguments of `mr approve`.
+/// Arguments of `revu approve`.
 #[derive(Args, Debug)]
 pub struct ApproveArgs {
     /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.

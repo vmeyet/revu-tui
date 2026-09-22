@@ -1,7 +1,7 @@
 # 02 · GitLab API
 
 Everything below was probed live on gitlab.com (19.5.0-pre) on 2026-09-22 with a personal access token.
-`glab` is used for one thing only: `mr login --from-glab` reads the token it already holds (`glab auth status --show-token`).
+`glab` is used for one thing only: `revu login --from-glab` reads the token it already holds (`glab auth status --show-token`).
 All other traffic is direct HTTPS from the binary: spawning `glab` per action costs 100 ms+ and it has no draft-note support.
 
 ## Auth
@@ -31,7 +31,7 @@ REST lists answer with a `Link: <…>; rel="next"` header and `X-Total`, `X-Next
 
 ## The queue (GraphQL, one call)
 
-Run inside a git checkout whose `origin` lives on the configured host, the queue is scoped to that project (`mr --all` or `*` in the TUI widens it to every project).
+Run inside a git checkout whose `origin` lives on the configured host, the queue is scoped to that project (`revu --all` or `*` in the TUI widens it to every project).
 Scoped, a second query runs in parallel, `project(fullPath: $project) { mergeRequests(state: opened, first: 100, sort: UPDATED_DESC) { ...list } }`, and the four sections below keep only that project's MRs.
 One query for both is refused: it scores 359 against GitLab's complexity limit of 250 (the project query alone scores 114, verified 2026-09-22).
 The fragment also asks for `description`, so the description modal opens from the queue without a request.
@@ -152,7 +152,7 @@ PUT  /projects/:pid/merge_requests/:iid/discussions/:did       resolved=true|fal
 ```
 
 The TUI does not call the two POSTs directly: every comment goes through draft notes so `P` is the one publishing key.
-The `mr comment` subcommand may post directly, since a script means it.
+The `revu comment` subcommand may post directly, since a script means it.
 
 ## Draft notes (review mode)
 
