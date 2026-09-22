@@ -76,6 +76,9 @@ host = "gitlab.com"
 [queue]
 watch_labels = ["infra"]   # MRs with these labels land in Watching
 
+[review]
+fold = ["*.lock", "*.snap"]   # files that open folded
+
 [tui]
 theme = "tokyonight"   # default, dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
 ```
