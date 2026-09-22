@@ -154,6 +154,12 @@ impl Review {
         Self { threads: threads_of(discussions, &self.files), ..self.clone() }
     }
 
+    /// The thread flipped locally, ahead of GitLab's answer.
+    pub fn with_resolved(&self, id: &str, resolved: bool) -> Self {
+        let threads = self.threads.iter().map(|t| if t.id == id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
+        Self { threads, ..self.clone() }
+    }
+
     pub fn unresolved(&self) -> usize {
         self.threads.iter().filter(|t| t.resolvable && !t.resolved).count()
     }
