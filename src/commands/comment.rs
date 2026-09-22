@@ -5,6 +5,7 @@ use crate::ctx::Ctx;
 use crate::diff;
 use anyhow::{Context, Result, bail};
 
+/// Posts a public comment, on a line when `--at` names one.
 pub async fn run(ctx: &Ctx, args: CommentArgs) -> Result<()> {
     let (project_id, iid) = target::resolve(&ctx.gitlab, Some(&args.mr)).await?;
     let body = args.text.join(" ");
@@ -14,7 +15,7 @@ pub async fn run(ctx: &Ctx, args: CommentArgs) -> Result<()> {
     };
     let discussion = ctx.gitlab.comment(project_id, iid, &body, position.as_ref()).await?;
     if ctx.json {
-        return ctx.emit(&discussion);
+        return crate::ctx::emit(&discussion);
     }
     println!("posted discussion {} on !{iid}", discussion.id);
     Ok(())
@@ -25,14 +26,13 @@ async fn anchor(gitlab: &Client, project_id: u64, iid: u64, at: &str) -> Result<
     let (path, line) = parse_at(at)?;
     let (mr, diffs) = tokio::try_join!(gitlab.mr(project_id, iid), gitlab.diffs(project_id, iid))?;
     let file = diffs.iter().find(|f| f.new_path == path).with_context(|| format!("{path} is not in the diff of !{iid}"))?;
-    let old_line = old_line_of(file, line).with_context(|| format!("line {line} of {path} is not in the diff of !{iid}"))?;
+    let old_line = line_at(file, line).with_context(|| format!("line {line} of {path} is not in the diff of !{iid}"))?.old;
     Ok(Position::line(&mr.diff_refs, &file.old_path, &file.new_path, old_line, Some(line)))
 }
 
-/// The old-side number of new line `line` (context lines carry both), or `None` when the line was added;
-/// an error when the line is not part of the diff at all.
-fn old_line_of(file: &DiffFile, line: u32) -> Option<Option<u32>> {
-    diff::parse(&file.diff).iter().flat_map(|h| h.lines.iter()).find(|l| l.new == Some(line)).map(|l| l.old)
+/// The diff line whose new-side number is `line`; `None` when the line is not part of the diff.
+fn line_at(file: &DiffFile, line: u32) -> Option<diff::Line> {
+    diff::parse(&file.diff).into_iter().flat_map(|h| h.lines).find(|l| l.new == Some(line))
 }
 
 fn parse_at(at: &str) -> Result<(String, u32)> {
@@ -46,6 +46,7 @@ fn parse_at(at: &str) -> Result<(String, u32)> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -60,9 +61,9 @@ mod tests {
     #[test]
     fn old_line_comes_from_the_diff() {
         let file = DiffFile { diff: "@@ -10,3 +10,4 @@\n a\n-b\n+c\n+d\n e\n".into(), ..DiffFile::default() };
-        assert_eq!(old_line_of(&file, 10), Some(Some(10)));
-        assert_eq!(old_line_of(&file, 11), Some(None));
-        assert_eq!(old_line_of(&file, 13), Some(Some(12)));
-        assert_eq!(old_line_of(&file, 99), None);
+        assert_eq!(line_at(&file, 10).unwrap().old, Some(10));
+        assert_eq!(line_at(&file, 11).unwrap().old, None);
+        assert_eq!(line_at(&file, 13).unwrap().old, Some(12));
+        assert!(line_at(&file, 99).is_none());
     }
 }

@@ -7,18 +7,19 @@ use anyhow::{Context, Result};
 use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
+/// Prints the coloured diff, through the pager on a terminal.
 pub async fn run(ctx: &Ctx, args: RefArgs) -> Result<()> {
     let (project_id, iid) = target::resolve(&ctx.gitlab, args.mr.as_deref()).await?;
     let (_, diffs, _) = super::show::fetch(ctx, project_id, iid).await?;
-    let out = text(&diffs, &Theme::detect());
+    let out = text(&diffs, Theme::detect());
     if std::io::stdout().is_terminal() { page(&out) } else { print_all(&out) }
 }
 
-pub fn text(diffs: &[DiffFile], theme: &Theme) -> String {
+pub(crate) fn text(diffs: &[DiffFile], theme: Theme) -> String {
     diffs.iter().map(|file| file_text(file, theme)).collect()
 }
 
-fn file_text(file: &DiffFile, theme: &Theme) -> String {
+fn file_text(file: &DiffFile, theme: Theme) -> String {
     let head = format!("diff --git a/{} b/{}\n--- a/{}\n+++ b/{}\n", file.old_path, file.new_path, file.old_path, file.new_path);
     let body: String = file
         .diff
@@ -55,6 +56,7 @@ fn print_all(out: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -65,8 +67,8 @@ mod tests {
             new_path: "x.rs".into(),
             ..DiffFile::default()
         }];
-        assert_eq!(text(&files, &Theme::plain()), "diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n@@ -1 +1 @@\n-a\n+b\n");
-        let coloured = text(&files, &Theme { color: true });
+        assert_eq!(text(&files, Theme::plain()), "diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n@@ -1 +1 @@\n-a\n+b\n");
+        let coloured = text(&files, Theme { color: true });
         assert!(coloured.contains("\x1b[32m+b\x1b[39m") && coloured.contains("\x1b[31m-a\x1b[39m"), "{coloured:?}");
     }
 }

@@ -1,3 +1,4 @@
+//! The `mr` binary: parses the command line and runs the matching command.
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use gitlabmr::cli::{Cli, Command};
@@ -19,7 +20,7 @@ async fn main() {
 async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Some(Command::Login(args)) => return commands::login::run(args, cli.host.as_deref(), cli.json).await,
-        Some(Command::Logout { host }) => return commands::login::logout(host.or(cli.host)),
+        Some(Command::Logout { host }) => return commands::login::logout(host.or(cli.host).as_deref()),
         Some(Command::Update(args)) => return commands::update::run(&args),
         Some(Command::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "mr", &mut std::io::stdout());

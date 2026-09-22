@@ -141,11 +141,11 @@ fn first_selectable(rows: &[Row]) -> usize {
 }
 
 /// A row still names the same thing once folds changed, even if its `open` flag flipped.
-fn same_place(a: &Row, b: &Row) -> bool {
-    match (a, b) {
-        (Row::File { index: x, .. }, Row::File { index: y, .. }) => x == y,
-        (Row::Hunk { file: f, index: x, .. }, Row::Hunk { file: g, index: y, .. }) => f == g && x == y,
-        _ => a == b,
+fn same_place(before: &Row, after: &Row) -> bool {
+    match (before, after) {
+        (Row::File { index: was, .. }, Row::File { index: is, .. }) => was == is,
+        (Row::Hunk { file: file_was, index: was, .. }, Row::Hunk { file: file_is, index: is, .. }) => file_was == file_is && was == is,
+        _ => before == after,
     }
 }
 
@@ -209,7 +209,7 @@ impl App {
     pub(super) fn fold_all(&mut self, closed: bool) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let paths: Vec<String> = open.review.files.iter().map(|f| f.new_path.clone()).collect();
-        let next = if closed { open.review.fold.fold_all(&paths) } else { open.review.fold.unfold_all() };
+        let next = if closed { open.review.fold.fold_all(&paths) } else { FoldState::default() };
         self.apply_fold(next)
     }
 
@@ -275,6 +275,7 @@ fn first_link(text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

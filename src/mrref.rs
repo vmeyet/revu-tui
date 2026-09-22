@@ -25,14 +25,12 @@ pub enum Target {
 impl Target {
     /// `arg` as typed; the git checkout under `dir` fills in what the argument leaves out.
     pub fn from_arg(arg: Option<&str>, dir: &Path) -> Result<Self> {
-        match arg {
-            Some(text) => parse(text, || local_project(dir)).map(Target::Mr),
-            None => {
-                let project = local_project(dir).context("not in a GitLab checkout: name the MR as group/project!42")?;
-                let branch = current_branch(dir).context("no branch checked out")?;
-                Ok(Target::Branch { project, branch })
-            }
+        if let Some(text) = arg {
+            return parse(text, || local_project(dir)).map(Target::Mr);
         }
+        let project = local_project(dir).context("not in a GitLab checkout: name the MR as group/project!42")?;
+        let branch = current_branch(dir).context("no branch checked out")?;
+        Ok(Target::Branch { project, branch })
     }
 }
 
@@ -109,6 +107,7 @@ fn git<const N: usize>(dir: &Path, args: [&str; N]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn no_local() -> Option<String> {

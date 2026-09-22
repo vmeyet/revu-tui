@@ -1,12 +1,13 @@
-pub mod app;
-pub mod brief_view;
-pub mod compose;
-pub mod diff_view;
-pub mod field;
-pub mod publish_view;
-pub mod theme;
-pub mod thread_view;
-pub mod ui;
+//! The review TUI: an event loop over a pure `App`, with the network at its edge.
+mod app;
+mod brief_view;
+mod compose;
+mod diff_view;
+mod field;
+mod publish_view;
+mod theme;
+mod thread_view;
+mod ui;
 
 use crate::api::{Client, DraftNote, NewDraft, Queue};
 use crate::cache::{Cache, Entry, keys};
@@ -44,6 +45,7 @@ struct Backend {
     watch_labels: Vec<String>,
 }
 
+/// Runs the review TUI until the user quits, restoring the terminal on the way out.
 pub async fn run(ctx: Ctx) -> Result<()> {
     let theme = match ctx.config.tui.theme.as_deref() {
         Some(name) => theme::Theme::named(name)
@@ -60,8 +62,6 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         theme,
         host: ctx.gitlab.host().to_owned(),
         me: ctx.config.username.clone().unwrap_or_default(),
-        fold_globs: backend.fold_globs.clone(),
-        watch_labels: backend.watch_labels.clone(),
         project: ctx.project.clone(),
     };
     let mut app = App::new(settings);
@@ -116,7 +116,7 @@ fn compose_inline(terminal: &mut ratatui::DefaultTerminal, app: &mut App, input:
     let _ = terminal.clear();
     match edited {
         Ok(text) => app.apply(Incoming::Composed { input, text }),
-        Err(e) => app.apply(failed(Failure::Local, e)),
+        Err(e) => app.apply(failed(Failure::Local, &e)),
     }
     app.take_actions()
 }
@@ -133,53 +133,49 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 if let Some(cached) = backend.cached_queue(scope.clone()).filter(|_| from_cache) {
                     send(cached);
                 }
-                send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, e)));
+                send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, &e)));
             }
             Action::Open(key) => {
                 if let Some(cached) = backend.open_cached(key) {
                     send(cached);
                 }
-                send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Open, e)));
+                send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Open, &e)));
             }
-            Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, e))),
-            Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, e))),
+            Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
+            Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::SaveState { key, fold, viewed } => {
                 if let Err(e) = backend.save_state(key, fold, viewed) {
-                    send(failed(Failure::Local, e));
+                    send(failed(Failure::Local, &e));
                 }
             }
             Action::OpenUrl(url) => {
-                send(open_url(&url).map(|()| Incoming::Done("opened in the browser".into())).unwrap_or_else(|e| failed(Failure::Local, e)))
+                send(open_url(&url).map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("opened in the browser".into())));
             }
-            Action::Yank(url) => send(copy(&url).map(|()| Incoming::Done("copied".into())).unwrap_or_else(|e| failed(Failure::Local, e))),
+            Action::Yank(url) => send(copy(&url).map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
             Action::SaveDraft { key, index, draft } => {
-                send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, e)))
+                send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
             }
             Action::UpdateDraft { key, id, draft } => {
                 if let Err(e) = backend.gitlab.update_draft(key.0, key.1, id, &new_draft(&draft)).await {
-                    send(failed(Failure::Local, e));
+                    send(failed(Failure::Local, &e));
                 }
             }
             Action::DeleteDraft { key, id } => {
                 if let Err(e) = backend.gitlab.delete_draft(key.0, key.1, id).await {
-                    send(failed(Failure::Local, e));
+                    send(failed(Failure::Local, &e));
                 }
             }
             Action::Publish { key, approve, count } => {
-                send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, e)))
+                send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }
-            Action::Resolve { key, thread, resolved } => send(
-                backend
-                    .gitlab
-                    .resolve(key.0, key.1, &thread, resolved)
-                    .await
-                    .map(|_| Incoming::Resolved { key, thread: thread.clone(), resolved })
-                    .unwrap_or_else(|e| failed(Failure::Resolve { thread, resolved }, e)),
-            ),
+            Action::Resolve { key, thread, resolved } => send(backend.gitlab.resolve(key.0, key.1, &thread, resolved).await.map_or_else(
+                |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
+                |_| Incoming::Resolved { key, thread: thread.clone(), resolved },
+            )),
             Action::Approve { key, approve } => {
                 let outcome =
                     if approve { backend.gitlab.approve(key.0, key.1).await } else { backend.gitlab.unapprove(key.0, key.1).await };
-                send(outcome.map(|()| Incoming::Approved { key, approve }).unwrap_or_else(|e| failed(Failure::Approve, e)));
+                send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
             }
             Action::Compose { .. } => unreachable!("the loop runs the editor itself"),
         }
@@ -231,7 +227,7 @@ fn print_links(links: &[Hyperlink]) {
     let _ = out.flush();
 }
 
-fn failed(what: Failure, err: anyhow::Error) -> Incoming {
+fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
     Incoming::Failed { what, message: err.to_string() }
 }
 
@@ -275,7 +271,7 @@ impl Backend {
         let discussions: Vec<crate::api::Discussion> = self.cache.read(&keys::discussions(key.0, key.1)).unwrap_or_default();
         let drafts: Vec<DraftNote> = self.cache.read(&keys::drafts(key.0, key.1)).unwrap_or_default();
         let age = mr.age(Utc::now());
-        let review = self.build(key, mr.value, diffs, discussions, &drafts);
+        let review = self.build(key, mr.value, &diffs, discussions, &drafts);
         Some(Incoming::Review { key, review: Box::new(review), cached: Some(age) })
     }
 
@@ -293,7 +289,7 @@ impl Backend {
         let _ = self.cache.write(&keys::drafts(project_id, iid), &drafts);
         let state = MrState { opened_at: Some(Utc::now()), ..self.state(key) };
         let _ = self.cache.write(&keys::state(project_id, iid), &state);
-        let review = self.build(key, mr, diffs, discussions, &drafts);
+        let review = self.build(key, mr, &diffs, discussions, &drafts);
         Ok(Incoming::Review { key, review: Box::new(review), cached: None })
     }
 
@@ -327,7 +323,7 @@ impl Backend {
         &self,
         key: MrKey,
         mr: crate::api::Mr,
-        diffs: Vec<crate::api::DiffFile>,
+        diffs: &[crate::api::DiffFile],
         discussions: Vec<crate::api::Discussion>,
         drafts: &[DraftNote],
     ) -> Review {
@@ -381,6 +377,7 @@ fn copy(text: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]
@@ -429,7 +426,7 @@ mod tests {
         })
     }
 
-    async fn backend_on(server: &wiremock::MockServer) -> Backend {
+    fn backend_on(server: &wiremock::MockServer) -> Backend {
         let creds = crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
         let gitlab = Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap();
         let dir = tempfile::tempdir().unwrap();
@@ -437,7 +434,7 @@ mod tests {
     }
 
     fn draft_at(new_line: u32, body: &str) -> Draft {
-        let refs = crate::api::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
+        let refs = crate::api::types::DiffRefs { base_sha: "a".into(), head_sha: "b".into(), start_sha: "a".into() };
         Draft::on(crate::api::Position::line(&refs, "src/a.rs", "src/a.rs", None, Some(new_line)), body)
     }
 
@@ -457,7 +454,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let backend = backend_on(&server).await;
+        let backend = backend_on(&server);
         let same = backend.save_draft((7, 42), 0, &draft_at(12, "nit")).await.unwrap();
         assert_eq!(same, Incoming::DraftSaved { key: (7, 42), index: 0, id: 5 });
         let fresh = backend.save_draft((7, 42), 1, &draft_at(13, "other")).await.unwrap();

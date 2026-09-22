@@ -1,3 +1,4 @@
+//! What every command opens first: the GitLab client, the config, the cache and the checkout's project.
 use crate::api::Client;
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
@@ -7,17 +8,18 @@ use serde::Serialize;
 
 /// Everything a command needs, opened once from the config, the environment and the keychain.
 pub struct Ctx {
-    pub gitlab: Client,
-    pub credentials: Credentials,
-    pub source: Source,
-    pub config: Config,
-    pub cache: Cache,
-    pub json: bool,
+    pub(crate) gitlab: Client,
+    pub(crate) credentials: Credentials,
+    pub(crate) source: Source,
+    pub(crate) config: Config,
+    pub(crate) cache: Cache,
+    pub(crate) json: bool,
     /// The project of the checkout the command runs in: the queue shows only it unless `--all`.
-    pub project: Option<String>,
+    pub(crate) project: Option<String>,
 }
 
 impl Ctx {
+    /// Reads the config, finds the token and the checkout's project.
     pub fn open(host: Option<&str>, json: bool) -> Result<Self> {
         let config = Config::load()?;
         let store = SecurityCli::new(auth::SERVICE);
@@ -31,14 +33,15 @@ impl Ctx {
         if all { Self { project: None, ..self } } else { self }
     }
 
-    pub fn build(env: &Env, store: &dyn SecretStore, config: Config, host: Option<&str>, json: bool) -> Result<Self> {
+    pub(crate) fn build(env: &Env, store: &dyn SecretStore, config: Config, host: Option<&str>, json: bool) -> Result<Self> {
         let (credentials, source) = auth::resolve(env, store, &config, host)?;
         let cache = Cache::for_host(&credentials.host);
         Ok(Self { gitlab: Client::new(&credentials)?, credentials, source, config, cache, json, project: None })
     }
+}
 
-    pub fn emit<T: Serialize>(&self, value: &T) -> Result<()> {
-        println!("{}", serde_json::to_string_pretty(value)?);
-        Ok(())
-    }
+/// Prints `value` as pretty JSON, what every command does under `--json`.
+pub(crate) fn emit<T: Serialize>(value: &T) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
 }

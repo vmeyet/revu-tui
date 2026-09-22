@@ -257,7 +257,7 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
             Line::from(Span::styled(format!(" {glyph} {}", toast.text), Style::default().fg(colour)))
         }
         (None, Some(_), Some(open)) => {
-            let age = open.staleness(app.now).map(short_age).unwrap_or_else(|| "now".into());
+            let age = open.staleness(app.now).map_or_else(|| "now".into(), short_age);
             Line::from(Span::styled(format!(" offline · last refresh {age} ago"), Style::default().fg(theme.warn)))
         }
         _ => {
@@ -381,6 +381,7 @@ pub fn short_age(age: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

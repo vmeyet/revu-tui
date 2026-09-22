@@ -126,6 +126,7 @@ fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn text(lines: &[Line]) -> Vec<String> {

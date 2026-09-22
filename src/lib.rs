@@ -1,14 +1,15 @@
-pub mod api;
-pub mod auth;
-pub mod cache;
+//! GitLab merge request review in your terminal: the library behind the `mr` binary.
+mod api;
+mod auth;
+mod cache;
 pub mod cli;
 pub mod commands;
-pub mod config;
+mod config;
 pub mod ctx;
-pub mod diff;
-pub mod mrref;
-pub mod render;
-pub mod review;
+mod diff;
+mod mrref;
+mod render;
+mod review;
 pub mod tui;
-pub mod update;
-pub mod version;
+mod update;
+mod version;

@@ -4,22 +4,23 @@ use crate::update::{Decision, Source, decide};
 use crate::version;
 use anyhow::Result;
 
+/// Rebuilds and installs `mr` when its source moved past the running commit.
 pub fn run(args: &UpdateArgs) -> Result<()> {
     let theme = Theme::detect();
     let source = Source::find()?;
-    let latest = if args.force { None } else { latest(&source, &theme) };
+    let latest = if args.force { None } else { latest(&source, theme) };
     match decide(version::COMMIT, latest.as_deref(), args.force) {
         Decision::UpToDate => println!("{} already up to date ({})", theme.paint("✓", Style::Ok), version::label()),
-        Decision::Install => install(&source, &theme)?,
+        Decision::Install => install(&source, theme)?,
     }
     Ok(())
 }
 
-fn latest(source: &Source, theme: &Theme) -> Option<String> {
+fn latest(source: &Source, theme: Theme) -> Option<String> {
     source.latest().inspect_err(|err| eprintln!("{} could not check the latest version: {err}", theme.paint("!", Style::Warn))).ok()
 }
 
-fn install(source: &Source, theme: &Theme) -> Result<()> {
+fn install(source: &Source, theme: Theme) -> Result<()> {
     if source.dirty() {
         eprintln!("{} {source} has uncommitted changes; they go into this build", theme.paint("!", Style::Warn));
     }

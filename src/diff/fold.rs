@@ -75,10 +75,6 @@ impl FoldState {
         let files = paths.iter().map(|p| (p.clone(), Fold::Closed)).collect();
         Self { files, hunks: self.hunks.clone() }
     }
-
-    pub fn unfold_all(&self) -> Self {
-        Self::default()
-    }
 }
 
 fn set_or_forget<K: Ord>(map: &mut BTreeMap<K, Fold>, key: K, fold: Fold) {
@@ -94,6 +90,7 @@ fn set_or_forget<K: Ord>(map: &mut BTreeMap<K, Fold>, key: K, fold: Fold) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn file(path: &str) -> FileMeta {
@@ -146,7 +143,7 @@ mod tests {
         let folded = FoldState::default().toggle_hunk("a", 0).fold_all(&paths);
         assert!(!folded.file_is_open("a") && !folded.file_is_open("b"));
         assert!(!folded.hunk_is_open("a", 0), "hunk folds survive fold_all");
-        assert_eq!(folded.unfold_all(), FoldState::default());
+        assert_ne!(folded, FoldState::default());
     }
 
     #[test]

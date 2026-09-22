@@ -181,7 +181,7 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme:
         review.threads.iter().filter(|t| t.anchor.as_ref().is_some_and(|a| a.path == file.new_path || a.path == file.old_path)).count();
     let anchors = if threads > 0 { format!("  ◆{threads}") } else { String::new() };
     let state = file_state(file, review, open);
-    let tail_w = counts.width() + anchors.width() + state.as_ref().map(|s| s.width() + 2).unwrap_or(0);
+    let tail_w = counts.width() + anchors.width() + state.as_ref().map_or(0, |s| s.width() + 2);
     let name_room = width.saturating_sub(mark.width() + tail_w + 2);
     let name = truncate(&format!("{dir}{base}"), name_room);
     let (dir, base) = match name.rsplit_once('/') {
@@ -267,13 +267,13 @@ fn paint(kind: LineKind, theme: Theme) -> Option<Paint> {
 /// and changed words go bold, so every theme reads on every terminal.
 fn line_spans<'a>(line: &DiffLine, selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
     let gutter_colour = if selected { theme.muted } else { theme.faded };
-    let number = |n: Option<u32>| n.map(|n| format!("{n:>GUTTER_W$}")).unwrap_or_else(|| " ".repeat(GUTTER_W));
+    let number = |n: Option<u32>| n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"));
     let paint = paint(line.kind, theme);
     let base = match &paint {
         Some(p) => p.fill.map_or(Style::default().fg(p.text), |fill| Style::default().fg(p.text).bg(fill)),
         None => Style::default(),
     };
-    let sign = paint.as_ref().map(|p| Span::styled(p.sign, base.fg(p.accent))).unwrap_or_else(|| Span::styled(" ", base));
+    let sign = paint.as_ref().map_or_else(|| Span::styled(" ", base), |p| Span::styled(p.sign, base.fg(p.accent)));
     let word = paint.as_ref().map(|p| match p.word {
         Some(fill) => base.fg(p.accent).bg(fill),
         None => base.add_modifier(Modifier::BOLD),
@@ -281,7 +281,7 @@ fn line_spans<'a>(line: &DiffLine, selected: bool, width: usize, theme: Theme) -
     let mut spans = vec![Span::styled(format!("{} {} ", number(line.old), number(line.new)), base.fg(gutter_colour)), sign];
     let room = width.saturating_sub(GUTTER_W * 2 + 3);
     let text = text_spans(line, room, base, word, theme);
-    let used: usize = text.iter().map(|s| s.width()).sum();
+    let used: usize = text.iter().map(Span::width).sum();
     spans.extend(text);
     if paint.is_some() && used < room {
         spans.push(Span::styled(" ".repeat(room - used), base));
@@ -365,6 +365,7 @@ fn plural(n: usize) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::diff;
 

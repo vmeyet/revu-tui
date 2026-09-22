@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use std::io::{IsTerminal, Read, Write};
 use std::process::Command;
 
+/// Verifies a token and stores it in the keychain.
 pub async fn run(args: LoginArgs, host_flag: Option<&str>, json: bool) -> Result<()> {
     let mut config = Config::load()?;
     let host = auth::pick_host(&Env::from_process(), &config, args.host.as_deref().or(host_flag));
@@ -28,9 +29,10 @@ pub async fn run(args: LoginArgs, host_flag: Option<&str>, json: bool) -> Result
     Ok(())
 }
 
-pub fn logout(host: Option<String>) -> Result<()> {
+/// Forgets a host: keychain entry, config and cache.
+pub fn logout(host: Option<&str>) -> Result<()> {
     let mut config = Config::load()?;
-    let host = auth::pick_host(&Env::default(), &config, host.as_deref());
+    let host = auth::pick_host(&Env::default(), &config, host);
     SecurityCli::new(auth::SERVICE).delete(&host)?;
     if config.host.as_deref() == Some(&host) {
         config.host = None;

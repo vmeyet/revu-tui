@@ -2,17 +2,14 @@ pub mod graphql;
 pub mod rest;
 pub mod types;
 
-pub use graphql::{Queue, QueueMr, ReviewState, Sections};
-pub use rest::Project;
-pub use types::{Approvals, DiffFile, DiffRefs, Discussion, DraftNote, Mr, NewDraft, Note, Pipeline, Position, User};
+pub use graphql::{Queue, QueueMr, Sections};
+pub use types::{DiffFile, Discussion, DraftNote, Mr, NewDraft, Note, Position, User};
 
 use crate::auth::Credentials;
 use anyhow::{Context, Result, bail};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Method, Response, StatusCode};
 use serde::de::DeserializeOwned;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
 
@@ -27,7 +24,6 @@ pub struct Client {
     http: reqwest::Client,
     host: String,
     base: Url,
-    remaining: Arc<AtomicU64>,
 }
 
 impl Client {
@@ -42,24 +38,20 @@ impl Client {
             .user_agent(concat!("gitlabmr/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let base = Url::parse(&format!("https://{}/api/v4/", credentials.host)).context("host is not a hostname")?;
-        Ok(Self { http, host: credentials.host.clone(), base, remaining: Arc::new(AtomicU64::new(u64::MAX)) })
+        Ok(Self { http, host: credentials.host.clone(), base })
     }
 
     /// For tests: point at a mock server. The host guard still applies to that server's host.
+    #[cfg(test)]
     pub fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
         let base = Url::parse(base)?;
         let host = base.host_str().context("base url without a host")?.to_owned();
         let client = Self::new(&Credentials { host: host.clone(), token: credentials.token.clone() })?;
-        Ok(Self { base, host, ..client })
+        Ok(Self { host, base, ..client })
     }
 
     pub fn host(&self) -> &str {
         &self.host
-    }
-
-    /// Requests left in the current rate-limit window, from the last answer; `None` before the first one.
-    pub fn remaining(&self) -> Option<u64> {
-        Some(self.remaining.load(Ordering::Relaxed)).filter(|n| *n != u64::MAX)
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
@@ -126,9 +118,6 @@ impl Client {
             None => request,
         };
         let response = request.send().await.map_err(scrub)?;
-        if let Some(left) = response.headers().get("ratelimit-remaining").and_then(|h| h.to_str().ok()?.parse().ok()) {
-            self.remaining.store(left, Ordering::Relaxed);
-        }
         Ok(response)
     }
 
@@ -168,7 +157,7 @@ fn wait_from(headers: &HeaderMap) -> Duration {
         return Duration::from_secs(seconds);
     }
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-    number("ratelimit-reset").map(|reset| Duration::from_secs(reset.saturating_sub(now))).unwrap_or(Duration::from_secs(1))
+    number("ratelimit-reset").map_or(Duration::from_secs(1), |reset| Duration::from_secs(reset.saturating_sub(now)))
 }
 
 /// The `<url>` whose `rel="next"` in a `Link` header.
@@ -188,6 +177,7 @@ fn scrub(err: reqwest::Error) -> anyhow::Error {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -201,19 +191,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn me_sends_the_token_header_and_reads_the_rate_limit() {
+    async fn me_sends_the_token_header() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/v4/user"))
             .and(header(TOKEN_HEADER, "glpat-xxxx"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(me_json()).insert_header("Ratelimit-Remaining", "1992"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(me_json()))
             .mount(&server)
             .await;
         let client = Client::with_base(&creds(), &format!("{}/api/v4/", server.uri())).unwrap();
-        assert_eq!(client.remaining(), None);
         let me = client.me().await.unwrap();
         assert_eq!((me.id, me.username.as_str()), (7, "nina"));
-        assert_eq!(client.remaining(), Some(1992));
     }
 
     #[tokio::test]

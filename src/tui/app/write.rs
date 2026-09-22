@@ -142,8 +142,8 @@ impl App {
 
     /// `E` writes the note in the editor; `s` starts it as a suggestion block for the selected lines.
     fn compose_here(&mut self, suggestion: bool) -> Vec<Action> {
-        if let (Some(index), false) = (self.draft_here(), suggestion) {
-            let body = self.open.as_ref().unwrap().review.drafts[index].body.clone();
+        if let (Some(index), false, Some(open)) = (self.draft_here(), suggestion, self.open.as_ref()) {
+            let body = open.review.drafts[index].body.clone();
             return vec![Action::Compose { input: Input::EditDraft { index }, draft: body }];
         }
         let Some(position) = self.position_here() else {
@@ -166,11 +166,11 @@ impl App {
     }
 
     pub(super) fn draft_count(&self) -> usize {
-        self.open.as_ref().map(|o| o.review.drafts.len()).unwrap_or(0)
+        self.open.as_ref().map_or(0, |o| o.review.drafts.len())
     }
 
     pub fn unsaved_drafts(&self) -> usize {
-        self.open.as_ref().map(|o| o.review.drafts.iter().filter(|d| d.id.is_none()).count()).unwrap_or(0)
+        self.open.as_ref().map_or(0, |o| o.review.drafts.iter().filter(|d| d.id.is_none()).count())
     }
 
     pub(super) fn open_publish(&mut self) {
@@ -266,9 +266,9 @@ impl App {
         }
     }
 
-    pub(super) fn apply_resolved(&mut self, key: MrKey, thread: String, resolved: bool) {
+    pub(super) fn apply_resolved(&mut self, key: MrKey, thread: &str, resolved: bool) {
         let Some(open) = self.open.clone().filter(|o| o.key == key) else { return };
-        self.open = Some(open.with_review(open.review.with_resolved(&thread, resolved)));
+        self.open = Some(open.with_review(open.review.with_resolved(thread, resolved)));
     }
 
     pub(super) fn set_approved(&mut self, key: MrKey, approve: bool) {

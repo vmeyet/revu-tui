@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
 use crate::api::types::from_fixture;
 use crate::api::{DiffFile, Discussion, Mr, Queue};
@@ -34,14 +35,7 @@ fn today() -> DateTime<Utc> {
 }
 
 fn settings() -> Settings {
-    Settings {
-        theme: Theme::default(),
-        host: "gitlab.com".into(),
-        me: "nina".into(),
-        fold_globs: vec![],
-        watch_labels: vec![],
-        project: None,
-    }
+    Settings { theme: Theme::default(), host: "gitlab.com".into(), me: "nina".into(), project: None }
 }
 
 fn app() -> App {
@@ -105,7 +99,7 @@ fn discussions() -> Vec<Discussion> {
 }
 
 fn review() -> Review {
-    Review::new(mr(), diffs(), discussions(), &["*.lock".into()])
+    Review::new(mr(), &diffs(), discussions(), &["*.lock".into()])
 }
 
 fn with_review() -> App {
@@ -440,7 +434,7 @@ fn snapshot_help() {
 fn snapshot_offline_and_filter() {
     let mut app = with_review();
     app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
-    app.open.as_mut().unwrap().cached = Some((app.now - Duration::from_secs(60), Duration::from_secs(120)));
+    app.open.as_mut().unwrap().cached = Some((app.now.checked_sub(Duration::from_secs(60)).unwrap(), Duration::from_secs(120)));
     press(&mut app, "h/pay");
     insta::assert_snapshot!("offline_filter", render(&mut app, 100, 12));
 }

@@ -8,13 +8,14 @@ use chrono::{DateTime, Utc};
 
 const TITLE_W: usize = 64;
 
+/// Prints the queue, scoped to the checkout's project unless `--all`.
 pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     let queue = if args.cached { cached(ctx)? } else { fetched(ctx).await? };
     let sections = queue.sections(&ctx.config.queue.watch_labels);
     if ctx.json {
-        return ctx.emit(&sections);
+        return crate::ctx::emit(&sections);
     }
-    print!("{}", text(&sections, ctx.project.as_deref(), &Theme::detect(), Utc::now()));
+    print!("{}", text(&sections, ctx.project.as_deref(), Theme::detect(), Utc::now()));
     Ok(())
 }
 
@@ -30,7 +31,7 @@ async fn fetched(ctx: &Ctx) -> Result<Queue> {
 }
 
 /// `project` is the scope, named on a first line so a short list never reads as "nothing else is open".
-pub fn text(sections: &Sections, project: Option<&str>, theme: &Theme, now: DateTime<Utc>) -> String {
+pub(crate) fn text(sections: &Sections, project: Option<&str>, theme: Theme, now: DateTime<Utc>) -> String {
     let scope = project.map(|p| format!("{}\n\n", theme.paint(&format!("{p} · --all for every project"), Style::Dim))).unwrap_or_default();
     let groups = [
         ("TO REVIEW", &sections.to_review),
@@ -85,6 +86,7 @@ fn badges(mr: &QueueMr) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::api::Client;
     use crate::auth::Credentials;
@@ -107,7 +109,7 @@ mod tests {
     #[tokio::test]
     async fn sections_print_as_headed_aligned_blocks() {
         let now = Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap();
-        let out = text(&sections().await, None, &Theme::plain(), now);
+        let out = text(&sections().await, None, Theme::plain(), now);
         assert!(out.starts_with("TO REVIEW 1\n  !42  "), "{out}");
         assert!(out.contains("\nMINE 1\n") && out.contains("\nWATCHING 1\n") && out.contains("\nDONE 1\n"), "{out}");
         assert!(out.contains("+412") && out.contains("−38") && out.contains("acme/widgets"), "{out}");
@@ -115,13 +117,13 @@ mod tests {
 
     #[test]
     fn an_empty_queue_says_so() {
-        assert_eq!(text(&Sections::default(), None, &Theme::plain(), Utc::now()), "nothing open\n");
+        assert_eq!(text(&Sections::default(), None, Theme::plain(), Utc::now()), "nothing open\n");
     }
 
     #[test]
     fn a_scoped_list_names_its_project_and_shows_the_open_section() {
         let sections = Queue::from_json_in(include_str!("../api/fixtures/queue_scoped.json"), "acme/widgets").unwrap().sections(&[]);
-        let out = text(&sections, Some("acme/widgets"), &Theme::plain(), Utc::now());
+        let out = text(&sections, Some("acme/widgets"), Theme::plain(), Utc::now());
         assert!(out.starts_with("acme/widgets · --all for every project\n\nTO REVIEW 1\n"), "{out}");
         let open = out.find("\nOPEN 2\n").expect("an OPEN section");
         assert!(out.find("\nMINE 1\n").unwrap() < open && open < out.find("\nDONE 1\n").unwrap(), "{out}");

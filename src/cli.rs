@@ -1,6 +1,8 @@
+//! The command line `mr` parses, with the help text each flag shows.
 use crate::version;
 use clap::{Args, Parser, Subcommand};
 
+/// The command line: global flags, then one subcommand.
 #[derive(Parser, Debug)]
 #[command(name = "mr", version = version::label(), about = "GitLab merge requests from your terminal.", propagate_version = true)]
 pub struct Cli {
@@ -13,16 +15,21 @@ pub struct Cli {
     /// Queue every project, not only the one of the checkout you are in.
     #[arg(long, global = true)]
     pub all: bool,
+    /// What to run; the TUI when omitted.
     #[command(subcommand)]
     pub command: Option<Command>,
 }
 
+/// Every subcommand `mr` knows.
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Store a personal access token (scope `api`) in the keychain.
     Login(LoginArgs),
     /// Forget a host: keychain entry, config and cache.
-    Logout { host: Option<String> },
+    Logout {
+        /// GitLab host, the configured one by default.
+        host: Option<String>,
+    },
     /// Show who you are logged in as.
     Whoami,
     /// The merge requests waiting on you, yours, and the ones you watch.
@@ -41,11 +48,15 @@ pub enum Command {
     /// Interactive review client.
     Tui,
     /// Generate shell completions.
-    Completions { shell: clap_complete::Shell },
+    Completions {
+        /// The shell to write the script for.
+        shell: clap_complete::Shell,
+    },
     /// Rebuild and install the latest `mr` with cargo.
     Update(UpdateArgs),
 }
 
+/// Flags of `mr update`.
 #[derive(Args, Debug)]
 pub struct UpdateArgs {
     /// Install even when the running binary is already the latest commit.
@@ -53,6 +64,7 @@ pub struct UpdateArgs {
     pub force: bool,
 }
 
+/// Flags of `mr login`.
 #[derive(Args, Debug)]
 pub struct LoginArgs {
     /// GitLab host, `gitlab.com` by default.
@@ -65,6 +77,7 @@ pub struct LoginArgs {
     pub token: Option<String>,
 }
 
+/// Flags of `mr list`.
 #[derive(Args, Debug)]
 pub struct ListArgs {
     /// Print the last fetched queue without touching the network.
@@ -72,12 +85,14 @@ pub struct ListArgs {
     pub cached: bool,
 }
 
+/// The merge request a read command works on.
 #[derive(Args, Debug)]
 pub struct RefArgs {
     /// `group/project!42`, `!42` (project from the origin remote), an MR URL, or nothing for the current branch.
     pub mr: Option<String>,
 }
 
+/// Arguments of `mr comment`.
 #[derive(Args, Debug)]
 pub struct CommentArgs {
     /// `group/project!42`, `!42`, or an MR URL.
@@ -90,6 +105,7 @@ pub struct CommentArgs {
     pub text: Vec<String>,
 }
 
+/// Arguments of `mr approve`.
 #[derive(Args, Debug)]
 pub struct ApproveArgs {
     /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
