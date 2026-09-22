@@ -1,0 +1,29 @@
+{
+  "id": "c0ffee00c0ffee00",
+  "individual_note": false,
+  "notes": [
+    {
+      "id": 503,
+      "type": "DiffNote",
+      "body": "Why drop the plain client?",
+      "author": { "id": 2, "username": "nina", "name": "Nina", "avatar_url": null },
+      "created_at": "2026-09-22T09:50:00Z",
+      "updated_at": "2026-09-22T09:50:00Z",
+      "system": false,
+      "resolvable": true,
+      "resolved": true,
+      "resolved_by": null,
+      "position": {
+        "base_sha": "aaaa",
+        "head_sha": "bbbb",
+        "start_sha": "aaaa",
+        "position_type": "text",
+        "old_path": "src/pay/charge.rs",
+        "new_path": "src/pay/charge.rs",
+        "old_line": 13,
+        "new_line": null,
+        "line_range": null
+      }
+    }
+  ]
+}
