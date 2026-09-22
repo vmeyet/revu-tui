@@ -56,7 +56,7 @@ impl App {
         drafts.push(draft.clone());
         let index = drafts.len() - 1;
         self.open = Some(Open { select_from: None, ..open.with_review(open.review.with_drafts(drafts)) });
-        vec![Action::SaveDraft { key: open.key, index, draft: Box::new(draft) }]
+        vec![Action::SaveDraft { key: open.key.clone(), index, draft: Box::new(draft) }]
     }
 
     fn change_draft(&mut self, open: &Open, index: usize, text: String) -> Vec<Action> {
@@ -66,7 +66,7 @@ impl App {
         drafts[index] = changed.clone();
         self.open = Some(open.with_review(open.review.with_drafts(drafts)));
         match draft.id {
-            Some(id) => vec![Action::UpdateDraft { key: open.key, id, draft: Box::new(changed) }],
+            Some(id) => vec![Action::UpdateDraft { key: open.key.clone(), id, draft: Box::new(changed) }],
             None => vec![],
         }
     }
@@ -75,9 +75,9 @@ impl App {
     pub fn input_label(&self) -> String {
         match &self.input {
             Some(Input::Comment { position }) => {
-                let path = position.new_path.as_deref().or(position.old_path.as_deref()).unwrap_or("");
+                let path = position.new_path.as_str();
                 let name = path.rsplit('/').next().unwrap_or(path);
-                match (position.new_line, position.old_line) {
+                match (position.line.new, position.line.old) {
                     (Some(n), _) => format!("comment {name}:{n}"),
                     (None, Some(o)) => format!("comment {name}:-{o}"),
                     (None, None) => "comment".to_owned(),

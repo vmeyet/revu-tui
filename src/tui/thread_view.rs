@@ -2,7 +2,7 @@
 use super::app::{App, Focus};
 use super::theme::Theme;
 use super::ui::{pane, short_age};
-use crate::api::Note;
+use crate::forge::Note;
 use crate::review::{Side, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -143,7 +143,8 @@ mod tests {
     #[test]
     fn the_title_names_the_line_and_marks_the_old_side() {
         let thread =
-            Thread::from_discussion(crate::api::types::from_fixture(include_str!("../review/fixtures/old_side_note.json"))).unwrap();
+            Thread::from_discussion(crate::forge::gitlab::fixture::discussion(include_str!("../review/fixtures/old_side_note.json")))
+                .unwrap();
         assert_eq!(pane_title(&thread), "charge.rs:-13");
     }
 }

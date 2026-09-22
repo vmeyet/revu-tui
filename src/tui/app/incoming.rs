@@ -29,11 +29,11 @@ impl App {
                 }
             }
             Incoming::Done(text) => self.toast(text),
-            Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(key, index, id),
-            Incoming::Published { key, approved, count } => self.apply_published(key, approved, count),
-            Incoming::Resolved { key, thread, resolved } => self.apply_resolved(key, &thread, resolved),
+            Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(&key, index, id),
+            Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
+            Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Approved { key, approve } => {
-                self.set_approved(key, approve);
+                self.set_approved(&key, approve);
                 self.toast(if approve { "approved" } else { "approval removed" });
             }
             Incoming::Composed { input, text } => {
@@ -51,12 +51,12 @@ impl App {
     }
 
     fn apply_review(&mut self, key: super::MrKey, review: Review, cached: Option<std::time::Duration>) {
-        if self.opening != Some(key) && self.open.as_ref().is_none_or(|o| o.key != key) {
+        if self.opening.as_ref() != Some(&key) && self.open.as_ref().is_none_or(|o| o.key != key) {
             return;
         }
         let next = match self.open.as_ref().filter(|o| o.key == key) {
             Some(open) => open.with_review(carry_folds(&open.review, &review)),
-            None => Open::new(key, review),
+            None => Open::new(key.clone(), review),
         };
         self.open = Some(Open { cached: cached.map(|age| (self.now, age)), ..next });
         if cached.is_none() {

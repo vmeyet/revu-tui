@@ -1,5 +1,7 @@
+use crate::forge::Kind;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -17,6 +19,17 @@ pub struct Config {
     pub tui: Tui,
     #[serde(default, skip_serializing_if = "Ai::is_default")]
     pub ai: Ai,
+    /// Per-host settings, for a host whose name does not say which forge it runs.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub hosts: BTreeMap<String, Host>,
+}
+
+/// `[hosts."git.acme.dev"] forge = "github"`: a GitHub Enterprise host, which the name alone cannot tell.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Host {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forge: Option<Kind>,
 }
 
 /// Which MRs the queue shows beyond the ones GitLab lists for me.
@@ -129,8 +142,10 @@ mod tests {
             review: Review { fold: vec!["*.lock".into()] },
             tui: Tui { theme: Some("nord".into()), ascii: false },
             ai: Ai::default(),
+            hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub) })]),
         };
         let text = toml::to_string_pretty(&config).unwrap();
+        assert!(text.contains("forge = \"github\""), "{text}");
         assert!(!text.contains("[ai]"), "defaults are not written:\n{text}");
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
     }

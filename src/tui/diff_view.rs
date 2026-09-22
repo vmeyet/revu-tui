@@ -3,6 +3,7 @@ use super::app::{App, Focus, Open};
 use super::theme::Theme;
 use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
 use crate::diff::{Line as DiffLine, LineKind};
+use crate::forge::Kind;
 use crate::review::{File, FileKind, Review, Row, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -20,12 +21,14 @@ const MIN_BRANCH_W: usize = 12;
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let title = match &app.open {
-        Some(open) => format!("{} · {}", mr_ref(&open.review), truncate(&open.review.mr.title, area.width.saturating_sub(30) as usize)),
+        Some(open) => {
+            format!("{} · {}", mr_ref(&open.review, app.kind), truncate(&open.review.mr.title, area.width.saturating_sub(30) as usize))
+        }
         None => "Review".to_owned(),
     };
     let block = pane(theme, &title, app.focus == Focus::Review);
     if let Some(open) = &app.open {
-        app.links.push(title_link(&open.review, area));
+        app.links.push(title_link(&open.review, app.kind, area));
     }
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -57,13 +60,13 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 /// The `group/project!42` at the start of the pane title, one cell past the border and its space.
-pub fn title_link(review: &Review, area: Rect) -> super::ui::Link {
-    super::ui::Link { x: area.x + 2, y: area.y, text: mr_ref(review), url: review.mr.web_url.clone() }
+pub fn title_link(review: &Review, kind: Kind, area: Rect) -> super::ui::Link {
+    super::ui::Link { x: area.x + 2, y: area.y, text: mr_ref(review, kind), url: review.mr.web_url.clone() }
 }
 
-pub fn mr_ref(review: &Review) -> String {
-    let project = review.mr.web_url.split("/-/merge_requests/").next().and_then(|u| u.splitn(4, '/').nth(3)).unwrap_or("");
-    format!("{project}!{}", review.mr.iid)
+/// `group/project!42` on GitLab, `owner/repo#42` on GitHub.
+pub fn mr_ref(review: &Review, kind: Kind) -> String {
+    format!("{}{}{}", review.mr.project, kind.sigil(), review.mr.number)
 }
 
 fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usize) -> Vec<Line<'a>> {
@@ -72,7 +75,7 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
     let age = short_age((today - mr.updated_at).to_std().unwrap_or_default());
-    let pipeline = mr.head_pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
+    let pipeline = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
     let (glyph, colour) = pipeline_glyph(&pipeline, theme);
     let branch_room = width.saturating_sub(40);
     let branches = format!("{} → {}", mr.source_branch, mr.target_branch);
@@ -114,7 +117,7 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
             second.push(Span::styled(format!(", {unresolved} unresolved"), Style::default().fg(theme.warn)));
         }
     }
-    if mr.has_conflicts {
+    if mr.conflicts {
         second.push(dot());
         second.push(Span::styled("conflicts", Style::default().fg(theme.danger)));
     }
@@ -393,7 +396,7 @@ mod tests {
 
     #[test]
     fn hunk_rows_split_range_and_context_and_count_when_folded() {
-        let file = File::from_diff(&crate::api::DiffFile {
+        let file = File::from_diff(&crate::forge::DiffFile {
             diff: "@@ -12,4 +12,5 @@ pub async fn charge\n a\n".into(),
             new_path: "a.rs".into(),
             old_path: "a.rs".into(),

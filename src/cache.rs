@@ -114,32 +114,43 @@ fn root() -> PathBuf {
 
 /// The one place cache paths are spelled.
 pub mod keys {
+    use crate::forge::MrKey;
+
     /// One file per scope, so switching between a repo and every project never shows the other list.
     pub fn queue(project: Option<&str>) -> String {
         match project {
-            Some(path) => format!("queue.{}.json", path.replace('/', "+")),
+            Some(path) => format!("queue.{}.json", slug(path)),
             None => "queue.json".into(),
         }
     }
 
-    pub fn mr(project_id: u64, iid: u64) -> String {
-        format!("mr/{project_id}/{iid}/mr.json")
+    /// The directory of one MR: its project path with `+` for `/`, then its number.
+    fn dir(key: &MrKey) -> String {
+        format!("mr/{}/{}", slug(&key.project), key.number)
     }
 
-    pub fn diffs(project_id: u64, iid: u64, head_sha: &str) -> String {
-        format!("mr/{project_id}/{iid}/diffs.{head_sha}.json")
+    fn slug(project: &str) -> String {
+        project.replace('/', "+")
     }
 
-    pub fn discussions(project_id: u64, iid: u64) -> String {
-        format!("mr/{project_id}/{iid}/discussions.json")
+    pub fn mr(key: &MrKey) -> String {
+        format!("{}/mr.json", dir(key))
     }
 
-    pub fn drafts(project_id: u64, iid: u64) -> String {
-        format!("mr/{project_id}/{iid}/drafts.json")
+    pub fn diffs(key: &MrKey, head_sha: &str) -> String {
+        format!("{}/diffs.{head_sha}.json", dir(key))
     }
 
-    pub fn state(project_id: u64, iid: u64) -> String {
-        format!("mr/{project_id}/{iid}/state.json")
+    pub fn discussions(key: &MrKey) -> String {
+        format!("{}/discussions.json", dir(key))
+    }
+
+    pub fn drafts(key: &MrKey) -> String {
+        format!("{}/drafts.json", dir(key))
+    }
+
+    pub fn state(key: &MrKey) -> String {
+        format!("{}/state.json", dir(key))
     }
 }
 
@@ -147,7 +158,12 @@ pub mod keys {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::forge::MrKey;
     use chrono::TimeDelta;
+
+    fn key() -> MrKey {
+        MrKey::new("acme/widgets", 42)
+    }
 
     fn cache() -> (tempfile::TempDir, Cache) {
         let dir = tempfile::tempdir().unwrap();
@@ -158,7 +174,7 @@ mod tests {
     #[test]
     fn round_trip_under_a_nested_key() {
         let (_dir, cache) = cache();
-        let key = keys::diffs(7, 42, "abc");
+        let key = keys::diffs(&key(), "abc");
         assert_eq!(cache.read::<Vec<u32>>(&key), None);
         cache.write(&key, &vec![1, 2]).unwrap();
         assert_eq!(cache.read::<Vec<u32>>(&key), Some(vec![1, 2]));
@@ -181,20 +197,20 @@ mod tests {
     fn files_and_directories_are_private() {
         use std::os::unix::fs::PermissionsExt;
         let (dir, cache) = cache();
-        cache.write(&keys::mr(7, 42), &"x").unwrap();
+        cache.write(&keys::mr(&key()), &"x").unwrap();
         let host = dir.path().join("gitlab.com");
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&host), DIR_MODE);
         assert_eq!(mode(&host.join("mr")), DIR_MODE);
-        assert_eq!(mode(&host.join("mr/7/42")), DIR_MODE);
-        assert_eq!(mode(&host.join(keys::mr(7, 42))), FILE_MODE);
+        assert_eq!(mode(&host.join("mr/acme+widgets/42")), DIR_MODE);
+        assert_eq!(mode(&host.join(keys::mr(&key()))), FILE_MODE);
     }
 
     #[test]
     fn write_leaves_no_temp_file_behind() {
         let (dir, cache) = cache();
-        cache.write(&keys::state(7, 42), &"x").unwrap();
-        let names: Vec<String> = std::fs::read_dir(dir.path().join("gitlab.com/mr/7/42"))
+        cache.write(&keys::state(&key()), &"x").unwrap();
+        let names: Vec<String> = std::fs::read_dir(dir.path().join("gitlab.com/mr/acme+widgets/42"))
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
@@ -223,7 +239,7 @@ mod tests {
 
     #[test]
     fn keys_are_stable() {
-        assert_eq!(keys::discussions(7, 42), "mr/7/42/discussions.json");
+        assert_eq!(keys::discussions(&key()), "mr/acme+widgets/42/discussions.json");
     }
 
     #[test]

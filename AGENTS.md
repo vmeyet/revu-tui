@@ -20,6 +20,7 @@ The design lives in `specs/`; read `specs/06-roadmap.md` first, it says what to 
 - Flat bodies of named steps at one level of abstraction; signatures designed from the call site.
 - One word per concept, the words in `specs/00-vision.md` § Vocabulary.
 - Anything that can run twice (draft sync, cache writes, logout) is safe to run twice.
+- Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else speaks the neutral model in `src/forge/model.rs` (`specs/07-forges.md`).
 
 ## Tests
 

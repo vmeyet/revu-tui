@@ -1,9 +1,9 @@
 use super::target;
-use crate::api::{DiffFile, Discussion, Mr, Note};
 use crate::cache::keys;
 use crate::cli::RefArgs;
 use crate::ctx::Ctx;
 use crate::diff::{self, LineKind};
+use crate::forge::{DiffFile, Discussion, Kind, Mr, MrKey, Note, Position};
 use crate::render::{self, Cell, Style, Theme, cell, right};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -13,23 +13,22 @@ const BODY_W: usize = 80;
 
 /// Prints the MR header, its files and its unresolved threads.
 pub async fn run(ctx: &Ctx, args: RefArgs) -> Result<()> {
-    let (project_id, iid) = target::resolve(&ctx.gitlab, args.mr.as_deref()).await?;
-    let (mr, diffs, discussions) = fetch(ctx, project_id, iid).await?;
+    let key = target::resolve(&ctx.forge, args.mr.as_deref()).await?;
+    let (mr, diffs, discussions) = fetch(ctx, &key).await?;
     if ctx.json {
         return crate::ctx::emit(&Shown { files: diffs.iter().map(FileStat::from).collect(), mr: &mr, discussions: &discussions });
     }
-    print!("{}", text(&mr, &diffs, &discussions, Theme::detect(), Utc::now()));
+    print!("{}", text(ctx.forge.kind(), &mr, &diffs, &discussions, Theme::detect(), Utc::now()));
     Ok(())
 }
 
 /// The three answers together, written to the cache so the TUI opens the MR without waiting.
-pub(crate) async fn fetch(ctx: &Ctx, project_id: u64, iid: u64) -> Result<(Mr, Vec<DiffFile>, Vec<Discussion>)> {
-    let gitlab = &ctx.gitlab;
-    let (mr, diffs, discussions) =
-        tokio::try_join!(gitlab.mr(project_id, iid), gitlab.diffs(project_id, iid), gitlab.discussions(project_id, iid))?;
-    ctx.cache.write_entry(&keys::mr(project_id, iid), &mr)?;
-    ctx.cache.write_entry(&keys::diffs(project_id, iid, &mr.diff_refs.head_sha), &diffs)?;
-    ctx.cache.write_entry(&keys::discussions(project_id, iid), &discussions)?;
+pub(crate) async fn fetch(ctx: &Ctx, key: &MrKey) -> Result<(Mr, Vec<DiffFile>, Vec<Discussion>)> {
+    let forge = &ctx.forge;
+    let (mr, diffs, discussions) = tokio::try_join!(forge.mr(key), forge.diffs(key), forge.discussions(key))?;
+    ctx.cache.write_entry(&keys::mr(key), &mr)?;
+    ctx.cache.write_entry(&keys::diffs(key, &mr.refs.head), &diffs)?;
+    ctx.cache.write_entry(&keys::discussions(key), &discussions)?;
     Ok((mr, diffs, discussions))
 }
 
@@ -60,13 +59,13 @@ impl From<&DiffFile> for FileStat {
     }
 }
 
-pub(crate) fn text(mr: &Mr, diffs: &[DiffFile], discussions: &[Discussion], theme: Theme, now: DateTime<Utc>) -> String {
+pub(crate) fn text(kind: Kind, mr: &Mr, diffs: &[DiffFile], discussions: &[Discussion], theme: Theme, now: DateTime<Utc>) -> String {
     let open: Vec<&Discussion> = discussions.iter().filter(|d| unresolved(d)).collect();
     let files: Vec<Vec<Cell>> = diffs.iter().map(|f| file_row(f, &FileStat::from(f))).collect();
     let threads: Vec<Vec<Cell>> = open.iter().filter_map(|d| thread_row(d, now)).collect();
     let header = format!(
         "{} {}\n{}\n{}\n",
-        theme.paint(&format!("!{}", mr.iid), Style::Accent),
+        theme.paint(&format!("{}{}", kind.sigil(), mr.number), Style::Accent),
         theme.paint(&mr.title, Style::Bold),
         theme.paint(&meta(mr, discussions.len(), open.len(), now), Style::Plain),
         theme.paint(&mr.web_url, Style::Dim)
@@ -87,14 +86,14 @@ pub(crate) fn text(mr: &Mr, diffs: &[DiffFile], discussions: &[Discussion], them
 }
 
 fn meta(mr: &Mr, threads: usize, open: usize, now: DateTime<Utc>) -> String {
-    let pipeline = mr.head_pipeline.as_ref().map(|p| format!("pipeline {}", p.status.to_ascii_lowercase()));
+    let pipeline = mr.pipeline.as_ref().map(|p| format!("pipeline {}", p.status.to_ascii_lowercase()));
     let approvals = match mr.approvals.approved_by.len() {
         0 if mr.approvals.approved => Some("approved".to_owned()),
         0 => None,
         _ => Some(format!("approved by {}", mr.approvals.approved_by.iter().map(|u| u.username.as_str()).collect::<Vec<_>>().join(", "))),
     };
     let threads = (threads > 0).then(|| format!("{threads} threads, {open} unresolved"));
-    let conflicts = mr.has_conflicts.then(|| "conflicts".to_owned());
+    let conflicts = mr.conflicts.then(|| "conflicts".to_owned());
     [
         Some(mr.author.username.clone()),
         Some(format!("{} → {}", mr.source_branch, mr.target_branch)),
@@ -129,15 +128,14 @@ fn file_row(file: &DiffFile, stat: &FileStat) -> Vec<Cell> {
 }
 
 fn unresolved(discussion: &Discussion) -> bool {
-    discussion.notes.first().is_some_and(|n| n.resolvable && n.resolved != Some(true))
+    discussion.notes.first().is_some_and(|n| n.resolvable && !n.resolved)
 }
 
 /// `path:line` of a note on the diff, the path alone when it names no line.
-fn anchor_label(position: &crate::api::Position) -> String {
-    let path = position.new_path.as_deref().or(position.old_path.as_deref()).unwrap_or("?");
-    match position.new_line.or(position.old_line) {
-        Some(line) => format!("{path}:{line}"),
-        None => path.to_owned(),
+fn anchor_label(position: &Position) -> String {
+    match position.line.number() {
+        Some(line) => format!("{}:{line}", position.path()),
+        None => position.path().to_owned(),
     }
 }
 
@@ -156,11 +154,11 @@ fn thread_row(discussion: &Discussion, now: DateTime<Utc>) -> Option<Vec<Cell>> 
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::api::types::from_fixture;
+    use crate::forge::gitlab::fixture;
     use chrono::TimeZone;
 
     fn mr() -> Mr {
-        from_fixture(
+        fixture::mr(
             r#"{"id": 1042, "iid": 42, "project_id": 7, "title": "feat: charge cards at checkout", "state": "opened", "draft": false,
                 "author": {"id": 5, "username": "omar", "name": "Omar"}, "source_branch": "feat/checkout", "target_branch": "main",
                 "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/42", "updated_at": "2026-09-22T10:00:00Z", "sha": "bbbb",
@@ -186,10 +184,10 @@ mod tests {
     fn header_files_and_open_threads_are_laid_out() {
         let now = Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap();
         let discussions = vec![
-            from_fixture(include_str!("../api/fixtures/diff_note.json")),
-            from_fixture(include_str!("../api/fixtures/discussions.json")),
+            fixture::discussion(include_str!("../forge/gitlab/fixtures/diff_note.json")),
+            fixture::discussion(include_str!("../forge/gitlab/fixtures/discussions.json")),
         ];
-        let out = text(&mr(), &diffs(), &discussions, Theme::plain(), now);
+        let out = text(Kind::GitLab, &mr(), &diffs(), &discussions, Theme::plain(), now);
         assert!(
             out.starts_with("!42 feat: charge cards at checkout\nomar · feat/checkout → main · 2h · pipeline success · approved by lea"),
             "{out}"

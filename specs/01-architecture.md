@@ -10,7 +10,7 @@ src/
   main.rs            parse Cli, dispatch, print errors as `✗ message` + dimmed causes
   lib.rs             pub mod list
   cli.rs             clap: login, logout, whoami, list, show, diff, comment, approve, tui, completions, update
-  ctx.rs             Ctx { gitlab: Client, config, cache, json } opened once per command
+  ctx.rs             Ctx { forge: Forge, config, cache, json, project } opened once per command
   config.rs          ~/.config/gitlabmr/config.toml
   cache.rs           ~/.cache/gitlabmr/<host>/…  json files, atomic writes
   version.rs         `mr --version` = crate version + git hash from build.rs
@@ -19,18 +19,23 @@ src/
     mod.rs           SERVICE, Credentials { host, token }, resolve(env, store, config, host)
     store.rs         SecretStore trait, SecurityCli, MemoryStore   (copied from slack-tui)
     login.rs         prompt / --from-glab / --token -, verify with GET /user, store
-  api/
-    mod.rs           Client: PRIVATE-TOKEN header, base url guard, pagination, rate-limit backoff
-    types.rs         serde structs mirroring GitLab (Mr, DiffRefs, Discussion, Note, DraftNote, Position, Pipeline, User)
-    graphql.rs       one query for the queue; typed response
-    rest.rs          mr(), diffs(), discussions(), draft_notes(), publish(), approve(), resolve(), reply()
+  forge/             the seam, see 07-forges.md
+    mod.rs           Kind (which forge a host runs), Forge (enum, one arm per backend), re-exports
+    model.rs         the neutral model: MrKey, Mr, Refs, DiffFile, Discussion, Note, Position, LineRef, Draft, NewDraft
+    queue.rs         Queue, QueueMr, Sections and the pure split into sections
+    gitlab/
+      mod.rs         Client: PRIVATE-TOKEN header, host guard, pagination, rate-limit backoff, line_url
+      wire.rs        GitLab JSON (Mr, DiffRefs, Discussion, Note, DraftNote, Position, line_code) and its conversions
+      graphql.rs     the queue query; typed answer turned into Queue
+      rest.rs        mr, diffs, discussions, drafts, draft CRUD, publish, resolve, approve, comment
+    github/          phase 2
   diff/
     mod.rs           parse(unified: &str) -> Vec<Hunk>; Line { kind, old, new, text }
     words.rs         intra-line word diff between a paired -/+ block (crate `similar`)
     fold.rs          FoldState per file and hunk, viewed files, "expand all" helpers
   review/
     mod.rs           Review { mr, files, threads, drafts, viewed, fold } — the pure model the TUI edits
-    position.rs      builds a GitLab Position from a selected line (or range) and DiffRefs
+    position.rs      builds a neutral Position from a selected line (or range) and the MR's refs
     thread.rs        Thread model: root note, replies, resolvable/resolved, anchored line
   render/            plain-terminal rendering for the scriptable commands (copied from slack-tui)
   commands/          one file per subcommand
@@ -88,27 +93,25 @@ Rules, copied from slack-tui and kept:
 ## Data model
 
 ```rust
-pub struct Mr {
-    pub id: u64,                 // global id, for GraphQL
-    pub iid: u64,
-    pub project: String,         // "group/project"
-    pub project_id: u64,
+pub struct Mr {                  // forge/model.rs; see 07-forges.md for the rest of the neutral model
+    pub project: String,         // "group/project" or "owner/repo"
+    pub number: u64,             // GitLab iid, GitHub PR number
     pub title: String,
     pub description: String,     // markdown
-    pub author: User,
+    pub state: String,
     pub draft: bool,
+    pub author: User,
     pub source_branch: String,
     pub target_branch: String,
     pub web_url: String,
     pub updated_at: DateTime<Utc>,
-    pub diff_refs: DiffRefs,     // base_sha, head_sha, start_sha
+    pub refs: Refs,              // base, start, head: what notes on lines are made against
     pub pipeline: Option<Pipeline>,   // status, web_url
-    pub approved: bool,
-    pub approvals: Vec<User>,
-    pub reviewers: Vec<Reviewer>,     // user + state (unreviewed | reviewed | requested_changes | approved)
-    pub unresolved: u32,
+    pub changes_count: Option<String>,
     pub conflicts: bool,
-    pub changes: Changes,        // files, additions, deletions
+    pub reviewers: Vec<User>,
+    pub labels: Vec<String>,
+    pub approvals: Approvals,    // approved, approvals_left, user_has_approved, user_can_approve, approved_by
 }
 
 pub struct File {
@@ -192,12 +195,14 @@ The fold state is saved in the cache per MR and head sha, so reopening an MR res
 `dirs::cache_dir()/gitlabmr/<host>/` (`~/Library/Caches/gitlabmr` on macOS, `~/.cache/gitlabmr` elsewhere; `GITLABMR_CACHE_DIR` overrides):
 
 ```
-queue.json                          last queue answer + fetched_at
-mr/<project_id>/<iid>/mr.json
-mr/<project_id>/<iid>/diffs.<head_sha>.json
-mr/<project_id>/<iid>/discussions.json
-mr/<project_id>/<iid>/state.json    viewed files, folds, last read note id
-ai/<project_id>/<iid>/<head_sha>/<question_hash>.json
+queue.json                          last queue answer + fetched_at, every project
+queue.<group+project>.json          the same, scoped to one project
+mr/<group+project>/<number>/mr.json
+mr/<group+project>/<number>/diffs.<head_sha>.json
+mr/<group+project>/<number>/discussions.json
+mr/<group+project>/<number>/drafts.json
+mr/<group+project>/<number>/state.json    viewed files, folds, last opened
+ai/<group+project>/<number>/<head_sha>/<question_hash>.json
 ```
 
 Files are written to a temp name then renamed, mode 0600, directory 0700.

@@ -1,6 +1,6 @@
 //! The description modal: what the MR says about itself, from the queue row or the open review.
 use super::{Action, App};
-use crate::api::QueueMr;
+use crate::forge::QueueMr;
 use crate::review::Review;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -8,7 +8,7 @@ const HALF_PAGE: usize = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Brief {
-    pub iid: u64,
+    pub number: u64,
     pub title: String,
     pub author: String,
     pub source_branch: String,
@@ -23,7 +23,7 @@ pub struct Brief {
 impl Brief {
     pub fn of_queue(mr: &QueueMr) -> Self {
         Self {
-            iid: mr.iid,
+            number: mr.number,
             title: mr.title.clone(),
             author: mr.author.clone(),
             source_branch: mr.source_branch.clone(),
@@ -38,7 +38,7 @@ impl Brief {
     pub fn of_review(review: &Review) -> Self {
         let mr = &review.mr;
         Self {
-            iid: mr.iid,
+            number: mr.number,
             title: mr.title.clone(),
             author: mr.author.username.clone(),
             source_branch: mr.source_branch.clone(),

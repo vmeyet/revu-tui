@@ -1,14 +1,14 @@
-//! What every command opens first: the GitLab client, the config, the cache and the checkout's project.
-use crate::api::Client;
+//! What every command opens first: the forge, the config, the cache and the checkout's project.
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
+use crate::forge::{Forge, Kind};
 use anyhow::Result;
 use serde::Serialize;
 
 /// Everything a command needs, opened once from the config, the environment and the keychain.
 pub struct Ctx {
-    pub(crate) gitlab: Client,
+    pub(crate) forge: Forge,
     pub(crate) credentials: Credentials,
     pub(crate) source: Source,
     pub(crate) config: Config,
@@ -36,7 +36,8 @@ impl Ctx {
     pub(crate) fn build(env: &Env, store: &dyn SecretStore, config: Config, host: Option<&str>, json: bool) -> Result<Self> {
         let (credentials, source) = auth::resolve(env, store, &config, host)?;
         let cache = Cache::for_host(&credentials.host);
-        Ok(Self { gitlab: Client::new(&credentials)?, credentials, source, config, cache, json, project: None })
+        let forge = Forge::connect(Kind::for_host(&credentials.host, &config), &credentials)?;
+        Ok(Self { forge, credentials, source, config, cache, json, project: None })
     }
 }
 

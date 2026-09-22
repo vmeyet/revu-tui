@@ -1,5 +1,5 @@
 use super::{Action, Brief, Focus, Input, MrKey, Open, Publish, Toast};
-use crate::api::Sections;
+use crate::forge::{Kind, Sections};
 use crate::tui::field::Field;
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
@@ -16,6 +16,8 @@ const BACKOFF: Duration = Duration::from_secs(300);
 pub struct Settings {
     pub theme: Theme,
     pub host: String,
+    /// Which forge `host` runs: how an MR is named and how a line is linked.
+    pub kind: Kind,
     pub me: String,
     /// The project of the checkout `mr` runs in; `None` outside one or with `--all`.
     pub project: Option<String>,
@@ -33,6 +35,7 @@ pub struct Poll {
 pub struct App {
     pub theme: Theme,
     pub host: String,
+    pub kind: Kind,
     pub me: String,
     pub focus: Focus,
     /// The checkout's project; the queue shows only it unless `everywhere`.
@@ -82,6 +85,7 @@ impl App {
         Self {
             theme: settings.theme,
             host: settings.host,
+            kind: settings.kind,
             me: settings.me,
             focus: Focus::default(),
             everywhere: settings.project.is_none(),
@@ -131,10 +135,10 @@ impl App {
             self.poll.queue_due = None;
             actions.push(Action::LoadQueue { scope: self.scope(), from_cache: false });
         }
-        let Some(key) = self.open.as_ref().map(|o| o.key) else { return actions };
+        let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return actions };
         if self.poll.mr_due.is_some_and(|due| self.now >= due) {
             self.poll.mr_due = None;
-            actions.push(Action::RefreshMr(key));
+            actions.push(Action::RefreshMr(key.clone()));
         }
         if self.poll.discussions_due.is_some_and(|due| self.now >= due) {
             self.poll.discussions_due = None;

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
-use crate::api::types::from_fixture;
-use crate::api::{DiffFile, Discussion, Mr, Queue};
+use crate::forge::gitlab::fixture;
+use crate::forge::{DiffFile, Discussion, Kind, Mr};
 use crate::review::Row;
 use crate::tui::theme::Theme;
 use crate::tui::ui;
@@ -12,7 +12,9 @@ use ratatui::style::Color;
 use serde_json::json;
 use std::time::Duration;
 
-const KEY: MrKey = (7, 42);
+fn mr_key() -> MrKey {
+    fixture::key()
+}
 
 fn key(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
@@ -35,7 +37,7 @@ fn today() -> DateTime<Utc> {
 }
 
 fn settings() -> Settings {
-    Settings { theme: Theme::default(), host: "gitlab.com".into(), me: "nina".into(), project: None }
+    Settings { theme: Theme::default(), host: "gitlab.com".into(), kind: Kind::GitLab, me: "nina".into(), project: None }
 }
 
 fn app() -> App {
@@ -45,7 +47,7 @@ fn app() -> App {
 }
 
 fn sections() -> Sections {
-    Queue::from_json(include_str!("../../api/fixtures/queue.json")).unwrap().sections(&[])
+    fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json")).sections(&[])
 }
 
 fn with_queue() -> App {
@@ -55,7 +57,7 @@ fn with_queue() -> App {
 }
 
 fn mr() -> Mr {
-    from_fixture(
+    fixture::mr(
         &json!({
             "id": 1042, "iid": 42, "project_id": 7, "title": "feat: charge cards at checkout",
             "state": "opened", "draft": false,
@@ -92,9 +94,9 @@ fn diffs() -> Vec<DiffFile> {
 
 fn discussions() -> Vec<Discussion> {
     vec![
-        from_fixture(include_str!("../../api/fixtures/discussions.json")),
-        from_fixture(include_str!("../../api/fixtures/diff_note.json")),
-        from_fixture(include_str!("../../review/fixtures/old_side_note.json")),
+        fixture::discussion(include_str!("../../forge/gitlab/fixtures/discussions.json")),
+        fixture::discussion(include_str!("../../forge/gitlab/fixtures/diff_note.json")),
+        fixture::discussion(include_str!("../../review/fixtures/old_side_note.json")),
     ]
 }
 
@@ -107,8 +109,8 @@ fn with_review() -> App {
     app.queue_move(0);
     assert_eq!(press(&mut app, "\r"), vec![]);
     let actions = app.handle_key(code(KeyCode::Enter));
-    assert_eq!(actions, vec![Action::Open(KEY)]);
-    app.apply(Incoming::Review { key: KEY, review: Box::new(review()), cached: None });
+    assert_eq!(actions, vec![Action::Open(mr_key())]);
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
     app
 }
 
@@ -132,7 +134,7 @@ fn the_queue_lands_in_sections_and_the_cursor_on_the_first_mr() {
     let app = with_queue();
     assert!(!app.queue_loading);
     assert!(app.poll.queue_due.is_some());
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(42));
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
     let rows = app.queue_rows();
     assert!(matches!(rows[0], QueueRow::Section { name: "TO REVIEW", count: 1, open: true }));
     assert!(rows.iter().any(|r| matches!(r, QueueRow::Section { name: "DONE", open: false, .. })));
@@ -142,13 +144,13 @@ fn the_queue_lands_in_sections_and_the_cursor_on_the_first_mr() {
 fn j_and_k_skip_section_headers_and_stop_at_the_ends() {
     let mut app = with_queue();
     press(&mut app, "j");
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(41), "MINE header is skipped");
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(41), "MINE header is skipped");
     press(&mut app, "kkk");
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(42));
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
     press(&mut app, "G");
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(35));
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(35));
     press(&mut app, "g");
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(42));
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
 }
 
 #[test]
@@ -157,9 +159,9 @@ fn zo_in_the_queue_shows_the_done_section() {
     press(&mut app, "zo");
     assert!(app.done_open);
     press(&mut app, "G");
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(40));
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(40));
     press(&mut app, "zc");
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(35), "the cursor settles on a visible row");
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(35), "the cursor settles on a visible row");
 }
 
 #[test]
@@ -167,13 +169,13 @@ fn the_filter_narrows_live_and_esc_clears_it() {
     let mut app = with_queue();
     press(&mut app, "/runner");
     assert!(app.filtering);
-    assert_eq!(app.selected_mr().map(|m| m.iid), Some(35));
+    assert_eq!(app.selected_mr().map(|m| m.number), Some(35));
     app.handle_key(code(KeyCode::Enter));
     assert!(!app.filtering && app.filter == "runner");
     app.handle_key(code(KeyCode::Esc));
     assert!(app.filter.is_empty());
     press(&mut app, "/omar");
-    let iids: Vec<u64> = app.queue_rows().iter().filter_map(|r| if let QueueRow::Mr(m) = r { Some(m.iid) } else { None }).collect();
+    let iids: Vec<u64> = app.queue_rows().iter().filter_map(|r| if let QueueRow::Mr(m) = r { Some(m.number) } else { None }).collect();
     assert_eq!(iids, [42, 35], "author matches too");
     app.handle_key(code(KeyCode::Esc));
     assert!(app.filter.is_empty() && !app.filtering);
@@ -187,16 +189,16 @@ fn badges_follow_the_spec_order() {
         [&sections.to_review, &sections.mine, &sections.watching, &sections.done]
             .into_iter()
             .flatten()
-            .find(|m| m.iid == iid)
+            .find(|m| m.number == iid)
             .unwrap()
             .clone()
     };
     assert_eq!(app.badge(&by_iid(40)), Some(Badge::Failed), "conflicts beat approved");
     assert_eq!(app.badge(&by_iid(35)), Some(Badge::Running));
     assert_eq!(app.badge(&by_iid(42)), None);
-    app.opened.insert(KEY, "2026-09-21T00:00:00Z".parse().unwrap());
+    app.opened.insert(mr_key(), "2026-09-21T00:00:00Z".parse().unwrap());
     assert_eq!(app.badge(&by_iid(42)), Some(Badge::Activity), "updated after it was last opened");
-    app.opened.insert(KEY, today());
+    app.opened.insert(mr_key(), today());
     assert_eq!(app.badge(&by_iid(42)), None);
 }
 
@@ -217,9 +219,9 @@ fn enter_opens_the_mr_and_the_review_arrives() {
     assert_eq!(app.opening, None);
     assert_eq!(app.focus, Focus::Review);
     let open = app.open.as_ref().unwrap();
-    assert_eq!(open.key, KEY);
+    assert_eq!(open.key, mr_key());
     assert_eq!(open.row(), Some(&Row::File { index: 0, open: true }), "the cursor starts on the first file");
-    assert_eq!(app.opened.get(&KEY), Some(&today()));
+    assert_eq!(app.opened.get(&mr_key()), Some(&today()));
     assert!(app.poll.mr_due.is_some() && app.poll.discussions_due.is_some());
 }
 
@@ -227,12 +229,12 @@ fn enter_opens_the_mr_and_the_review_arrives() {
 fn a_cached_review_paints_first_and_the_fresh_one_clears_the_age() {
     let mut app = with_queue();
     app.handle_key(code(KeyCode::Enter));
-    app.apply(Incoming::Review { key: KEY, review: Box::new(review()), cached: Some(Duration::from_secs(120)) });
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: Some(Duration::from_secs(120)) });
     assert!(app.opening.is_some(), "still fetching");
     assert_eq!(app.open.as_ref().unwrap().staleness(app.now), Some(Duration::from_secs(120)));
     app.apply(Incoming::Failed { what: Failure::Open, message: "offline".into() });
     assert!(app.offline.is_some() && app.open.is_some(), "the cached view stays");
-    app.apply(Incoming::Review { key: KEY, review: Box::new(review()), cached: None });
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
     assert_eq!(app.open.as_ref().unwrap().staleness(app.now), None);
     assert_eq!(app.offline, None);
 }
@@ -240,8 +242,8 @@ fn a_cached_review_paints_first_and_the_fresh_one_clears_the_age() {
 #[test]
 fn a_review_for_another_mr_is_ignored() {
     let mut app = with_review();
-    app.apply(Incoming::Review { key: (7, 99), review: Box::new(review()), cached: None });
-    assert_eq!(app.open.as_ref().unwrap().key, KEY);
+    app.apply(Incoming::Review { key: MrKey::new("acme/widgets", 99), review: Box::new(review()), cached: None });
+    assert_eq!(app.open.as_ref().unwrap().key, mr_key());
 }
 
 #[test]
@@ -275,7 +277,7 @@ fn bracket_f_finds_files_with_unresolved_threads() {
 fn folds_save_state_and_keep_the_cursor_on_the_same_place() {
     let mut app = with_review();
     let actions = press(&mut app, "za");
-    assert!(matches!(actions.as_slice(), [Action::SaveState { key: KEY, .. }]));
+    assert!(matches!(actions.as_slice(), [Action::SaveState { key, .. }] if *key == mr_key()));
     let open = app.open.as_ref().unwrap();
     assert_eq!(open.row(), Some(&Row::File { index: 0, open: false }));
     assert_eq!(open.rows.len(), 5, "header, gap, file, gap, file");
@@ -334,7 +336,10 @@ fn o_and_y_on_a_line_use_the_line_url() {
 fn fresh_discussions_replace_the_threads_and_reschedule() {
     let mut app = with_review();
     app.poll.discussions_due = None;
-    app.apply(Incoming::Discussions { key: KEY, discussions: vec![from_fixture(include_str!("../../api/fixtures/diff_note.json"))] });
+    app.apply(Incoming::Discussions {
+        key: mr_key(),
+        discussions: vec![fixture::discussion(include_str!("../../forge/gitlab/fixtures/diff_note.json"))],
+    });
     assert_eq!(app.open.as_ref().unwrap().review.threads.len(), 1);
     assert!(app.poll.discussions_due.is_some());
 }
@@ -343,7 +348,7 @@ fn fresh_discussions_replace_the_threads_and_reschedule() {
 fn a_fresh_review_keeps_the_folds_of_unchanged_files() {
     let mut app = with_review();
     press(&mut app, "za");
-    app.apply(Incoming::Review { key: KEY, review: Box::new(review()), cached: None });
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
     assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
 }
 
@@ -352,12 +357,12 @@ fn polling_fires_once_per_due_date_and_backs_off_on_failure() {
     let mut app = with_review();
     assert_eq!(app.tick(), vec![]);
     app.now += Duration::from_secs(31);
-    assert_eq!(app.tick(), vec![Action::RefreshDiscussions(KEY)]);
+    assert_eq!(app.tick(), vec![Action::RefreshDiscussions(mr_key())]);
     assert_eq!(app.tick(), vec![]);
     app.now += Duration::from_secs(30);
     let actions = app.tick();
     assert!(
-        actions.contains(&Action::LoadQueue { scope: None, from_cache: false }) && actions.contains(&Action::RefreshMr(KEY)),
+        actions.contains(&Action::LoadQueue { scope: None, from_cache: false }) && actions.contains(&Action::RefreshMr(mr_key())),
         "{actions:?}"
     );
     app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
@@ -403,7 +408,7 @@ fn snapshot_queue_loading_and_empty() {
 #[test]
 fn snapshot_queue_loaded() {
     let mut app = with_queue();
-    app.opened.insert((7, 41), "2026-09-01T00:00:00Z".parse().unwrap());
+    app.opened.insert(MrKey::new("acme/widgets", 41), "2026-09-01T00:00:00Z".parse().unwrap());
     app.now = app.started;
     insta::assert_snapshot!("queue_loaded", render(&mut app, 100, 16));
 }
@@ -458,7 +463,7 @@ fn with_saved_draft() -> App {
     on_line(&mut app);
     press(&mut app, "c");
     type_text(&mut app, "nit");
-    app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
+    app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
     app
 }
 
@@ -471,16 +476,17 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
     press(&mut app, "c");
     assert_eq!(app.input_label(), "comment charge.rs:12");
     let actions = type_text(&mut app, "nit: rename");
-    let [Action::SaveDraft { key: KEY, index: 0, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    let [Action::SaveDraft { key, index: 0, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(*key, mr_key());
     assert_eq!(draft.body, "nit: rename");
-    assert_eq!(draft.position.as_ref().and_then(|p| p.new_line), Some(12));
+    assert_eq!(draft.position.as_ref().and_then(|p| p.line.new), Some(12));
     assert_eq!(draft.id, None);
     assert!(app.input.is_none());
     let open = app.open.as_ref().unwrap();
     assert_eq!(draft_rows(&app), [0]);
     assert!(matches!(open.rows[open.selected + 1], Row::Draft { index: 0 }), "the draft row follows the line");
     assert_eq!(app.unsaved_drafts(), 1);
-    app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
+    app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
     assert_eq!(app.unsaved_drafts(), 0);
 }
@@ -521,9 +527,9 @@ fn v_selects_a_range_for_c_y_and_esc() {
     let actions = type_text(&mut app, "fold these");
     let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     let position = draft.position.as_ref().unwrap();
-    assert_eq!(position.new_line, Some(13));
-    let range = position.line_range.as_ref().expect("a range");
-    assert_eq!((range.start.old_line, range.end.new_line), (Some(12), Some(13)));
+    assert_eq!(position.line.new, Some(13));
+    let start = position.start.expect("a range");
+    assert_eq!((start.old, position.line.new), (Some(12), Some(13)));
     assert_eq!(app.open.as_ref().unwrap().select_from, None, "sending drops the selection");
     press(&mut app, "Vj");
     app.handle_key(code(KeyCode::Esc));
@@ -554,13 +560,13 @@ fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
     let id = "c0ffee00c0ffee00".to_owned();
     assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
     let actions = press(&mut app, "R");
-    assert_eq!(actions, vec![Action::Resolve { key: KEY, thread: id.clone(), resolved: false }]);
+    assert_eq!(actions, vec![Action::Resolve { key: mr_key(), thread: id.clone(), resolved: false }]);
     assert!(!app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
     app.apply(Incoming::Failed { what: Failure::Resolve { thread: id.clone(), resolved: false }, message: "HTTP 403".into() });
     assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved, "back to resolved");
     assert!(app.live_toast().unwrap().danger);
     press(&mut app, "R");
-    app.apply(Incoming::Resolved { key: KEY, thread: id.clone(), resolved: false });
+    app.apply(Incoming::Resolved { key: mr_key(), thread: id.clone(), resolved: false });
     assert!(!app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
 }
 
@@ -572,10 +578,11 @@ fn enter_edits_a_draft_and_d_deletes_it() {
     app.handle_key(code(KeyCode::Enter));
     assert_eq!((app.input_label(), app.buffer.text()), ("edit draft".to_owned(), "nit"));
     let actions = type_text(&mut app, " (typo)");
-    let [Action::UpdateDraft { key: KEY, id: 9, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    let [Action::UpdateDraft { key, id: 9, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(*key, mr_key());
     assert_eq!((draft.body.as_str(), draft.position.is_some()), ("nit (typo)", true), "the position travels with the edit");
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit (typo)");
-    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: KEY, id: 9 }]);
+    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
     assert!(draft_rows(&app).is_empty());
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })), "the cursor lands on the next row");
 }
@@ -589,7 +596,7 @@ fn an_unsaved_draft_is_posted_again_by_r_and_deleted_without_a_request() {
     app.apply(Incoming::Failed { what: Failure::Draft { index: 0 }, message: "offline".into() });
     assert!(app.live_toast().unwrap().text.contains("r to retry"));
     let actions = press(&mut app, "r");
-    assert!(matches!(actions.as_slice(), [Action::RefreshMr(KEY), Action::SaveDraft { index: 0, .. }]), "{actions:?}");
+    assert!(matches!(actions.as_slice(), [Action::RefreshMr(key), Action::SaveDraft { index: 0, .. }] if *key == mr_key()), "{actions:?}");
     press(&mut app, "j");
     assert_eq!(press(&mut app, "d"), vec![], "GitLab never had it");
     assert_eq!(app.draft_count(), 0);
@@ -600,7 +607,7 @@ fn the_publish_modal_walks_the_drafts_toggles_approve_and_publishes() {
     let mut app = with_saved_draft();
     press(&mut app, "jjc");
     type_text(&mut app, "second");
-    app.apply(Incoming::DraftSaved { key: KEY, index: 1, id: 10 });
+    app.apply(Incoming::DraftSaved { key: mr_key(), index: 1, id: 10 });
     press(&mut app, "P");
     let publish = app.publish.clone().unwrap();
     assert_eq!((publish.selected, publish.approve, publish.busy), (0, false, false));
@@ -609,10 +616,10 @@ fn the_publish_modal_walks_the_drafts_toggles_approve_and_publishes() {
     press(&mut app, "a");
     assert!(app.publish.as_ref().unwrap().approve);
     let actions = app.handle_key(code(KeyCode::Enter));
-    assert_eq!(actions, vec![Action::Publish { key: KEY, approve: true, count: 2 }]);
+    assert_eq!(actions, vec![Action::Publish { key: mr_key(), approve: true, count: 2 }]);
     assert!(app.publish.as_ref().unwrap().busy);
     assert_eq!(press(&mut app, "a"), vec![], "keys wait for the answer");
-    app.apply(Incoming::Published { key: KEY, approved: true, count: 2 });
+    app.apply(Incoming::Published { key: mr_key(), approved: true, count: 2 });
     assert_eq!(app.publish, None);
     assert_eq!(app.draft_count(), 0);
     assert!(app.open.as_ref().unwrap().review.mr.approvals.user_has_approved);
@@ -633,7 +640,7 @@ fn the_publish_modal_edits_deletes_and_survives_a_failure() {
     assert!(!app.publish.as_ref().unwrap().busy);
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit!");
     assert!(app.live_toast().unwrap().text.contains("not published"));
-    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: KEY, id: 9 }]);
+    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
     assert_eq!(app.draft_count(), 0);
     app.handle_key(code(KeyCode::Esc));
     assert_eq!(app.publish, None);
@@ -657,10 +664,10 @@ fn publishing_waits_for_unsaved_drafts() {
 #[test]
 fn big_a_approves_then_unapproves() {
     let mut app = with_review();
-    assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: KEY, approve: true }]);
-    app.apply(Incoming::Approved { key: KEY, approve: true });
+    assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: mr_key(), approve: true }]);
+    app.apply(Incoming::Approved { key: mr_key(), approve: true });
     assert_eq!(app.live_toast().unwrap().text, "approved");
-    assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: KEY, approve: false }]);
+    assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: mr_key(), approve: false }]);
     app.apply(Incoming::Failed { what: Failure::Approve, message: "you cannot approve this MR".into() });
     assert!(app.live_toast().unwrap().danger);
 }
@@ -671,7 +678,7 @@ fn big_e_and_s_open_the_editor_and_what_comes_back_is_a_draft() {
     on_line(&mut app);
     let actions = press(&mut app, "E");
     let [Action::Compose { input: Input::Comment { position }, draft }] = actions.as_slice() else { panic!("{actions:?}") };
-    assert!(draft.is_empty() && position.new_line == Some(12));
+    assert!(draft.is_empty() && position.line.new == Some(12));
     let actions = press(&mut app, "Vjs");
     let [Action::Compose { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(
@@ -717,19 +724,19 @@ fn snapshot_thread_with_a_draft_reply() {
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
     type_text(&mut app, "agreed, keys are per card");
-    app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
+    app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
     insta::assert_snapshot!("thread_draft_reply", render(&mut app, 120, 24));
 }
 
 #[test]
 fn right_from_the_queue_opens_the_selected_mr_like_enter() {
     let mut app = with_queue();
-    assert_eq!(press(&mut app, "l"), vec![Action::Open(KEY)]);
+    assert_eq!(press(&mut app, "l"), vec![Action::Open(mr_key())]);
     assert_eq!(app.focus, Focus::Review);
-    app.apply(Incoming::Review { key: KEY, review: Box::new(review()), cached: None });
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
     press(&mut app, "hj");
-    let next = super::queue::key_of(app.selected_mr().unwrap());
-    assert_ne!(next, KEY);
+    let next = app.selected_mr().unwrap().key();
+    assert_ne!(next, mr_key());
     assert_eq!(press(&mut app, "l"), vec![Action::Open(next)], "the diff must follow the queue row, never show the previous MR");
     assert_eq!(app.focus, Focus::Review);
 }
@@ -775,7 +782,7 @@ fn scoped_app() -> App {
 }
 
 fn scoped_sections() -> Sections {
-    Queue::from_json_in(include_str!("../../api/fixtures/queue_scoped.json"), "acme/widgets").unwrap().sections(&[])
+    fixture::queue_in(include_str!("../../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets").sections(&[])
 }
 
 fn queue_answer(scope: Option<&str>, sections: Sections, cached: bool) -> Incoming {
@@ -821,13 +828,13 @@ fn i_opens_the_description_from_the_queue_and_the_review_and_closes_on_esc() {
     press(&mut app, "Gk");
     press(&mut app, "i");
     let brief = app.brief.clone().unwrap();
-    assert_eq!((brief.iid, brief.description.as_str()), (50, "Adds the refund flow."));
+    assert_eq!((brief.number, brief.description.as_str()), (50, "Adds the refund flow."));
     assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(brief.web_url)]);
     app.handle_key(code(KeyCode::Esc));
     assert_eq!(app.brief, None);
     let mut app = with_review();
     press(&mut app, "i");
-    assert_eq!(app.brief.as_ref().map(|b| b.iid), Some(42));
+    assert_eq!(app.brief.as_ref().map(|b| b.number), Some(42));
     press(&mut app, "q");
     assert!(app.brief.is_none() && !app.should_quit, "q closes the modal, it does not quit");
 }

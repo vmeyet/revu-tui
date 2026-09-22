@@ -1,5 +1,6 @@
 use super::{Action, App, Focus, MrKey};
 use crate::diff::fold::FoldState;
+use crate::forge::{Kind, LineRef};
 use crate::review::{Review, Row};
 use std::time::{Duration, Instant};
 
@@ -121,13 +122,13 @@ impl Open {
         Self { review, rows, selected, ..self.clone() }
     }
 
-    pub fn line_url(&self) -> String {
+    /// The web page of the line under the cursor, the MR's page anywhere else.
+    pub fn line_url(&self, kind: Kind) -> String {
         let mr = &self.review.mr;
         let Some(Row::Line { file, hunk, index }) = self.row() else { return mr.web_url.clone() };
         let file = &self.review.files[*file];
         let line = &file.hunks[*hunk].lines[*index];
-        let digest = sha1_smol::Sha1::from(file.new_path.as_bytes()).digest().to_string();
-        format!("{}/diffs#{digest}_{}_{}", mr.web_url, line.old.unwrap_or(0), line.new.unwrap_or(0))
+        kind.line_url(&mr.web_url, &file.new_path, LineRef { old: line.old, new: line.new })
     }
 }
 
@@ -216,7 +217,7 @@ impl App {
     fn apply_fold(&mut self, fold: FoldState) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let next = open.with_fold(fold);
-        let action = Action::SaveState { key: next.key, fold: next.review.fold.clone(), viewed: next.review.viewed.clone() };
+        let action = Action::SaveState { key: next.key.clone(), fold: next.review.fold.clone(), viewed: next.review.viewed.clone() };
         self.open = Some(next);
         vec![action]
     }

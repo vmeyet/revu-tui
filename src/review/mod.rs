@@ -7,12 +7,12 @@ pub mod thread;
 pub use draft::Draft;
 pub use thread::{Anchor, Side, Thread};
 
-use crate::api::{DiffFile, Discussion, Mr};
 use crate::diff::fold::{FileMeta, FoldState};
 use crate::diff::{self, Hunk, LineKind};
+use crate::forge::{DiffFile, Discussion, Mr};
 use std::collections::BTreeSet;
 
-/// Above this many lines a file starts folded, whatever GitLab says.
+/// Above this many lines a file starts folded, whatever the forge says.
 const TOO_LARGE_LINES: usize = 2000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,7 +154,7 @@ impl Review {
         Self { threads: threads_of(discussions, &self.files), ..self.clone() }
     }
 
-    /// The thread flipped locally, ahead of GitLab's answer.
+    /// The thread flipped locally, ahead of the forge's answer.
     pub fn with_resolved(&self, id: &str, resolved: bool) -> Self {
         let threads = self.threads.iter().map(|t| if t.id == id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
         Self { threads, ..self.clone() }
@@ -249,11 +249,11 @@ fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
 pub(super) mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::api::types::from_fixture;
+    use crate::forge::gitlab::fixture;
     use serde_json::json;
 
     fn mr() -> Mr {
-        from_fixture(
+        fixture::mr(
             &json!({
                 "id": 1042, "iid": 42, "project_id": 7, "title": "feat: charge cards at checkout",
                 "state": "opened", "draft": false,
@@ -289,9 +289,9 @@ pub(super) mod tests {
 
     fn discussions() -> Vec<Discussion> {
         vec![
-            from_fixture(include_str!("../api/fixtures/discussions.json")),
-            from_fixture(include_str!("../api/fixtures/diff_note.json")),
-            from_fixture(include_str!("fixtures/old_side_note.json")),
+            fixture::discussion(include_str!("../forge/gitlab/fixtures/discussions.json")),
+            fixture::discussion(include_str!("../forge/gitlab/fixtures/diff_note.json")),
+            fixture::discussion(include_str!("fixtures/old_side_note.json")),
         ]
     }
 
@@ -370,7 +370,7 @@ pub(super) mod tests {
     #[test]
     fn fresh_discussions_keep_the_files_and_folds() {
         let review = review();
-        let refreshed = review.with_discussions(vec![from_fixture(include_str!("../api/fixtures/diff_note.json"))]);
+        let refreshed = review.with_discussions(vec![fixture::discussion(include_str!("../forge/gitlab/fixtures/diff_note.json"))]);
         assert_eq!(refreshed.threads.len(), 1);
         assert_eq!(refreshed.files, review.files);
         assert_eq!(refreshed.fold, review.fold);

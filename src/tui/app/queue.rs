@@ -1,5 +1,5 @@
-use super::{Action, App, MrKey};
-use crate::api::{QueueMr, Sections};
+use super::{Action, App};
+use crate::forge::{QueueMr, Sections};
 
 /// The one glyph at the right edge of a queue row, most pressing first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,7 +52,7 @@ impl App {
             return true;
         }
         let needle = self.filter.to_lowercase();
-        mr.title.to_lowercase().contains(&needle) || mr.author.to_lowercase().contains(&needle) || mr.iid.to_string().contains(&needle)
+        mr.title.to_lowercase().contains(&needle) || mr.author.to_lowercase().contains(&needle) || mr.number.to_string().contains(&needle)
     }
 
     pub fn selected_mr(&self) -> Option<&QueueMr> {
@@ -66,7 +66,7 @@ impl App {
         let pipeline = mr.pipeline.as_deref().map(str::to_ascii_lowercase);
         let failed = mr.conflicts || pipeline.as_deref() == Some("failed");
         let running = matches!(pipeline.as_deref(), Some("running" | "pending" | "created" | "waiting_for_resource" | "preparing"));
-        let activity = self.opened.get(&key_of(mr)).is_some_and(|opened| mr.updated_at > *opened);
+        let activity = self.opened.get(&mr.key()).is_some_and(|opened| mr.updated_at > *opened);
         let approved = mr.approved_by.iter().any(|u| u == &self.me);
         [
             (failed, Badge::Failed),
@@ -110,17 +110,13 @@ impl App {
 
     pub(super) fn open_selected(&mut self) -> Vec<Action> {
         let Some(mr) = self.selected_mr() else { return vec![] };
-        let key = key_of(mr);
+        let key = mr.key();
         if self.open.as_ref().is_some_and(|o| o.key == key) {
             self.focus = super::Focus::Review;
             return vec![];
         }
-        self.opening = Some(key);
+        self.opening = Some(key.clone());
         self.focus = super::Focus::Review;
         vec![Action::Open(key)]
     }
-}
-
-pub fn key_of(mr: &QueueMr) -> MrKey {
-    (mr.project_id, mr.iid)
 }

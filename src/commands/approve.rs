@@ -5,16 +5,12 @@ use anyhow::Result;
 
 /// Approves the MR, or takes the approval back with `--undo`.
 pub async fn run(ctx: &Ctx, args: ApproveArgs) -> Result<()> {
-    let (project_id, iid) = target::resolve(&ctx.gitlab, args.mr.as_deref()).await?;
+    let key = target::resolve(&ctx.forge, args.mr.as_deref()).await?;
     let verb = if args.undo { "unapproved" } else { "approved" };
-    if args.undo {
-        ctx.gitlab.unapprove(project_id, iid).await?;
-    } else {
-        ctx.gitlab.approve(project_id, iid).await?;
-    }
+    ctx.forge.approve(&key, !args.undo).await?;
     if ctx.json {
-        return crate::ctx::emit(&serde_json::json!({"project_id": project_id, "iid": iid, "approved": !args.undo}));
+        return crate::ctx::emit(&serde_json::json!({"project": key.project, "number": key.number, "approved": !args.undo}));
     }
-    println!("{verb} !{iid}");
+    println!("{verb} {}{}", ctx.forge.kind().sigil(), key.number);
     Ok(())
 }

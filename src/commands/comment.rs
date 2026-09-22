@@ -1,33 +1,40 @@
 use super::target;
-use crate::api::{Client, DiffFile, Position};
 use crate::cli::CommentArgs;
 use crate::ctx::Ctx;
 use crate::diff;
+use crate::forge::{DiffFile, Forge, LineRef, MrKey, Position};
 use anyhow::{Context, Result, bail};
 
 /// Posts a public comment, on a line when `--at` names one.
 pub async fn run(ctx: &Ctx, args: CommentArgs) -> Result<()> {
-    let (project_id, iid) = target::resolve(&ctx.gitlab, Some(&args.mr)).await?;
+    let key = target::resolve(&ctx.forge, Some(&args.mr)).await?;
     let body = args.text.join(" ");
     let position = match args.at.as_deref() {
-        Some(at) => Some(anchor(&ctx.gitlab, project_id, iid, at).await?),
+        Some(at) => Some(anchor(&ctx.forge, &key, at).await?),
         None => None,
     };
-    let discussion = ctx.gitlab.comment(project_id, iid, &body, position.as_ref()).await?;
+    let discussion = ctx.forge.comment(&key, &body, position.as_ref()).await?;
     if ctx.json {
         return crate::ctx::emit(&discussion);
     }
-    println!("posted discussion {} on !{iid}", discussion.id);
+    println!("posted discussion {} on {}{}", discussion.id, ctx.forge.kind().sigil(), key.number);
     Ok(())
 }
 
 /// `path:line` on the new side of the current diff.
-async fn anchor(gitlab: &Client, project_id: u64, iid: u64, at: &str) -> Result<Position> {
+async fn anchor(forge: &Forge, key: &MrKey, at: &str) -> Result<Position> {
     let (path, line) = parse_at(at)?;
-    let (mr, diffs) = tokio::try_join!(gitlab.mr(project_id, iid), gitlab.diffs(project_id, iid))?;
-    let file = diffs.iter().find(|f| f.new_path == path).with_context(|| format!("{path} is not in the diff of !{iid}"))?;
-    let old_line = line_at(file, line).with_context(|| format!("line {line} of {path} is not in the diff of !{iid}"))?.old;
-    Ok(Position::line(&mr.diff_refs, &file.old_path, &file.new_path, old_line, Some(line)))
+    let (mr, diffs) = tokio::try_join!(forge.mr(key), forge.diffs(key))?;
+    let name = format!("{}{}", forge.kind().sigil(), key.number);
+    let file = diffs.iter().find(|f| f.new_path == path).with_context(|| format!("{path} is not in the diff of {name}"))?;
+    let old = line_at(file, line).with_context(|| format!("line {line} of {path} is not in the diff of {name}"))?.old;
+    Ok(Position {
+        refs: mr.refs,
+        old_path: file.old_path.clone(),
+        new_path: file.new_path.clone(),
+        line: LineRef { old, new: Some(line) },
+        start: None,
+    })
 }
 
 /// The diff line whose new-side number is `line`; `None` when the line is not part of the diff.

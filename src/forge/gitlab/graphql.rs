@@ -2,11 +2,11 @@
 //! Scoped to a project, a second call in parallel lists every open MR of that project: one query
 //! for both scores over GitLab's complexity limit of 250.
 use super::Client;
+use crate::forge::{Queue, QueueMr, ReviewState, ReviewerState};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
-use std::collections::HashSet;
 
 const MINE: &str = r"
   currentUser {
@@ -46,152 +46,46 @@ fn project_query() -> String {
     format!("query Open($project: ID!) {{{PROJECT}\n}}{FRAGMENT}")
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Queue {
-    pub me: String,
-    /// The project the queue is scoped to; `None` for every project.
-    #[serde(default)]
-    pub project: Option<String>,
-    pub review_requested: Vec<QueueMr>,
-    pub authored: Vec<QueueMr>,
-    pub assigned: Vec<QueueMr>,
-    /// Every open MR of `project`, mine or not.
-    #[serde(default)]
-    pub open: Vec<QueueMr>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QueueMr {
-    pub id: u64,
-    pub iid: u64,
-    pub project_id: u64,
-    pub project: String,
-    pub title: String,
-    #[serde(default)]
-    pub description: String,
-    pub draft: bool,
-    pub web_url: String,
-    pub updated_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub conflicts: bool,
-    pub author: String,
-    pub author_name: String,
-    pub approved: bool,
-    pub approved_by: Vec<String>,
-    pub reviewers: Vec<ReviewerState>,
-    /// GraphQL status: `SUCCESS`, `FAILED`, `RUNNING`, `PENDING`, `CANCELED`, `SKIPPED`, `MANUAL`…
-    pub pipeline: Option<String>,
-    pub additions: u32,
-    pub deletions: u32,
-    pub files: u32,
-    pub unresolved: u32,
-    pub labels: Vec<String>,
-    pub notes: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewerState {
-    pub username: String,
-    pub state: ReviewState,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ReviewState {
-    Unreviewed,
-    Reviewed,
-    RequestedChanges,
-    Approved,
-    ReviewStarted,
-    Unapproved,
-}
-
-/// The queue sorted into the sidebar sections, each MR in exactly one.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct Sections {
-    pub to_review: Vec<QueueMr>,
-    pub mine: Vec<QueueMr>,
-    pub watching: Vec<QueueMr>,
-    /// The rest of the project's open MRs, only when the queue is scoped to one.
-    pub open: Vec<QueueMr>,
-    pub done: Vec<QueueMr>,
-}
-
-impl QueueMr {
-    pub fn my_state(&self, me: &str) -> Option<ReviewState> {
-        self.reviewers.iter().find(|r| r.username == me).map(|r| r.state)
-    }
-
-    fn reviewed_by(&self, me: &str) -> bool {
-        matches!(self.my_state(me), Some(ReviewState::Approved | ReviewState::Reviewed))
-    }
-
-    fn key(&self) -> (u64, u64) {
-        (self.project_id, self.iid)
-    }
-}
-
-impl Queue {
-    pub fn sections(&self, watch_labels: &[String]) -> Sections {
-        let me = self.me.as_str();
-        let in_scope = |mr: &&QueueMr| self.project.as_ref().is_none_or(|p| &mr.project == p);
-        let (done, to_review): (Vec<_>, Vec<_>) = self.review_requested.iter().filter(in_scope).cloned().partition(|mr| mr.reviewed_by(me));
-        let mine: Vec<QueueMr> = self.authored.iter().filter(in_scope).cloned().collect();
-        let mut seen: HashSet<(u64, u64)> = to_review.iter().chain(&mine).chain(&done).map(QueueMr::key).collect();
-        let labelled = self.review_requested.iter().chain(&self.authored).filter(|mr| mr.labels.iter().any(|l| watch_labels.contains(l)));
-        let watching = self.assigned.iter().chain(labelled).filter(in_scope).filter(|mr| seen.insert(mr.key())).cloned().collect();
-        let open = self.open.iter().filter(|mr| seen.insert(mr.key())).cloned().collect();
-        Sections { to_review, mine, watching, open, done }
-    }
-}
-
 impl Client {
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
     pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
         let mine_body = json!({"query": mine_query()});
         let mine = self.post_json::<Answer>("graphql", &mine_body);
-        let Some(path) = project else { return Queue::from_answers(mine.await?, None) };
+        let Some(path) = project else { return queue_from(mine.await?, None) };
         let open_body = json!({"query": project_query(), "variables": {"project": path}});
         let (mine, open) = tokio::try_join!(mine, self.post_json::<Answer>("graphql", &open_body))?;
-        Queue::from_answers(mine, Some((open, path)))
+        queue_from(mine, Some((open, path)))
     }
 }
 
-impl Queue {
-    /// `open` is the project answer and the path it was asked for, when the queue is scoped.
-    fn from_answers(mine: Answer, open: Option<(Answer, &str)>) -> Result<Self> {
-        let user = data_of(mine)?.current_user.context("GraphQL answered without currentUser")?;
-        let (project, open) = match open {
-            Some((answer, path)) => {
-                let found =
-                    data_of(answer)?.project.with_context(|| format!("project {path} not found, or not visible with this token"))?;
-                (Some(path.to_owned()), convert(found.merge_requests)?)
-            }
-            None => (None, vec![]),
-        };
-        Ok(Queue {
-            me: user.username,
-            project,
-            review_requested: convert(user.review_requested)?,
-            authored: convert(user.authored)?,
-            assigned: convert(user.assigned)?,
-            open,
-        })
-    }
+/// `open` is the project answer and the path it was asked for, when the queue is scoped.
+fn queue_from(mine: Answer, open: Option<(Answer, &str)>) -> Result<Queue> {
+    let user = data_of(mine)?.current_user.context("GraphQL answered without currentUser")?;
+    let (project, open) = match open {
+        Some((answer, path)) => {
+            let found = data_of(answer)?.project.with_context(|| format!("project {path} not found, or not visible with this token"))?;
+            (Some(path.to_owned()), convert(found.merge_requests)?)
+        }
+        None => (None, vec![]),
+    };
+    Ok(Queue {
+        me: user.username,
+        project,
+        review_requested: convert(user.review_requested)?,
+        authored: convert(user.authored)?,
+        assigned: convert(user.assigned)?,
+        open,
+    })
+}
 
-    /// A queue straight from a GraphQL answer body, for fixtures.
-    #[cfg(test)]
-    pub fn from_json(body: &str) -> Result<Self> {
-        Self::from_answers(serde_json::from_str(body)?, None)
-    }
-
-    /// The same, scoped to `project`: one body carries both answers, `currentUser` and `project`.
-    #[cfg(test)]
-    pub fn from_json_in(body: &str, project: &str) -> Result<Self> {
-        Self::from_answers(serde_json::from_str(body)?, Some((serde_json::from_str(body)?, project)))
-    }
+/// A queue straight from a GraphQL answer body; scoped, the one body carries both answers.
+#[cfg(test)]
+pub(super) fn queue_from_json(body: &str, project: Option<&str>) -> Result<Queue> {
+    let open = match project {
+        Some(path) => Some((serde_json::from_str(body)?, path)),
+        None => None,
+    };
+    queue_from(serde_json::from_str(body)?, open)
 }
 
 fn data_of(answer: Answer) -> Result<Data> {
@@ -211,9 +105,7 @@ impl TryFrom<WireMr> for QueueMr {
     fn try_from(w: WireMr) -> Result<Self> {
         let stats = w.diff_stats_summary.unwrap_or_default();
         Ok(Self {
-            id: gid(&w.id)?,
-            iid: w.iid.parse().with_context(|| format!("iid {:?}", w.iid))?,
-            project_id: gid(&w.project.id)?,
+            number: w.iid.parse().with_context(|| format!("iid {:?}", w.iid))?,
             project: w.project.full_path,
             title: w.title,
             description: w.description.unwrap_or_default(),
@@ -243,11 +135,6 @@ impl TryFrom<WireMr> for QueueMr {
             notes: w.user_notes_count,
         })
     }
-}
-
-/// `gid://gitlab/MergeRequest/1042` → 1042
-fn gid(id: &str) -> Result<u64> {
-    id.rsplit('/').next().and_then(|n| n.parse().ok()).with_context(|| format!("not a global id: {id:?}"))
 }
 
 #[derive(Deserialize)]
@@ -291,7 +178,6 @@ struct Connection<T> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WireMr {
-    id: String,
     iid: String,
     title: String,
     description: Option<String>,
@@ -318,7 +204,6 @@ struct WireMr {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WireProject {
-    id: String,
     full_path: String,
 }
 
@@ -375,11 +260,11 @@ mod tests {
     const FIXTURE: &str = include_str!("fixtures/queue.json");
 
     fn queue() -> Queue {
-        Queue::from_json(FIXTURE).unwrap()
+        queue_from_json(FIXTURE, None).unwrap()
     }
 
     fn iids(mrs: &[QueueMr]) -> Vec<u64> {
-        mrs.iter().map(|m| m.iid).collect()
+        mrs.iter().map(|m| m.number).collect()
     }
 
     #[tokio::test]
@@ -397,7 +282,7 @@ mod tests {
         assert_eq!(queue.me, "nina");
         assert_eq!(iids(&queue.review_requested), [42, 40]);
         let first = &queue.review_requested[0];
-        assert_eq!((first.id, first.project_id, first.project.as_str()), (1042, 7, "acme/widgets"));
+        assert_eq!(first.key(), crate::forge::MrKey::new("acme/widgets", 42));
         assert_eq!(first.my_state("nina"), Some(ReviewState::Unreviewed));
         assert_eq!((first.additions, first.deletions, first.files, first.unresolved), (412, 38, 9, 1));
         assert_eq!(first.pipeline.as_deref(), Some("SUCCESS"));
@@ -467,7 +352,7 @@ mod tests {
 
     #[test]
     fn a_scoped_queue_keeps_its_project_and_lists_the_rest_as_open() {
-        let sections = Queue::from_json_in(SCOPED, "acme/widgets").unwrap().sections(&[]);
+        let sections = queue_from_json(SCOPED, Some("acme/widgets")).unwrap().sections(&[]);
         assert_eq!(iids(&sections.to_review), [42]);
         assert_eq!(iids(&sections.mine), [41]);
         assert_eq!(iids(&sections.done), [40]);
@@ -478,13 +363,7 @@ mod tests {
     #[test]
     fn an_unknown_project_is_an_error_not_an_empty_queue() {
         let body = FIXTURE.replacen("\"data\": {", "\"data\": {\"project\": null, ", 1);
-        let err = Queue::from_json_in(&body, "acme/gone").unwrap_err().to_string();
+        let err = queue_from_json(&body, Some("acme/gone")).unwrap_err().to_string();
         assert!(err.contains("acme/gone"), "{err}");
-    }
-
-    #[test]
-    fn global_ids_parse_and_garbage_does_not() {
-        assert_eq!(gid("gid://gitlab/MergeRequest/1042").unwrap(), 1042);
-        assert!(gid("gid://gitlab/MergeRequest/").is_err());
     }
 }
