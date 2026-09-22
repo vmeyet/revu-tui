@@ -189,7 +189,7 @@ The fold state is saved in the cache per MR and head sha, so reopening an MR res
 
 ## Cache
 
-`~/.cache/gitlabmr/<host>/`:
+`dirs::cache_dir()/gitlabmr/<host>/` (`~/Library/Caches/gitlabmr` on macOS, `~/.cache/gitlabmr` elsewhere; `GITLABMR_CACHE_DIR` overrides):
 
 ```
 queue.json                          last queue answer + fetched_at

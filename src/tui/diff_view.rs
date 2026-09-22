@@ -7,15 +7,12 @@ use crate::review::{File, FileKind, Review, Row, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
 const GUTTER_W: usize = 4;
-const SURFACE_PCT: u32 = 8;
-const WORD_PCT: u32 = 20;
-const LINE_PCT: u32 = 60;
 const TAB: &str = "→   ";
 const INDENT: &str = "   ";
 const MIN_BRANCH_W: usize = 12;
@@ -237,30 +234,51 @@ fn hunk_spans<'a>(file: &File, index: usize, open: bool, width: usize, theme: Th
     ]
 }
 
+/// How one kind of changed line paints: sign, text colour, fills, and the colour of its meaning.
+struct Paint {
+    sign: &'static str,
+    text: Color,
+    fill: Option<Color>,
+    word: Option<Color>,
+    accent: Color,
+}
+
+fn paint(kind: LineKind, theme: Theme) -> Option<Paint> {
+    match kind {
+        LineKind::Added => {
+            Some(Paint { sign: "+", text: theme.added, fill: theme.added_fill, word: theme.added_word, accent: theme.success })
+        }
+        LineKind::Removed => {
+            Some(Paint { sign: "-", text: theme.removed, fill: theme.removed_fill, word: theme.removed_word, accent: theme.danger })
+        }
+        LineKind::Context => None,
+    }
+}
+
+/// A changed line is filled edge to edge; without a fill, the text itself carries the colour
+/// and changed words go bold, so every theme reads on every terminal.
 fn line_spans<'a>(line: &DiffLine, selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
     let gutter_colour = if selected { theme.muted } else { theme.faded };
     let number = |n: Option<u32>| n.map(|n| format!("{n:>GUTTER_W$}")).unwrap_or_else(|| " ".repeat(GUTTER_W));
-    let (sign, colour) = match line.kind {
-        LineKind::Added => ("+", Some(theme.success)),
-        LineKind::Removed => ("-", Some(theme.danger)),
-        LineKind::Context => (" ", None),
-    };
-    let surface = colour.map(|c| theme.tint(c, SURFACE_PCT));
-    let base = match colour {
-        Some(c) => Style::default().fg(mix_fg(theme, c)).bg(surface.unwrap_or(theme.base)),
+    let paint = paint(line.kind, theme);
+    let base = match &paint {
+        Some(p) => p.fill.map_or(Style::default().fg(p.text), |fill| Style::default().fg(p.text).bg(fill)),
         None => Style::default(),
     };
-    let mut spans = vec![
-        Span::styled(format!("{} {} ", number(line.old), number(line.new)), Style::default().fg(gutter_colour)),
-        Span::styled(sign.to_owned(), colour.map(|c| base.fg(c)).unwrap_or(base)),
-    ];
+    let sign = paint.as_ref().map(|p| Span::styled(p.sign, base.fg(p.accent))).unwrap_or_else(|| Span::styled(" ", base));
+    let word = paint.as_ref().map(|p| match p.word {
+        Some(fill) => base.fg(p.accent).bg(fill),
+        None => base.add_modifier(Modifier::BOLD),
+    });
+    let mut spans = vec![Span::styled(format!("{} {} ", number(line.old), number(line.new)), base.fg(gutter_colour)), sign];
     let room = width.saturating_sub(GUTTER_W * 2 + 3);
-    spans.extend(text_spans(line, room, base, colour.map(|c| base.fg(c).bg(theme.tint(c, WORD_PCT))), theme));
+    let text = text_spans(line, room, base, word, theme);
+    let used: usize = text.iter().map(|s| s.width()).sum();
+    spans.extend(text);
+    if paint.is_some() && used < room {
+        spans.push(Span::styled(" ".repeat(room - used), base));
+    }
     spans
-}
-
-fn mix_fg(theme: Theme, colour: ratatui::style::Color) -> ratatui::style::Color {
-    theme.tint(colour, LINE_PCT)
 }
 
 /// The text with its changed words emphasised, tabs made visible, trailing spaces marked, cut to `room`.
@@ -352,7 +370,8 @@ mod tests {
         let context = spans_text(&line_spans(&hunk.lines[0], false, 60, Theme::default()));
         assert_eq!(context, "   1    1  →   keep");
         let added = spans_text(&line_spans(&hunk.lines[2], false, 60, Theme::default()));
-        assert_eq!(added, "        2 +→   new··", "trailing spaces are marked on changed lines");
+        assert_eq!(added.trim_end(), "        2 +→   new··", "trailing spaces are marked on changed lines");
+        assert_eq!(added.width(), 60, "a changed line is filled edge to edge");
     }
 
     #[test]

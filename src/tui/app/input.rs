@@ -61,12 +61,12 @@ impl App {
 
     fn change_draft(&mut self, open: &Open, index: usize, text: String) -> Vec<Action> {
         let Some(draft) = open.review.drafts.get(index) else { return vec![] };
-        let changed = draft.clone().with_body(text.clone());
+        let changed = draft.clone().with_body(text);
         let mut drafts = open.review.drafts.clone();
-        drafts[index] = changed;
+        drafts[index] = changed.clone();
         self.open = Some(open.with_review(open.review.with_drafts(drafts)));
         match draft.id {
-            Some(id) => vec![Action::UpdateDraft { key: open.key, id, body: text }],
+            Some(id) => vec![Action::UpdateDraft { key: open.key, id, draft: Box::new(changed) }],
             None => vec![],
         }
     }

@@ -154,7 +154,7 @@ The `mr comment` subcommand may post directly, since a script means it.
 GET    /projects/:pid/merge_requests/:iid/draft_notes                     → []  (verified)
 POST   /projects/:pid/merge_requests/:iid/draft_notes
          note=…  [in_reply_to_discussion_id=…]  [position[…]]  [resolve_discussion=true]
-PUT    /projects/:pid/merge_requests/:iid/draft_notes/:id                 note=…
+PUT    /projects/:pid/merge_requests/:iid/draft_notes/:id                 note=… position[…]   resend the position: a PUT with the note alone drops it and the draft turns into an MR-level comment (verified 2026-09-22)
 DELETE /projects/:pid/merge_requests/:iid/draft_notes/:id
 PUT    /projects/:pid/merge_requests/:iid/draft_notes/:id/publish         one
 POST   /projects/:pid/merge_requests/:iid/draft_notes/bulk_publish        all

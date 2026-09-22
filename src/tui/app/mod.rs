@@ -54,10 +54,11 @@ pub enum Action {
         index: usize,
         draft: Box<Draft>,
     },
+    /// The changed draft in full, position included, so GitLab keeps it on its line.
     UpdateDraft {
         key: MrKey,
         id: u64,
-        body: String,
+        draft: Box<Draft>,
     },
     DeleteDraft {
         key: MrKey,

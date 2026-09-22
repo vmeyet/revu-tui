@@ -20,7 +20,7 @@ pub const HELP: [(&str, &str); 32] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
-    ("h l", "focus the pane to the left, right"),
+    ("h l", "pane to the left; open the MR, pane to the right"),
     ("enter", "open the MR, the thread, or toggle the fold"),
     ("esc", "back: close the thread, then the queue"),
     ("/", "filter the queue"),

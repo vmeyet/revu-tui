@@ -47,7 +47,7 @@ mr
 | Key | Action |
 |---|---|
 | `j` `k` / arrows, `g` `G`, `ctrl-d` `ctrl-u` | Move |
-| `h` `l` | Focus the pane to the left, right |
+| `h` `l` | Pane to the left; open the selected MR, pane to the right |
 | `enter` | Open the MR, open the thread, or toggle the fold under the cursor |
 | `esc` | Back: close the thread, then the queue |
 | `/` | Filter the queue by title, author or iid |

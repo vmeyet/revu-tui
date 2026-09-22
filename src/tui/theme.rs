@@ -29,6 +29,16 @@ pub struct Theme {
     pub danger: Color,
     /// Author names, picked by a hash of the name.
     pub users: [Color; 6],
+    /// Text of an added or removed line: the terminal's own foreground where a fill carries the
+    /// meaning (as on GitHub), plain green and red where the ground is unknown.
+    pub added: Color,
+    pub removed: Color,
+    /// Fill under a changed line, and the stronger one under its changed words.
+    /// None where the ground is unknown: a fill guessed wrong paints text into invisibility.
+    pub added_fill: Option<Color>,
+    pub removed_fill: Option<Color>,
+    pub added_word: Option<Color>,
+    pub removed_word: Option<Color>,
 }
 
 const fn rgb(hex: u32) -> Color {
@@ -46,6 +56,8 @@ const fn mix(from: u32, to: u32, pct: u32) -> Color {
 }
 
 const SURFACE_PCT: u32 = 3;
+const FILL_PCT: u32 = 10;
+const WORD_PCT: u32 = 25;
 
 impl Default for Theme {
     fn default() -> Self {
@@ -74,18 +86,6 @@ impl Theme {
         }
     }
 
-    /// The ground nudged `pct` percent toward `to`, for the surface under a changed line.
-    /// Falls back to `surface` when the base is not an RGB colour, so nothing paints black.
-    pub fn tint(&self, to: Color, pct: u32) -> Color {
-        match (self.base, to) {
-            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
-                let channel = |a: u8, b: u8| ((u32::from(a) * (100 - pct) + u32::from(b) * pct) / 100) as u8;
-                Color::Rgb(channel(r1, r2), channel(g1, g2), channel(b1, b2))
-            }
-            _ => self.surface,
-        }
-    }
-
     pub fn user(&self, name: &str) -> Color {
         let idx = name.trim().bytes().fold(7usize, |h, b| h.wrapping_mul(33).wrapping_add(b as usize)) % self.users.len();
         self.users[idx]
@@ -109,6 +109,12 @@ const DEFAULT: Theme = Theme {
     warn: Color::Yellow,
     danger: Color::Red,
     users: [Color::Cyan, Color::Green, Color::Yellow, Color::Magenta, Color::Blue, Color::LightRed],
+    added: Color::Green,
+    removed: Color::Red,
+    added_fill: None,
+    removed_fill: None,
+    added_word: None,
+    removed_word: None,
 };
 
 const DRACULA: Theme = Theme {
@@ -127,6 +133,12 @@ const DRACULA: Theme = Theme {
     warn: rgb(0xffb86c),
     danger: rgb(0xff5555),
     users: [rgb(0x8be9fd), rgb(0x50fa7b), rgb(0xf1fa8c), rgb(0xff79c6), rgb(0xbd93f9), rgb(0xffb86c)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0x282a36, 0x50fa7b, FILL_PCT)),
+    removed_fill: Some(mix(0x282a36, 0xff5555, FILL_PCT)),
+    added_word: Some(mix(0x282a36, 0x50fa7b, WORD_PCT)),
+    removed_word: Some(mix(0x282a36, 0xff5555, WORD_PCT)),
 };
 
 const CATPPUCCIN: Theme = Theme {
@@ -145,6 +157,12 @@ const CATPPUCCIN: Theme = Theme {
     warn: rgb(0xfab387),
     danger: rgb(0xf38ba8),
     users: [rgb(0x89dceb), rgb(0xa6e3a1), rgb(0xf9e2af), rgb(0xf5c2e7), rgb(0x89b4fa), rgb(0xf38ba8)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0x1e1e2e, 0xa6e3a1, FILL_PCT)),
+    removed_fill: Some(mix(0x1e1e2e, 0xf38ba8, FILL_PCT)),
+    added_word: Some(mix(0x1e1e2e, 0xa6e3a1, WORD_PCT)),
+    removed_word: Some(mix(0x1e1e2e, 0xf38ba8, WORD_PCT)),
 };
 
 const CATPPUCCIN_LATTE: Theme = Theme {
@@ -163,6 +181,12 @@ const CATPPUCCIN_LATTE: Theme = Theme {
     warn: rgb(0xfe640b),
     danger: rgb(0xd20f39),
     users: [rgb(0x04a5e5), rgb(0x40a02b), rgb(0xdf8e1d), rgb(0xea76cb), rgb(0x1e66f5), rgb(0xd20f39)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0xeff1f5, 0x40a02b, FILL_PCT)),
+    removed_fill: Some(mix(0xeff1f5, 0xd20f39, FILL_PCT)),
+    added_word: Some(mix(0xeff1f5, 0x40a02b, WORD_PCT)),
+    removed_word: Some(mix(0xeff1f5, 0xd20f39, WORD_PCT)),
 };
 
 const ROSEPINE: Theme = Theme {
@@ -181,6 +205,12 @@ const ROSEPINE: Theme = Theme {
     warn: rgb(0xf6c177),
     danger: rgb(0xeb6f92),
     users: [rgb(0x9ccfd8), rgb(0x31748f), rgb(0xf6c177), rgb(0xeb6f92), rgb(0xc4a7e7), rgb(0xebbcba)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0x191724, 0x31748f, FILL_PCT)),
+    removed_fill: Some(mix(0x191724, 0xeb6f92, FILL_PCT)),
+    added_word: Some(mix(0x191724, 0x31748f, WORD_PCT)),
+    removed_word: Some(mix(0x191724, 0xeb6f92, WORD_PCT)),
 };
 
 const ROSEPINE_DAWN: Theme = Theme {
@@ -199,6 +229,12 @@ const ROSEPINE_DAWN: Theme = Theme {
     warn: rgb(0xea9d34),
     danger: rgb(0xb4637a),
     users: [rgb(0x56949f), rgb(0x286983), rgb(0xea9d34), rgb(0xb4637a), rgb(0x907aa9), rgb(0xd7827e)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0xfaf4ed, 0x286983, FILL_PCT)),
+    removed_fill: Some(mix(0xfaf4ed, 0xb4637a, FILL_PCT)),
+    added_word: Some(mix(0xfaf4ed, 0x286983, WORD_PCT)),
+    removed_word: Some(mix(0xfaf4ed, 0xb4637a, WORD_PCT)),
 };
 
 const NORD: Theme = Theme {
@@ -217,6 +253,12 @@ const NORD: Theme = Theme {
     warn: rgb(0xd08770),
     danger: rgb(0xbf616a),
     users: [rgb(0x88c0d0), rgb(0xa3be8c), rgb(0xebcb8b), rgb(0xb48ead), rgb(0x81a1c1), rgb(0xbf616a)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0x2e3440, 0xa3be8c, FILL_PCT)),
+    removed_fill: Some(mix(0x2e3440, 0xbf616a, FILL_PCT)),
+    added_word: Some(mix(0x2e3440, 0xa3be8c, WORD_PCT)),
+    removed_word: Some(mix(0x2e3440, 0xbf616a, WORD_PCT)),
 };
 
 const TOKYONIGHT: Theme = Theme {
@@ -235,6 +277,12 @@ const TOKYONIGHT: Theme = Theme {
     warn: rgb(0xff9e64),
     danger: rgb(0xf7768e),
     users: [rgb(0x7dcfff), rgb(0x9ece6a), rgb(0xe0af68), rgb(0xbb9af7), rgb(0x7aa2f7), rgb(0xf7768e)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0x1a1b26, 0x9ece6a, FILL_PCT)),
+    removed_fill: Some(mix(0x1a1b26, 0xf7768e, FILL_PCT)),
+    added_word: Some(mix(0x1a1b26, 0x9ece6a, WORD_PCT)),
+    removed_word: Some(mix(0x1a1b26, 0xf7768e, WORD_PCT)),
 };
 
 const MONOKAI: Theme = Theme {
@@ -253,6 +301,12 @@ const MONOKAI: Theme = Theme {
     warn: rgb(0xfd971f),
     danger: rgb(0xf92672),
     users: [rgb(0x66d9ef), rgb(0xa6e22e), rgb(0xe6db74), rgb(0xf92672), rgb(0xae81ff), rgb(0xfd971f)],
+    added: Color::Reset,
+    removed: Color::Reset,
+    added_fill: Some(mix(0x272822, 0xa6e22e, FILL_PCT)),
+    removed_fill: Some(mix(0x272822, 0xf92672, FILL_PCT)),
+    added_word: Some(mix(0x272822, 0xa6e22e, WORD_PCT)),
+    removed_word: Some(mix(0x272822, 0xf92672, WORD_PCT)),
 };
 
 #[cfg(test)]
@@ -284,12 +338,18 @@ mod tests {
     }
 
     #[test]
-    fn tint_walks_from_the_base_and_survives_a_non_rgb_base() {
-        let theme = Theme::named("dracula").unwrap();
-        assert_eq!(theme.tint(theme.base, 50), theme.base);
-        assert_ne!(theme.tint(theme.success, 8), theme.base);
-        let plain = Theme::default();
-        assert_eq!(plain.tint(plain.success, 8), plain.surface, "the default theme does not know its ground");
+    fn rgb_themes_fill_changed_lines_and_the_default_theme_colours_the_text() {
+        for name in Theme::NAMES {
+            let theme = Theme::named(name).unwrap();
+            let knows_its_ground = matches!(theme.base, Color::Rgb(..));
+            assert_eq!(theme.added_fill.is_some(), knows_its_ground, "{name}");
+            assert_eq!(theme.removed_word.is_some(), knows_its_ground, "{name}");
+            assert_eq!(theme.added == Color::Reset, knows_its_ground, "{name}");
+        }
+        let dracula = Theme::named("dracula").unwrap();
+        assert_ne!(dracula.added_fill, dracula.removed_fill);
+        assert_ne!(dracula.added_fill, Some(dracula.base));
+        assert_eq!((Theme::default().added, Theme::default().removed), (Color::Green, Color::Red));
     }
 
     #[test]

@@ -61,8 +61,9 @@ impl Client {
         self.post_json(&format!("{}/draft_notes", mr_path(project_id, iid)), &serde_json::to_value(draft)?).await
     }
 
-    pub async fn update_draft(&self, project_id: u64, iid: u64, id: u64, note: &str) -> Result<DraftNote> {
-        self.put_json(&format!("{}/draft_notes/{id}", mr_path(project_id, iid)), &json!({"note": note})).await
+    /// The whole draft goes again: GitLab drops the position of a draft updated with its text alone.
+    pub async fn update_draft(&self, project_id: u64, iid: u64, id: u64, draft: &NewDraft) -> Result<DraftNote> {
+        self.put_json(&format!("{}/draft_notes/{id}", mr_path(project_id, iid)), &serde_json::to_value(draft)?).await
     }
 
     pub async fn delete_draft(&self, project_id: u64, iid: u64, id: u64) -> Result<()> {
@@ -233,7 +234,7 @@ mod tests {
             .await;
         Mock::given(method("PUT"))
             .and(path(format!("{base}/2")))
-            .and(body_partial_json(json!({"note": "nit: renamed"})))
+            .and(body_partial_json(json!({"note": "nit: renamed", "position": {"new_line": 13, "head_sha": "b"}})))
             .respond_with(ResponseTemplate::new(200).set_body_json(draft_json(2)))
             .mount(&server)
             .await;
@@ -245,7 +246,8 @@ mod tests {
         let draft = NewDraft { note: "nit".into(), position: Some(Position::line(&refs, "x", "x", None, Some(13))), ..NewDraft::default() };
         assert_eq!(client.draft_notes(7, 42).await.unwrap()[0].id, 1);
         assert_eq!(client.create_draft(7, 42, &draft).await.unwrap().id, 2);
-        assert_eq!(client.update_draft(7, 42, 2, "nit: renamed").await.unwrap().id, 2);
+        let renamed = NewDraft { note: "nit: renamed".into(), ..draft.clone() };
+        assert_eq!(client.update_draft(7, 42, 2, &renamed).await.unwrap().id, 2);
         client.delete_draft(7, 42, 2).await.unwrap();
         client.publish_draft(7, 42, 1).await.unwrap();
         client.publish_drafts(7, 42).await.unwrap();

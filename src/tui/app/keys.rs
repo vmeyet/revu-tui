@@ -30,7 +30,7 @@ impl App {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('?') => self.help = true,
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
-            KeyCode::Char('l') | KeyCode::Right => self.focus_right(),
+            KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z') | KeyCode::Char('[') | KeyCode::Char(']') if self.focus != Focus::Side => self.pending = key.code.as_char(),
             _ => {
                 return match self.focus {
@@ -50,13 +50,15 @@ impl App {
         };
     }
 
-    fn focus_right(&mut self) {
+    /// From the queue, right opens the selected MR, as `enter` does, so the diff always matches the row.
+    fn focus_right(&mut self) -> Vec<Action> {
         self.focus = match (self.focus, &self.open) {
-            (Focus::Queue, Some(_)) => Focus::Review,
+            (Focus::Queue, _) => return self.open_selected(),
             (Focus::Review, Some(open)) if open.thread.is_some() => Focus::Side,
             (Focus::Side, _) => Focus::Side,
             (focus, _) => focus,
         };
+        vec![]
     }
 
     fn handle_filter_key(&mut self, key: KeyEvent) -> Vec<Action> {

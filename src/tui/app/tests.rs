@@ -7,6 +7,7 @@ use crate::tui::ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::style::Color;
 use serde_json::json;
 use std::time::Duration;
 
@@ -567,7 +568,8 @@ fn enter_edits_a_draft_and_d_deletes_it() {
     app.handle_key(code(KeyCode::Enter));
     assert_eq!((app.input_label(), app.buffer.text()), ("edit draft".to_owned(), "nit"));
     let actions = type_text(&mut app, " (typo)");
-    assert_eq!(actions, vec![Action::UpdateDraft { key: KEY, id: 9, body: "nit (typo)".into() }]);
+    let [Action::UpdateDraft { key: KEY, id: 9, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((draft.body.as_str(), draft.position.is_some()), ("nit (typo)", true), "the position travels with the edit");
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit (typo)");
     assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: KEY, id: 9 }]);
     assert!(draft_rows(&app).is_empty());
@@ -713,4 +715,51 @@ fn snapshot_thread_with_a_draft_reply() {
     type_text(&mut app, "agreed, keys are per card");
     app.apply(Incoming::DraftSaved { key: KEY, index: 0, id: 9 });
     insta::assert_snapshot!("thread_draft_reply", render(&mut app, 120, 24));
+}
+
+#[test]
+fn right_from_the_queue_opens_the_selected_mr_like_enter() {
+    let mut app = with_queue();
+    assert_eq!(press(&mut app, "l"), vec![Action::Open(KEY)]);
+    assert_eq!(app.focus, Focus::Review);
+    app.apply(Incoming::Review { key: KEY, review: Box::new(review()), cached: None });
+    press(&mut app, "hj");
+    let next = super::queue::key_of(app.selected_mr().unwrap());
+    assert_ne!(next, KEY);
+    assert_eq!(press(&mut app, "l"), vec![Action::Open(next)], "the diff must follow the queue row, never show the previous MR");
+    assert_eq!(app.focus, Focus::Review);
+}
+
+fn cells(app: &mut App, width: u16, height: u16) -> ratatui::buffer::Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal.draw(|f| ui::draw(f, app)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// The cell holding the first character of the removed text, and the last cell of that row
+/// inside the pane (the column before the border is the pane's own padding).
+fn removed_line_cells(app: &mut App) -> (ratatui::buffer::Cell, ratatui::buffer::Cell) {
+    let buffer = cells(app, 120, 30);
+    let text = "let client = Client::new();";
+    let (x, y) = (0..30)
+        .find_map(|y| {
+            let row: String = (0..120).map(|x| buffer[(x, y)].symbol().to_owned()).collect();
+            row.find(text).map(|i| (i as u16, y))
+        })
+        .expect("the removed line is on screen");
+    let border = (x..120).find(|&x| buffer[(x, y)].symbol() == "│").expect("a pane border closes the row");
+    (buffer[(x, y)].clone(), buffer[(border - 2, y)].clone())
+}
+
+#[test]
+fn removed_lines_read_on_every_theme_and_fill_the_row_where_the_theme_knows_its_ground() {
+    let mut app = with_review();
+    press(&mut app, "]cj");
+    let (text, edge) = removed_line_cells(&mut app);
+    assert_eq!((text.fg, text.bg), (Color::Red, Color::Reset), "the default theme paints the text, never a fill it cannot see");
+    assert_eq!(edge.bg, Color::Reset);
+    app.theme = Theme::named("tokyonight").unwrap();
+    let (text, edge) = removed_line_cells(&mut app);
+    assert_eq!((text.fg, text.bg), (Color::Reset, app.theme.removed_fill.unwrap()), "the terminal's own text on the theme's fill");
+    assert_eq!(edge.bg, app.theme.removed_fill.unwrap(), "the fill reaches the edge of the pane");
 }

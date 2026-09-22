@@ -146,8 +146,8 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::SaveDraft { key, index, draft } => {
                 send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, e)))
             }
-            Action::UpdateDraft { key, id, body } => {
-                if let Err(e) = backend.gitlab.update_draft(key.0, key.1, id, &body).await {
+            Action::UpdateDraft { key, id, draft } => {
+                if let Err(e) = backend.gitlab.update_draft(key.0, key.1, id, &new_draft(&draft)).await {
                     send(failed(Failure::Local, e));
                 }
             }
