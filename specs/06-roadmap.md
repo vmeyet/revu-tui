@@ -18,7 +18,9 @@ TDD order inside each milestone is given; write the failing test first.
 - Keychain store, config, API client with `GET /user`, theme, event loop.
 - Acceptance: `cargo test` green; `mr whoami` prints the username with a token in the keychain or `GITLAB_TOKEN`.
 
-## M1 · Read-only review
+## M1 · Read-only review (done 2026-09-22)
+
+Known gaps carried to M3: the header does not fold, `zo`/`zc` in the queue always target the Done section, the default theme has no added/removed tint (RGB themes do).
 
 Spec: `01`, `02` (queue, MR, diffs, discussions), `03` (layout, diff pane, folds, navigation).
 
