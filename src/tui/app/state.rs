@@ -1,5 +1,6 @@
-use super::{Action, Focus, MrKey, Open, Toast};
+use super::{Action, Focus, Input, MrKey, Open, Publish, Toast};
 use crate::api::Sections;
+use crate::tui::field::Field;
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -49,6 +50,12 @@ pub struct App {
     pub opening: Option<MrKey>,
     /// First half of `z`, `[` or `]`.
     pub pending: Option<char>,
+    /// The input row is open for this; `buffer` holds what is typed.
+    pub input: Option<Input>,
+    pub buffer: Field,
+    pub publish: Option<Publish>,
+    /// What the editor's text turned into; the loop drains it after `apply`.
+    pub composed: Vec<Action>,
     pub help: bool,
     pub toast: Option<Toast>,
     /// Since when refreshes fail while a cached view is shown.
@@ -81,6 +88,10 @@ impl App {
             open: None,
             opening: None,
             pending: None,
+            input: None,
+            buffer: Field::default(),
+            publish: None,
+            composed: vec![],
             help: false,
             toast: None,
             offline: None,

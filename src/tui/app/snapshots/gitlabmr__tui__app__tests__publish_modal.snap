@@ -1,0 +1,28 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 120, 24)"
+---
+╭ Queue ─────────────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
+│   TO REVIEW                  1 ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success                    │
+│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 unresolved                                       │
+│   MINE                       1 ││                                                                                    │
+│   !41 fix: flaky cache test  D ││                                                                                    │
+│   WATCHING                   1 ││  ▾ src/pay/charge.rs                                                     +4 −2  ◆2 │
+│   !35 infra: new runner   ╭ Publish review ──────────────────────────────────────────────╮                           │
+│   DONE ▸                  │                                                              │ey) -> Result<Receipt> {   │
+│                           │ 2 drafts on 1 file                                           │                           │
+│                           │                                                              │                           │
+│                           │  charge.rs:12          nit                                   │                           │
+│                           │ ▎charge.rs:-13         second one, a bit longer so the mod…  │t with an ellip… · unsaved │
+│                           │                                                              │y_key(card));              │
+│                           │ [x] approve  a to toggle                                     │                           │
+│                           │                                                              │it?;                       │
+│                           │  enter publish · d delete · esc back                         │                           │
+│                           ╰──────────────────────────────────────────────────────────────╯                           │
+│                                ││    40   41  fn idempotency_key(card: &Card) -> Key {                               │
+│                                ││    41      -    Key::from(card.number())                                           │
+│                                ││         42 +    Key::from((card.number(), card.expiry()))                          │
+│                                ││         43 +    // hunk two, line 43 is new                                        │
+│                                ││    42   44  }                                                                      │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved · 2 drafts (1 unsaved) · P to publish                                          ? help

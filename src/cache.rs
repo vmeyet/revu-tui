@@ -130,6 +130,10 @@ pub mod keys {
         format!("mr/{project_id}/{iid}/discussions.json")
     }
 
+    pub fn drafts(project_id: u64, iid: u64) -> String {
+        format!("mr/{project_id}/{iid}/drafts.json")
+    }
+
     pub fn state(project_id: u64, iid: u64) -> String {
         format!("mr/{project_id}/{iid}/state.json")
     }

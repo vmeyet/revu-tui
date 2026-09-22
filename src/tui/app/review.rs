@@ -15,18 +15,35 @@ pub struct Open {
     pub thread_scroll: usize,
     /// How old the painted data was when it came from the cache, and when that was.
     pub cached: Option<(Instant, Duration)>,
+    /// Where `V` started; the selection runs from there to the cursor.
+    pub select_from: Option<usize>,
 }
 
 impl Open {
     pub fn new(key: MrKey, review: Review) -> Self {
         let rows = review.rows();
         let selected = first_selectable(&rows);
-        Self { key, review, rows, selected, scroll: 0, thread: None, thread_scroll: 0, cached: None }
+        Self { key, review, rows, selected, scroll: 0, thread: None, thread_scroll: 0, cached: None, select_from: None }
     }
 
+    /// The rows the selection covers, the cursor included; just the cursor without `V`.
+    pub fn selection(&self) -> std::ops::RangeInclusive<usize> {
+        let from = self.select_from.unwrap_or(self.selected);
+        from.min(self.selected)..=from.max(self.selected)
+    }
+
+    pub fn is_selected(&self, index: usize) -> bool {
+        self.select_from.is_some() && self.selection().contains(&index)
+    }
+
+    /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
     pub fn with_review(&self, review: Review) -> Self {
         let rows = review.rows();
-        let selected = self.selected.min(rows.len().saturating_sub(1));
+        let selected = self
+            .row()
+            .and_then(|row| rows.iter().position(|r| same_place(r, row)))
+            .unwrap_or(self.selected)
+            .min(rows.len().saturating_sub(1));
         let thread = self.thread.clone().filter(|id| review.thread(id).is_some());
         Self { review, rows, selected, thread, ..self.clone() }
     }
@@ -219,6 +236,10 @@ impl App {
                 vec![]
             }
             Some(Row::File { .. } | Row::Hunk { .. }) => self.fold_at_cursor(None),
+            Some(Row::Draft { .. }) => {
+                self.edit_draft_here();
+                vec![]
+            }
             _ => vec![],
         }
     }

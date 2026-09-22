@@ -21,7 +21,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let block = pane(theme, &pane_title(thread), focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
-    let lines = thread_lines(thread, theme, today, &me);
+    let mut lines = thread_lines(thread, theme, today, &me);
+    for draft in open.review.drafts.iter().filter(|d| d.reply_to.as_deref() == Some(thread.id.as_str())) {
+        lines.extend(draft_lines(draft, theme));
+    }
     let scroll = open.thread_scroll.min(lines.len().saturating_sub(1)) as u16;
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((scroll, 0)), inner);
 }
@@ -59,6 +62,17 @@ fn thread_lines<'a>(thread: &Thread, theme: Theme, today: DateTime<Utc>, me: &st
         lines.extend(note_lines(note, theme, today, me));
         lines.push(Line::default());
     }
+    lines
+}
+
+fn draft_lines<'a>(draft: &crate::review::Draft, theme: Theme) -> Vec<Line<'a>> {
+    let state = if draft.id.is_none() { "unsaved" } else { "draft" };
+    let mut lines = vec![Line::from(vec![
+        Span::styled("◇ you", Style::default().fg(theme.warn).add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" · {state}"), Style::default().fg(theme.muted)),
+    ])];
+    lines.extend(body_lines(&draft.body, theme));
+    lines.push(Line::default());
     lines
 }
 

@@ -50,7 +50,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         .enumerate()
         .skip(open.scroll)
         .take(height)
-        .map(|(i, row)| row_line(&open.review, row, i == open.selected, width, theme, today, &me))
+        .map(|(i, row)| row_line(&open.review, row, i == open.selected, open.is_selected(i), width, theme, today, &me))
         .collect();
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
@@ -129,8 +129,18 @@ fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::
     }
 }
 
-fn row_line<'a>(review: &Review, row: &Row, selected: bool, width: usize, theme: Theme, today: DateTime<Utc>, me: &str) -> Line<'a> {
-    let bar = Span::styled(if selected { "▎" } else { " " }, Style::default().fg(theme.accent));
+#[allow(clippy::too_many_arguments)]
+fn row_line<'a>(
+    review: &Review,
+    row: &Row,
+    selected: bool,
+    in_range: bool,
+    width: usize,
+    theme: Theme,
+    today: DateTime<Utc>,
+    me: &str,
+) -> Line<'a> {
+    let bar = Span::styled(if selected || in_range { "▎" } else { " " }, Style::default().fg(theme.accent));
     let mut spans = vec![bar];
     let body = width.saturating_sub(1);
     match row {
@@ -139,17 +149,14 @@ fn row_line<'a>(review: &Review, row: &Row, selected: bool, width: usize, theme:
         Row::Hunk { file, index, open } => spans.extend(hunk_spans(&review.files[*file], *index, *open, body, theme)),
         Row::Line { file, hunk, index } => {
             let line = &review.files[*file].hunks[*hunk].lines[*index];
-            spans.extend(line_spans(line, selected, body, theme));
+            spans.extend(line_spans(line, selected || in_range, body, theme));
         }
         Row::Thread { id } => {
             if let Some(thread) = review.thread(id) {
                 spans.extend(thread_spans(thread, body, theme, today, me));
             }
         }
-        Row::Draft { index } => {
-            let first = review.drafts[*index].body.lines().next().unwrap_or_default();
-            spans.push(Span::styled(format!("{INDENT}◇ you · {first}"), Style::default().fg(theme.warn)));
-        }
+        Row::Draft { index } => spans.extend(draft_spans(&review.drafts[*index], body, theme)),
         Row::Outdated { file } => {
             let count = review.outdated(&review.files[*file].new_path).len();
             spans.push(Span::styled(format!("{INDENT}outdated · {count} thread{}", plural(count)), Style::default().fg(theme.faded)));
@@ -311,6 +318,18 @@ fn thread_spans<'a>(thread: &Thread, width: usize, theme: Theme, today: DateTime
         Span::styled(format!("{author} · "), Style::default().fg(if thread.resolved { theme.faded } else { theme.user(&author) })),
         Span::styled(body, text),
         Span::styled(tail, Style::default().fg(theme.faded)),
+    ]
+}
+
+fn draft_spans<'a>(draft: &crate::review::Draft, width: usize, theme: Theme) -> Vec<Span<'a>> {
+    let head = format!("{INDENT}◇ you · ");
+    let tail = if draft.id.is_none() { " · unsaved" } else { " · draft" };
+    let room = width.saturating_sub(head.width() + tail.width());
+    let first = truncate(draft.body.lines().next().unwrap_or_default(), room);
+    vec![
+        Span::styled(head, Style::default().fg(theme.warn)),
+        Span::raw(first),
+        Span::styled(tail, Style::default().fg(if draft.id.is_none() { theme.danger } else { theme.faded })),
     ]
 }
 
