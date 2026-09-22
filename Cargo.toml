@@ -1,0 +1,37 @@
+[package]
+name = "gitlabmr"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "GitLab merge request review in your terminal: a TUI plus scriptable commands."
+license = "MIT"
+readme = "README.md"
+
+[[bin]]
+name = "mr"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive", "env"] }
+clap_complete = "4.5"
+crossterm = { version = "0.29", features = ["event-stream"] }
+dirs = "7.0"
+futures-util = "0.3"
+ratatui = "0.30"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "fs", "sync", "io-util"] }
+toml = "1.1"
+url = "2.5"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+wiremock = "0.6"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
