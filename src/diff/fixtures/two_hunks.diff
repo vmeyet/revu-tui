@@ -1,0 +1,9 @@
+@@ -10,3 +10,3 @@ impl Foo
+ x
+-let client = Client::new();
++let client = Client::with_key(key);
+ y
+@@ -40,2 +40,3 @@
+ z
++more
+ w

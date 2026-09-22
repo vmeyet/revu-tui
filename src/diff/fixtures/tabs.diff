@@ -1,0 +1,6 @@
+@@ -3,4 +3,5 @@ fn tabs()
+ 	let a = 1;
+-	let b = 2;
++	let b = 3;
++	let c = 4;
+ 	let d = 5;

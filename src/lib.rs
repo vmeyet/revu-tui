@@ -4,5 +4,6 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod ctx;
+pub mod diff;
 pub mod tui;
 pub mod version;
