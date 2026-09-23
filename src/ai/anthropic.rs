@@ -25,6 +25,7 @@ pub struct Block {
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     User,
+    Assistant,
 }
 
 /// One turn of the conversation.
@@ -60,7 +61,7 @@ pub enum Stop {
 }
 
 /// Tokens of one call, the cache reads included, so the pane can show what caching saved.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Usage {
     pub input: u64,
     pub output: u64,
@@ -105,7 +106,12 @@ impl Claude {
         Self::with_base(API_URL, key, model)
     }
 
-    fn with_base(base: &str, key: Secret, model: &str) -> Self {
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
+    /// Pointed at another server: a mock in tests.
+    pub(crate) fn with_base(base: &str, key: Secret, model: &str) -> Self {
         let http = reqwest::Client::builder().connect_timeout(CONNECT_TIMEOUT).build().unwrap_or_default();
         Self { http, base: base.trim_end_matches('/').to_owned(), key, model: model.to_owned() }
     }

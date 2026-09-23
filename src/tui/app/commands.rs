@@ -68,6 +68,11 @@ impl App {
             Command::All => self.toggle_scope(),
             Command::Set { key, value } => self.set(&key, &value),
             Command::View(argument) => self.view_command(&argument),
+            Command::AiOff => {
+                self.ai_off();
+                vec![]
+            }
+            Command::Ask(question) => self.ask_free(question),
             Command::Help => {
                 self.help = Some(0);
                 vec![]

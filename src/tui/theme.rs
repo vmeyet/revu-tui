@@ -469,6 +469,7 @@ mod tests {
             ("ui.rs", include_str!("ui.rs")),
             ("diff_view.rs", include_str!("diff_view.rs")),
             ("thread_view.rs", include_str!("thread_view.rs")),
+            ("answer_view.rs", include_str!("answer_view.rs")),
             ("publish_view.rs", include_str!("publish_view.rs")),
             ("brief_view.rs", include_str!("brief_view.rs")),
             ("app/brief.rs", include_str!("app/brief.rs")),
