@@ -11,6 +11,7 @@ mod legacy;
 mod mrref;
 mod render;
 mod review;
+mod syntax;
 pub mod tui;
 mod update;
 mod version;

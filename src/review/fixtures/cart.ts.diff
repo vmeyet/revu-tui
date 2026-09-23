@@ -1,0 +1,8 @@
+@@ -10,6 +10,7 @@ export class Cart {
+   total(items: Item[]): number {
+-    const sum = items.reduce((acc, item) => acc + item.price, 0); // cents
++    const sum = items.reduce((acc, item) => acc + item.price * item.quantity, 0); // cents
+     return sum;
++    const label = "total";
+   }
+ }

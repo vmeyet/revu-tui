@@ -1,6 +1,7 @@
 //! One palette for the whole TUI, so a terminal never mixes theme colors with hardcoded ones.
 //! Themes only set foregrounds and row surfaces; the terminal keeps painting its own background,
 //! so pick the theme that matches the terminal's.
+use crate::syntax::Token;
 use ratatui::style::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -40,6 +41,51 @@ pub struct Theme {
     pub removed_fill: Option<Color>,
     pub added_word: Option<Color>,
     pub removed_word: Option<Color>,
+    /// Code colours, from each palette's own upstream scheme; the diff keeps the fills underneath.
+    pub syntax: Syntax,
+}
+
+/// One colour per [`Token`]: what a keyword, a string or a comment looks like in this palette.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Syntax {
+    pub keyword: Color,
+    pub string: Color,
+    pub comment: Color,
+    pub number: Color,
+    pub kind: Color,
+    pub function: Color,
+    pub constant: Color,
+    pub punctuation: Color,
+}
+
+impl Syntax {
+    pub fn colour(&self, token: Token) -> Color {
+        match token {
+            Token::Keyword => self.keyword,
+            Token::String => self.string,
+            Token::Comment => self.comment,
+            Token::Number => self.number,
+            Token::Type => self.kind,
+            Token::Function => self.function,
+            Token::Constant => self.constant,
+            Token::Punctuation => self.punctuation,
+        }
+    }
+}
+
+/// A palette's code colours from hex values, in [`Syntax`] field order: keyword, string, comment,
+/// number, type, function, constant, then punctuation in the palette's muted tone.
+const fn code([keyword, string, comment, number, kind, function, constant, punctuation]: [u32; 8]) -> Syntax {
+    Syntax {
+        keyword: rgb(keyword),
+        string: rgb(string),
+        comment: rgb(comment),
+        number: rgb(number),
+        kind: rgb(kind),
+        function: rgb(function),
+        constant: rgb(constant),
+        punctuation: rgb(punctuation),
+    }
 }
 
 const fn rgb(hex: u32) -> Color {
@@ -140,6 +186,16 @@ const DEFAULT: Theme = Theme {
     removed_fill: None,
     added_word: None,
     removed_word: None,
+    syntax: Syntax {
+        keyword: Color::Magenta,
+        string: Color::Green,
+        comment: Color::Indexed(244),
+        number: Color::Yellow,
+        kind: Color::Cyan,
+        function: Color::Blue,
+        constant: Color::Yellow,
+        punctuation: Color::Indexed(246),
+    },
 };
 
 const DRACULA: Theme = Theme {
@@ -164,6 +220,7 @@ const DRACULA: Theme = Theme {
     removed_fill: Some(mix(0x282a36, 0xff5555, FILL_PCT)),
     added_word: Some(mix(0x282a36, 0x50fa7b, WORD_PCT)),
     removed_word: Some(mix(0x282a36, 0xff5555, WORD_PCT)),
+    syntax: code([0xff79c6, 0xf1fa8c, 0x6272a4, 0xbd93f9, 0x8be9fd, 0x50fa7b, 0xbd93f9, 0x9098bd]),
 };
 
 const CATPPUCCIN: Theme = Theme {
@@ -188,6 +245,7 @@ const CATPPUCCIN: Theme = Theme {
     removed_fill: Some(mix(0x1e1e2e, 0xf38ba8, FILL_PCT)),
     added_word: Some(mix(0x1e1e2e, 0xa6e3a1, WORD_PCT)),
     removed_word: Some(mix(0x1e1e2e, 0xf38ba8, WORD_PCT)),
+    syntax: code([0xcba6f7, 0xa6e3a1, 0x9399b2, 0xfab387, 0xf9e2af, 0x89b4fa, 0xfab387, 0x9399b2]),
 };
 
 const CATPPUCCIN_LATTE: Theme = Theme {
@@ -212,6 +270,7 @@ const CATPPUCCIN_LATTE: Theme = Theme {
     removed_fill: Some(mix(0xeff1f5, 0xd20f39, FILL_PCT)),
     added_word: Some(mix(0xeff1f5, 0x40a02b, WORD_PCT)),
     removed_word: Some(mix(0xeff1f5, 0xd20f39, WORD_PCT)),
+    syntax: code([0x8839ef, 0x40a02b, 0x7c7f93, 0xfe640b, 0xdf8e1d, 0x1e66f5, 0xfe640b, 0x7c7f93]),
 };
 
 const ROSEPINE: Theme = Theme {
@@ -236,6 +295,7 @@ const ROSEPINE: Theme = Theme {
     removed_fill: Some(mix(0x191724, 0xeb6f92, FILL_PCT)),
     added_word: Some(mix(0x191724, 0x31748f, WORD_PCT)),
     removed_word: Some(mix(0x191724, 0xeb6f92, WORD_PCT)),
+    syntax: code([0x31748f, 0xf6c177, 0x6e6a86, 0xc4a7e7, 0x9ccfd8, 0xebbcba, 0xc4a7e7, 0x908caa]),
 };
 
 const ROSEPINE_DAWN: Theme = Theme {
@@ -260,6 +320,7 @@ const ROSEPINE_DAWN: Theme = Theme {
     removed_fill: Some(mix(0xfaf4ed, 0xb4637a, FILL_PCT)),
     added_word: Some(mix(0xfaf4ed, 0x286983, WORD_PCT)),
     removed_word: Some(mix(0xfaf4ed, 0xb4637a, WORD_PCT)),
+    syntax: code([0x286983, 0xea9d34, 0x9893a5, 0x907aa9, 0x56949f, 0xd7827e, 0x907aa9, 0x797593]),
 };
 
 const NORD: Theme = Theme {
@@ -284,6 +345,7 @@ const NORD: Theme = Theme {
     removed_fill: Some(mix(0x2e3440, 0xbf616a, FILL_PCT)),
     added_word: Some(mix(0x2e3440, 0xa3be8c, WORD_PCT)),
     removed_word: Some(mix(0x2e3440, 0xbf616a, WORD_PCT)),
+    syntax: code([0x81a1c1, 0xa3be8c, 0x616e88, 0xb48ead, 0x8fbcbb, 0x88c0d0, 0xb48ead, 0x81a1c1]),
 };
 
 const TOKYONIGHT: Theme = Theme {
@@ -308,6 +370,7 @@ const TOKYONIGHT: Theme = Theme {
     removed_fill: Some(mix(0x1a1b26, 0xf7768e, FILL_PCT)),
     added_word: Some(mix(0x1a1b26, 0x9ece6a, WORD_PCT)),
     removed_word: Some(mix(0x1a1b26, 0xf7768e, WORD_PCT)),
+    syntax: code([0xbb9af7, 0x9ece6a, 0x565f89, 0xff9e64, 0x2ac3de, 0x7aa2f7, 0xff9e64, 0x89ddff]),
 };
 
 const MONOKAI: Theme = Theme {
@@ -332,6 +395,7 @@ const MONOKAI: Theme = Theme {
     removed_fill: Some(mix(0x272822, 0xf92672, FILL_PCT)),
     added_word: Some(mix(0x272822, 0xa6e22e, WORD_PCT)),
     removed_word: Some(mix(0x272822, 0xf92672, WORD_PCT)),
+    syntax: code([0xf92672, 0xe6db74, 0x75715e, 0xae81ff, 0x66d9ef, 0xa6e22e, 0xae81ff, 0xa59f85]),
 };
 
 #[cfg(test)]

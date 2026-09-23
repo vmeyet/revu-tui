@@ -6,12 +6,14 @@ use crate::diff::words::{Segment, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::Kind;
 use crate::review::{File, FileKind, Review, Row, Thread};
+use crate::syntax::Token;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
 const GUTTER_W: usize = 4;
@@ -158,11 +160,12 @@ fn row_line<'a>(
         Row::Hunk { file, index, open } => spans.extend(hunk_spans(&review.files[*file], *index, *open, body, theme)),
         Row::Line { file, hunk, index } => {
             let line = &review.files[*file].hunks[*hunk].lines[*index];
-            spans.extend(line_spans(line, selected || in_range, body, theme));
+            spans.extend(line_spans(line, review.files[*file].spans(*hunk, *index), selected || in_range, body, theme));
         }
         Row::Pair { file, hunk, removed, added } => {
             let lines = &review.files[*file].hunks[*hunk].lines;
-            spans.extend(pair_spans(&lines[*removed], &lines[*added], selected || in_range, body, theme));
+            let code = review.files[*file].spans(*hunk, *added);
+            spans.extend(pair_spans(&lines[*removed], &lines[*added], code, selected || in_range, body, theme));
         }
         Row::Thread { id } => {
             if let Some(thread) = review.thread(id) {
@@ -273,7 +276,7 @@ fn paint(kind: LineKind, theme: Theme) -> Option<Paint> {
 
 /// A changed line is filled edge to edge; without a fill, the text itself carries the colour
 /// and changed words go bold, so every theme reads on every terminal.
-fn line_spans<'a>(line: &DiffLine, selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
+fn line_spans<'a>(line: &DiffLine, code: &[(Range<usize>, Token)], selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
     let gutter_colour = if selected { theme.muted } else { theme.faded };
     let number = |n: Option<u32>| n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"));
     let paint = paint(line.kind, theme);
@@ -288,7 +291,7 @@ fn line_spans<'a>(line: &DiffLine, selected: bool, width: usize, theme: Theme) -
     });
     let mut spans = vec![Span::styled(format!("{} {} ", number(line.old), number(line.new)), base.fg(gutter_colour)), sign];
     let room = width.saturating_sub(GUTTER_W * 2 + 3);
-    let text = text_spans(line, room, base, word, theme);
+    let text = text_spans(line, code, room, base, word, theme);
     let used: usize = text.iter().map(Span::width).sum();
     spans.extend(text);
     if paint.is_some() && used < room {
@@ -297,25 +300,30 @@ fn line_spans<'a>(line: &DiffLine, selected: bool, width: usize, theme: Theme) -
     spans
 }
 
-/// The text with its changed words emphasised, tabs made visible, trailing spaces marked, cut to `room`.
-fn text_spans<'a>(line: &DiffLine, room: usize, base: Style, word: Option<Style>, theme: Theme) -> Vec<Span<'a>> {
+/// The text cut into pieces wherever a changed word or a syntax colour starts or stops: syntax
+/// sets the text colour, the diff keeps the fills; tabs made visible, trailing spaces marked, cut to `room`.
+fn text_spans<'a>(
+    line: &DiffLine,
+    code: &[(Range<usize>, Token)],
+    room: usize,
+    base: Style,
+    word: Option<Style>,
+    theme: Theme,
+) -> Vec<Span<'a>> {
     let changed = line.kind != LineKind::Context;
     let trimmed = line.text.trim_end_matches([' ', '\t']);
     let trailing = line.text.len() - trimmed.len();
+    let mut edges: Vec<usize> = line.words.iter().chain(code.iter().map(|(range, _)| range)).flat_map(|r| [r.start, r.end]).collect();
+    edges.extend([0, trimmed.len()]);
+    edges.retain(|&edge| edge <= trimmed.len() && trimmed.is_char_boundary(edge));
+    edges.sort_unstable();
+    edges.dedup();
     let mut parts: Vec<(&str, Style)> = vec![];
-    let mut cursor = 0;
-    for range in &line.words {
-        if range.start > cursor {
-            parts.push((&trimmed[cursor..range.start.min(trimmed.len())], base));
-        }
-        let end = range.end.min(trimmed.len());
-        if range.start < end {
-            parts.push((&trimmed[range.start..end], word.unwrap_or(base)));
-        }
-        cursor = end.max(cursor);
-    }
-    if cursor < trimmed.len() {
-        parts.push((&trimmed[cursor..], base));
+    for piece in edges.windows(2) {
+        let (from, to) = (piece[0], piece[1]);
+        let in_word = line.words.iter().any(|w| w.start <= from && from < w.end);
+        let style = if in_word { word.unwrap_or(base) } else { base };
+        parts.push((&trimmed[from..to], with_syntax(style, code, from, theme)));
     }
     let dots = "·".repeat(trailing);
     if changed && trailing > 0 {
@@ -324,27 +332,58 @@ fn text_spans<'a>(line: &DiffLine, room: usize, base: Style, word: Option<Style>
     fit(parts, room)
 }
 
-/// A removed line and its added twin on one row: the kept text plain, each old word struck
-/// through in the removed colours, then its replacement in the added colours.
-fn pair_spans<'a>(old: &DiffLine, new: &DiffLine, selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
+/// `style` with the syntax colour of the token covering byte `at`, if any.
+fn with_syntax(style: Style, code: &[(Range<usize>, Token)], at: usize, theme: Theme) -> Style {
+    code.iter().find(|(range, _)| range.start <= at && at < range.end).map_or(style, |(_, token)| style.fg(theme.syntax.colour(*token)))
+}
+
+/// A removed line and its added twin on one row: the kept text in its syntax colours, each old
+/// word struck through in the removed colours, then its replacement in the added colours.
+/// `code` is the added line's syntax, so offsets follow the new text: kept and new pieces advance it.
+fn pair_spans<'a>(
+    old: &DiffLine,
+    new: &DiffLine,
+    code: &[(Range<usize>, Token)],
+    selected: bool,
+    width: usize,
+    theme: Theme,
+) -> Vec<Span<'a>> {
     let gutter = Style::default().fg(if selected { theme.muted } else { theme.faded });
     let number = |n: Option<u32>| n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"));
     let with_fill = |style: Style, fill: Option<Color>| fill.map_or(style, |f| style.bg(f));
     let dropped = with_fill(Style::default().fg(theme.danger).add_modifier(Modifier::CROSSED_OUT), theme.removed_word);
     let added = with_fill(Style::default().fg(theme.success), theme.added_word);
     let parts = segments(&old.text, &new.text);
-    let styled: Vec<(&str, Style)> = parts
-        .iter()
-        .map(|part| match part {
-            Segment::Same(text) => (text.as_str(), Style::default()),
-            Segment::Old(text) => (text.as_str(), dropped),
-            Segment::New(text) => (text.as_str(), added),
-        })
-        .collect();
+    let mut styled: Vec<(&str, Style)> = vec![];
+    let mut at = 0;
+    for part in &parts {
+        match part {
+            Segment::Same(text) => {
+                styled.extend(coloured(text, at, code, theme));
+                at += text.len();
+            }
+            Segment::Old(text) => styled.push((text.as_str(), dropped)),
+            Segment::New(text) => {
+                styled.push((text.as_str(), added));
+                at += text.len();
+            }
+        }
+    }
     let mut spans =
         vec![Span::styled(format!("{} {} ", number(old.old), number(new.new)), gutter), Span::styled("~", Style::default().fg(theme.warn))];
     spans.extend(fit(styled, width.saturating_sub(GUTTER_W * 2 + 3)));
     spans
+}
+
+/// `text`, found at byte `at` of its line, cut wherever a syntax token starts or stops.
+fn coloured<'t>(text: &'t str, at: usize, code: &[(Range<usize>, Token)], theme: Theme) -> Vec<(&'t str, Style)> {
+    let end = at + text.len();
+    let mut edges: Vec<usize> = code.iter().flat_map(|(r, _)| [r.start, r.end]).filter(|&e| at < e && e < end).map(|e| e - at).collect();
+    edges.extend([0, text.len()]);
+    edges.retain(|&edge| text.is_char_boundary(edge));
+    edges.sort_unstable();
+    edges.dedup();
+    edges.windows(2).map(|w| (&text[w[0]..w[1]], with_syntax(Style::default(), code, at + w[0], theme))).collect()
 }
 
 /// Styled pieces laid end to end, tabs made visible, cut to `room` columns.
@@ -410,12 +449,85 @@ mod tests {
         spans.iter().map(|s| s.content.to_string()).collect()
     }
 
+    fn cart() -> crate::review::File {
+        crate::review::File::from_diff(&crate::forge::DiffFile {
+            diff: include_str!("../review/fixtures/cart.ts.diff").to_owned(),
+            old_path: "src/cart.ts".into(),
+            new_path: "src/cart.ts".into(),
+            ..crate::forge::DiffFile::default()
+        })
+    }
+
+    /// Each piece of a painted line as `fg/bg text`, so a snapshot shows the colours.
+    #[test]
+    fn an_inline_row_keeps_syntax_on_the_kept_text_and_diff_colours_on_the_words() {
+        let hunk = &diff::parse("@@ -1 +1 @@\n-const total = 1;\n+const total = 2;\n")[0];
+        let (old, new) = (&hunk.lines[0], &hunk.lines[1]);
+        let code = [(0..5, Token::Keyword), (14..15, Token::Number)];
+        let theme = Theme::named("tokyonight").unwrap();
+        let spans = pair_spans(old, new, &code, false, 80, theme);
+        let style_of = |text: &str| spans.iter().find(|s| s.content == text).map(|s| s.style).unwrap();
+        assert_eq!(spans_text(&spans).trim_end(), "   1    1 ~const total = 1;2;");
+        assert_eq!(style_of("const").fg, Some(theme.syntax.colour(Token::Keyword)), "kept text takes its syntax colour");
+        assert_eq!(style_of(" total = ").fg, None);
+        assert_eq!(style_of("1;").fg, Some(theme.danger), "the old word keeps the diff colour");
+        assert!(style_of("1;").add_modifier.contains(Modifier::CROSSED_OUT));
+        assert_eq!(style_of("2;").fg, Some(theme.success), "the new word keeps the diff colour");
+    }
+
+    fn painted(spans: &[Span]) -> String {
+        spans
+            .iter()
+            .filter(|s| !s.content.trim().is_empty())
+            .map(|s| format!("{:?}/{:?} {:?}", s.style.fg, s.style.bg, s.content))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn syntax_sets_the_text_and_the_diff_keeps_the_fills() {
+        let file = cart();
+        let theme = Theme::named("tokyonight").unwrap();
+        let spans = line_spans(&file.hunks[0].lines[1], file.spans(0, 1), false, 100, theme);
+        let keyword = spans.iter().find(|s| s.content == "const").unwrap();
+        assert_eq!((keyword.style.fg, keyword.style.bg), (Some(theme.syntax.keyword), theme.removed_fill));
+        let comment = spans.iter().find(|s| s.content.contains("// cents")).unwrap();
+        assert_eq!((comment.style.fg, comment.style.bg), (Some(theme.syntax.comment), theme.removed_fill));
+        let changed = line_spans(&file.hunks[0].lines[2], file.spans(0, 2), false, 100, theme);
+        let word = changed.iter().find(|s| s.content.contains("quantity")).unwrap();
+        assert_eq!(word.style.bg, theme.added_word, "a changed word keeps its stronger fill under the syntax colour");
+    }
+
+    #[test]
+    fn on_an_unknown_ground_syntax_colours_the_text_and_only_the_sign_says_removed() {
+        let file = cart();
+        let theme = Theme::default();
+        let spans = line_spans(&file.hunks[0].lines[1], file.spans(0, 1), false, 100, theme);
+        assert_eq!(spans[1].content, "-");
+        assert_eq!(spans[1].style.fg, Some(theme.danger));
+        let keyword = spans.iter().find(|s| s.content == "const").unwrap();
+        assert_eq!((keyword.style.fg, keyword.style.bg), (Some(theme.syntax.keyword), None));
+    }
+
+    #[test]
+    fn snapshot_highlighted_typescript_hunk() {
+        let file = cart();
+        let theme = Theme::named("tokyonight").unwrap();
+        let lines: Vec<String> = file.hunks[0]
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(i, line)| painted(&line_spans(line, file.spans(0, i), false, 100, theme)))
+            .collect();
+        insta::assert_snapshot!("highlighted_typescript_hunk", lines.join("\n---\n"));
+    }
+
     #[test]
     fn line_shows_both_gutters_the_sign_and_visible_tabs() {
         let hunk = &diff::parse("@@ -1,2 +1,2 @@\n \tkeep  \n-\told\n+\tnew  \n")[0];
-        let context = spans_text(&line_spans(&hunk.lines[0], false, 60, Theme::default()));
+        let context = spans_text(&line_spans(&hunk.lines[0], &[], false, 60, Theme::default()));
         assert_eq!(context, "   1    1  →   keep");
-        let added = spans_text(&line_spans(&hunk.lines[2], false, 60, Theme::default()));
+        let added = spans_text(&line_spans(&hunk.lines[2], &[], false, 60, Theme::default()));
         assert_eq!(added.trim_end(), "        2 +→   new··", "trailing spaces are marked on changed lines");
         assert_eq!(added.width(), 60, "a changed line is filled edge to edge");
     }
@@ -423,7 +535,7 @@ mod tests {
     #[test]
     fn long_lines_are_cut_to_the_pane() {
         let hunk = &diff::parse(&format!("@@ -1 +1 @@\n+{}\n", "x".repeat(100)))[0];
-        let text = spans_text(&line_spans(&hunk.lines[0], false, 30, Theme::default()));
+        let text = spans_text(&line_spans(&hunk.lines[0], &[], false, 30, Theme::default()));
         assert_eq!(text.width(), 30);
         assert!(text.ends_with('…'));
     }

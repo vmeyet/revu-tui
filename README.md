@@ -39,6 +39,7 @@ revu
 ```
 
 Three panes, like a chat client: the queue of MRs, the diff, the thread.
+The diff is coloured by syntax for TypeScript, JavaScript, Python and JSON.
 Inside a checkout the queue shows that repo only: what waits on you, yours, what you watch, and every other open MR.
 `*` widens it to every project.
 

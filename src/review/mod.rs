@@ -11,6 +11,7 @@ use crate::diff::fold::{FileMeta, FoldState};
 use crate::diff::words::{self, InlineRule};
 use crate::diff::{self, Hunk, LineKind};
 use crate::forge::{DiffFile, Discussion, Mr};
+use crate::syntax::{self, Spans};
 use std::collections::BTreeSet;
 
 /// Above this many lines a file starts folded, whatever the forge says.
@@ -35,6 +36,8 @@ pub struct File {
     pub hunks: Vec<Hunk>,
     pub additions: usize,
     pub deletions: usize,
+    /// Syntax colours per hunk, per line, parallel to `hunks`; empty for a language revu does not colour.
+    pub syntax: Vec<Vec<Spans>>,
 }
 
 impl File {
@@ -43,16 +46,28 @@ impl File {
         let lines = hunks.iter().map(|h| h.lines.len()).sum::<usize>();
         let count = |kind: LineKind| hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind == kind).count();
         let kind = kind_of(diff);
+        let too_large = diff.too_large || lines > TOO_LARGE_LINES;
+        let path = if kind == FileKind::Deleted { &diff.old_path } else { &diff.new_path };
+        let syntax = match syntax::language_for(path, &syntax::LANGUAGES) {
+            Some(language) if !too_large => hunks.iter().map(|hunk| colour(language, hunk)).collect(),
+            _ => Vec::new(),
+        };
         Self {
             old_path: diff.old_path.clone(),
             new_path: diff.new_path.clone(),
             kind,
             binary: diff.diff.is_empty() && !matches!(kind, FileKind::Mode | FileKind::Renamed),
-            too_large: diff.too_large || lines > TOO_LARGE_LINES,
+            too_large,
+            syntax,
             additions: count(LineKind::Added),
             deletions: count(LineKind::Removed),
             hunks,
         }
+    }
+
+    /// The syntax colours of one diff line; empty when the file is not coloured.
+    pub fn spans(&self, hunk: usize, line: usize) -> &[(std::ops::Range<usize>, syntax::Token)] {
+        self.syntax.get(hunk).and_then(|lines| lines.get(line)).map_or(&[], Vec::as_slice)
     }
 
     pub fn meta(&self) -> FileMeta {
@@ -72,6 +87,26 @@ impl File {
             Side::Old => l.old == Some(anchor.line),
         })
     }
+}
+
+/// Each side of a hunk is highlighted as one text, so a string or comment spanning lines keeps its
+/// colour; each line then takes the spans of the side it belongs to (context lines, the new side).
+fn colour(language: &syntax::Language, hunk: &Hunk) -> Vec<Spans> {
+    let side = |skip: LineKind| -> (Vec<usize>, Vec<Spans>) {
+        let indexes: Vec<usize> = hunk.lines.iter().enumerate().filter(|(_, l)| l.kind != skip).map(|(i, _)| i).collect();
+        let text: Vec<&str> = indexes.iter().map(|&i| hunk.lines[i].text.as_str()).collect();
+        (indexes, syntax::highlight(language, &text.join("\n")))
+    };
+    let (old_lines, old_spans) = side(LineKind::Added);
+    let (new_lines, new_spans) = side(LineKind::Removed);
+    let mut lines = vec![Spans::new(); hunk.lines.len()];
+    for (index, spans) in old_lines.into_iter().zip(old_spans) {
+        lines[index] = spans;
+    }
+    for (index, spans) in new_lines.into_iter().zip(new_spans) {
+        lines[index] = spans;
+    }
+    lines
 }
 
 fn kind_of(diff: &DiffFile) -> FileKind {
@@ -310,6 +345,28 @@ pub(super) mod tests {
             b_mode: "100644".into(),
             ..DiffFile::default()
         }
+    }
+
+    fn cart() -> DiffFile {
+        DiffFile {
+            diff: include_str!("fixtures/cart.ts.diff").to_owned(),
+            old_path: "src/cart.ts".into(),
+            new_path: "src/cart.ts".into(),
+            ..DiffFile::default()
+        }
+    }
+
+    #[test]
+    fn typescript_files_carry_syntax_per_line_and_other_files_none() {
+        let file = File::from_diff(&cart());
+        assert_eq!(file.syntax.len(), file.hunks.len());
+        assert_eq!(file.syntax[0].len(), file.hunks[0].lines.len());
+        let removed = &file.hunks[0].lines[1];
+        assert!(file.spans(0, 1).iter().any(|(r, t)| &removed.text[r.clone()] == "const" && *t == crate::syntax::Token::Keyword));
+        let added = &file.hunks[0].lines[4];
+        assert!(file.spans(0, 4).iter().any(|(r, t)| &added.text[r.clone()] == "\"total\"" && *t == crate::syntax::Token::String));
+        assert!(File::from_diff(&charge()).syntax.is_empty(), "no grammar for .rs yet");
+        assert!(File::from_diff(&DiffFile { too_large: true, ..cart() }).syntax.is_empty(), "too large files stay plain");
     }
 
     fn lock() -> DiffFile {
