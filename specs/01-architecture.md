@@ -1,6 +1,6 @@
 # 01 · Architecture
 
-Crate `revu`, binary `revu`, edition 2024, Rust 1.88+.
+Crate `revu`, binary `revu`, edition 2024, Rust 1.90+.
 `cargo install --git <repo>` is the only install path, as for slack-tui.
 
 ## Crate layout
