@@ -1296,3 +1296,28 @@ fn plus_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
     let screen = render(&mut app, 120, 40);
     assert!(screen.contains("line 2"), "{screen}");
 }
+
+#[test]
+fn a_poll_that_brings_notes_says_so_until_the_next_key() {
+    let mut app = with_review();
+    let mut more = discussions();
+    let extra = more[1].notes[0].clone();
+    more[1].notes.push(crate::forge::Note { id: 999, ..extra });
+    app.apply(Incoming::Discussions { key: mr_key(), discussions: more });
+    assert_eq!(app.news.as_deref(), Some("● 1 new note"));
+    assert!(render(&mut app, 120, 20).contains("● 1 new note"));
+    press(&mut app, "j");
+    assert_eq!(app.news, None);
+}
+
+#[test]
+fn few_requests_left_slow_polling_and_a_wait_shows_in_the_status_line() {
+    let mut app = with_queue();
+    app.rate = crate::forge::RateLimit { remaining: Some(12), wait: None };
+    app.schedule_queue();
+    assert_eq!(app.poll.queue_due, Some(app.now + Duration::from_secs(300)), "five times slower");
+    assert!(render(&mut app, 120, 20).contains("12 requests left"));
+    app.rate = crate::forge::RateLimit { remaining: Some(0), wait: Some(Duration::from_secs(42)) };
+    let screen = render(&mut app, 120, 20);
+    assert!(screen.contains("⏳") && screen.contains("42s"), "{screen}");
+}

@@ -274,6 +274,11 @@ impl Review {
         Self { threads: threads_of(discussions, &self.files), ..self.clone() }
     }
 
+    /// Every note in every thread, to notice new ones between two polls.
+    pub fn note_count(&self) -> usize {
+        self.threads.iter().map(|t| t.notes.len()).sum()
+    }
+
     /// The thread flipped locally, ahead of the forge's answer.
     pub fn with_resolved(&self, id: &str, resolved: bool) -> Self {
         let threads = self.threads.iter().map(|t| if t.id == id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();

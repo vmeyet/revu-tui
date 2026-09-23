@@ -6,6 +6,7 @@ const HALF_PAGE: isize = 10;
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        self.news = None;
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.should_quit = true;
             return vec![];

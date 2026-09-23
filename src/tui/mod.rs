@@ -105,6 +105,7 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, back
             Some(incoming) = rx.recv() => { app.apply(incoming); app.take_actions() }
             _ = ticks.tick() => {
                 app.now = Instant::now();
+                app.rate = backend.forge.rate();
                 app.today = Utc::now();
                 app.tick()
             }

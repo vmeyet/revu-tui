@@ -223,12 +223,17 @@ fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -
     }
 }
 
+/// The activity dot breathes: bright one second, faded the next.
+fn pulse_on(app: &App) -> bool {
+    app.now.duration_since(app.started).as_secs().is_multiple_of(2)
+}
+
 fn badge_span<'a>(app: &App, badge: Badge) -> Span<'a> {
     let theme = app.theme;
     match badge {
         Badge::Failed => Span::styled("✗", Style::default().fg(theme.danger)),
         Badge::Running => Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.muted)),
-        Badge::Activity => Span::styled("●", Style::default().fg(theme.accent)),
+        Badge::Activity => Span::styled("●", Style::default().fg(if pulse_on(app) { theme.accent } else { theme.faded })),
         Badge::Approved => Span::styled("✓", Style::default().fg(theme.success)),
         Badge::Draft => Span::styled("D", Style::default().fg(theme.muted)),
     }
@@ -299,6 +304,9 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let muted = Style::default().fg(theme.muted);
     let dot = Span::styled(" · ", Style::default().fg(theme.faded));
     let left = match (app.live_toast(), app.offline, &app.open) {
+        (None, None, Some(_)) if app.news.is_some() => {
+            Line::from(Span::styled(format!(" {}", app.news.clone().unwrap_or_default()), Style::default().fg(theme.accent)))
+        }
         (Some(toast), _, _) => {
             let colour = if toast.danger { theme.danger } else { theme.accent };
             let glyph = if toast.danger { "✗" } else { "✓" };
@@ -337,7 +345,14 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
             Line::from(spans)
         }
     };
-    let right = if app.loading() {
+    let rate = match (app.rate.wait, app.rate.remaining) {
+        (Some(wait), _) => Some(Span::styled(format!("⏳ {}s", wait.as_secs()), Style::default().fg(theme.warn))),
+        (None, Some(left)) if app.rate.is_low() => Some(Span::styled(format!("{left} requests left"), Style::default().fg(theme.warn))),
+        _ => None,
+    };
+    let right = if let Some(rate) = rate {
+        Line::from(vec![rate, dot.clone(), Span::styled("? help ", muted)])
+    } else if app.loading() {
         Line::from(vec![
             Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.accent)),
             Span::styled(" loading", muted),

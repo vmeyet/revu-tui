@@ -27,7 +27,9 @@ impl App {
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
             Incoming::Discussions { key, discussions } => {
                 if let Some(open) = self.open.as_ref().filter(|o| o.key == key) {
-                    self.open = Some(open.with_review(open.review.with_discussions(discussions)));
+                    let fresh = open.review.with_discussions(discussions);
+                    self.news = news(&open.review, &fresh).or(self.news.take());
+                    self.open = Some(open.with_review(fresh));
                     self.offline = None;
                     self.schedule_discussions();
                 }
@@ -58,6 +60,9 @@ impl App {
     fn apply_review(&mut self, key: super::MrKey, review: Review, cached: Option<std::time::Duration>) {
         if self.opening.as_ref() != Some(&key) && self.open.as_ref().is_none_or(|o| o.key != key) {
             return;
+        }
+        if cached.is_none() {
+            self.news = self.open.as_ref().filter(|o| o.key == key).and_then(|o| news(&o.review, &review)).or(self.news.take());
         }
         let next = match self.open.as_ref().filter(|o| o.key == key) {
             Some(open) => open.with_review(carry_folds(&open.review, &review)),
@@ -97,6 +102,15 @@ impl App {
             other => self.apply_write_failure(other, message),
         }
     }
+}
+
+/// What a poll brought to the open MR, in the words of the status line; nothing when nothing moved.
+fn news(old: &Review, fresh: &Review) -> Option<String> {
+    if old.mr.refs.head != fresh.mr.refs.head {
+        return Some("● new commits".into());
+    }
+    let new_notes = fresh.note_count().saturating_sub(old.note_count());
+    (new_notes > 0).then(|| format!("● {new_notes} new note{}", if new_notes == 1 { "" } else { "s" }))
 }
 
 /// Fresh data keeps the folds of every file that did not change, so a poll never unfolds what was read.
