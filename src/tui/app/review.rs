@@ -182,6 +182,14 @@ impl App {
         }
     }
 
+    /// Moves to the first row `wanted` accepts, from the top.
+    pub(super) fn review_jump_to(&mut self, wanted: impl Fn(&Row) -> bool) {
+        let Some(open) = &self.open else { return };
+        if let Some(index) = open.rows.iter().position(wanted) {
+            self.open = Some(open.move_to(index));
+        }
+    }
+
     pub(super) fn review_first(&mut self) {
         if let Some(open) = &self.open {
             self.open = Some(open.move_to(first_selectable(&open.rows)));

@@ -7,6 +7,7 @@ mod config;
 pub mod ctx;
 mod diff;
 mod forge;
+mod fuzzy;
 mod legacy;
 mod mrref;
 mod render;

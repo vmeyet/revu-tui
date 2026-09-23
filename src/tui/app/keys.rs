@@ -17,6 +17,12 @@ impl App {
         if self.input.is_some() {
             return self.handle_input_key(key);
         }
+        if self.palette.is_some() {
+            return self.handle_palette_key(key);
+        }
+        if self.jump.is_some() {
+            return self.handle_jump_key(key);
+        }
         if self.publish.is_some() {
             return self.handle_publish_key(key);
         }
@@ -29,7 +35,12 @@ impl App {
         if let Some(prefix) = self.pending.take() {
             return self.handle_prefixed(prefix, key);
         }
+        if key.code == KeyCode::Char('k') && key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER) {
+            self.open_jump();
+            return vec![];
+        }
         match key.code {
+            KeyCode::Char(':') => self.open_palette(),
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
@@ -114,7 +125,7 @@ impl App {
     }
 
     /// Between the checkout's project and every project; the other list paints from its cache.
-    fn toggle_scope(&mut self) -> Vec<Action> {
+    pub(super) fn toggle_scope(&mut self) -> Vec<Action> {
         if self.project.is_none() {
             self.toast("not in a GitLab checkout: the queue already shows every project");
             return vec![];
