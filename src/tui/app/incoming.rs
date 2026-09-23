@@ -23,6 +23,7 @@ impl App {
                 self.offline = None;
                 self.queue_settle();
                 self.schedule_queue();
+                self.ask_triage();
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
             Incoming::Discussions { key, discussions } => {
@@ -50,6 +51,8 @@ impl App {
             }
             Incoming::ViewReady { key, view } => self.apply_view_ready(&key, view),
             Incoming::Viewed { view, outcome } => self.apply_viewed(&view, outcome),
+            Incoming::Triaged { key, verdict } => self.apply_triaged(key, verdict),
+            Incoming::Read { key, head, reading } => self.apply_read(key, head, reading),
             Incoming::Failed { what, message } => self.apply_failure(what, message),
         }
     }
@@ -76,6 +79,7 @@ impl App {
             self.offline = None;
             self.opened.insert(key, self.today);
             self.schedule_review();
+            self.ask_reading();
         }
     }
 
@@ -101,6 +105,7 @@ impl App {
                 self.back_off();
             }
             Failure::Local => self.warn(message),
+            Failure::Triage => self.triage_failed(&message),
             other => self.apply_write_failure(other, message),
         }
     }

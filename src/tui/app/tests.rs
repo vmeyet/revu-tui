@@ -37,7 +37,15 @@ fn today() -> DateTime<Utc> {
 }
 
 fn settings() -> Settings {
-    Settings { theme: Theme::default(), host: "gitlab.com".into(), kind: Kind::GitLab, me: "nina".into(), project: None, ground: None }
+    Settings {
+        theme: Theme::default(),
+        host: "gitlab.com".into(),
+        kind: Kind::GitLab,
+        me: "nina".into(),
+        project: None,
+        ground: None,
+        triage: false,
+    }
 }
 
 fn app() -> App {
@@ -1499,4 +1507,90 @@ fn snapshot_narrow_pane_and_a_three_line_box() {
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
     press(&mut app, "and per amount");
     insta::assert_snapshot!("compose_three_lines", render(&mut app, 160, 24));
+}
+
+fn triaging() -> App {
+    let mut app = App::new(Settings { triage: true, ..settings() });
+    app.today = today();
+    app
+}
+
+fn verdict_for(mr: &crate::forge::QueueMr, urgency: f64, size: crate::ai::triage::Size) -> crate::ai::triage::Verdict {
+    crate::ai::triage::Verdict { urgency, size, seen: mr.updated_at }
+}
+
+#[test]
+fn a_fresh_queue_asks_jev_once_per_mr_and_not_at_all_when_it_is_off() {
+    let mut off = app();
+    off.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    assert!(off.take_actions().is_empty(), "nothing leaves while Jev is off");
+    let mut app = triaging();
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: true });
+    assert!(app.take_actions().is_empty(), "a cached queue asks nothing");
+    let fresh = || Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false };
+    app.apply(fresh());
+    let asked = app.take_actions();
+    assert!(!asked.is_empty() && asked.iter().all(|a| matches!(a, Action::Triage(_))), "{asked:?}");
+    app.apply(fresh());
+    assert!(app.take_actions().is_empty(), "an MR being asked about is not asked twice");
+}
+
+#[test]
+fn verdicts_mark_rows_and_lead_the_review_section_by_urgency() {
+    let mut app = triaging();
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    let _ = app.take_actions();
+    let to_review = app.sections.clone().unwrap().to_review;
+    let last = to_review.last().unwrap().clone();
+    app.apply(Incoming::Triaged { key: last.key(), verdict: verdict_for(&last, 2.9, crate::ai::triage::Size::Focused) });
+    assert_eq!(app.mark(&last), Some(super::Mark::Urgent));
+    let first_row = app.queue_rows().into_iter().find_map(|r| match r {
+        QueueRow::Mr(mr) => Some(mr.key()),
+        QueueRow::Section { .. } => None,
+    });
+    assert_eq!(first_row, Some(last.key()), "the urgent MR leads To review");
+    let moved = crate::forge::QueueMr { updated_at: last.updated_at + chrono::TimeDelta::hours(1), ..last.clone() };
+    assert_eq!(app.mark(&moved), None, "a verdict on an older state marks nothing");
+    let screen = render(&mut app, 100, 16);
+    assert!(screen.contains(&format!("! !{}", last.number)), "{screen}");
+}
+
+#[test]
+fn a_fresh_review_asks_for_a_reading_once_per_head_and_it_tints_the_tree() {
+    let mut app = triaging();
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    let _ = app.take_actions();
+    app.queue_move(0);
+    app.handle_key(code(KeyCode::Enter));
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+    let asked = app.take_actions();
+    let [Action::Read { head, files, .. }] = asked.as_slice() else { panic!("{asked:?}") };
+    assert!(!files.is_empty());
+    let path = files[0].0.clone();
+    let reading = crate::ai::triage::Reading {
+        waits_on_me: true,
+        risks: std::collections::BTreeMap::from([(path.clone(), crate::ai::triage::Risk::Security)]),
+    };
+    app.apply(Incoming::Read { key: mr_key(), head: head.clone(), reading });
+    assert_eq!(app.risk(&path), Some(crate::ai::triage::Risk::Security));
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+    assert!(app.take_actions().is_empty(), "the same head is not read twice");
+    let queued = app.sections.clone().unwrap().to_review.into_iter().find(|mr| mr.key() == mr_key()).unwrap();
+    assert_eq!(app.mark(&queued), Some(super::Mark::WaitsOnMe), "waiting on me outranks every other mark");
+    press(&mut app, "t");
+    let buffer = cells(&mut app, 140, 30);
+    let name = path.rsplit('/').next().unwrap();
+    assert_eq!(cell_of(&buffer, name).fg, app.theme.danger, "a security file reads red in the tree");
+}
+
+#[test]
+fn jev_failing_says_so_once_and_stops_asking() {
+    let mut app = triaging();
+    app.apply(Incoming::Failed { what: Failure::Triage, message: "⚠ typesafe unavailable: quota exhausted".into() });
+    assert!(!app.triage);
+    assert!(app.live_toast().is_some_and(|t| t.text.contains("quota")));
+    app.apply(Incoming::Failed { what: Failure::Triage, message: "again".into() });
+    assert!(app.live_toast().is_some_and(|t| t.text.contains("quota")), "the second failure stays quiet");
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    assert!(app.take_actions().is_empty());
 }
