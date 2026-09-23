@@ -337,9 +337,7 @@ impl App {
 
     pub(super) fn set_approved(&mut self, key: &MrKey, approve: bool) {
         let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
-        let mut review = open.review.clone();
-        review.mr.approvals.user_has_approved = approve;
-        self.open = Some(open.with_review(review));
+        self.open = Some(open.with_review(open.review.with_approved(approve)));
     }
 
     pub(super) fn apply_write_failure(&mut self, what: Failure, message: String) {

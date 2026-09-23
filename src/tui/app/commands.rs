@@ -49,7 +49,7 @@ impl App {
             Slot::Setting => vec!["theme=".to_owned()],
             Slot::Theme => Theme::NAMES.iter().map(|name| format!("theme={name}")).collect(),
             Slot::File => {
-                let files = self.open.iter().flat_map(|o| &o.review.files).map(|f| f.new_path.clone());
+                let files = self.open.iter().flat_map(|o| o.review.files.iter()).map(|f| f.new_path.clone());
                 std::iter::once("old".to_owned()).chain(files).collect()
             }
             Slot::Free => vec![],
