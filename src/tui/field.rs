@@ -14,7 +14,6 @@ impl Field {
         Self { cursor: text.len(), text }
     }
 
-    #[cfg(test)]
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -23,11 +22,6 @@ impl Field {
     pub fn take(&mut self) -> String {
         self.cursor = 0;
         std::mem::take(&mut self.text)
-    }
-
-    pub fn clear(&mut self) {
-        self.text.clear();
-        self.cursor = 0;
     }
 
     pub fn at_end(&self) -> bool {
@@ -258,7 +252,7 @@ mod tests {
         assert_eq!(shown(&field), "|");
         field.insert('a');
         assert_eq!(shown(&field), "a|");
-        field.clear();
+        field.take();
         assert_eq!(shown(&field), "|");
     }
 }

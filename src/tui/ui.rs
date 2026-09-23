@@ -19,7 +19,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 48] = [
+pub const HELP: [(&str, &str); 49] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -50,11 +50,12 @@ pub const HELP: [(&str, &str); 48] = [
     ("W", "hide changes that are only whitespace (shown as ≈)"),
     ("+", "ten more unchanged lines above and below the hunk"),
     ("v", "the file after the change in your program, at this line ([open] in config)"),
-    ("c", "comment on the line, as a draft"),
+    ("c", "new thread on the line: a compose box opens in the pane"),
     ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),
     ("E", "write the comment in $EDITOR"),
-    ("s", "suggestion in the editor, prefilled with the lines"),
+    ("s", "new thread prefilled with a suggestion of the lines"),
+    ("⌥enter ^o", "in the box: newline, move the text to $EDITOR"),
     ("e d", "in the pane: edit, delete my draft"),
     ("J K", "in the pane: next, previous thread on the line"),
     ("P", "publish: enter sends, e edits, m moves a lost draft to the MR"),
@@ -62,7 +63,7 @@ pub const HELP: [(&str, &str); 48] = [
     ("r", "in a thread: reply, as a draft"),
     ("R", "resolve, unresolve: in the pane, or on a marked line"),
     ("u", "in a thread: open its first link"),
-    ("esc", "drop the selection, close the input"),
+    ("esc", "drop the selection; in the box, leave it, the text stays"),
     (":", "command line: :go !42 · :view old · :set theme=nord · tab completes"),
     ("^k", "jump to a file of the MR, or to another MR"),
     ("?", "this help"),
@@ -81,7 +82,7 @@ pub struct Link {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
-    let input_rows = u16::from(app.filtering || app.input.is_some() || app.palette.is_some());
+    let input_rows = u16::from(app.filtering || app.palette.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some());
@@ -99,9 +100,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     } else if side_open {
         thread_view::draw(f, app, side);
     }
-    if app.input.is_some() {
-        draw_input(f, app, input);
-    } else if let Some(palette) = &app.palette {
+    if let Some(palette) = &app.palette {
         draw_palette(f, app, palette, input);
     } else if app.filtering {
         draw_filter(f, app, input);
@@ -285,20 +284,6 @@ fn draw_palette(f: &mut Frame, app: &App, palette: &super::palette::Palette, are
     spans.insert(2, Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
     spans.push(Span::styled("  tab completes · enter runs · esc", Style::default().fg(theme.faded)));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-fn draw_input(f: &mut Frame, app: &App, area: Rect) {
-    let theme = app.theme;
-    let (before, under, after) = app.buffer.split();
-    let caret = if under.is_empty() { " " } else { under };
-    let line = Line::from(vec![
-        Span::styled(format!(" {} ", app.input_label()), Style::default().fg(theme.accent)),
-        Span::raw(before.to_owned()),
-        Span::styled(caret.to_owned(), Style::default().add_modifier(Modifier::REVERSED)),
-        Span::raw(after.to_owned()),
-        Span::styled("  enter save · esc cancel", Style::default().fg(theme.faded)),
-    ]);
-    f.render_widget(Paragraph::new(line), area);
 }
 
 fn draw_status(f: &mut Frame, app: &App, area: Rect) {
