@@ -138,7 +138,7 @@ fn prompt(host: &str, kind: Kind) -> Result<String> {
 }
 
 /// Reads one line with echo off, restoring the terminal even when the read fails.
-fn read_hidden() -> Result<String> {
+pub(crate) fn read_hidden() -> Result<String> {
     crossterm::terminal::enable_raw_mode()?;
     let line = read_raw_line();
     crossterm::terminal::disable_raw_mode()?;

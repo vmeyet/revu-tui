@@ -106,6 +106,13 @@ default = "hx"                # what `v` runs; else $VISUAL, $EDITOR, then less
 
 [open.files]
 "*.md" = "glow -p"            # by glob, the longest match wins; {file} and {line} place the arguments yourself
+
+[ai.anthropic]
+enabled = false               # true sends the MR you ask about to Claude
+model = "claude-opus-5"
+
+[ai.typesafe]
+enabled = false               # true sends queue and file summaries to TypeSafe's Jev for triage
 ```
 
 `v` knows how to jump to the line in hx, vim, nvim, nano, micro, emacs, kak, less, bat and glow.
@@ -116,6 +123,17 @@ Inside a checkout on the MR's head commit it opens your real file; elsewhere a r
 Tokens live in the macOS login keychain (service `revu`), never on disk in clear.
 Each token goes to its own host only, and redirects are refused.
 `GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` override the keychain for scripts.
+
+AI is off until the config switches a provider on, and its key is a keychain secret too:
+
+```sh
+revu ai login anthropic           # hidden prompt, checked against Anthropic before it is stored (`--token -` reads stdin)
+revu ai login typesafe            # offers to reuse the key slack-tui already stores
+revu ai status                    # which provider is on and where its key comes from, never the key
+revu ai logout anthropic
+```
+
+`ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY` override the keychain.
 
 ## Development
 

@@ -1,4 +1,6 @@
 //! One module per subcommand, each with a `run` the binary calls.
+/// `revu ai`.
+pub mod ai;
 /// `revu approve`.
 pub mod approve;
 /// `revu comment`.

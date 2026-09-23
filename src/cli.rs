@@ -45,6 +45,8 @@ pub enum Command {
     Approve(ApproveArgs),
     /// Publish every draft comment you hold on a merge request as one review.
     Publish(RefArgs),
+    /// The AI providers: store a key, forget it, see which one is on.
+    Ai(AiArgs),
     /// Interactive review client.
     Tui,
     /// Generate shell completions.
@@ -116,4 +118,39 @@ pub struct ApproveArgs {
     /// Remove your approval instead.
     #[arg(long)]
     pub undo: bool,
+}
+
+/// `revu ai`: one subcommand.
+#[derive(Args, Debug)]
+pub struct AiArgs {
+    /// What to do with the AI keys.
+    #[command(subcommand)]
+    pub command: AiCommand,
+}
+
+/// The `revu ai` subcommands.
+#[derive(Subcommand, Debug)]
+pub enum AiCommand {
+    /// Store a provider's key in the keychain; the config still has to switch it on.
+    Login(AiLoginArgs),
+    /// Forget a provider's key.
+    Logout {
+        /// Which provider.
+        provider: crate::ai::Provider,
+    },
+    /// Which provider is on and where its key comes from (never the key).
+    Status,
+}
+
+/// Flags of `revu ai login`.
+#[derive(Args, Debug)]
+pub struct AiLoginArgs {
+    /// Which provider.
+    pub provider: crate::ai::Provider,
+    /// Read the key from stdin (`-`) instead of prompting.
+    #[arg(long, value_name = "-")]
+    pub token: Option<String>,
+    /// Reuse the TypeSafe key slack-tui keeps in the keychain.
+    #[arg(long, conflicts_with = "token")]
+    pub from_slack_tui: bool,
 }
