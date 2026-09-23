@@ -54,7 +54,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let render = |open: &Open, i: usize| -> Vec<Line<'static>> {
         let row = &open.rows[i];
         let (selected, in_range) = (i == open.selected, open.is_selected(i));
-        if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. }) {
+        if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
             wrap_row(row_line(&open.review, row, selected, in_range, UNCUT, theme, today, &me), width, WRAP_INDENT)
         } else {
             vec![row_line(&open.review, row, selected, in_range, width, theme, today, &me)]
@@ -250,6 +250,12 @@ fn row_line<'a>(
             } else {
                 spans.extend(pair_spans(old, new, code, selected || in_range, body, theme));
             }
+        }
+        Row::Context { file, old, new, .. } => {
+            let path = &review.files[*file].new_path;
+            let text = review.context.texts.get(path).and_then(|t| t.get(*new as usize - 1)).cloned().unwrap_or_default();
+            let line = DiffLine { kind: LineKind::Context, old: Some(*old), new: Some(*new), text, words: vec![], no_newline: false };
+            spans.extend(line_spans(&line, &[], selected || in_range, body, theme));
         }
         Row::Thread { id } => {
             if let Some(thread) = review.thread(id) {

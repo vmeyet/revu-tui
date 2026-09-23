@@ -16,6 +16,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
 
 const PAGE_SIZE: &str = "100";
+/// What the contents API is asked for to answer with the file itself rather than base64 JSON.
+const RAW: &str = "application/vnd.github.raw+json";
 const MAX_WAIT: Duration = Duration::from_secs(60);
 const API_VERSION: &str = "2022-11-28";
 
@@ -95,6 +97,14 @@ impl Client {
                 None => return Ok(items),
             }
         }
+    }
+
+    /// A file's bytes as text: the contents API answers raw when asked for `vnd.github.raw`.
+    async fn get_raw(&self, path: &str) -> Result<String> {
+        let url = self.url(path)?;
+        let response = self.http.get(url.clone()).header(ACCEPT, RAW).send().await.map_err(scrub)?;
+        let response = checked(response, &Method::GET, &url).await?;
+        response.text().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
     }
 
     /// One GraphQL call; an answer carrying `errors` is an error, whatever its status.

@@ -100,6 +100,11 @@ impl Client {
         Ok(found.first().map(|p| p.number))
     }
 
+    /// The whole file at `sha`, raw, to show the lines around a hunk.
+    pub async fn file(&self, project: &str, path: &str, sha: &str) -> Result<String> {
+        self.get_raw(&format!("{}/contents/{path}?ref={sha}", repo_path(project))).await
+    }
+
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         let files: Vec<File> = self.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
@@ -255,5 +260,17 @@ mod tests {
         assert!(err.contains("refused") && err.contains("your own pull request"), "{err}");
         let err = client.approve(&key(), false).await.unwrap_err().to_string();
         assert!(err.contains("cannot unapprove"), "{err}");
+    }
+    #[tokio::test]
+    async fn a_file_is_read_raw_at_a_commit() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/src/pay/charge.rs"))
+            .and(query_param("ref", "abc123"))
+            .and(wiremock::matchers::header("accept", "application/vnd.github.raw+json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fn main() {}\n"))
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
     }
 }

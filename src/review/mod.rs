@@ -13,7 +13,8 @@ use crate::diff::words::{self, InlineRule};
 use crate::diff::{self, Hunk, LineKind};
 use crate::forge::{DiffFile, Discussion, Mr};
 use crate::syntax::{self, Spans};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 /// Above this many lines a file starts folded, whatever the forge says.
 const TOO_LARGE_LINES: usize = 2000;
@@ -156,6 +157,13 @@ pub enum Row {
         hunk: usize,
         index: usize,
     },
+    /// An unchanged line outside the hunk, read from the whole file: `new` is its line on the new side.
+    Context {
+        file: usize,
+        hunk: usize,
+        old: u32,
+        new: u32,
+    },
     /// A removed line and its added twin read as one row, the changed words side by side.
     Pair {
         file: usize,
@@ -190,6 +198,17 @@ pub struct Review {
     pub split: bool,
     /// Lines that changed only in whitespace read as one quiet row, `W` in the TUI.
     pub quiet_whitespace: bool,
+    /// Unchanged lines shown around hunks, `+` in the TUI.
+    pub context: Context,
+}
+
+/// The files read whole, and how many lines each hunk shows beyond its own.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Context {
+    /// The new side of a file at the head commit, one entry per line, shared between copies of the review.
+    pub texts: BTreeMap<String, Arc<Vec<String>>>,
+    /// Extra lines above and below a hunk, by (file, hunk).
+    pub around: BTreeMap<(usize, usize), u32>,
 }
 
 impl Review {
@@ -208,6 +227,7 @@ impl Review {
             inline: InlineRule::default(),
             split: false,
             quiet_whitespace: false,
+            context: Context::default(),
         }
     }
 
@@ -217,6 +237,10 @@ impl Review {
 
     pub fn with_split(&self, split: bool) -> Self {
         Self { split, ..self.clone() }
+    }
+
+    pub fn with_context(&self, context: Context) -> Self {
+        Self { context, ..self.clone() }
     }
 
     pub fn with_quiet_whitespace(&self, quiet_whitespace: bool) -> Self {
@@ -305,11 +329,19 @@ impl Review {
     }
 
     fn push_file_rows(&self, rows: &mut Vec<Row>, index: usize, file: &File) {
+        let text = self.context.texts.get(&file.new_path);
+        let mut shown_until = 0;
         for (hunk_index, hunk) in file.hunks.iter().enumerate() {
             let open = self.fold.hunk_is_open(&file.new_path, hunk_index);
             rows.push(Row::Hunk { file: index, index: hunk_index, open });
             if !open {
                 continue;
+            }
+            let extra = self.context.around.get(&(index, hunk_index)).copied().unwrap_or(0);
+            if text.is_some() {
+                let from = hunk.new_start.saturating_sub(extra).max(shown_until + 1).max(1);
+                let offset = i64::from(hunk.old_start) - i64::from(hunk.new_start);
+                rows.extend((from..hunk.new_start).map(|new| context_row(index, hunk_index, offset, new)));
             }
             let mut pairs = if self.split { vec![] } else { words::inline_pairs(hunk, self.inline) };
             if self.quiet_whitespace {
@@ -328,6 +360,16 @@ impl Review {
                 }
                 self.push_anchors(rows, file, line);
             }
+            let last_new = hunk.lines.iter().filter_map(|l| l.new).max().unwrap_or(hunk.new_start.saturating_sub(1));
+            let last_old = hunk.lines.iter().filter_map(|l| l.old).max().unwrap_or(hunk.old_start.saturating_sub(1));
+            shown_until = last_new;
+            if let Some(text) = text {
+                let next_start = file.hunks.get(hunk_index + 1).map_or(u32::MAX, |h| h.new_start);
+                let until = (last_new + extra).min(text.len() as u32).min(next_start.saturating_sub(1));
+                let offset = i64::from(last_old) - i64::from(last_new);
+                rows.extend((last_new + 1..=until).map(|new| context_row(index, hunk_index, offset, new)));
+                shown_until = shown_until.max(until);
+            }
         }
         if !self.outdated(&file.new_path).is_empty() {
             rows.push(Row::Outdated { file: index });
@@ -340,6 +382,12 @@ impl Review {
         let old = line.old.map(|n| self.threads_at(&file.old_path, Side::Old, n)).unwrap_or_default();
         new.into_iter().chain(old).collect()
     }
+}
+
+/// Line `new` of the file; `offset` is how far the old side's numbering sits from the new one's there.
+fn context_row(file: usize, hunk: usize, offset: i64, new: u32) -> Row {
+    let old = (i64::from(new) + offset).max(0) as u32;
+    Row::Context { file, hunk, old, new }
 }
 
 impl Review {
@@ -579,5 +627,35 @@ pub(super) mod tests {
         assert_eq!(lines, 2, "split shows both lines");
         let quiet = review.with_quiet_whitespace(true);
         assert!(quiet.rows().iter().any(|r| matches!(r, Row::Pair { .. })), "W reads them as one row");
+    }
+
+    fn contexts(review: &Review) -> Vec<(usize, u32, u32)> {
+        review
+            .rows()
+            .iter()
+            .filter_map(|r| if let Row::Context { hunk, old, new, .. } = r { Some((*hunk, *old, *new)) } else { None })
+            .collect()
+    }
+
+    #[test]
+    fn context_lines_come_from_the_whole_file_numbered_on_both_sides_and_never_twice() {
+        let review = review();
+        let path = review.files[0].new_path.clone();
+        let text: Vec<String> = (1..=60).map(|n| format!("line {n}")).collect();
+        let context = Context { texts: BTreeMap::from([(path, Arc::new(text))]), around: BTreeMap::from([((0, 0), 10), ((0, 1), 20)]) };
+        let rows = contexts(&review.with_context(context));
+        let above_first: Vec<u32> = rows.iter().filter(|(h, _, n)| *h == 0 && *n < 12).map(|(_, _, n)| *n).collect();
+        assert_eq!(above_first, (2..12).collect::<Vec<_>>(), "ten lines above the first hunk");
+        assert!(rows.iter().any(|&(h, o, n)| h == 0 && n == 17 && o == 16), "below the first hunk, old numbers follow its offset");
+        let second_above: Vec<u32> = rows.iter().filter(|(h, _, n)| *h == 1 && *n < 41).map(|(_, _, n)| *n).collect();
+        assert_eq!(second_above.first(), Some(&27), "the second hunk starts after what the first one showed");
+        assert!(rows.iter().any(|&(h, o, n)| h == 1 && n == 40 && o == 39), "the second hunk's offset: old is one less");
+        assert!(rows.iter().all(|(_, _, n)| *n <= 60), "never past the end of the file");
+    }
+
+    #[test]
+    fn no_context_is_shown_before_the_file_arrives() {
+        let context = Context { texts: BTreeMap::new(), around: BTreeMap::from([((0, 0), 10)]) };
+        assert!(contexts(&review().with_context(context)).is_empty());
     }
 }

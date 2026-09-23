@@ -192,6 +192,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
                 |()| Incoming::Resolved { key, thread: thread.clone(), resolved },
             )),
+            Action::LoadFile { key, path, sha } => {
+                let outcome = backend.forge.file(&key, &path, &sha).await;
+                send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
+            }
             Action::Approve { key, approve } => {
                 let outcome = backend.forge.approve(&key, approve).await;
                 send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
