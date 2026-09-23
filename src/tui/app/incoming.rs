@@ -41,6 +41,12 @@ impl App {
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
+            Incoming::Applied { key, branch } => {
+                if self.open.as_ref().is_some_and(|o| o.key == key) {
+                    let follow = self.applied(&branch);
+                    self.composed.extend(follow);
+                }
+            }
             Incoming::Approved { key, approve } => {
                 self.set_approved(&key, approve);
                 self.toast(if approve { "approved" } else { "approval removed" });

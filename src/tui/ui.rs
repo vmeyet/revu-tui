@@ -23,7 +23,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 53] = [
+pub const HELP: [(&str, &str); 54] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -70,6 +70,7 @@ pub const HELP: [(&str, &str); 53] = [
     ("A", "approve, unapprove"),
     ("r", "in a thread: reply, as a draft"),
     ("R", "resolve, unresolve: in the pane, or on a marked line"),
+    ("S", "in the pane: commit the note's suggestion on the MR branch, after a y"),
     ("u", "in a thread: open its first link"),
     ("esc", "drop the selection; in the box, leave it, the text stays"),
     (":", "command line: :go !42 · :view old · :set theme=nord · tab completes"),
@@ -340,6 +341,11 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme;
     let muted = Style::default().fg(theme.muted);
     let dot = Span::styled(" · ", Style::default().fg(theme.faded));
+    if let Some(confirm) = &app.confirm {
+        let line = Line::from(Span::styled(format!(" ? {}", confirm.question()), Style::default().fg(theme.warn)));
+        f.render_widget(Paragraph::new(line), area);
+        return;
+    }
     let left = match (app.live_toast(), app.offline, &app.open) {
         (None, None, Some(_)) if app.news.is_some() => {
             Line::from(Span::styled(format!(" {}", app.news.clone().unwrap_or_default()), Style::default().fg(theme.accent)))
