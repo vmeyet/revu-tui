@@ -133,6 +133,10 @@ impl App {
                 self.ai_off();
                 vec![]
             }
+            Command::AiOn => {
+                self.ai_on();
+                vec![]
+            }
             Command::Ask(question) => self.ask_free(question),
             Command::Help => {
                 self.help = Some(0);

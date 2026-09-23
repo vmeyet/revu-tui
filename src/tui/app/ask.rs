@@ -243,14 +243,27 @@ impl App {
         }
     }
 
-    /// `:ai off`: nothing more goes to an AI provider until `revu` starts again.
+    /// `:ai off`: nothing more goes to an AI provider until `:ai on` or `revu` starts again.
     pub(super) fn ai_off(&mut self) {
         self.ask_model = None;
         self.triage = false;
         if let Some(open) = &self.open {
             self.open = Some(Open { answer: None, ..open.clone() });
         }
-        self.toast("AI off until revu starts again");
+        self.toast("AI off: :ai on brings it back");
+    }
+
+    /// `:ai on`: back to what the config switched on, after `:ai off` or a Jev failure.
+    pub(super) fn ai_on(&mut self) {
+        let (triage, ask) = self.ai_configured.clone();
+        if !triage && ask.is_none() {
+            self.toast("no AI provider is on in the config: see revu ai status");
+            return;
+        }
+        let names: Vec<&str> = [triage.then_some("Jev"), ask.as_ref().map(|_| "Claude")].into_iter().flatten().collect();
+        self.triage = triage;
+        self.ask_model = ask;
+        self.toast(format!("AI on: {}", names.join(" and ")));
     }
 
     fn lines_target(&self) -> Target {

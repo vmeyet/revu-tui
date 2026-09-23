@@ -125,6 +125,8 @@ pub struct App {
     pub triage: bool,
     /// Claude's model while `a` may ask it; `:ai off` clears it for the session.
     pub ask_model: Option<String>,
+    /// What the config switched on at start, so `:ai on` can bring it back after `:ai off`.
+    pub ai_configured: (bool, Option<String>),
     /// A question already went out this session: the first one says where the MR goes.
     pub asked: bool,
     /// The id of the last answer started.
@@ -197,6 +199,7 @@ impl App {
             palette: None,
             palette_history: vec![],
             ground: settings.ground,
+            ai_configured: (settings.triage, settings.ask.clone()),
             triage: settings.triage,
             ask_model: settings.ask,
             asked: false,

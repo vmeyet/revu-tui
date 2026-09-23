@@ -10,10 +10,11 @@ pub const BUDGET: usize = 60_000;
 const DESCRIPTION_CHARS: usize = 2000;
 const AROUND: usize = 20;
 
-const SYSTEM: &str = "You help a code reviewer reading a merge request (a pull request on GitHub) in a terminal.
-Answer in plain markdown, short paragraphs, code in fences. Refer to lines as `path:new_line`.
-When asked for a comment, write it as the reviewer would post it: direct, specific, no greeting.
-Say when the diff alone cannot answer.";
+const SYSTEM: &str = "You help a developer review a merge request in a narrow terminal pane.
+Be brief: lead with the answer, no preamble, no closing summary, no headers.
+Use simple words and short sentences, one idea each. Plain markdown only.
+Point at code as `path:line`. Quote code only when it helps, in a fence.
+Say what you are unsure of in one sentence; if the diff cannot answer, say so and stop.";
 
 /// The part of the MR a question is about.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -43,11 +44,18 @@ pub enum Prompt {
 impl Prompt {
     pub fn question(&self) -> String {
         match self {
-            Prompt::Explain => "Explain what this change does and why it might be here.".into(),
-            Prompt::Risks => "List the risks and the things a careful reviewer should check. Be concrete.".into(),
-            Prompt::Summary => "Summarise this MR in five lines and suggest the reading order of the files.".into(),
-            Prompt::Thread => "Summarise this thread and say what is still open and who it waits on.".into(),
-            Prompt::Comment(concern) => format!("Draft a review comment for these lines about: {concern}"),
+            Prompt::Explain => "What does this change do, and why? Answer in 2 or 3 sentences.".into(),
+            Prompt::Risks => "What could break? List at most 5 real risks, worst first, one line each: `path:line`: the risk. \
+                Skip style, naming and anything the tests clearly cover. If there is no real risk, say only: No real risk."
+                .into(),
+            Prompt::Summary => "Summarise this MR in at most 5 bullets: what changes and why. \
+                Then one line: the order to read the files in."
+                .into(),
+            Prompt::Thread => "In at most 3 bullets: what is agreed, what is still open, and who must act next.".into(),
+            Prompt::Comment(concern) => format!(
+                "Write the review comment for these lines about: {concern}. \
+                Write it as the reviewer would post it: 1 to 3 sentences, direct, no greeting. Give the fix when it is clear."
+            ),
             Prompt::Free(text) => text.clone(),
         }
     }
@@ -232,8 +240,8 @@ mod tests {
 
     #[test]
     fn prompts_read_as_the_spec_words_them() {
-        assert!(Prompt::Comment("naming".into()).question().ends_with("about: naming"));
-        assert!(Prompt::Summary.question().starts_with("Summarise this MR"));
+        assert!(Prompt::Comment("naming".into()).question().contains("about: naming."));
+        assert!(Prompt::Summary.question().starts_with("Summarise this MR in at most 5 bullets"));
         assert_eq!(Prompt::Free("why?".into()).question(), "why?");
     }
 }
