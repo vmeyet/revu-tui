@@ -2,27 +2,27 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 120, 24)"
 ---
-╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: cha… ────────╮╭ charge.rs:13 · 1 thread ───────────────────╮
-│   TO REVIEW                  1 ││  omar · 2h · +5 −3 · 2 files · ✓ suc ││ ▎◇ draft                                   │
-│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 un ││ ▎you · unsaved ◇                           │
-│   MINE                       1 ││  ◆ 1 on the MR  enter opens          ││ ▎second one, a bit longer so the modal     │
-│   !41 fix: flaky cache test  D ││                                      ││ ▎cuts it with an ellipsis                  │
-│   WATCHING                   1 ││  ▾ src/p…  +4 −2  ◆1 ◇2 · 1 outdated ││                                            │
-│   !35 infra: new runner   ╭ Publish review ──────────────────────────────────────────────╮n this file · ]n           │
-│   DONE ▸                  │                                                              │                           │
-│                           │ 2 drafts on 1 file                                           │                           │
-│                           │                                                              │                           │
-│                           │   charge.rs:12         nit                                   │                           │
-│                           │ ▎ charge.rs:13         second one, a bit longer so the moda… │                           │
-│                           │                                                              │                           │
-│                           │ [x] approve  a to toggle                                     │                           │
-│                           │                                                              │                           │
-│                           │  enter publish · e edit · d delete · esc back                │                           │
-│                           ╰──────────────────────────────────────────────────────────────╯                           │
-│                                ││           43 +    // hunk two, line… ││                                            │
-│                                ││      42   44  }                      ││                                            │
-│                                ││                                      ││                                            │
-│                                ││  ▸ Cargo.lock          +1 −1  folded ││                                            │
-│                                ││                                      ││                                            │
-╰────────────────────────────────╯╰──────────────────────────────────────╯╰────────────────────────────────────────────╯
+╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────╮╭ charge.rs:13 · 1 thread ─────────────────────╮
+│  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success      ││ ▎◇ draft                                     │
+│   1 of 2 approvals · 3 threads, 1 unresolved                         ││ ▎you · unsaved ◇                             │
+│  ◆ 1 on the MR  enter opens                                          ││ ▎second one, a bit longer so the modal cuts  │
+│                                                                      ││ ▎it with an ellipsis                         │
+│  ▾ src/pay/charge.rs                       +4 −2  ◆1 ◇2 · 1 outdated ││                                              │
+│     ▾ @@ -12,4 +12,5 @@ pu╭ Publish review ──────────────────────────────────────────────╮this file · ]n             │
+│  ◇   12   12  pub async fn│                                                              │                           │
+│  ✓   13      -    let clie│ 2 drafts on 1 file                                           │                           │
+│ ▎◇        13 +    let clie│                                                              │                           │
+│           14 +    let atte│   charge.rs:12         nit                                   │                           │
+│      14   15      let resp│ ▎ charge.rs:13         second one, a bit longer so the moda… │                           │
+│      15   16      audit::r│                                                              │                           │
+│     ▾ @@ -40,3 +41,4 @@ fn│ [x] approve  a to toggle                                     │                           │
+│      40   41  fn idempoten│                                                              │                           │
+│      41      -    Key::fro│  enter publish · e edit · d delete · esc back                │                           │
+│           42 +    Key::fro╰──────────────────────────────────────────────────────────────╯                           │
+│           43 +    // hunk two, line 43 is new                        ││                                              │
+│      42   44  }                                                      ││                                              │
+│                                                                      ││                                              │
+│  ▸ Cargo.lock                                          +1 −1  folded ││                                              │
+│                                                                      ││                                              │
+╰──────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved · 2 drafts (1 unsaved) · P to publish                                          ? help

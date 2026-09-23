@@ -21,6 +21,9 @@ It has to look like it belongs there.
 
 ## Layout
 
+Since M3b the diff holds no thread rows: conversations are marked in an anchor column and read and written in the right pane; `09-thread-pane.md` has the layout, keys and width rules.
+The mockup below predates it.
+
 ```
 ┌ Queue ──────────────────────────┐┌ acme/widgets!42 · feat: charge cards at checkout ────────────────────┐┌ Thread ──────────────────┐
 │ TO REVIEW                    3  ││ nina · feat/checkout → main · 2h · +412 −38 · 9 files · ✓ pipeline   ││ src/pay/charge.rs:57     │
@@ -143,9 +146,10 @@ A removed line and its added twin read as one row when the change is small:
 
 ### Anchors in the flow
 
-A thread renders as one collapsed row under its line: `◆ author · first line of the note · n replies`, `resolved` ones in `faded` with `✓`.
-`enter` on it opens the right pane. A draft renders the same with `◇` and `you`.
-Outdated threads sit in a `outdated` block at the file's tail.
+Built (M3b, `09-thread-pane.md`): no row is inserted for a conversation.
+A two-cell anchor column left of the numbers shows `◆` (unresolved, `warn`), `◇` (my draft, `accent`, `danger` while unsaved) or `✓` (resolved, `faded`), then a count when the line holds several.
+The row under the header lists the threads on the MR; file rows add `· n outdated`.
+While the pane is on a range comment, the range's other lines show `│` in `accent`.
 
 ### Visual select
 
@@ -156,7 +160,7 @@ Outdated threads sit in a `outdated` block at the file's tail.
 
 One of:
 
-- **Thread**: path:line title, then notes as `author · age` in `muted` and the body as markdown (bold, code, lists, quotes; links show their label with `u` to open). The reply input is the input row. `R` toggles resolved. Drafts in the thread show `◇`.
+- **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, or a file's outdated threads), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff. The compose box sits at its bottom. It follows the cursor onto marked lines. Width: three columns from 150, the queue steps aside from 120, a page of its own below.
 - **Overview** (`o` on the header, or on open when there is no thread): description as markdown, labels, reviewers with their state, approvals, pipeline link, then the activity list (system notes) in `muted`.
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
 
@@ -237,14 +241,19 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `A` | approve, unapprove | M2 |
 | `a` | ask: `e` explain, `r` risks, `s` summary, `t` thread, `c` comment, `a` free | M4 |
 
-### Thread
+### Thread pane (M3b)
 
-| Key | Action | |
-|---|---|---|
-| `r` | reply (draft) | M2 |
-| `R` | resolve, unresolve | M2 |
-| `u` | open the first link | M1 |
-| `e` | edit my note | M3 |
+| Key | Action |
+|---|---|
+| `j` `k`, `J` `K` | note by note, thread by thread |
+| `enter` | unfold, fold a resolved thread |
+| `r` | reply, in the compose box |
+| `R` | resolve, unresolve (also on a marked line in the diff) |
+| `e` `d` `E` | edit, delete my draft; edit it in `$EDITOR` |
+| `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
+| `x` `esc` | close |
+
+In the compose box: `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
 
 ### Command line (`:`)
 

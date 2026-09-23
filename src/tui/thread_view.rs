@@ -175,9 +175,10 @@ fn conversation_lines(
     if let Some(thread) = conversation.thread.as_deref().and_then(|id| open.review.thread(id)) {
         let shown = entries.iter().filter(|e| e.conversation == index && matches!(e.kind, EntryKind::Note(_))).count();
         lines.push((stop(EntryKind::Note(0)), status(thread, shown, theme)));
+        let replaced = thread.first().position.as_ref().map(|p| open.review.text_at(p)).unwrap_or_default();
         for (n, note) in thread.notes.iter().take(shown).enumerate() {
             let entry = stop(EntryKind::Note(n));
-            lines.extend(note_lines(note, theme, today, me).into_iter().map(|line| (entry, line)));
+            lines.extend(note_lines(note, &replaced, theme, today, me).into_iter().map(|line| (entry, line)));
         }
     }
     for &draft in &conversation.drafts {
@@ -186,7 +187,12 @@ fn conversation_lines(
         if conversation.thread.is_none() {
             lines.push((entry, Line::from(Span::styled("◇ draft", Style::default().fg(theme.accent)))));
         }
-        lines.extend(draft_lines(draft, theme).into_iter().map(|line| (entry, line)));
+        let position = draft.position.as_ref().or_else(|| {
+            let thread = conversation.thread.as_deref().and_then(|id| open.review.thread(id))?;
+            thread.first().position.as_ref()
+        });
+        let replaced = position.map(|p| open.review.text_at(p)).unwrap_or_default();
+        lines.extend(draft_lines(draft, &replaced, theme).into_iter().map(|line| (entry, line)));
     }
     lines
 }
@@ -247,39 +253,68 @@ fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
 }
 
 /// My draft: `you · draft ◇`, `unsaved` in danger until the forge holds it.
-fn draft_lines<'a>(draft: &crate::review::Draft, theme: Theme) -> Vec<Line<'a>> {
+fn draft_lines<'a>(draft: &crate::review::Draft, replaced: &[String], theme: Theme) -> Vec<Line<'a>> {
     let (state, colour) = if draft.id.is_none() { ("unsaved", theme.danger) } else { ("draft", theme.muted) };
     let mut lines = vec![Line::from(vec![
         Span::styled("you", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {state} ◇"), Style::default().fg(colour)),
     ])];
-    lines.extend(body_lines(&draft.body, theme));
+    lines.extend(body_lines_over(&draft.body, replaced, theme));
     lines
 }
 
-fn note_lines<'a>(note: &Note, theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Line<'a>> {
+/// `replaced` is the text of the lines the thread hangs on, which a suggestion in the note replaces.
+fn note_lines<'a>(note: &Note, replaced: &[String], theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Line<'a>> {
     let author = if note.author.username == me { "you".to_owned() } else { note.author.username.clone() };
     let age = short_age((today - note.created_at).to_std().unwrap_or_default());
     let mut lines = vec![Line::from(vec![
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {age}"), Style::default().fg(theme.muted)),
     ])];
-    lines.extend(body_lines(&note.body, theme));
+    lines.extend(body_lines_over(&note.body, replaced, theme));
     lines
 }
 
 /// Code spans, bullets and quotes; the rest is the text as written, wrapped by the widget.
 pub fn body_lines<'a>(body: &str, theme: Theme) -> Vec<Line<'a>> {
-    let mut in_fence = false;
+    body_lines_over(body, &[], theme)
+}
+
+/// The same, with a suggestion block drawn as a small diff: the `replaced` lines struck as `-`,
+/// the suggested ones as `+`, in the diff colours.
+fn body_lines_over<'a>(body: &str, replaced: &[String], theme: Theme) -> Vec<Line<'a>> {
+    #[derive(PartialEq)]
+    enum Fence {
+        Out,
+        Code,
+        Suggestion,
+    }
+    let mut fence = Fence::Out;
     let mut lines = vec![];
     for raw in body.lines() {
-        if raw.trim_start().starts_with("```") {
-            in_fence = !in_fence;
+        let opener = raw.trim_start();
+        if opener.starts_with("```") {
+            fence = match fence {
+                Fence::Out if opener.starts_with("```suggestion") => {
+                    let old = Style::default().fg(theme.danger);
+                    lines.extend(replaced.iter().map(|text| Line::from(Span::styled(format!("- {text}"), old))));
+                    Fence::Suggestion
+                }
+                Fence::Out => Fence::Code,
+                Fence::Code | Fence::Suggestion => Fence::Out,
+            };
             continue;
         }
-        if in_fence {
-            lines.push(Line::from(Span::styled(format!("  {raw}"), Style::default().fg(theme.code))));
-            continue;
+        match fence {
+            Fence::Code => {
+                lines.push(Line::from(Span::styled(format!("  {raw}"), Style::default().fg(theme.code))));
+                continue;
+            }
+            Fence::Suggestion => {
+                lines.push(Line::from(Span::styled(format!("+ {raw}"), Style::default().fg(theme.success))));
+                continue;
+            }
+            Fence::Out => {}
         }
         let line = match raw.trim_start() {
             rest if rest.starts_with("- ") || rest.starts_with("* ") => Line::from(inline(&format!("• {}", &rest[2..]), theme)),
@@ -328,6 +363,14 @@ mod tests {
         assert_eq!(title(&review, &old, 1, true), "charge.rs:-13 · 1 thread");
         assert_eq!(title(&review, &old, 2, false), "charge.rs:-13 · 2 threads · ↑ line -13");
         assert_eq!(title(&review, &Place::Mr, 1, true), "on the MR · 1 thread");
+    }
+
+    #[test]
+    fn a_suggestion_reads_as_a_small_diff() {
+        let body = "Try this:\n```suggestion:-0+0\nlet client = Client::default();\n```\nthanks";
+        let lines = text(&body_lines_over(body, &["let client = Client::new();".to_owned()], Theme::default()));
+        assert_eq!(lines, ["Try this:", "- let client = Client::new();", "+ let client = Client::default();", "thanks"]);
+        assert_eq!(text(&body_lines("```rust\nlet x = 1;\n```", Theme::default())), ["  let x = 1;"], "other fences stay code");
     }
 
     #[test]

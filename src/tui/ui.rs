@@ -13,7 +13,11 @@ use unicode_width::UnicodeWidthStr;
 const QUEUE_W: u16 = 34;
 /// How wide the diff reads in reading mode: a comfortable line of code with both gutters.
 const READING_W: u16 = 120;
-const SIDE_W: u16 = 32;
+const SIDE_W: u16 = 36;
+/// From this width the queue, the diff and the right pane sit side by side.
+const WIDE: u16 = 150;
+/// From this width the diff and the right pane share the screen; below, the pane is a page of its own.
+const MEDIUM: u16 = 120;
 const SIDE_PCT: u16 = 40;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
@@ -86,16 +90,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some());
-    let side_w = if side_open { SIDE_W.max(main.width * SIDE_PCT / 100) } else { 0 };
-    let queue_w = if app.reading { 0 } else { QUEUE_W };
-    let [queue, review, side] =
-        Layout::horizontal([Constraint::Length(queue_w), Constraint::Min(40), Constraint::Length(side_w)]).areas(main);
-    let review = if app.reading { centered(review, READING_W) } else { review };
-    if !app.reading {
+    let shown = columns(main.width, side_open, app.focus == Focus::Side, app.reading);
+    let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
+    let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
+    let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
+    let review = if app.reading && shown.side == 0 { centered(review, READING_W) } else { review };
+    let side_open = side_open && shown.side > 0;
+    if shown.queue > 0 {
         draw_queue(f, app, queue);
     }
-    diff_view::draw(f, app, review);
-    if app.open.as_ref().is_some_and(|o| o.tree.is_some()) {
+    if shown.diff {
+        diff_view::draw(f, app, review);
+    }
+    if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
         super::tree_view::draw(f, app, side);
     } else if side_open {
         thread_view::draw(f, app, side);
@@ -130,6 +137,28 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if let Some(scroll) = app.help {
         draw_help(f, app, main, scroll);
+    }
+}
+
+/// Which columns show, and how wide: zero hides the queue or the right pane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Columns {
+    queue: u16,
+    side: u16,
+    diff: bool,
+}
+
+/// The right pane's width rules: all three columns from 150, the queue steps aside from 120,
+/// and below that, or in reading mode, the pane is a page of its own while it has the keys.
+fn columns(width: u16, side_open: bool, side_focused: bool, reading: bool) -> Columns {
+    let side = SIDE_W.max(width * SIDE_PCT / 100);
+    let queue = if reading { 0 } else { QUEUE_W };
+    match (side_open, width) {
+        (false, _) => Columns { queue, side: 0, diff: true },
+        (true, WIDE..) if !reading => Columns { queue, side, diff: true },
+        (true, MEDIUM..) if !reading => Columns { queue: 0, side, diff: true },
+        (true, _) if side_focused => Columns { queue: 0, side: width, diff: false },
+        (true, _) => Columns { queue: 0, side: 0, diff: true },
     }
 }
 
@@ -432,6 +461,34 @@ pub fn short_age(age: Duration) -> String {
         60..=3599 => format!("{}m", secs / 60),
         3600..=86_399 => format!("{}h", secs / 3600),
         _ => format!("{}d", secs / 86_400),
+    }
+}
+
+#[cfg(test)]
+mod columns_tests {
+    use super::*;
+
+    #[test]
+    fn the_pane_takes_what_the_width_allows() {
+        assert_eq!(columns(160, true, false, false), Columns { queue: QUEUE_W, side: 64, diff: true }, "three columns from 150");
+        assert_eq!(columns(130, true, true, false), Columns { queue: 0, side: 52, diff: true }, "the queue steps aside from 120");
+        assert_eq!(columns(100, true, true, false), Columns { queue: 0, side: 100, diff: false }, "a page of its own below 120");
+        assert_eq!(columns(100, true, false, false), Columns { queue: 0, side: 0, diff: true }, "h goes back to the diff at the same line");
+        assert_eq!(columns(90, true, true, false).side, 90);
+        assert_eq!(columns(80, false, false, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+    }
+
+    #[test]
+    fn reading_mode_never_puts_the_pane_beside_the_diff() {
+        assert_eq!(columns(200, false, false, true), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(columns(200, true, true, true), Columns { queue: 0, side: 200, diff: false }, "the pane opens the narrow way");
+        assert_eq!(columns(200, true, false, true), Columns { queue: 0, side: 0, diff: true });
+    }
+
+    #[test]
+    fn the_pane_is_never_narrower_than_36_columns() {
+        assert_eq!(columns(80, true, false, false).side, 0);
+        assert_eq!(SIDE_W.max(80 * SIDE_PCT / 100), 36);
     }
 }
 

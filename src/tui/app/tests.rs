@@ -1459,3 +1459,44 @@ fn a_file_ready_for_another_mr_is_dropped_and_the_way_back_is_said() {
     app.apply(Incoming::Viewed { view, outcome: Err("hx not found · set [open] default in config".into()) });
     assert!(app.live_toast().unwrap().danger);
 }
+
+#[test]
+fn a_range_comment_marks_its_other_lines_while_the_pane_is_on_it() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "Vjjc");
+    type_text(&mut app, "these three lines");
+    let screen = render(&mut app, 160, 24);
+    let line_12 = screen.lines().find(|l| l.contains("12   12")).expect("line 12 on screen");
+    assert!(line_12.contains("│   12"), "the first line of the range shows the bar: {line_12}");
+    let line_13 = screen.lines().find(|l| l.contains("13 +    let client")).expect("line 13 on screen");
+    assert!(line_13.contains("◇"), "the last line carries the draft mark: {line_13}");
+}
+
+#[test]
+fn below_120_columns_the_pane_is_a_page_and_h_goes_back_to_the_diff() {
+    let mut app = with_review();
+    press(&mut app, "]n");
+    press(&mut app, "l");
+    let page = render(&mut app, 100, 20);
+    assert!(page.contains("charge.rs:-13") && !page.contains("Queue"), "the pane alone:\n{page}");
+    press(&mut app, "h");
+    let diff = render(&mut app, 100, 20);
+    assert!(diff.contains("let client = Client::new()") && !diff.contains("charge.rs:-13 ·"), "the diff alone:\n{diff}");
+    assert!(app.open.as_ref().unwrap().pane.is_some(), "the pane waits for l");
+}
+
+#[test]
+fn snapshot_narrow_pane_and_a_three_line_box() {
+    let mut app = with_review();
+    press(&mut app, "]n");
+    press(&mut app, "l");
+    insta::assert_snapshot!("pane_narrow", render(&mut app, 100, 20));
+    press(&mut app, "r");
+    press(&mut app, "agreed");
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+    press(&mut app, "keys are per card");
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+    press(&mut app, "and per amount");
+    insta::assert_snapshot!("compose_three_lines", render(&mut app, 160, 24));
+}
