@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 49 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 52 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │

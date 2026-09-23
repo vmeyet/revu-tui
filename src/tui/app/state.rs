@@ -26,6 +26,8 @@ pub struct Settings {
     pub ground: Option<u32>,
     /// Jev is switched on and holds a key: the queue and the files get its marks.
     pub triage: bool,
+    /// Claude's model, when it is switched on and holds a key: `a` asks it.
+    pub ask: Option<String>,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -96,6 +98,12 @@ pub struct App {
     pub ground: Option<u32>,
     /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off for good once it fails.
     pub triage: bool,
+    /// Claude's model while `a` may ask it; `:ai off` clears it for the session.
+    pub ask_model: Option<String>,
+    /// A question already went out this session: the first one says where the MR goes.
+    pub asked: bool,
+    /// The id of the last answer started.
+    pub next_answer: u64,
     /// What Jev said about each queue MR.
     pub verdicts: HashMap<MrKey, crate::ai::triage::Verdict>,
     /// MRs Jev is being asked about right now, so a new queue does not ask twice.
@@ -156,6 +164,9 @@ impl App {
             jump: None,
             ground: settings.ground,
             triage: settings.triage,
+            ask_model: settings.ask,
+            asked: false,
+            next_answer: 0,
             verdicts: HashMap::new(),
             triage_asked: std::collections::HashSet::new(),
             readings: HashMap::new(),

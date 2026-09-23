@@ -97,7 +97,7 @@ impl App {
     /// The pane on `place`, focused, in place of the file tree.
     pub(super) fn open_pane(&mut self, place: Place) {
         let Some(open) = &self.open else { return };
-        self.open = Some(Open { tree: None, ..open.with_pane(Some(Pane::at(place))) });
+        self.open = Some(Open { tree: None, answer: None, ..open.with_pane(Some(Pane::at(place))) });
         self.focus = Focus::Side;
     }
 

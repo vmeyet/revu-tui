@@ -23,6 +23,7 @@ impl App {
             Input::Comment { position } => place_of_position(review, position),
             Input::Reply { .. } if open.pane.is_some() => None,
             Input::Reply { thread } => Some(place_of_thread(review, thread)),
+            Input::Ask { .. } | Input::FollowUp => None,
             Input::EditDraft { index } => review.drafts.get(*index).map(|draft| match (&draft.position, &draft.reply_to) {
                 (Some(position), _) => place_of_position(review, position).unwrap_or(Place::Mr),
                 (None, Some(thread)) => place_of_thread(review, thread),
@@ -99,6 +100,7 @@ impl App {
             Input::Comment { position } => self.add_draft(&open, Draft::on(*position, text)),
             Input::Reply { thread } => self.add_draft(&open, Draft::reply(&thread, text)),
             Input::EditDraft { index } => self.change_draft(&open, index, text),
+            question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
         }
     }
 
@@ -144,6 +146,9 @@ impl App {
                 format!("reply to {}", author.unwrap_or_else(|| "the thread".into()))
             }
             Some(Input::EditDraft { .. }) => "edit draft".to_owned(),
+            Some(Input::Ask { concern: true, .. }) => "comment about".to_owned(),
+            Some(Input::Ask { .. }) => "ask Claude".to_owned(),
+            Some(Input::FollowUp) => "follow-up".to_owned(),
             None => String::new(),
         }
     }
@@ -175,5 +180,7 @@ fn target_key(input: &Input) -> String {
         }
         Input::Reply { thread } => format!("reply {thread}"),
         Input::EditDraft { index } => format!("draft {index}"),
+        Input::Ask { scope, concern, .. } => format!("ask {concern} {scope:?}"),
+        Input::FollowUp => "follow-up".to_owned(),
     }
 }

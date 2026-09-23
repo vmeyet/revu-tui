@@ -1,4 +1,5 @@
 //! The review TUI: an event loop over a pure `App`, with the network at its edge.
+mod answer_view;
 mod app;
 mod brief_view;
 mod complete;
@@ -15,6 +16,7 @@ mod tree_view;
 mod ui;
 
 use crate::ai;
+use crate::ai::anthropic::{self, Ask, Claude, Outcome, Stop, Usage};
 use crate::ai::triage::{self, Verdict};
 use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::{Cache, Entry, keys};
@@ -24,7 +26,7 @@ use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
-use app::{Action, App, Failure, Incoming, Input, Settings};
+use app::{Action, App, Failure, Incoming, Input, Part, Settings};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
@@ -61,6 +63,16 @@ struct Backend {
     checkout: Option<crate::open::Checkout>,
     /// Jev, when `[ai.typesafe]` is on and a key was found.
     jev: Option<TypeSafe>,
+    /// Claude, when `[ai.anthropic]` is on and a key was found.
+    claude: Option<Claude>,
+}
+
+/// An answer kept in the cache: asking the same thing about the same diff paints it at once.
+#[derive(Serialize, Deserialize)]
+struct SavedAnswer {
+    text: String,
+    model: String,
+    usage: Usage,
 }
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out.
@@ -81,6 +93,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         open: ctx.config.open.clone(),
         checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
         jev: jev(&ctx.config.ai),
+        claude: claude(&ctx.config.ai),
     };
     let settings = Settings {
         theme,
@@ -90,6 +103,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         project: ctx.project.clone(),
         ground,
         triage: backend.jev.is_some(),
+        ask: backend.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned()),
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -267,6 +281,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
+            Action::Ask { key, id, request, fresh } => backend.ask(&key, id, &request, fresh, &send).await,
             Action::Triage(mr) => {
                 send(backend.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
             }
@@ -338,6 +353,16 @@ fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
     TypeSafe::connect(&key).ok()
 }
 
+/// Claude, only when the config switches it on and a key is found.
+fn claude(ai: &crate::config::Ai) -> Option<Claude> {
+    if !ai.anthropic.enabled {
+        return None;
+    }
+    let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
+    let (key, _) = ai::key(ai::Provider::Anthropic, &ai::KeyEnv::from_process(), &keychain).ok().flatten()?;
+    Some(Claude::new(key, ai.anthropic.model()))
+}
+
 /// `:set theme=`: the one setting the TUI writes, read back on the next start.
 fn save_theme(name: &str) -> Result<()> {
     let mut config = crate::config::Config::load()?;
@@ -350,6 +375,44 @@ fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
 }
 
 impl Backend {
+    /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
+    /// Only a finished answer is kept, so a cut or refused one is asked again next time.
+    async fn ask(&self, key: &MrKey, id: u64, request: &Ask, fresh: bool, send: &impl Fn(Incoming)) {
+        let part = |part: Part| Incoming::Answer { key: key.clone(), id, part };
+        let Some(claude) = &self.claude else {
+            send(part(Part::Failed("Claude is off".into())));
+            return;
+        };
+        let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
+        if let Some(saved) = self.cache.read::<SavedAnswer>(&cache_key).filter(|_| !fresh) {
+            let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
+            send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
+            return;
+        }
+        let mut text = String::new();
+        let streamed = claude
+            .stream(request, |event| match event {
+                anthropic::Event::Text(more) => {
+                    text.push_str(&more);
+                    send(part(Part::Text(more)));
+                }
+                anthropic::Event::Restart => {
+                    text.clear();
+                    send(part(Part::Restart));
+                }
+            })
+            .await;
+        match streamed {
+            Ok(outcome) => {
+                if outcome.stop == Stop::Done {
+                    let _ = self.cache.write(&cache_key, &SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage });
+                }
+                send(part(Part::Done { outcome, cached_text: None }));
+            }
+            Err(failure) => send(part(Part::Failed(failure.0))),
+        }
+    }
+
     /// Jev's verdict on a queue MR, from the cache while the MR has not moved.
     async fn triage(&self, mr: &crate::forge::QueueMr) -> Result<Incoming, Unavailable> {
         let key = mr.key();
@@ -590,6 +653,7 @@ mod tests {
             open: crate::config::Open::default(),
             checkout: None,
             jev: None,
+            claude: None,
         };
         backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
         let state = backend.state(&key());
@@ -612,6 +676,7 @@ mod tests {
             open: crate::config::Open::default(),
             checkout: None,
             jev: None,
+            claude: None,
         };
         let mr = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
         let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
@@ -624,6 +689,52 @@ mod tests {
         backend.cache.write(&keys::reading(&key(), "abc"), &reading).unwrap();
         let Ok(Incoming::Read { reading: read, .. }) = backend.read(key(), "abc".into(), None, vec![]).await else { panic!("cached") };
         assert!(read.waits_on_me);
+    }
+
+    #[tokio::test]
+    async fn an_answer_streams_once_then_comes_from_the_cache_until_asked_fresh() {
+        use wiremock::matchers::method;
+        let server = wiremock::MockServer::start().await;
+        let stream = [
+            r#"{"type":"message_start","message":{"model":"claude-opus-5","usage":{"input_tokens":10,"cache_read_input_tokens":900}}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Looks fine."}}"#,
+            r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}"#,
+        ]
+        .iter()
+        .map(|data| format!("data: {data}\n\n"))
+        .collect::<String>();
+        wiremock::Mock::given(method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(stream))
+            .expect(2)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend {
+            forge: test_forge(),
+            cache: Cache::in_dir(dir.path()),
+            fold_globs: vec![],
+            watch_labels: vec![],
+            inline: InlineRule::default(),
+            open: crate::config::Open::default(),
+            checkout: None,
+            jev: None,
+            claude: Some(Claude::with_base(&server.uri(), ai::Secret::new("sk-ant-test"), "claude-opus-5")),
+        };
+        let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
+        let heard = std::sync::Mutex::new(vec![]);
+        let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
+        backend.ask(&key(), 1, &request, false, &listen).await;
+        backend.ask(&key(), 2, &request, false, &listen).await;
+        backend.ask(&key(), 3, &request, true, &listen).await;
+        let heard = heard.into_inner().unwrap();
+        let cached: Vec<_> = heard
+            .iter()
+            .filter_map(|i| match i {
+                Incoming::Answer { id, part: Part::Done { cached_text, .. }, .. } => Some((*id, cached_text.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cached, vec![(1, None), (2, Some("Looks fine.".into())), (3, None)], "the second answer never reaches the API");
     }
 
     fn test_forge() -> Forge {
@@ -651,6 +762,7 @@ mod tests {
             open: crate::config::Open::default(),
             checkout: None,
             jev: None,
+            claude: None,
         }
     }
 

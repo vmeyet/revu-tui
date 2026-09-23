@@ -45,6 +45,7 @@ fn settings() -> Settings {
         project: None,
         ground: None,
         triage: false,
+        ask: None,
     }
 }
 
@@ -1593,4 +1594,158 @@ fn jev_failing_says_so_once_and_stops_asking() {
     assert!(app.live_toast().is_some_and(|t| t.text.contains("quota")), "the second failure stays quiet");
     app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
     assert!(app.take_actions().is_empty());
+}
+
+fn asking() -> App {
+    let mut app = App::new(Settings { ask: Some("claude-opus-5".into()), ..settings() });
+    app.today = today();
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    app.queue_move(0);
+    app.handle_key(code(KeyCode::Enter));
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+    app
+}
+
+fn the_ask(actions: &[Action]) -> (u64, crate::ai::anthropic::Ask, bool) {
+    let [Action::Ask { id, request, fresh, .. }] = actions else { panic!("{actions:?}") };
+    (*id, (**request).clone(), *fresh)
+}
+
+fn answer(app: &App) -> super::Answer {
+    app.open.as_ref().unwrap().answer.clone().expect("an answer holds the pane")
+}
+
+fn done(model: &str) -> crate::ai::anthropic::Outcome {
+    crate::ai::anthropic::Outcome {
+        stop: crate::ai::anthropic::Stop::Done,
+        usage: crate::ai::anthropic::Usage { cache_read: 1200, output: 40, ..Default::default() },
+        model: model.into(),
+    }
+}
+
+#[test]
+fn a_says_claude_is_off_until_the_config_and_a_key_switch_it_on() {
+    let mut app = with_review();
+    on_line(&mut app);
+    assert!(press(&mut app, "ae").is_empty());
+    assert!(app.live_toast().is_some_and(|t| t.text.contains("[ai.anthropic] enabled = true")));
+}
+
+#[test]
+fn a_e_explains_the_hunk_under_the_cursor_and_streams_into_the_pane() {
+    let mut app = asking();
+    on_line(&mut app);
+    let (id, request, fresh) = the_ask(&press(&mut app, "ae"));
+    assert!(!fresh);
+    assert_eq!(request.system.len(), 3, "rules, the MR, the hunk");
+    assert!(request.system[2].text.contains("@@"));
+    assert_eq!(request.turns.last().unwrap().text, crate::ai::context::Prompt::Explain.question());
+    assert_eq!(app.focus, Focus::Side);
+    assert!(
+        app.live_toast().is_some_and(|t| t.text.contains("claude-opus-5") && t.text.contains("Anthropic")),
+        "the first question says where the MR goes"
+    );
+    app.apply(Incoming::Answer { key: mr_key(), id, part: super::Part::Text("It adds ".into()) });
+    app.apply(Incoming::Answer { key: mr_key(), id, part: super::Part::Restart });
+    app.apply(Incoming::Answer { key: mr_key(), id, part: super::Part::Text("a retry.".into()) });
+    app.apply(Incoming::Answer { key: mr_key(), id: id + 7, part: super::Part::Text(" stale".into()) });
+    assert_eq!(answer(&app).text, "a retry.", "a restart voids the partial text and an older stream is ignored");
+    app.apply(Incoming::Answer { key: mr_key(), id, part: super::Part::Done { outcome: done("claude-opus-5"), cached_text: None } });
+    assert_eq!(answer(&app).state, super::AnswerState::Done(done("claude-opus-5")));
+    let screen = render(&mut app, 150, 24);
+    assert!(screen.contains("Claude · explain") && screen.contains("a retry.") && screen.contains("1.2k cached"), "{screen}");
+}
+
+#[test]
+fn an_answer_becomes_a_draft_on_the_lines_asked_about() {
+    let mut app = asking();
+    on_line(&mut app);
+    let (id, ..) = the_ask(&press(&mut app, "ae"));
+    app.apply(Incoming::Answer {
+        key: mr_key(),
+        id,
+        part: super::Part::Done { outcome: done("claude-opus-5"), cached_text: Some("Rename this.".into()) },
+    });
+    assert!(answer(&app).cached);
+    press(&mut app, "c");
+    assert!(matches!(app.input, Some(Input::Comment { .. })), "{:?}", app.input);
+    assert_eq!(app.buffer.text(), "Rename this.", "editable before it is saved");
+    let actions = app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(actions.as_slice(), [Action::SaveDraft { .. }]), "{actions:?}");
+}
+
+#[test]
+fn a_follow_up_carries_the_conversation_and_r_asks_again_fresh() {
+    let mut app = asking();
+    on_line(&mut app);
+    let (id, ..) = the_ask(&press(&mut app, "ae"));
+    app.apply(Incoming::Answer { key: mr_key(), id, part: super::Part::Text("First answer.".into()) });
+    app.apply(Incoming::Answer { key: mr_key(), id, part: super::Part::Done { outcome: done("claude-opus-5"), cached_text: None } });
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.input, Some(Input::FollowUp));
+    let (next, request, _) = the_ask(&type_text(&mut app, "and the tests?"));
+    assert!(next > id);
+    let roles: Vec<_> = request.turns.iter().map(|t| (t.role, t.text.as_str())).collect();
+    assert_eq!(
+        roles[1..],
+        [(crate::ai::anthropic::Role::Assistant, "First answer."), (crate::ai::anthropic::Role::User, "and the tests?")]
+    );
+    let (_, again, fresh) = the_ask(&press(&mut app, "R"));
+    assert!(fresh && again == request, "R asks the same thing past the cache");
+}
+
+#[test]
+fn a_c_asks_for_the_concern_then_drafts_a_comment_about_it() {
+    let mut app = asking();
+    on_line(&mut app);
+    assert!(press(&mut app, "ac").is_empty());
+    assert_eq!(app.input_label(), "comment about");
+    let (_, request, _) = the_ask(&type_text(&mut app, "naming"));
+    assert!(request.turns[0].text.ends_with("about: naming"));
+    assert!(matches!(answer(&app).target, super::ask::Target::Lines(_)));
+}
+
+#[test]
+fn a_t_summarises_the_thread_and_its_answer_becomes_a_reply() {
+    let mut app = asking();
+    press(&mut app, "]c");
+    app.handle_key(code(KeyCode::Enter));
+    app.handle_key(code(KeyCode::Enter));
+    press(&mut app, "]n");
+    let (id, request, _) = the_ask(&press(&mut app, "at"));
+    assert!(request.system[2].text.contains("## Thread"));
+    app.apply(Incoming::Answer {
+        key: mr_key(),
+        id,
+        part: super::Part::Done { outcome: done("claude-opus-5"), cached_text: Some("Waits on nina.".into()) },
+    });
+    press(&mut app, "c");
+    assert!(matches!(app.input, Some(Input::Reply { .. })), "{:?}", app.input);
+}
+
+#[test]
+fn ai_off_stops_every_ai_call_for_the_session() {
+    let mut app = asking();
+    app.triage = true;
+    on_line(&mut app);
+    press(&mut app, ":ai off");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!((app.ask_model.as_deref(), app.triage), (None, false));
+    assert!(press(&mut app, "ae").is_empty());
+    press(&mut app, ":ask why");
+    assert!(app.handle_key(code(KeyCode::Enter)).is_empty());
+}
+
+#[test]
+fn snapshot_answer_pane() {
+    let mut app = asking();
+    on_line(&mut app);
+    let (id, ..) = the_ask(&press(&mut app, "ae"));
+    let text = "It swaps the client for one keyed by the card, so a retry **reuses** the idempotency key.\n\n- `charge` now takes the key\n- nothing else moves";
+    app.apply(Incoming::Answer {
+        key: mr_key(),
+        id,
+        part: super::Part::Done { outcome: done("claude-opus-5"), cached_text: Some(text.into()) },
+    });
+    insta::assert_snapshot!("answer_pane", render(&mut app, 150, 20));
 }

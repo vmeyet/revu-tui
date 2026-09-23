@@ -76,7 +76,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 /// Text rows the box shows: its own lines, at least one, at most 8 or 40 % of the pane, plus its border.
-fn box_height(field: &Field, pane: Rect) -> u16 {
+pub(super) fn box_height(field: &Field, pane: Rect) -> u16 {
     let width = pane.width.saturating_sub(4).max(1) as usize;
     let rows: usize = field.text().split('\n').map(|line| line.width().max(1).div_ceil(width)).sum();
     let most = (usize::from(pane.height) * 40 / 100).clamp(1, COMPOSE_ROWS);
@@ -84,7 +84,7 @@ fn box_height(field: &Field, pane: Rect) -> u16 {
 }
 
 /// The compose box: its target in the top border, the keys in the bottom one, the caret reversed.
-fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Field, area: Rect) {
+pub(super) fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Field, area: Rect) {
     let block = ratatui::widgets::Block::bordered()
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent))
@@ -119,7 +119,7 @@ fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Field, area: R
 }
 
 /// The pane's frame; its title fades when the reader looks at another line.
-fn pane_block(theme: Theme, title: &str, focused: bool) -> ratatui::widgets::Block<'static> {
+pub(super) fn pane_block(theme: Theme, title: &str, focused: bool) -> ratatui::widgets::Block<'static> {
     pane(theme, title, focused)
 }
 
@@ -214,7 +214,7 @@ fn status(thread: &Thread, shown: usize, theme: Theme) -> Line<'static> {
 }
 
 /// A line cut at word boundaries to `width`, styles kept; a word longer than the width is cut.
-fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
+pub(super) fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
     if width == 0 || line.width() <= width {
         return vec![line];
     }
