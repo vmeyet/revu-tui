@@ -74,6 +74,23 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 Comments stay drafts until `P`: GitLab draft notes, or your pending review on GitHub.
 They survive a restart, and nothing is public before you publish.
 
+**Your own keys.**
+On a Mac French AZERTY keyboard, `[` and `]` take `⌥⇧(` and `⌥⇧)`, so `]n` is three keys and a chord.
+`layout = "azerty"` under `[keys]` makes `(` and `)` do what `[` and `]` do: `)n` next thread, `(c` previous hunk, `)f` next file with an open thread.
+`[keys.bind]` adds a key of your own to any action; it does what the default key does in the pane you are in, and `?` shows it.
+
+```toml
+[keys]
+layout = "azerty"             # ( and ) work like [ and ]; the brackets keep working
+
+[keys.bind]
+next_thread = "N"             # one key, two keys (")x"), a named one ("ctrl-e", "tab"), or a list
+prev_thread = ["P", "ctrl-y"]
+```
+
+A key revu already reads is refused at startup with the action that owns it, and so are two actions on one key.
+The actions: `next_thread` `prev_thread` `next_hunk` `prev_hunk` `next_file_unresolved` `prev_file_unresolved` `next_file` `prev_file` `fold_toggle` `fold_open` `fold_close` `fold_all` `unfold_all` `fold_header` `viewed` `reading` `split` `tree` `pipeline` `wrap` `whitespace` `more_context` `view_file` `description` `comment` `comment_old` `select` `suggest` `editor` `resolve` `publish` `approve` `open_browser` `copy_link` `scope` `filter` `palette` `jump` `help` `quit`.
+
 ## Commands
 
 Every command takes `--json`, for scripts and agents.
@@ -106,6 +123,9 @@ theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine,
 
 [notify]
 enabled = true                # a macOS notification when an MR lands in To review while revu runs
+
+[keys]
+layout = "azerty"             # ( and ) work like [ and ]; see "Your own keys" above
 
 [hosts."git.acme.dev"]
 forge = "github"              # a GitHub Enterprise host

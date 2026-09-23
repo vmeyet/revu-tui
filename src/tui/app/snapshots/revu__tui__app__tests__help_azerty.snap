@@ -1,0 +1,44 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 40)"
+---
+╭ Queue · all ──╭ keys · 1–37 of 54 · j k scroll ──────────────────────────────────╮───────────────╮
+│   TO REVIEW   │        j k  move                                                 │               │
+│ ▎ !42 feat: ch│        g G  first, last                                          │               │
+│   MINE        │      ^d ^u  half page                                            │               │
+│   !41 fix: fla│        h l  pane to the left; open the MR, or a marked line's th │               │
+│   WATCHING    │      enter  open the MR, a marked line's threads, or toggle the  │               │
+│   !35 infra: n│      esc x  close the right pane; esc again goes back to the que │               │
+│   DONE ▸      │          /  filter the queue                                     │               │
+│               │          *  in the queue: this repo only, or every project       │               │
+│               │          i  the MR description                                   │               │
+│               │          r  refresh                                              │               │
+│               │          o  open in the browser (the line, in a diff)            │               │
+│               │          y  copy the URL                                         │               │
+│               │  click !42  open the MR, in terminals that follow links          │               │
+│               │  tab S-tab  next, previous file                                  │               │
+│               │      )c (c  next, previous hunk                                  │               │
+│               │    N )n (n  next, previous line with a conversation; the pane fo │               │
+│               │      )f (f  next, previous file with an open thread              │               │
+│               │         za  toggle the fold under the cursor                     │               │
+│               │          D  changed words inline, or every line split            │               │
+│               │      zc zo  close, open                                          │               │
+│               │      zM zR  fold, unfold every file                              │               │
+│               │      zo zc  in the queue: open, fold the section (enter too)     │               │
+│               │         zh  fold the MR header to one row                        │               │
+│               │          t  file tree: enter jumps to a file or folds a folder,  │               │
+│               │          p  pipeline: jobs by stage, failures first; o opens a j │               │
+│               │         zv  mark the file viewed: it folds, and comes back if it │               │
+│               │         zz  reading mode: the diff alone, centered; h brings the │               │
+│               │          w  wrap long lines under their text                     │               │
+│               │          W  hide changes that are only whitespace (shown as ≈)   │               │
+│               │          +  ten more unchanged lines above and below the hunk    │               │
+│               │          v  the file after the change in your program, at this l │               │
+│               │          c  new thread on the line: a compose box opens in the p │               │
+│               │          C  on a changed pair: comment on the old side           │               │
+│               │          V  select lines: c comments on them, y copies them      │               │
+│               │          E  write the comment in $EDITOR                         │               │
+│               │          s  new thread prefilled with a suggestion of the lines  │               │
+│               │  ⌥enter ^o  in the box: newline, move the text to $EDITOR        │               │
+╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
+ gitlab.com · nina                                                                           ? help

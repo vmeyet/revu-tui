@@ -415,17 +415,20 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
 /// The key list, scrolled by `scroll` rows when it does not fit; the title says how to move.
 fn draw_help(f: &mut Frame, app: &App, area: Rect, scroll: usize) {
     let theme = app.theme;
-    let lines: Vec<Line> = HELP
+    let keys: Vec<String> = HELP.iter().map(|(key, _)| app.keymap.label(key)).collect();
+    let key_w = keys.iter().map(|k| k.width()).max().unwrap_or(0).max(10);
+    let lines: Vec<Line> = keys
         .iter()
-        .map(|(key, what)| {
+        .zip(HELP)
+        .map(|(key, (_, what))| {
             Line::from(vec![
-                Span::styled(format!("{key:>10}  "), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-                Span::raw(*what),
+                Span::styled(format!("{key:>key_w$}  "), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+                Span::raw(what),
             ])
         })
         .collect();
     let height = (lines.len() as u16 + 2).min(area.height);
-    let width = 68.min(area.width);
+    let width = (key_w as u16 + 58).min(area.width);
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
     let visible = usize::from(height.saturating_sub(2));
     let overflow = lines.len() > visible;

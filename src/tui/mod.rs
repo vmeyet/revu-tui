@@ -111,6 +111,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         ask: backend.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned()),
         notify: ctx.config.notify.enabled,
         hosts,
+        keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();

@@ -9,6 +9,7 @@ pub mod ctx;
 mod diff;
 mod forge;
 mod fuzzy;
+mod keymap;
 mod legacy;
 mod mrref;
 mod open;
