@@ -1,4 +1,4 @@
-use super::{Action, App, Focus, MrKey};
+use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef};
 use crate::review::{Review, Row};
@@ -12,8 +12,8 @@ pub struct Open {
     pub rows: Vec<Row>,
     pub selected: usize,
     pub scroll: usize,
-    pub thread: Option<String>,
-    pub thread_scroll: usize,
+    /// The conversations of one place, when the right pane holds them.
+    pub pane: Option<super::pane::Pane>,
     /// How old the painted data was when it came from the cache, and when that was.
     pub cached: Option<(Instant, Duration)>,
     /// Where `V` started; the selection runs from there to the cursor.
@@ -26,7 +26,7 @@ impl Open {
     pub fn new(key: MrKey, review: Review) -> Self {
         let rows = review.rows();
         let selected = first_selectable(&rows);
-        Self { key, review, rows, selected, scroll: 0, thread: None, thread_scroll: 0, cached: None, select_from: None, tree: None }
+        Self { key, review, rows, selected, scroll: 0, pane: None, cached: None, select_from: None, tree: None }
     }
 
     /// The rows the selection covers, the cursor included; just the cursor without `V`.
@@ -54,8 +54,7 @@ impl Open {
             .and_then(|row| rows.iter().position(|r| same_place(r, row)))
             .unwrap_or(self.selected)
             .min(rows.len().saturating_sub(1));
-        let thread = self.thread.clone().filter(|id| review.thread(id).is_some());
-        Self { review, rows, selected, thread, ..self.clone() }
+        Self { review, rows, selected, ..self.clone() }
     }
 
     pub fn row(&self) -> Option<&Row> {
@@ -67,28 +66,13 @@ impl Open {
         self.cached.map(|(at, age)| age + now.saturating_duration_since(at))
     }
 
-    pub(super) fn file_of(&self, row: &Row) -> Option<usize> {
-        match row {
-            Row::File { index, .. } | Row::Outdated { file: index } => Some(*index),
-            Row::Hunk { file, .. } | Row::Line { file, .. } | Row::Pair { file, .. } | Row::Context { file, .. } => Some(*file),
-            Row::Thread { id } => {
-                let path = self.review.thread(id)?.anchor.as_ref()?.path.clone();
-                self.review.files.iter().position(|f| f.new_path == path || f.old_path == path)
-            }
-            Row::Draft { index } => {
-                let path = self.review.drafts.get(*index)?.anchor.as_ref()?.path.clone();
-                self.review.files.iter().position(|f| f.new_path == path || f.old_path == path)
-            }
-            Row::Header | Row::Gap => None,
-        }
-    }
-
     fn move_to(&self, index: usize) -> Self {
         Self { selected: index.min(self.rows.len().saturating_sub(1)), ..self.clone() }
     }
 
     fn move_by(&self, delta: isize) -> Self {
-        let selectable = |i: usize| is_selectable(&self.rows[i]);
+        let on_the_mr = !self.review.conversations(&crate::review::Place::Mr).is_empty();
+        let selectable = |i: usize| is_selectable(&self.rows[i], on_the_mr);
         let mut at = self.selected as isize;
         let mut left = delta.abs();
         let step = delta.signum();
@@ -105,15 +89,15 @@ impl Open {
         self.move_to(at as usize)
     }
 
-    /// The next row after the cursor that `wanted` accepts, wrapping around; None when there is none.
-    fn seek(&self, forward: bool, wanted: impl Fn(&Row) -> bool) -> Option<usize> {
+    /// The next row index after the cursor that `wanted` accepts, wrapping around; None when there is none.
+    fn seek(&self, forward: bool, wanted: impl Fn(usize) -> bool) -> Option<usize> {
         let len = self.rows.len();
-        (1..len).map(|k| if forward { (self.selected + k) % len } else { (self.selected + len - k) % len }).find(|&i| wanted(&self.rows[i]))
+        (1..len).map(|k| if forward { (self.selected + k) % len } else { (self.selected + len - k) % len }).find(|&i| wanted(i))
     }
 
     fn fold_target(&self) -> Option<(String, Option<usize>)> {
         let row = self.row()?;
-        let file = &self.review.files[self.file_of(row)?];
+        let file = &self.review.files[row.file()?];
         let hunk = match row {
             Row::Hunk { index, .. } => Some(*index),
             Row::Line { hunk, .. } | Row::Pair { hunk, .. } | Row::Context { hunk, .. } => Some(*hunk),
@@ -156,13 +140,18 @@ impl Open {
     }
 }
 
-/// The header is drawn above the rows and gaps are air: the cursor lands on neither.
-fn is_selectable(row: &Row) -> bool {
-    !matches!(row, Row::Header | Row::Gap)
+/// Gaps are air, and the header row only holds something when the MR itself has conversations.
+fn is_selectable(row: &Row, on_the_mr: bool) -> bool {
+    match row {
+        Row::Gap => false,
+        Row::Header => on_the_mr,
+        _ => true,
+    }
 }
 
+/// Where the cursor starts: the first file, even when the header holds conversations.
 fn first_selectable(rows: &[Row]) -> usize {
-    rows.iter().position(is_selectable).unwrap_or(0)
+    rows.iter().position(|row| is_selectable(row, false)).unwrap_or(0)
 }
 
 /// A row still names the same thing once folds changed, even if its `open` flag flipped.
@@ -189,6 +178,13 @@ impl App {
     }
 
     pub(super) fn review_jump(&mut self, forward: bool, wanted: impl Fn(&Row) -> bool) {
+        let Some(open) = &self.open else { return };
+        let rows = open.rows.clone();
+        self.review_jump_where(forward, |index| wanted(&rows[index]));
+    }
+
+    /// Moves to the next row index `wanted` accepts, wrapping around.
+    pub(super) fn review_jump_where(&mut self, forward: bool, wanted: impl Fn(usize) -> bool) {
         let Some(open) = &self.open else { return };
         match open.seek(forward, wanted) {
             Some(index) => self.open = Some(open.move_to(index)),
@@ -334,66 +330,12 @@ impl App {
     }
 
     pub(super) fn enter_review_row(&mut self) -> Vec<Action> {
-        let Some(open) = &self.open else { return vec![] };
-        match open.row().cloned() {
-            Some(Row::Thread { id }) => {
-                self.open = Some(Open { thread: Some(id), thread_scroll: 0, tree: None, ..open.clone() });
-                self.focus = Focus::Side;
-                vec![]
-            }
-            Some(Row::Outdated { file }) => {
-                let first = open.review.outdated(&open.review.files[file].new_path).first().map(|t| t.id.clone());
-                self.open = Some(Open { thread: first, thread_scroll: 0, ..open.clone() });
-                self.focus = Focus::Side;
-                vec![]
-            }
+        if self.open_pane_here() {
+            return vec![];
+        }
+        match self.open.as_ref().and_then(|o| o.row().cloned()) {
             Some(Row::File { .. } | Row::Hunk { .. }) => self.fold_at_cursor(None),
-            Some(Row::Draft { .. }) => {
-                self.edit_draft_here();
-                vec![]
-            }
             _ => vec![],
         }
-    }
-
-    pub(super) fn close_thread(&mut self) {
-        if let Some(open) = &self.open {
-            self.open = Some(Open { thread: None, thread_scroll: 0, ..open.clone() });
-        }
-        self.focus = Focus::Review;
-    }
-
-    pub(super) fn thread_scroll(&mut self, delta: isize) {
-        if let Some(open) = &self.open {
-            let scroll = (open.thread_scroll as isize + delta).max(0) as usize;
-            self.open = Some(Open { thread_scroll: scroll, ..open.clone() });
-        }
-    }
-
-    /// The first `http` link in the open thread, for `u`.
-    pub(super) fn thread_link(&self) -> Option<String> {
-        let open = self.open.as_ref()?;
-        let thread = open.review.thread(open.thread.as_ref()?)?;
-        thread.notes.iter().find_map(|n| first_link(&n.body))
-    }
-}
-
-fn first_link(text: &str) -> Option<String> {
-    let start = text.find("http://").or_else(|| text.find("https://"))?;
-    let rest = &text[start..];
-    let end = rest.find(|c: char| c.is_whitespace() || matches!(c, ')' | '>' | ']')).unwrap_or(rest.len());
-    Some(rest[..end].to_owned())
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-    use super::*;
-
-    #[test]
-    fn first_link_stops_at_whitespace_and_brackets() {
-        assert_eq!(first_link("see https://a.b/c) now"), Some("https://a.b/c".into()));
-        assert_eq!(first_link("[x](http://a.b/c?d=1)"), Some("http://a.b/c?d=1".into()));
-        assert_eq!(first_link("no link"), None);
     }
 }

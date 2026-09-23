@@ -69,10 +69,14 @@ impl App {
     }
 
     /// From the queue, right opens the selected MR, as `enter` does, so the diff always matches the row.
+    /// In the diff, a marked line (or a file's outdated threads) opens the pane on it.
     fn focus_right(&mut self) -> Vec<Action> {
+        if self.focus == Focus::Review && (self.open_pane_here() || self.open_outdated_here()) {
+            return vec![];
+        }
         self.focus = match (self.focus, &self.open) {
             (Focus::Queue, _) => return self.open_selected(),
-            (Focus::Review, Some(open)) if open.thread.is_some() || open.tree.is_some() => Focus::Side,
+            (Focus::Review, Some(open)) if open.pane.is_some() || open.tree.is_some() => Focus::Side,
             (Focus::Side, _) => Focus::Side,
             (focus, _) => focus,
         };
@@ -154,6 +158,12 @@ impl App {
         {
             return actions;
         }
+        let actions = self.move_in_review(key);
+        self.follow_cursor();
+        actions
+    }
+
+    fn move_in_review(&mut self, key: KeyEvent) -> Vec<Action> {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.review_move(1),
             KeyCode::Char('k') | KeyCode::Up => self.review_move(-1),
@@ -172,6 +182,7 @@ impl App {
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),
+            KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => self.close_pane(),
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
             KeyCode::Char('i') => self.brief = self.open.as_ref().map(|o| Brief::of_review(&o.review)),
@@ -214,7 +225,7 @@ impl App {
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
             ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
-            ('[' | ']', 'n') => self.review_jump(forward, |r| matches!(r, Row::Thread { .. } | Row::Outdated { .. })),
+            ('[' | ']', 'n') => self.jump_to_marked(forward),
             ('[' | ']', 'f') => {
                 let wanted = self.files_with_unresolved();
                 self.review_jump(forward, move |r| matches!(r, Row::File { index, .. } if wanted.contains(index)));
@@ -242,37 +253,7 @@ impl App {
         if self.tree_open() {
             return self.handle_tree_key(key);
         }
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.thread_scroll(1),
-            KeyCode::Char('k') | KeyCode::Up => self.thread_scroll(-1),
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.thread_scroll(HALF_PAGE),
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.thread_scroll(-HALF_PAGE),
-            KeyCode::Char('u') => {
-                let Some(url) = self.thread_link() else {
-                    self.toast("no link in this thread");
-                    return vec![];
-                };
-                return vec![Action::OpenUrl(url)];
-            }
-            KeyCode::Char('o') => {
-                let url = self.open.as_ref().and_then(|o| o.thread.as_ref().map(|id| note_url(&o.review.mr.web_url, &o.review, id)));
-                return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default();
-            }
-            KeyCode::Char('v') => return self.view_thread(),
-            KeyCode::Char('r') => self.reply_here(),
-            KeyCode::Char('R') => return self.toggle_resolved(),
-            KeyCode::Char('P') => self.open_publish(),
-            KeyCode::Esc => self.close_thread(),
-            _ => {}
-        }
-        vec![]
-    }
-}
-
-fn note_url(web_url: &str, review: &crate::review::Review, id: &str) -> String {
-    match review.thread(id) {
-        Some(thread) => format!("{web_url}#note_{}", thread.first().id),
-        None => web_url.to_owned(),
+        self.handle_pane_key(key)
     }
 }
 

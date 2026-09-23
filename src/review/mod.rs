@@ -1,11 +1,13 @@
 //! The value the TUI edits: one MR, its files as parsed hunks, its threads hung on lines, and what is folded.
 pub mod draft;
+pub mod place;
 pub mod position;
 pub mod suggestion;
 pub mod thread;
 pub mod tree;
 
 pub use draft::Draft;
+pub use place::{Conversation, Mark, Marker, Markers, Place};
 pub use thread::{Anchor, Side, Thread};
 
 use crate::diff::fold::{FileMeta, FoldState};
@@ -171,17 +173,18 @@ pub enum Row {
         removed: usize,
         added: usize,
     },
-    Thread {
-        id: String,
-    },
-    /// An unpublished note on a line; the index points into `Review::drafts`.
-    Draft {
-        index: usize,
-    },
-    Outdated {
-        file: usize,
-    },
     Gap,
+}
+
+impl Row {
+    /// The file a row belongs to; the header and gaps belong to none.
+    pub fn file(&self) -> Option<usize> {
+        match self {
+            Row::File { index, .. } => Some(*index),
+            Row::Hunk { file, .. } | Row::Line { file, .. } | Row::Pair { file, .. } | Row::Context { file, .. } => Some(*file),
+            Row::Header | Row::Gap => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -353,17 +356,15 @@ impl Review {
                 let quiet: Vec<(usize, usize)> = words::whitespace_pairs(hunk).into_iter().filter(|pair| !pairs.contains(pair)).collect();
                 pairs.extend(quiet);
             }
-            for (line_index, line) in hunk.lines.iter().enumerate() {
+            for line_index in 0..hunk.lines.len() {
                 if pairs.iter().any(|&(_, added)| added == line_index) {
                     continue;
                 }
                 if let Some(&(removed, added)) = pairs.iter().find(|&&(removed, _)| removed == line_index) {
                     rows.push(Row::Pair { file: index, hunk: hunk_index, removed, added });
-                    self.push_anchors(rows, file, &hunk.lines[added]);
                 } else {
                     rows.push(Row::Line { file: index, hunk: hunk_index, index: line_index });
                 }
-                self.push_anchors(rows, file, line);
             }
             let last_new = hunk.lines.iter().filter_map(|l| l.new).max().unwrap_or(hunk.new_start.saturating_sub(1));
             let last_old = hunk.lines.iter().filter_map(|l| l.old).max().unwrap_or(hunk.old_start.saturating_sub(1));
@@ -376,16 +377,6 @@ impl Review {
                 shown_until = shown_until.max(until);
             }
         }
-        if !self.outdated(&file.new_path).is_empty() {
-            rows.push(Row::Outdated { file: index });
-        }
-    }
-
-    /// Threads hung on a line, new side first: a context line carries both numbers.
-    fn threads_on(&self, file: &File, line: &diff::Line) -> Vec<&Thread> {
-        let new = line.new.map(|n| self.threads_at(&file.new_path, Side::New, n)).unwrap_or_default();
-        let old = line.old.map(|n| self.threads_at(&file.old_path, Side::Old, n)).unwrap_or_default();
-        new.into_iter().chain(old).collect()
     }
 }
 
@@ -393,20 +384,6 @@ impl Review {
 fn context_row(file: usize, hunk: usize, offset: i64, new: u32) -> Row {
     let old = (i64::from(new) + offset).max(0) as u32;
     Row::Context { file, hunk, old, new }
-}
-
-impl Review {
-    /// The threads, then the drafts, hung on one line.
-    fn push_anchors(&self, rows: &mut Vec<Row>, file: &File, line: &diff::Line) {
-        rows.extend(self.threads_on(file, line).into_iter().map(|t| Row::Thread { id: t.id.clone() }));
-        rows.extend(self.drafts_on(file, line).into_iter().map(|index| Row::Draft { index }));
-    }
-
-    fn drafts_on(&self, file: &File, line: &diff::Line) -> Vec<usize> {
-        let new = line.new.map(|n| self.drafts_at(&file.new_path, Side::New, n)).unwrap_or_default();
-        let old = line.old.map(|n| self.drafts_at(&file.old_path, Side::Old, n)).unwrap_or_default();
-        new.into_iter().chain(old).map(|(index, _)| index).collect()
-    }
 }
 
 fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
@@ -494,7 +471,7 @@ pub(super) mod tests {
         ]
     }
 
-    pub(super) fn review() -> Review {
+    pub(crate) fn review() -> Review {
         Review::new(mr(), &[charge(), lock()], discussions(), &["*.lock".into()])
     }
 
@@ -559,9 +536,8 @@ pub(super) mod tests {
         assert_eq!(rows[0], Row::Header);
         assert_eq!(rows[2], Row::File { index: 0, open: true });
         assert_eq!(rows[3], Row::Hunk { file: 0, index: 0, open: true });
-        let thread_at = rows.iter().position(|r| *r == Row::Thread { id: "c0ffee00c0ffee00".into() }).unwrap();
-        assert_eq!(rows[thread_at - 1], Row::Line { file: 0, hunk: 0, index: 1 }, "right after the removed line 13");
-        assert!(rows.contains(&Row::Outdated { file: 0 }));
+        let lines = review.files[0].hunks.iter().map(|h| h.lines.len()).sum::<usize>();
+        assert_eq!(rows.len(), 1 + 2 + 2 + 2 + lines, "header, gaps, files, hunks and lines only: conversations live in the pane");
         assert_eq!(rows.last(), Some(&Row::File { index: 1, open: false }), "the lock file starts folded");
         assert_eq!(rows.iter().filter(|r| matches!(r, Row::Gap)).count(), 2);
     }
@@ -582,23 +558,7 @@ pub(super) mod tests {
         let rows = folded.rows();
         assert_eq!(rows[3], Row::Hunk { file: 0, index: 0, open: false });
         assert_eq!(rows[4], Row::Hunk { file: 0, index: 1, open: true });
-        assert!(!rows.contains(&Row::Thread { id: "c0ffee00c0ffee00".into() }));
         assert!(rows.contains(&Row::Line { file: 0, hunk: 1, index: 0 }));
-    }
-
-    #[test]
-    fn drafts_hang_after_the_threads_of_their_line_and_replies_hang_nowhere() {
-        let on_line =
-            Draft::new(Some(Anchor { path: "src/pay/charge.rs".into(), side: Side::Old, line: 13 }), "why drop the default client?");
-        let reply = Draft::reply("c0ffee00c0ffee00", "agreed");
-        let on_mr = Draft::new(None, "overall fine");
-        let review = review().with_drafts(vec![reply, on_line, on_mr]);
-        let rows = review.rows();
-        let thread_at = rows.iter().position(|r| *r == Row::Thread { id: "c0ffee00c0ffee00".into() }).unwrap();
-        assert_eq!(rows[thread_at + 1], Row::Draft { index: 1 });
-        assert_eq!(rows.iter().filter(|r| matches!(r, Row::Draft { .. })).count(), 1);
-        assert_eq!(review.drafts_at("src/pay/charge.rs", Side::Old, 13).len(), 1);
-        assert!(review.drafts_at("src/pay/charge.rs", Side::New, 13).is_empty());
     }
 
     #[test]

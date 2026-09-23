@@ -2,10 +2,10 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
-╭ Queu╭ keys · 4–24 of 47 · j k scroll ──────────────────────────────────╮─────╮
-│   TO│        h l  pane to the left; open the MR, pane to the right     │     │
-│ ▎ !4│      enter  open the MR, the thread, or toggle the fold          │     │
-│   MI│        esc  back: close the thread, then the queue               │     │
+╭ Queu╭ keys · 4–24 of 48 · j k scroll ──────────────────────────────────╮─────╮
+│   TO│        h l  pane to the left; open the MR, or a marked line's th │     │
+│ ▎ !4│      enter  open the MR, a marked line's threads, or toggle the  │     │
+│   MI│      esc x  close the right pane; esc again goes back to the que │     │
 │   !4│          /  filter the queue                                     │     │
 │   WA│          *  in the queue: this repo only, or every project       │     │
 │   !3│          i  the MR description                                   │     │
@@ -15,7 +15,7 @@ expression: "render(&mut app, 80, 24)"
 │     │  click !42  open the MR, in terminals that follow links          │     │
 │     │  tab S-tab  next, previous file                                  │     │
 │     │      ]c [c  next, previous hunk                                  │     │
-│     │      ]n [n  next, previous thread                                │     │
+│     │      ]n [n  next, previous line with a conversation; the pane fo │     │
 │     │      ]f [f  next, previous file with an open thread              │     │
 │     │         za  toggle the fold under the cursor                     │     │
 │     │          D  changed words inline, or every line split            │     │

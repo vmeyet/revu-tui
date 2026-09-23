@@ -46,8 +46,8 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | Key | Action |
 |---|---|
 | `j` `k`, `g` `G` | Move |
-| `enter` / `l` | Open the MR, the thread, or toggle a fold |
-| `tab`, `]c`, `]n` | Next file, hunk, thread |
+| `enter` / `l` | Open the MR, or the threads of a marked line (`◆` `◇` `✓` left of the numbers); `enter` on a file or hunk folds it |
+| `tab`, `]c`, `]n` | Next file, hunk, line with a conversation |
 | `za`, `zM` `zR` | Fold one, fold all, unfold all |
 | `zo` `zc` (queue), `zh` | Open or fold the section under the cursor, fold the MR header |
 | `D` | One-word changes inline (`2;` struck, `20;` after it), or every line split |
@@ -58,7 +58,8 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `+` | Ten more unchanged lines around the hunk |
 | `v` | The file as it is after the change, in your own program at this line (`:view old` for before) |
 | `c` | Comment on the line (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change) |
-| `r` / `R` | Reply / resolve, in a thread |
+| `r` / `R` | Reply / resolve, in the right pane (`R` also on a marked line) |
+| `J` `K`, `e`, `d`, `x` | In the pane: next, previous thread; edit, delete my draft; close |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
 | `o` / `y` | Open in the browser / copy the link |
 | `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:view old`, `:set theme=nord`; tab completes |

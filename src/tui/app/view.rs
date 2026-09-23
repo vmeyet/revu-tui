@@ -8,7 +8,7 @@ impl App {
     pub(super) fn view_here(&mut self, side: Side) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(row) = open.row().cloned() else { return vec![] };
-        let Some(file) = open.file_of(&row) else {
+        let Some(file) = row.file() else {
             self.toast("move onto a file first");
             return vec![];
         };
@@ -16,10 +16,11 @@ impl App {
         self.view(file, side, lines)
     }
 
-    /// `v` in the thread pane: the file at the open thread's line.
+    /// `v` in the pane: the file at the line of the thread, or draft, under the cursor.
     pub(super) fn view_thread(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let anchor = open.thread.as_ref().and_then(|id| open.review.thread(id)).and_then(|t| t.anchor.clone());
+        let thread = open.focused_thread().and_then(|id| open.review.thread(&id)).and_then(|t| t.anchor.clone());
+        let anchor = thread.or_else(|| open.focused_draft().and_then(|i| open.review.drafts[i].anchor.clone()));
         let Some(anchor) = anchor else {
             self.toast("this thread is on the MR, not on a file");
             return vec![];
