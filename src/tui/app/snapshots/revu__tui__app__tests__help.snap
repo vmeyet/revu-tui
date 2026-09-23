@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 42 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 45 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │
@@ -28,6 +28,9 @@ expression: "render(&mut app, 100, 40)"
 │               │         zh  fold the MR header to one row                        │               │
 │               │          t  file tree: enter jumps to a file or folds a folder,  │               │
 │               │         zv  mark the file viewed: it folds, and comes back if it │               │
+│               │         zz  reading mode: the diff alone, centered; h brings the │               │
+│               │          w  wrap long lines under their text                     │               │
+│               │          W  hide changes that are only whitespace (shown as ≈)   │               │
 │               │          c  comment on the line, as a draft                      │               │
 │               │          C  on a changed pair: comment on the old side           │               │
 │               │          V  select lines: c comments on them, y copies them      │               │
@@ -37,8 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │          P  publish: enter sends, e edits, m moves a lost draft  │               │
 │               │          A  approve, unapprove                                   │               │
 │               │          r  in a thread: reply, as a draft                       │               │
-│               │          R  in a thread: resolve, unresolve                      │               │
-│               │          u  in a thread: open its first link                     │               │
-│               │        esc  drop the selection, close the input                  │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

@@ -42,7 +42,7 @@ impl Open {
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
     /// The reader's inline or split choice outlives the refresh.
     pub fn with_review(&self, review: Review) -> Self {
-        let review = Review { split: self.review.split, ..review };
+        let review = Review { split: self.review.split, quiet_whitespace: self.review.quiet_whitespace, ..review };
         let rows = review.rows();
         let selected = self
             .row()
@@ -123,6 +123,10 @@ impl Open {
 
     fn with_split(&self, split: bool) -> Self {
         self.relaid(self.review.with_split(split))
+    }
+
+    fn with_quiet_whitespace(&self, quiet: bool) -> Self {
+        self.relaid(self.review.with_quiet_whitespace(quiet))
     }
 
     /// The same review laid out again, the cursor kept on what it pointed at.
@@ -262,6 +266,14 @@ impl App {
         let next = open.with_split(!open.review.split);
         self.toast(if next.review.split { "split diff" } else { "inline diff" });
         self.keep(next)
+    }
+
+    /// `W`: lines that changed only in whitespace read as one quiet row, or show as they are.
+    pub(super) fn toggle_whitespace(&mut self) {
+        let Some(open) = &self.open else { return };
+        let next = open.with_quiet_whitespace(!open.review.quiet_whitespace);
+        self.toast(if next.review.quiet_whitespace { "whitespace-only changes hidden" } else { "whitespace changes shown" });
+        self.open = Some(next);
     }
 
     /// Shows `next` and saves what the reader chose in it: folds, viewed files, split.

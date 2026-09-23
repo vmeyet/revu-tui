@@ -99,6 +99,20 @@ pub fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// Every equal-run pair whose lines differ in whitespace only.
+pub fn whitespace_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
+    pairs(&hunk.lines)
+        .into_iter()
+        .flat_map(|(removed, added)| removed.zip(added))
+        .filter(|&(r, a)| same_but_whitespace(&hunk.lines[r].text, &hunk.lines[a].text))
+        .collect()
+}
+
+/// Equal once every space, tab and line ending is taken out.
+pub fn same_but_whitespace(old: &str, new: &str) -> bool {
+    old != new && old.chars().filter(|c| !c.is_whitespace()).eq(new.chars().filter(|c| !c.is_whitespace()))
+}
+
 fn changed_ranges(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
     let (mut old_at, mut new_at) = (0, 0);
     let (mut old_words, mut new_words) = (Vec::new(), Vec::new());
@@ -210,5 +224,15 @@ mod tests {
         assert_eq!(inline_pairs(&hunk, rule), vec![(0, 2)]);
         let unequal = parse(include_str!("fixtures/tabs.diff"))[0].clone();
         assert!(inline_pairs(&unequal, rule).is_empty(), "one removed, two added");
+    }
+
+    #[test]
+    fn whitespace_only_changes_pair_and_real_ones_do_not() {
+        assert!(same_but_whitespace("let a = 1;", "let  a = 1; "));
+        assert!(same_but_whitespace("\tif x {", "    if x {"));
+        assert!(!same_but_whitespace("let a = 1;", "let a = 1;"), "an unchanged line is no whitespace change");
+        assert!(!same_but_whitespace("let a = 1;", "let a = 2;"));
+        let hunk = &crate::diff::parse("@@ -1,2 +1,2 @@\n-\tone();\n-two();\n+    one();\n+three();\n")[0];
+        assert_eq!(whitespace_pairs(hunk), [(0, 2)]);
     }
 }
