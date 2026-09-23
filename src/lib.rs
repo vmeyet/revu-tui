@@ -1,4 +1,5 @@
 //! Merge request review in your terminal, on GitLab and GitHub: the library behind the `revu` binary.
+mod ai;
 mod auth;
 mod cache;
 pub mod cli;

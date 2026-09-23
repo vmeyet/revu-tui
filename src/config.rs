@@ -111,21 +111,74 @@ impl Tui {
     }
 }
 
+/// `[ai]`: each provider is switched on by itself, and both are off until then, because enabling
+/// one sends MR content to it. Keys are never here: they live in the keychain (`revu ai login`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ai {
-    /// Off by default: enabling it sends MR content to the configured provider.
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Typesafe::is_default")]
+    pub typesafe: Typesafe,
+    #[serde(default, skip_serializing_if = "Anthropic::is_default")]
+    pub anthropic: Anthropic,
+    /// The single `[ai] enabled/provider/model` switch this table replaced; read only to point at the new keys.
+    #[serde(default, skip_serializing)]
+    enabled: Option<toml::Value>,
+    #[serde(default, skip_serializing)]
+    provider: Option<toml::Value>,
+    #[serde(default, skip_serializing)]
+    model: Option<toml::Value>,
 }
 
 impl Ai {
     fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    fn check(&self) -> Result<()> {
+        if self.enabled.is_some() || self.provider.is_some() || self.model.is_some() {
+            anyhow::bail!(
+                "`[ai] enabled`, `provider` and `model` moved to one table per provider: \
+                 `[ai.anthropic] enabled = true` (with `model`), `[ai.typesafe] enabled = true`"
+            );
+        }
+        Ok(())
+    }
+}
+
+/// `[ai.typesafe]`: Jev ranks the queue and the files of an MR.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Typesafe {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Typesafe {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// `[ai.anthropic]`: Claude answers questions about the MR.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Anthropic {
+    #[serde(default)]
+    pub enabled: bool,
+    /// `claude-opus-5` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+impl Anthropic {
+    pub const DEFAULT_MODEL: &str = "claude-opus-5";
+
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn model(&self) -> &str {
+        self.model.as_deref().unwrap_or(Self::DEFAULT_MODEL)
     }
 }
 
@@ -181,6 +234,7 @@ impl Config {
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let config: Self = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
         config.open.check().with_context(|| format!("in {}", path.display()))?;
+        config.ai.check().with_context(|| format!("in {}", path.display()))?;
         Ok(config)
     }
 
@@ -228,6 +282,19 @@ mod tests {
         assert!(err.contains("*.md") && err.contains("{path}"), "{err}");
         std::fs::write(&path, "[open]\ndefault = \"\"\n").unwrap();
         assert!(format!("{:#}", Config::load_from(&path).unwrap_err()).contains("empty"));
+    }
+
+    #[test]
+    fn each_ai_provider_has_its_own_table_and_the_old_switch_names_the_new_one() {
+        let config: Config = toml::from_str("[ai.anthropic]\nenabled = true\n\n[ai.typesafe]\nenabled = true\n").unwrap();
+        assert!(config.ai.anthropic.enabled && config.ai.typesafe.enabled);
+        assert_eq!(config.ai.anthropic.model(), "claude-opus-5");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[ai]\nenabled = true\nprovider = \"anthropic\"\n").unwrap();
+        let err = format!("{:#}", Config::load_from(&path).unwrap_err());
+        assert!(err.contains("[ai.anthropic] enabled = true"), "{err}");
+        assert!(toml::from_str::<Config>("[ai.anthropic]\nkey = \"sk-ant\"\n").is_err(), "a key in the config is refused");
     }
 
     #[test]

@@ -239,10 +239,12 @@ theme = "tokyonight"
 highlight = "none"
 ascii = false                # true swaps glyphs (◆ ▸ ●) for ASCII
 
-[ai]
-enabled = false              # both providers off until this is true
-provider = "anthropic"       # or "typesafe"; typesafe is triage only
+[ai.anthropic]
+enabled = false              # questions about the MR; off until true
 model = "claude-opus-5"
+
+[ai.typesafe]
+enabled = false              # Jev triage of the queue and files; off until true
 ```
 
 Unknown keys fail loudly with the file path and key, as in slack-tui.
