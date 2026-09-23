@@ -400,7 +400,7 @@ fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+pub(crate) mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture;

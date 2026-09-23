@@ -12,6 +12,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 mod tree;
+mod triage;
 mod view;
 mod write;
 
@@ -22,11 +23,12 @@ pub use queue::{Badge, QueueRow};
 pub use review::Open;
 pub use state::{App, Settings};
 pub use tree::Tree;
+pub use triage::Mark;
 pub use write::Publish;
 
 use crate::diff::fold::FoldState;
 pub use crate::forge::MrKey;
-use crate::forge::{Discussion, Position, Sections};
+use crate::forge::{Discussion, Position, QueueMr, Sections};
 use crate::review::{Draft, Review};
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, HashMap};
@@ -108,6 +110,15 @@ pub enum Action {
     },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
+    /// Ask Jev how urgent and how big a queue MR is.
+    Triage(Box<QueueMr>),
+    /// Ask Jev whether the open MR waits on me and how risky each file is, at commit `head`.
+    Read {
+        key: MrKey,
+        head: String,
+        waits: Option<serde_json::Value>,
+        files: Vec<(String, serde_json::Value)>,
+    },
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
     Compose {
         input: Input,
@@ -136,9 +147,16 @@ pub enum Failure {
     Open,
     Poll,
     Local,
-    Draft { index: usize },
+    Draft {
+        index: usize,
+    },
     Publish,
-    Resolve { thread: String, resolved: bool },
+    /// Jev could not answer; the views go on without its marks.
+    Triage,
+    Resolve {
+        thread: String,
+        resolved: bool,
+    },
     Approve,
 }
 
@@ -203,6 +221,15 @@ pub enum Incoming {
     Composed {
         input: Input,
         text: Option<String>,
+    },
+    Triaged {
+        key: MrKey,
+        verdict: crate::ai::triage::Verdict,
+    },
+    Read {
+        key: MrKey,
+        head: String,
+        reading: crate::ai::triage::Reading,
     },
     Failed {
         what: Failure,
