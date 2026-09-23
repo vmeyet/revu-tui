@@ -41,6 +41,18 @@ impl Cache {
         Self { dir: dir.into() }
     }
 
+    /// The cache root itself, for what belongs to no host.
+    pub fn shared() -> Self {
+        Self::in_dir(root())
+    }
+
+    /// A folder for files that are not JSON, created on first use.
+    pub fn folder(&self, name: &str) -> Result<PathBuf> {
+        let path = self.dir.join(name);
+        std::fs::create_dir_all(&path).with_context(|| format!("creating {}", path.display()))?;
+        Ok(path)
+    }
+
     /// A missing or unreadable file is a miss; an unreadable one is removed so it cannot fail again.
     pub fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let path = self.dir.join(key);
@@ -189,6 +201,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path().join("gitlab.com"));
         (dir, cache)
+    }
+
+    #[test]
+    fn a_folder_is_created_once_and_reused() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path().join("root"));
+        let first = cache.folder("cargo_target").unwrap();
+        std::fs::write(first.join("kept"), "").unwrap();
+        let second = cache.folder("cargo_target").unwrap();
+        assert!(first.is_dir());
+        assert_eq!(first, second);
+        assert!(second.join("kept").exists(), "a second call keeps what the folder holds");
     }
 
     #[test]
