@@ -3,6 +3,7 @@ pub mod draft;
 pub mod position;
 pub mod suggestion;
 pub mod thread;
+pub mod tree;
 
 pub use draft::Draft;
 pub use thread::{Anchor, Side, Thread};
@@ -68,6 +69,20 @@ impl File {
     /// The syntax colours of one diff line; empty when the file is not coloured.
     pub fn spans(&self, hunk: usize, line: usize) -> &[(std::ops::Range<usize>, syntax::Token)] {
         self.syntax.get(hunk).and_then(|lines| lines.get(line)).map_or(&[], Vec::as_slice)
+    }
+
+    /// Names this file's change: equal fingerprints mean nothing was pushed to it since.
+    pub fn fingerprint(&self) -> String {
+        let mut hash = sha1_smol::Sha1::new();
+        for hunk in &self.hunks {
+            hash.update(hunk.header.as_bytes());
+            for line in &hunk.lines {
+                hash.update(&[line.kind as u8]);
+                hash.update(line.text.as_bytes());
+                hash.update(b"\n");
+            }
+        }
+        hash.digest().to_string()
     }
 
     pub fn meta(&self) -> FileMeta {
@@ -198,6 +213,16 @@ impl Review {
 
     pub fn with_viewed(&self, viewed: BTreeSet<String>) -> Self {
         Self { viewed, ..self.clone() }
+    }
+
+    /// Viewed files with the fingerprint of the change the reader saw, as the cache keeps them.
+    pub fn viewed_fingerprints(&self) -> std::collections::BTreeMap<String, String> {
+        self.files.iter().filter(|f| self.viewed.contains(&f.new_path)).map(|f| (f.new_path.clone(), f.fingerprint())).collect()
+    }
+
+    /// The saved viewed files that still show the change the reader saw: one pushed to since is to read again.
+    pub fn still_viewed(&self, saved: &std::collections::BTreeMap<String, String>) -> BTreeSet<String> {
+        self.files.iter().filter(|f| saved.get(&f.new_path) == Some(&f.fingerprint())).map(|f| f.new_path.clone()).collect()
     }
 
     pub fn with_drafts(&self, drafts: Vec<Draft>) -> Self {
@@ -509,5 +534,15 @@ pub(super) mod tests {
         let paths: Vec<String> = review.files.iter().map(|f| f.new_path.clone()).collect();
         let rows = review.with_fold(review.fold.fold_all(&paths)).rows();
         assert_eq!(rows, [Row::Header, Row::Gap, Row::File { index: 0, open: false }, Row::Gap, Row::File { index: 1, open: false }]);
+    }
+
+    #[test]
+    fn a_viewed_file_stays_viewed_until_its_change_moves() {
+        let review = review();
+        let path = review.files[0].new_path.clone();
+        let saved = review.with_viewed(BTreeSet::from([path.clone()])).viewed_fingerprints();
+        assert_eq!(review.still_viewed(&saved), BTreeSet::from([path.clone()]));
+        let moved = std::collections::BTreeMap::from([(path, "an older change".to_owned())]);
+        assert!(review.still_viewed(&moved).is_empty(), "a file pushed to since is to read again");
     }
 }

@@ -113,5 +113,5 @@ fn carry_folds(old: &Review, fresh: &Review) -> Review {
             fold.hunks.insert(file.new_path.clone(), hunks.clone());
         }
     }
-    fresh.with_fold(fold).with_viewed(old.viewed.clone())
+    fresh.with_fold(fold).with_viewed(fresh.still_viewed(&old.viewed_fingerprints()))
 }

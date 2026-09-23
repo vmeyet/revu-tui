@@ -11,6 +11,7 @@ mod palette;
 mod publish_view;
 mod theme;
 mod thread_view;
+mod tree_view;
 mod ui;
 
 use crate::cache::{Cache, Entry, keys};
@@ -25,7 +26,7 @@ use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
@@ -36,8 +37,9 @@ const TICK: Duration = Duration::from_millis(100);
 struct MrState {
     #[serde(default)]
     fold: FoldState,
+    /// Viewed files by path, with the fingerprint of the change seen.
     #[serde(default)]
-    viewed: BTreeSet<String>,
+    viewed_files: BTreeMap<String, String>,
     #[serde(default)]
     opened_at: Option<DateTime<Utc>>,
     #[serde(default)]
@@ -341,14 +343,14 @@ impl Backend {
         let fold = merged_fold(review.fold.clone(), state.fold);
         review
             .with_fold(fold)
-            .with_viewed(state.viewed)
+            .with_viewed(review.still_viewed(&state.viewed_files))
             .with_inline(self.inline)
             .with_split(state.split)
             .with_drafts(drafts.iter().map(Draft::held).collect())
     }
 
-    fn save_state(&self, key: &MrKey, fold: FoldState, viewed: BTreeSet<String>, split: bool) -> Result<()> {
-        let state = MrState { fold, viewed, split, ..self.state(key) };
+    fn save_state(&self, key: &MrKey, fold: FoldState, viewed_files: BTreeMap<String, String>, split: bool) -> Result<()> {
+        let state = MrState { fold, viewed_files, split, ..self.state(key) };
         self.cache.write(&keys::state(key), &state)
     }
 }
@@ -414,9 +416,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
         let backend = Backend { forge: test_forge(), cache, fold_globs: vec![], watch_labels: vec![], inline: InlineRule::default() };
-        backend.save_state(&key(), FoldState::default(), BTreeSet::from(["a.rs".to_owned()]), true).unwrap();
+        backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
         let state = backend.state(&key());
-        assert_eq!((state.viewed, state.split), (BTreeSet::from(["a.rs".to_owned()]), true), "the split choice is remembered per MR");
+        assert_eq!((state.viewed_files, state.split), (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true), "the split choice is remembered per MR");
     }
 
     fn test_forge() -> Forge {
