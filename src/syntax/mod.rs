@@ -52,12 +52,13 @@ impl Language {
 }
 
 /// Every language revu colours. Order matters only when two claim one extension: the first wins.
-pub static LANGUAGES: [Language; 5] = [
+pub static LANGUAGES: [Language; 6] = [
     Language::new("TypeScript", &["ts", "mts", "cts"], typescript),
     Language::new("TSX", &["tsx"], tsx),
     Language::new("JavaScript", &["js", "mjs", "cjs", "jsx"], javascript),
     Language::new("Python", &["py", "pyi"], python),
     Language::new("JSON", &["json", "jsonc"], json),
+    Language::new("SQL", &["sql"], sql),
 ];
 
 /// The language of a path, by its extension; nothing is loaded by asking.
@@ -170,6 +171,22 @@ fn json() -> Option<HighlightConfiguration> {
     build(tree_sitter_json::LANGUAGE.into(), "json", tree_sitter_json::HIGHLIGHTS_QUERY, "")
 }
 
+/// The grammar's query is written for Neovim: its number patterns use Lua's `%d`, which the Rust
+/// highlighter reads as a literal `%`, so every literal stayed a string; comments also carry a
+/// Neovim-only `@spell`. Here a literal is a string only when quoted, a number when it is digits.
+fn sql() -> Option<HighlightConfiguration> {
+    const LITERALS: &str = r#"((literal) @string (#match? @string "^['\"]"))
+((literal) @number (#match? @number "^[-+]?[0-9]*[.]?[0-9]+$"))
+"#;
+    let upstream = tree_sitter_sequel::HIGHLIGHTS_QUERY.replace("@comment @spell", "@comment");
+    let kept: Vec<String> = upstream
+        .split("\n\n")
+        .filter(|block| !block.contains("%d"))
+        .map(|block| block.lines().filter(|line| line.trim() != "(literal) @string").collect::<Vec<_>>().join("\n"))
+        .collect();
+    build(tree_sitter_sequel::LANGUAGE.into(), "sql", &format!("{LITERALS}{}", kept.join("\n\n")), "")
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -211,6 +228,16 @@ mod tests {
         assert!(first.contains(&("// the answer", Token::Comment)), "{first:?}");
         let second = tokens_of(source.lines().nth(1).unwrap(), &lines[1]);
         assert!(second.contains(&("\"nina\"", Token::String)), "{second:?}");
+    }
+
+    #[test]
+    fn sql_colours_keywords_strings_numbers_and_comments() {
+        let sql = "SELECT id, count(*) FROM orders WHERE status = 'paid' AND total > 10; -- recent\n";
+        let tokens = tokens_of(sql.lines().next().unwrap(), &highlight(by_name("SQL"), sql)[0]);
+        assert!(tokens.contains(&("SELECT", Token::Keyword)) && tokens.contains(&("WHERE", Token::Keyword)), "{tokens:?}");
+        assert!(tokens.contains(&("'paid'", Token::String)) && tokens.contains(&("10", Token::Number)), "{tokens:?}");
+        assert!(tokens.contains(&("-- recent", Token::Comment)), "{tokens:?}");
+        assert_eq!(language_for("db/migrations/0042_orders.SQL", &LANGUAGES).map(|l| l.name), Some("SQL"));
     }
 
     #[test]

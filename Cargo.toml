@@ -45,6 +45,7 @@ tree-sitter-python = "0.25"
 tree-sitter-typescript = "0.23"
 unicode-width = "0.2"
 url = "2.5"
+tree-sitter-sequel = "0.3"
 
 [dev-dependencies]
 insta = "1"
