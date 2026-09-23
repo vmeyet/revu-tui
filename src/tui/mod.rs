@@ -1,10 +1,13 @@
 //! The review TUI: an event loop over a pure `App`, with the network at its edge.
 mod app;
 mod brief_view;
+mod complete;
 mod compose;
 mod diff_view;
 mod field;
 mod ground;
+mod jump;
+mod palette;
 mod publish_view;
 mod theme;
 mod thread_view;
@@ -57,7 +60,8 @@ pub async fn run(ctx: Ctx) -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", ")))?,
         None => theme::Theme::default(),
     };
-    let theme = ground::ask().map_or(theme, |ground| theme.with_ground(ground));
+    let ground = ground::ask();
+    let theme = ground.map_or(theme, |ground| theme.with_ground(ground));
     let backend = Backend {
         forge: ctx.forge.clone(),
         cache: ctx.cache.clone(),
@@ -71,6 +75,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         kind: ctx.forge.kind(),
         me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
         project: ctx.project.clone(),
+        ground,
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -159,6 +164,11 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::OpenUrl(url) => {
                 send(open_url(&url).map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("opened in the browser".into())));
             }
+            Action::SaveTheme(name) => {
+                if let Err(e) = save_theme(&name) {
+                    send(failed(Failure::Local, &e));
+                }
+            }
             Action::Yank(url) => send(copy(&url).map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
             Action::SaveDraft { key, index, draft } => {
                 send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
@@ -232,6 +242,13 @@ fn print_links(links: &[Hyperlink]) {
         );
     }
     let _ = out.flush();
+}
+
+/// `:set theme=`: the one setting the TUI writes, read back on the next start.
+fn save_theme(name: &str) -> Result<()> {
+    let mut config = crate::config::Config::load()?;
+    config.tui.theme = Some(name.to_owned());
+    config.save()
 }
 
 fn failed(what: Failure, err: &anyhow::Error) -> Incoming {

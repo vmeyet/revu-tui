@@ -173,7 +173,7 @@ impl App {
         vec![Action::Compose { input: Input::Comment { position: Box::new(position) }, draft }]
     }
 
-    fn toggle_approval(&mut self) -> Vec<Action> {
+    pub(super) fn toggle_approval(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let approve = !open.review.mr.approvals.user_has_approved;
         vec![Action::Approve { key: open.key.clone(), approve }]

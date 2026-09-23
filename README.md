@@ -56,6 +56,8 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `r` / `R` | Reply / resolve, in a thread |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
 | `o` / `y` | Open in the browser / copy the link |
+| `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:set theme=nord`; tab completes |
+| `ctrl-k` | Jump to a file of the open MR, or to another MR |
 | `?` | Every key |
 
 Comments stay drafts until `P`: GitLab draft notes, or your pending review on GitHub.

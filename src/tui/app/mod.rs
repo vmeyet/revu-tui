@@ -1,5 +1,6 @@
 //! The pure state machine: keys in, actions out, incoming answers applied. No clock, no network.
 mod brief;
+mod commands;
 mod feedback;
 mod incoming;
 mod input;
@@ -85,6 +86,8 @@ pub enum Action {
         key: MrKey,
         approve: bool,
     },
+    /// `:set theme=…`: write the theme to the config so the next start keeps it.
+    SaveTheme(String),
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
     Compose {
         input: Input,

@@ -17,7 +17,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 38] = [
+pub const HELP: [(&str, &str); 40] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -53,6 +53,8 @@ pub const HELP: [(&str, &str); 38] = [
     ("R", "in a thread: resolve, unresolve"),
     ("u", "in a thread: open its first link"),
     ("esc", "drop the selection, close the input"),
+    (":", "command line: :go !42 · :set theme=nord · tab completes"),
+    ("^k", "jump to a file of the MR, or to another MR"),
     ("?", "this help"),
     ("q", "quit"),
     ("^c", "quit, always"),
@@ -69,7 +71,7 @@ pub struct Link {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
-    let input_rows = u16::from(app.filtering || app.input.is_some());
+    let input_rows = u16::from(app.filtering || app.input.is_some() || app.palette.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.thread.is_some());
@@ -83,11 +85,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if app.input.is_some() {
         draw_input(f, app, input);
+    } else if let Some(palette) = &app.palette {
+        draw_palette(f, app, palette, input);
     } else if app.filtering {
         draw_filter(f, app, input);
     }
     draw_status(f, app, status);
-    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some();
+    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.jump.is_some();
     if modal {
         app.links.clear();
     }
@@ -105,6 +109,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if app.brief.is_some() {
         brief_view::draw(f, app, main);
+    }
+    if let Some(jump) = &app.jump {
+        super::jump::draw(f, jump, main, app.theme);
     }
     if let Some(scroll) = app.help {
         draw_help(f, app, main, scroll);
@@ -235,6 +242,22 @@ fn draw_filter(f: &mut Frame, app: &App, area: Rect) {
         Span::styled("  enter keep · esc clear", Style::default().fg(theme.faded)),
     ]);
     f.render_widget(Paragraph::new(line), area);
+}
+
+/// The `:` line: what is typed, the ghost of the best completion, and the options while tab cycles.
+fn draw_palette(f: &mut Frame, app: &App, palette: &super::palette::Palette, area: Rect) {
+    let theme = app.theme;
+    let candidates = app.completions_for(&palette.input);
+    let mut spans =
+        vec![Span::styled(":", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)), Span::raw(palette.input.clone())];
+    match (palette.hint(), palette.ghost(&candidates)) {
+        (Some(hint), _) => spans.push(Span::styled(format!("   {hint}"), Style::default().fg(theme.muted))),
+        (None, Some(ghost)) => spans.push(Span::styled(ghost, Style::default().fg(theme.faded))),
+        (None, None) => {}
+    }
+    spans.insert(2, Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
+    spans.push(Span::styled("  tab completes · enter runs · esc", Style::default().fg(theme.faded)));
+    f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn draw_input(f: &mut Frame, app: &App, area: Rect) {

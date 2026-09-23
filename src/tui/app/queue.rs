@@ -148,6 +148,11 @@ impl App {
         }
         let Some(mr) = self.selected_mr() else { return vec![] };
         let key = mr.key();
+        self.open_key(key)
+    }
+
+    /// Shows the MR `key` in the review, fetching it unless it is the one already open.
+    pub(super) fn open_key(&mut self, key: crate::forge::MrKey) -> Vec<Action> {
         if self.open.as_ref().is_some_and(|o| o.key == key) {
             self.focus = super::Focus::Review;
             return vec![];
