@@ -43,7 +43,7 @@ It has to look like it belongs there.
  gitlab.com · vivien · 2 drafts · P to publish                                                     ⠋ refreshing · ? help
 ```
 
-- Left pane: 34 columns, the queue. Hidden in reading mode (`z`).
+- Left pane: 34 columns, the queue. Hidden in reading mode (`zz`), where the diff sits centered at 120 columns; `h` or `zz` brings the queue back.
 - Middle: the review, `Min(60)`.
 - Right: 32 columns or 40 % of the width, only when a thread, the MR overview, the file tree or an AI answer is open.
 - Row above the status line: the input row, only while typing.
@@ -123,8 +123,8 @@ Between two hunks the elided lines show as `· · ·  38 lines` in `faded`; `+` 
 - Every palette carries these six colours (`added`, `removed`, the two fills, the two word fills), so a theme decides the diff look, not the renderer. A key typed in the first ~50 ms after launch may be read with the answer and lost.
 - Context lines are `fg` with no surface.
 - Tabs render as `→   `, trailing whitespace as `·` in `warn`, both only on changed lines.
-- Long lines are cut with `…`; `w` wraps them with a hanging indent under the text column.
-- `W` hides whitespace-only changes (the line shows as context with a `≈` sign).
+- Long lines are cut with `…`; `w` wraps them with a hanging indent under the text column, the line's fill carried on every row.
+- `W` hides whitespace-only changes: a removed line and its added twin that differ only in spaces, tabs or line endings read as one context row with a `≈` sign, even in split mode.
 - The selected line has the `▎` bar and, if the theme has `highlight`, the fill.
 
 ### Inline pairs
@@ -207,7 +207,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `i` | the MR description, in a modal | M3 |
 | `:` | command line | M3 |
 | `ctrl-k` | jump to an MR or a file | M3 |
-| `z` | reading mode | M3 |
+| `zz` | reading mode (`z` is the fold prefix) | M3 |
 | `?` | help | M1 |
 | `q` | quit (`ctrl-c` always) | M1 |
 

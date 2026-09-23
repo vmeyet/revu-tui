@@ -1244,3 +1244,35 @@ fn snapshot_file_tree() {
     press(&mut app, "]cjzvt");
     insta::assert_snapshot!("file_tree", render(&mut app, 120, 20));
 }
+
+#[test]
+fn big_w_hides_whitespace_only_changes_and_back() {
+    let mut app = with_review();
+    press(&mut app, "W");
+    assert!(app.open.as_ref().unwrap().review.quiet_whitespace);
+    assert!(app.live_toast().unwrap().text.contains("hidden"));
+    press(&mut app, "W");
+    assert!(!app.open.as_ref().unwrap().review.quiet_whitespace);
+}
+
+#[test]
+fn zz_reads_the_diff_alone_and_h_brings_the_queue_back() {
+    let mut app = with_queue();
+    press(&mut app, "zz");
+    assert!(!app.reading, "nothing to read before an MR is open");
+    let mut app = with_review();
+    press(&mut app, "zz");
+    assert!(app.reading);
+    let screen = render(&mut app, 160, 20);
+    assert!(!screen.contains("Queue"), "{screen}");
+    press(&mut app, "h");
+    assert!(!app.reading);
+    assert_eq!(app.focus, Focus::Queue);
+}
+
+#[test]
+fn snapshot_wrapped_lines() {
+    let mut app = with_review();
+    press(&mut app, "w");
+    insta::assert_snapshot!("wrapped", render(&mut app, 80, 24));
+}

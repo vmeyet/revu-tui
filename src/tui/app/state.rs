@@ -54,6 +54,10 @@ pub struct App {
     /// Queue sections folded to their header; Done starts folded.
     /// The review header on one row instead of two.
     pub header_folded: bool,
+    /// Long diff lines wrap under their text instead of ending in `…`, `w`.
+    pub wrap: bool,
+    /// Reading mode, `zz`: the queue hides and the diff sits centered.
+    pub reading: bool,
     pub closed_sections: std::collections::BTreeSet<&'static str>,
     pub queue_loading: bool,
     pub open: Option<Open>,
@@ -107,6 +111,8 @@ impl App {
             filter: String::new(),
             filtering: false,
             header_folded: false,
+            wrap: false,
+            reading: false,
             closed_sections: std::collections::BTreeSet::from(["DONE"]),
             queue_loading: true,
             open: None,

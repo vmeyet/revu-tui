@@ -11,13 +11,15 @@ use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
 const QUEUE_W: u16 = 34;
+/// How wide the diff reads in reading mode: a comfortable line of code with both gutters.
+const READING_W: u16 = 120;
 const SIDE_W: u16 = 32;
 const SIDE_PCT: u16 = 40;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 42] = [
+pub const HELP: [(&str, &str); 45] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -43,6 +45,9 @@ pub const HELP: [(&str, &str); 42] = [
     ("zh", "fold the MR header to one row"),
     ("t", "file tree: enter jumps to a file or folds a folder, t closes"),
     ("zv", "mark the file viewed: it folds, and comes back if it changes"),
+    ("zz", "reading mode: the diff alone, centered; h brings the queue back"),
+    ("w", "wrap long lines under their text"),
+    ("W", "hide changes that are only whitespace (shown as ≈)"),
     ("c", "comment on the line, as a draft"),
     ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),
@@ -78,9 +83,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.thread.is_some() || o.tree.is_some());
     let side_w = if side_open { SIDE_W.max(main.width * SIDE_PCT / 100) } else { 0 };
+    let queue_w = if app.reading { 0 } else { QUEUE_W };
     let [queue, review, side] =
-        Layout::horizontal([Constraint::Length(QUEUE_W), Constraint::Min(40), Constraint::Length(side_w)]).areas(main);
-    draw_queue(f, app, queue);
+        Layout::horizontal([Constraint::Length(queue_w), Constraint::Min(40), Constraint::Length(side_w)]).areas(main);
+    let review = if app.reading { centered(review, READING_W) } else { review };
+    if !app.reading {
+        draw_queue(f, app, queue);
+    }
     diff_view::draw(f, app, review);
     if app.open.as_ref().is_some_and(|o| o.tree.is_some()) {
         super::tree_view::draw(f, app, side);
@@ -120,6 +129,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if let Some(scroll) = app.help {
         draw_help(f, app, main, scroll);
     }
+}
+
+/// `area` narrowed to `width` columns in its middle, for reading mode.
+fn centered(area: Rect, width: u16) -> Rect {
+    let width = width.min(area.width);
+    Rect { x: area.x + (area.width - width) / 2, width, ..area }
 }
 
 pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {

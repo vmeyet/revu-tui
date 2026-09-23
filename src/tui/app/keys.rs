@@ -58,6 +58,9 @@ impl App {
     }
 
     fn focus_left(&mut self) {
+        if self.focus == Focus::Review {
+            self.reading = false;
+        }
         self.focus = match self.focus {
             Focus::Side => Focus::Review,
             _ => Focus::Queue,
@@ -159,6 +162,11 @@ impl App {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('D') => return self.toggle_split(),
             KeyCode::Char('t') => self.toggle_tree(),
+            KeyCode::Char('W') => self.toggle_whitespace(),
+            KeyCode::Char('w') => {
+                self.wrap = !self.wrap;
+                self.toast(if self.wrap { "long lines wrap" } else { "long lines end in …" });
+            }
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),
@@ -187,6 +195,7 @@ impl App {
                 ('z', 'o') => self.fold_section(Some(true)),
                 ('z', 'c') => self.fold_section(Some(false)),
                 ('z', 'a') => self.fold_section(None),
+                ('z', 'z') => self.toggle_reading(),
                 _ => {}
             }
             return vec![];
@@ -197,6 +206,7 @@ impl App {
             ('z', 'o') => return self.fold_at_cursor(Some(true)),
             ('z', 'c') => return self.fold_at_cursor(Some(false)),
             ('z', 'h') => self.header_folded = !self.header_folded,
+            ('z', 'z') => self.toggle_reading(),
             ('z', 'v') => return self.toggle_viewed(),
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
@@ -209,6 +219,16 @@ impl App {
             _ => {}
         }
         vec![]
+    }
+
+    /// `zz`: the diff alone and centered; the queue comes back with `zz` or `h`.
+    fn toggle_reading(&mut self) {
+        if self.open.is_none() {
+            self.toast("open an MR first");
+            return;
+        }
+        self.reading = !self.reading;
+        self.focus = Focus::Review;
     }
 
     fn tree_open(&self) -> bool {
