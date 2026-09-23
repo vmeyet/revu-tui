@@ -1,0 +1,24 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 20)"
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
+│   TO REVIEW       ╭ jump ────────────────────────────────────────────────────╮2 files · ✓ succes │
+│ ▎ !42 feat: charge│ › ch▌                                                    │                   │
+│   MINE            │ ▎· src/pay/charge.rs                                     │                   │
+│   !41 fix: flaky c│  ◆ !42 feat: charge cards at checkout                    │                   │
+│   WATCHING        │  ◆ !41 fix: flaky cache test                             │         +4 −2  ◆2 │
+│   !35 infra: new r│                                                          │                   │
+│   DONE ▸          │                                                          │ amount: Money) -… │
+│                   │                                                          │                   │
+│                   │                                                          │                   │
+│                   │                                                          │y(idempotency_key… │
+│                   │                                                          │();                │
+│                   │                                                          │(amount).await?;   │
+│                   │                                                          │                   │
+│                   │                                                          │                   │
+│                   ╰──────────────────────────────────────────────────────────╯-> Key {           │
+│                                ││    41      -    Key::from(card.number())                       │
+│                                ││         42 +    Key::from((card.number(), card.expiry()))      │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                            ? help

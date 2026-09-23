@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 38 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 40 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │
@@ -38,7 +38,7 @@ expression: "render(&mut app, 100, 40)"
 │               │          R  in a thread: resolve, unresolve                      │               │
 │               │          u  in a thread: open its first link                     │               │
 │               │        esc  drop the selection, close the input                  │               │
-│               │          ?  this help                                            │               │
-│               │          q  quit                                                 │               │
+│               │          :  command line: :go !42 · :set theme=nord · tab comple │               │
+│               │         ^k  jump to a file of the MR, or to another MR           │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

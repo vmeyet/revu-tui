@@ -21,6 +21,8 @@ pub struct Settings {
     pub me: String,
     /// The project of the checkout `revu` runs in; `None` outside one or with `--all`.
     pub project: Option<String>,
+    /// The terminal's own background, when it said: `:set theme=` tints the new theme from it.
+    pub ground: Option<u32>,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -71,6 +73,10 @@ pub struct App {
     pub composed: Vec<Action>,
     /// The key list, open, with how far it is scrolled.
     pub help: Option<usize>,
+    pub palette: Option<crate::tui::palette::Palette>,
+    pub palette_history: Vec<String>,
+    pub jump: Option<crate::tui::jump::Jump>,
+    pub ground: Option<u32>,
     pub toast: Option<Toast>,
     /// Since when refreshes fail while a cached view is shown.
     pub offline: Option<Instant>,
@@ -113,6 +119,10 @@ impl App {
             links: vec![],
             composed: vec![],
             help: None,
+            palette: None,
+            palette_history: vec![],
+            jump: None,
+            ground: settings.ground,
             toast: None,
             offline: None,
             poll: Poll::default(),

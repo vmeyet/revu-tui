@@ -37,7 +37,7 @@ fn today() -> DateTime<Utc> {
 }
 
 fn settings() -> Settings {
-    Settings { theme: Theme::default(), host: "gitlab.com".into(), kind: Kind::GitLab, me: "nina".into(), project: None }
+    Settings { theme: Theme::default(), host: "gitlab.com".into(), kind: Kind::GitLab, me: "nina".into(), project: None, ground: None }
 }
 
 fn app() -> App {
@@ -1130,4 +1130,72 @@ fn a_draft_whose_line_left_the_diff_is_named_before_publishing_and_m_moves_it_to
     let [Action::DeleteDraft { id: 5, .. }, Action::SaveDraft { index: 1, draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!((draft.anchor.clone(), draft.position.clone()), (None, None), "the note now sits on the MR");
     assert!(app.open.as_ref().unwrap().review.stranded().is_empty());
+}
+
+fn run_line(app: &mut App, line: &str) -> Vec<Action> {
+    press(app, ":");
+    press(app, line);
+    app.handle_key(code(KeyCode::Enter))
+}
+
+#[test]
+fn go_opens_an_mr_by_number_or_full_reference() {
+    let mut app = with_queue();
+    let actions = run_line(&mut app, "go !41");
+    assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41), "{actions:?}");
+    let actions = run_line(&mut app, "go other/thing!7");
+    assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.project == "other/thing" && key.number == 7), "{actions:?}");
+    assert_eq!(run_line(&mut app, "go !999"), vec![]);
+    assert!(app.live_toast().unwrap().text.contains("no MR !999"));
+}
+
+#[test]
+fn set_theme_changes_it_now_and_asks_to_save_it() {
+    let mut app = with_queue();
+    assert_eq!(run_line(&mut app, "set theme=nord"), vec![Action::SaveTheme("nord".into())]);
+    assert_eq!(app.theme.name, "nord");
+    assert_eq!(run_line(&mut app, "set theme=nope"), vec![]);
+    assert!(app.live_toast().unwrap().danger);
+}
+
+#[test]
+fn tab_completes_verbs_mrs_and_themes_and_up_recalls() {
+    let mut app = with_queue();
+    press(&mut app, ":pu");
+    app.handle_key(code(KeyCode::Tab));
+    assert_eq!(app.palette.as_ref().unwrap().input, "publish ");
+    app.handle_key(code(KeyCode::Esc));
+    assert!(app.palette.is_none());
+    assert!(app.completions_for("go ").contains(&"!42".to_owned()));
+    assert!(app.completions_for("set theme=").contains(&"theme=tokyonight".to_owned()));
+    run_line(&mut app, "help");
+    assert_eq!(app.help, Some(0));
+    press(&mut app, "x:");
+    app.handle_key(code(KeyCode::Up));
+    assert_eq!(app.palette.as_ref().unwrap().input, "help");
+}
+
+#[test]
+fn ctrl_k_jumps_to_a_file_of_the_open_mr_or_to_another_mr() {
+    let mut app = with_review();
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+    let first_file = app.jump.as_ref().unwrap().matches()[0].clone();
+    assert!(matches!(first_file.target, crate::tui::jump::Target::File(0)), "files of the open MR come first");
+    app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+    press(&mut app, "!41");
+    let actions = app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41));
+}
+
+#[test]
+fn snapshot_palette_and_jump() {
+    let mut app = with_review();
+    press(&mut app, ":pu");
+    insta::assert_snapshot!("palette_ghost", render(&mut app, 100, 20));
+    app.handle_key(code(KeyCode::Esc));
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+    press(&mut app, "ch");
+    insta::assert_snapshot!("jump", render(&mut app, 100, 20));
 }
