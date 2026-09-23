@@ -22,16 +22,19 @@ impl App {
             return None;
         }
         let arrived: Vec<_> = sections.to_review.iter().filter(|mr| !before.keys.contains(&mr.key())).collect();
-        let sigil = self.kind.sigil();
         match arrived.as_slice() {
             [] => None,
             [mr] => Some(Action::Notify {
                 title: "revu · to review".into(),
-                body: format!("{sigil}{} {} · {}", mr.number, mr.title, mr.author),
+                body: format!("{}{} {} · {}", self.hosts.kind_of(&mr.key()).sigil(), mr.number, mr.title, mr.author),
             }),
             many => Some(Action::Notify {
                 title: format!("revu · {} MRs to review", many.len()),
-                body: many.iter().map(|mr| format!("{sigil}{} {}", mr.number, mr.title)).collect::<Vec<_>>().join("\n"),
+                body: many
+                    .iter()
+                    .map(|mr| format!("{}{} {}", self.hosts.kind_of(&mr.key()).sigil(), mr.number, mr.title))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             }),
         }
     }

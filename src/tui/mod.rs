@@ -56,6 +56,8 @@ struct MrState {
 struct Backend {
     forge: Forge,
     cache: Cache,
+    /// The other hosts I am logged in to: every project's queue asks them too.
+    others: Vec<crate::ctx::Home>,
     fold_globs: Vec<String>,
     watch_labels: Vec<String>,
     inline: InlineRule,
@@ -85,9 +87,12 @@ pub async fn run(ctx: Ctx) -> Result<()> {
     };
     let ground = ground::ask();
     let theme = ground.map_or(theme, |ground| theme.with_ground(ground));
+    let others = ctx.others();
+    let hosts = ctx.hosts(&others);
     let backend = Backend {
         forge: ctx.forge.clone(),
         cache: ctx.cache.clone(),
+        others,
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
         inline: ctx.config.review.inline(),
@@ -99,13 +104,13 @@ pub async fn run(ctx: Ctx) -> Result<()> {
     let settings = Settings {
         theme,
         host: ctx.forge.host().to_owned(),
-        kind: ctx.forge.kind(),
         me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
         project: ctx.project.clone(),
         ground,
         triage: backend.jev.is_some(),
         ask: backend.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned()),
         notify: ctx.config.notify.enabled,
+        hosts,
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -260,36 +265,36 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
             }
             Action::UpdateDraft { key, id, draft } => {
-                if let Err(e) = backend.forge.update_draft(&key, id, &draft.payload()).await {
+                if let Err(e) = backend.forge_of(&key).update_draft(&key, id, &draft.payload()).await {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::DeleteDraft { key, id } => {
-                if let Err(e) = backend.forge.delete_draft(&key, id).await {
+                if let Err(e) = backend.forge_of(&key).delete_draft(&key, id).await {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::Publish { key, approve, count } => {
                 send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }
-            Action::Resolve { key, thread, resolved } => send(backend.forge.resolve(&key, &thread, resolved).await.map_or_else(
+            Action::Resolve { key, thread, resolved } => send(backend.forge_of(&key).resolve(&key, &thread, resolved).await.map_or_else(
                 |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
                 |()| Incoming::Resolved { key, thread: thread.clone(), resolved },
             )),
             Action::LoadFile { key, path, sha } => {
-                let outcome = backend.forge.file(&key, &path, &sha).await;
+                let outcome = backend.forge_of(&key).file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
             }
             Action::Apply { key, branch, suggestion } => {
-                let outcome = backend.forge.apply(&key, &branch, &suggestion).await;
+                let outcome = backend.forge_of(&key).apply(&key, &branch, &suggestion).await;
                 send(outcome.map_or_else(|e| failed(Failure::Apply, &e), |()| Incoming::Applied { key, branch }));
             }
             Action::LoadChecks { key, head } => {
-                let outcome = backend.forge.checks(&key, &head).await;
+                let outcome = backend.forge_of(&key).checks(&key, &head).await;
                 send(outcome.map_or_else(|e| failed(Failure::Checks, &e), |checks| Incoming::Checks { key, checks }));
             }
             Action::Approve { key, approve } => {
-                let outcome = backend.forge.approve(&key, approve).await;
+                let outcome = backend.forge_of(&key).approve(&key, approve).await;
                 send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
             }
             Action::View { key, path, sha, line, note } => {
@@ -399,7 +404,7 @@ impl Backend {
             return;
         };
         let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
-        if let Some(saved) = self.cache.read::<SavedAnswer>(&cache_key).filter(|_| !fresh) {
+        if let Some(saved) = self.cache_of(key).read::<SavedAnswer>(&cache_key).filter(|_| !fresh) {
             let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
             send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
             return;
@@ -420,7 +425,7 @@ impl Backend {
         match streamed {
             Ok(outcome) => {
                 if outcome.stop == Stop::Done {
-                    let _ = self.cache.write(&cache_key, &SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage });
+                    let _ = self.cache_of(key).write(&cache_key, &SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage });
                 }
                 send(part(Part::Done { outcome, cached_text: None }));
             }
@@ -431,13 +436,13 @@ impl Backend {
     /// Jev's verdict on a queue MR, from the cache while the MR has not moved.
     async fn triage(&self, mr: &crate::forge::QueueMr) -> Result<Incoming, Unavailable> {
         let key = mr.key();
-        let cached: Option<Verdict> = self.cache.read(&keys::verdict(&key));
+        let cached: Option<Verdict> = self.cache_of(&key).read(&keys::verdict(&key));
         let verdict = if let Some(verdict) = cached.filter(|v| v.fresh_for(mr)) {
             verdict
         } else {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let verdict = triage::judge_mr(jev, mr, Utc::now()).await?;
-            let _ = self.cache.write(&keys::verdict(&key), &verdict);
+            let _ = self.cache_of(&key).write(&keys::verdict(&key), &verdict);
             verdict
         };
         Ok(Incoming::Triaged { key, verdict })
@@ -451,32 +456,59 @@ impl Backend {
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
     ) -> Result<Incoming, Unavailable> {
-        let reading = if let Some(reading) = self.cache.read(&keys::reading(&key, &head)) {
+        let reading = if let Some(reading) = self.cache_of(&key).read(&keys::reading(&key, &head)) {
             reading
         } else {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let reading = triage::judge_open(jev, waits, files).await?;
-            let _ = self.cache.write(&keys::reading(&key, &head), &reading);
+            let _ = self.cache_of(&key).write(&keys::reading(&key, &head), &reading);
             reading
         };
         Ok(Incoming::Read { key, head, reading })
     }
 
+    /// Every project's queue also asks the other hosts I am logged in to; one that fails to
+    /// answer is left out rather than failing the whole queue.
     async fn load_queue(&self, scope: Option<String>) -> Result<Incoming> {
         let queue = self.forge.queue(scope.as_deref()).await?;
         let _ = self.cache.write_entry(&keys::queue(scope.as_deref()), &queue);
-        Ok(self.queue_answer(scope, &queue, false))
+        let others = if scope.is_none() {
+            futures_util::future::join_all(self.others.iter().map(crate::ctx::Home::queue))
+                .await
+                .into_iter()
+                .filter_map(Result::ok)
+                .collect()
+        } else {
+            vec![]
+        };
+        Ok(self.queue_answer(scope, &queue, &others, false))
     }
 
     fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
         let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_deref()))?.value;
-        Some(self.queue_answer(scope, &queue, true))
+        let others: Vec<Queue> = if scope.is_none() { self.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
+        Some(self.queue_answer(scope, &queue, &others, true))
     }
 
-    fn queue_answer(&self, scope: Option<String>, queue: &Queue, cached: bool) -> Incoming {
-        let sections = queue.sections(&self.watch_labels);
+    fn queue_answer(&self, scope: Option<String>, queue: &Queue, others: &[Queue], cached: bool) -> Incoming {
+        let parts = std::iter::once(queue).chain(others).map(|q| q.sections(&self.watch_labels)).collect();
+        let sections = Sections::merge(parts);
         let opened = self.opened_at(&sections);
         Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
+    }
+
+    /// The forge an MR lives on: its own host's when the queue merged several.
+    fn forge_of(&self, key: &MrKey) -> &Forge {
+        self.home_of(key).map_or(&self.forge, |home| &home.forge)
+    }
+
+    fn cache_of(&self, key: &MrKey) -> &Cache {
+        self.home_of(key).map_or(&self.cache, |home| &home.cache)
+    }
+
+    fn home_of(&self, key: &MrKey) -> Option<&crate::ctx::Home> {
+        let host = key.host.as_deref()?;
+        self.others.iter().find(|home| home.host == host)
     }
 
     fn opened_at(&self, sections: &Sections) -> HashMap<MrKey, DateTime<Utc>> {
@@ -485,59 +517,59 @@ impl Backend {
             .flatten()
             .filter_map(|mr| {
                 let key = mr.key();
-                let state: MrState = self.cache.read(&keys::state(&key))?;
+                let state: MrState = self.cache_of(&key).read(&keys::state(&key))?;
                 Some((key, state.opened_at?))
             })
             .collect()
     }
 
     fn state(&self, key: &MrKey) -> MrState {
-        self.cache.read(&keys::state(key)).unwrap_or_default()
+        self.cache_of(key).read(&keys::state(key)).unwrap_or_default()
     }
 
     fn open_cached(&self, key: &MrKey) -> Option<Incoming> {
-        let mr: Entry<Mr> = self.cache.read_entry(&keys::mr(key))?;
-        let diffs: Vec<DiffFile> = self.cache.read(&keys::diffs(key, &mr.value.refs.head))?;
-        let discussions: Vec<Discussion> = self.cache.read(&keys::discussions(key)).unwrap_or_default();
-        let drafts: Vec<HeldDraft> = self.cache.read(&keys::drafts(key)).unwrap_or_default();
+        let mr: Entry<Mr> = self.cache_of(key).read_entry(&keys::mr(key))?;
+        let diffs: Vec<DiffFile> = self.cache_of(key).read(&keys::diffs(key, &mr.value.refs.head))?;
+        let discussions: Vec<Discussion> = self.cache_of(key).read(&keys::discussions(key)).unwrap_or_default();
+        let drafts: Vec<HeldDraft> = self.cache_of(key).read(&keys::drafts(key)).unwrap_or_default();
         let age = mr.age(Utc::now());
         let review = self.build(key, mr.value, &diffs, discussions, &drafts);
         Some(Incoming::Review { key: key.clone(), review: Box::new(review), cached: Some(age) })
     }
 
     async fn fetch_review(&self, key: MrKey) -> Result<Incoming> {
-        let forge = &self.forge;
+        let forge = self.forge_of(&key);
         let (mr, diffs, discussions, drafts) =
             tokio::try_join!(forge.mr(&key), forge.diffs(&key), forge.discussions(&key), forge.drafts(&key))?;
-        let _ = self.cache.write_entry(&keys::mr(&key), &mr);
-        let _ = self.cache.write(&keys::diffs(&key, &mr.refs.head), &diffs);
-        let _ = self.cache.write(&keys::discussions(&key), &discussions);
-        let _ = self.cache.write(&keys::drafts(&key), &drafts);
+        let _ = self.cache_of(&key).write_entry(&keys::mr(&key), &mr);
+        let _ = self.cache_of(&key).write(&keys::diffs(&key, &mr.refs.head), &diffs);
+        let _ = self.cache_of(&key).write(&keys::discussions(&key), &discussions);
+        let _ = self.cache_of(&key).write(&keys::drafts(&key), &drafts);
         let state = MrState { opened_at: Some(Utc::now()), ..self.state(&key) };
-        let _ = self.cache.write(&keys::state(&key), &state);
+        let _ = self.cache_of(&key).write(&keys::state(&key), &state);
         let review = self.build(&key, mr, &diffs, discussions, &drafts);
         Ok(Incoming::Review { key, review: Box::new(review), cached: None })
     }
 
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
     async fn save_draft(&self, key: MrKey, index: usize, draft: &Draft) -> Result<Incoming> {
-        let held = self.forge.drafts(&key).await?;
+        let held = self.forge_of(&key).drafts(&key).await?;
         let id = match held.iter().find(|note| draft.same_as(&Draft::held(note))) {
             Some(note) => note.id,
-            None => self.forge.create_draft(&key, &draft.payload()).await?.id,
+            None => self.forge_of(&key).create_draft(&key, &draft.payload()).await?.id,
         };
         Ok(Incoming::DraftSaved { key, index, id })
     }
 
     async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
-        self.forge.publish(&key, approve).await?;
-        let _ = self.cache.write(&keys::drafts(&key), &Vec::<HeldDraft>::new());
+        self.forge_of(&key).publish(&key, approve).await?;
+        let _ = self.cache_of(&key).write(&keys::drafts(&key), &Vec::<HeldDraft>::new());
         Ok(Incoming::Published { key, approved: approve, count })
     }
 
     async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
-        let discussions = self.forge.discussions(&key).await?;
-        let _ = self.cache.write(&keys::discussions(&key), &discussions);
+        let discussions = self.forge_of(&key).discussions(&key).await?;
+        let _ = self.cache_of(&key).write(&keys::discussions(&key), &discussions);
         Ok(Incoming::Discussions { key, discussions })
     }
 
@@ -545,7 +577,7 @@ impl Backend {
     /// else a private read-only copy of what the forge serves.
     async fn view(&self, key: MrKey, path: &str, sha: &str, line: u32, note: Option<String>) -> Result<Incoming> {
         crate::open::safe_path(path)?;
-        let checkout = self.checkout.as_ref().and_then(|c| c.head().map(|head| (c, head)));
+        let checkout = self.checkout.as_ref().filter(|_| key.host.is_none()).and_then(|c| c.head().map(|head| (c, head)));
         let source = crate::open::Source::pick(&key.project, sha, checkout.as_ref().map(|(c, head)| (c.project.as_str(), head.as_str())));
         let (file, dir, note) = if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
             (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
@@ -563,17 +595,17 @@ impl Backend {
     /// A file at a commit never changes, so the cache serves it forever.
     async fn file_text(&self, key: &MrKey, path: &str, sha: &str) -> Result<String> {
         let cache_key = keys::file(key, sha, path);
-        if let Some(text) = self.cache.read::<String>(&cache_key) {
+        if let Some(text) = self.cache_of(key).read::<String>(&cache_key) {
             return Ok(text);
         }
         let short = sha.get(..8).unwrap_or(sha);
-        let text = self.forge.file(key, path, sha).await.with_context(|| format!("{path} at {short} · v tries again"))?;
+        let text = self.forge_of(key).file(key, path, sha).await.with_context(|| format!("{path} at {short} · v tries again"))?;
         anyhow::ensure!(
             text.len() <= crate::open::MAX_BYTES,
             "too large to open here ({} MB) · o opens it in the browser",
             text.len() / (1024 * 1024)
         );
-        let _ = self.cache.write(&cache_key, &text);
+        let _ = self.cache_of(key).write(&cache_key, &text);
         Ok(text)
     }
 
@@ -591,7 +623,7 @@ impl Backend {
 
     fn save_state(&self, key: &MrKey, fold: FoldState, viewed_files: BTreeMap<String, String>, split: bool) -> Result<()> {
         let state = MrState { fold, viewed_files, split, ..self.state(key) };
-        self.cache.write(&keys::state(key), &state)
+        self.cache_of(key).write(&keys::state(key), &state)
     }
 }
 
@@ -672,6 +704,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
         let backend = Backend {
+            others: vec![],
             forge: test_forge(),
             cache,
             fold_globs: vec![],
@@ -695,6 +728,7 @@ mod tests {
     async fn jev_is_asked_once_per_mr_state_and_answers_from_the_cache_after() {
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend {
+            others: vec![],
             forge: test_forge(),
             cache: Cache::in_dir(dir.path()),
             fold_globs: vec![],
@@ -737,6 +771,7 @@ mod tests {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend {
+            others: vec![],
             forge: test_forge(),
             cache: Cache::in_dir(dir.path()),
             fold_globs: vec![],
@@ -781,8 +816,48 @@ mod tests {
         let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap());
         let dir = tempfile::tempdir().unwrap();
         Backend {
+            others: vec![],
             forge,
             cache: Cache::in_dir(dir.path()),
+            fold_globs: vec![],
+            watch_labels: vec![],
+            inline: InlineRule::default(),
+            open: crate::config::Open::default(),
+            checkout: None,
+            jev: None,
+            claude: None,
+        }
+    }
+
+    #[test]
+    fn an_mr_from_another_host_reaches_that_host_and_its_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let github =
+            crate::forge::github::Client::new(&crate::auth::Credentials { host: "github.com".into(), token: "ghp_xxxx".into() }).unwrap();
+        let other =
+            crate::ctx::Home { host: "github.com".into(), forge: Forge::GitHub(github), cache: Cache::in_dir(dir.path().join("gh")) };
+        let queue = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json"));
+        other.cache.write_entry(&keys::queue(None), &queue.clone().on_host("github.com")).unwrap();
+        let backend = Backend { others: vec![other], cache: Cache::in_dir(dir.path().join("gl")), ..backend_on_nothing() };
+        backend.cache.write_entry(&keys::queue(None), &queue).unwrap();
+        let there = MrKey { host: Some("github.com".into()), ..key() };
+        assert_eq!(
+            (backend.forge_of(&there).kind(), backend.forge_of(&key()).kind()),
+            (crate::forge::Kind::GitHub, crate::forge::Kind::GitLab)
+        );
+        let Some(Incoming::Queue { sections, .. }) = backend.cached_queue(None) else { panic!("both caches answer") };
+        assert_eq!(
+            sections.to_review.iter().filter(|mr| mr.host.as_deref() == Some("github.com")).count(),
+            queue.sections(&[]).to_review.len()
+        );
+        assert!(backend.cached_queue(Some("acme/widgets".into())).is_none(), "a scoped queue keeps to its own host");
+    }
+
+    fn backend_on_nothing() -> Backend {
+        Backend {
+            others: vec![],
+            forge: test_forge(),
+            cache: Cache::in_dir(std::path::Path::new("/nonexistent")),
             fold_globs: vec![],
             watch_labels: vec![],
             inline: InlineRule::default(),

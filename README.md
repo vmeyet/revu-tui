@@ -31,6 +31,7 @@ revu whoami
 
 The host picks the forge: `github.com` is GitHub, anything else GitLab.
 Inside a checkout, `revu` talks to the host of its `origin` remote.
+Outside one (or with `--all`), the queue and `revu list` merge every host you logged in to, each row tagged with its host.
 
 ## Review
 

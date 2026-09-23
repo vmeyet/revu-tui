@@ -53,6 +53,34 @@ impl Kind {
 }
 
 /// A connected forge. Every method takes and returns the neutral model.
+/// The hosts a merged queue draws from: the one `revu` started with, and the others. Tells which
+/// forge an MR's host runs, and the short tag its row carries once there is more than one host.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hosts {
+    pub main: (String, Kind),
+    pub others: Vec<(String, Kind)>,
+}
+
+impl Hosts {
+    #[cfg(test)]
+    pub fn one(host: &str, kind: Kind) -> Self {
+        Self { main: (host.to_owned(), kind), others: vec![] }
+    }
+
+    pub fn kind_of(&self, key: &MrKey) -> Kind {
+        key.host.as_deref().and_then(|h| self.others.iter().find(|(host, _)| host == h)).map_or(self.main.1, |(_, kind)| *kind)
+    }
+
+    /// `gitlab`, `github`: the host's first name, only when rows from several hosts share the queue.
+    pub fn tag(&self, key: &MrKey) -> Option<String> {
+        if self.others.is_empty() {
+            return None;
+        }
+        let host = key.host.as_deref().unwrap_or(&self.main.0);
+        host.split('.').next().map(str::to_owned)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Forge {
     GitLab(gitlab::Client),
@@ -255,5 +283,16 @@ mod tests {
     #[test]
     fn sigils_follow_the_forge() {
         assert_eq!((Kind::GitLab.sigil(), Kind::GitHub.sigil()), ('!', '#'));
+    }
+
+    #[test]
+    fn hosts_say_which_forge_an_mr_lives_on_and_tag_rows_only_when_mixed() {
+        let alone = Hosts::one("gitlab.com", Kind::GitLab);
+        let key = MrKey::new("acme/widgets", 42);
+        assert_eq!((alone.kind_of(&key), alone.tag(&key)), (Kind::GitLab, None));
+        let both = Hosts { others: vec![("github.com".into(), Kind::GitHub)], ..alone };
+        let there = MrKey { host: Some("github.com".into()), ..key.clone() };
+        assert_eq!((both.kind_of(&there), both.tag(&there).as_deref()), (Kind::GitHub, Some("github")));
+        assert_eq!((both.kind_of(&key), both.tag(&key).as_deref()), (Kind::GitLab, Some("gitlab")));
     }
 }

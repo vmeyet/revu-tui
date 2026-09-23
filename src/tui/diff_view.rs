@@ -27,13 +27,17 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let title = match &app.open {
         Some(open) => {
-            format!("{} · {}", mr_ref(&open.review, app.kind), truncate(&open.review.mr.title, area.width.saturating_sub(30) as usize))
+            format!(
+                "{} · {}",
+                mr_ref(&open.review, app.hosts.kind_of(&open.key)),
+                truncate(&open.review.mr.title, area.width.saturating_sub(30) as usize)
+            )
         }
         None => "Review".to_owned(),
     };
     let block = pane(theme, &title, app.focus == Focus::Review);
     if let Some(open) = &app.open {
-        app.links.push(title_link(&open.review, app.kind, area));
+        app.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
     }
     let inner = block.inner(area);
     f.render_widget(block, area);

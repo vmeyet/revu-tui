@@ -17,7 +17,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let width = (area.width * SIZE_PCT / 100).max(40).min(area.width);
     let height = (area.height * SIZE_PCT / 100).max(10).min(area.height);
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
-    let block = pane(theme, &format!("{}{} {}", app.kind.sigil(), brief.number, brief.title), true)
+    let block = pane(theme, &format!("{}{} {}", brief.sigil, brief.number, brief.title), true)
         .title_bottom(Line::from(Span::styled(" j k scroll · o open in the browser · esc close ", Style::default().fg(theme.faded))));
     let inner = block.inner(popup);
     let lines = lines(brief, theme);

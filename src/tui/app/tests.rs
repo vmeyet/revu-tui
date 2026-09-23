@@ -39,9 +39,9 @@ fn today() -> DateTime<Utc> {
 fn settings() -> Settings {
     Settings {
         notify: true,
+        hosts: crate::forge::Hosts::one("gitlab.com", Kind::GitLab),
         theme: Theme::default(),
         host: "gitlab.com".into(),
-        kind: Kind::GitLab,
         me: "nina".into(),
         project: None,
         ground: None,
@@ -1927,4 +1927,24 @@ fn several_arrivals_share_one_notification_and_off_means_off() {
     let mut quiet = App::new(Settings { notify: false, ..settings() });
     announce(&mut quiet, empty);
     assert_eq!(announce(&mut quiet, full), vec![]);
+}
+
+#[test]
+fn a_queue_across_hosts_tags_each_row_and_opens_it_on_its_host() {
+    let hosts =
+        crate::forge::Hosts { others: vec![("github.com".into(), Kind::GitHub)], ..crate::forge::Hosts::one("gitlab.com", Kind::GitLab) };
+    let mut app = App::new(Settings { hosts, ..settings() });
+    let here = sections();
+    let queue = fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json"));
+    let there = queue.on_host("github.com").sections(&[]);
+    let merged = crate::forge::Sections::merge(vec![here, there]);
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: merged, opened: HashMap::new(), cached: false });
+    let screen = render(&mut app, 120, 20);
+    assert!(screen.contains("#42") && screen.contains("!42"), "{screen}");
+    assert!(screen.contains("github") && screen.contains("gitlab"), "{screen}");
+    let github_row = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.host.is_some())).unwrap();
+    app.queue_selected = github_row;
+    let actions = app.handle_key(code(KeyCode::Enter));
+    let [Action::Open(key)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(key.host.as_deref(), Some("github.com"));
 }

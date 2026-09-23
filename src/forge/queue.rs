@@ -21,6 +21,9 @@ pub struct Queue {
 /// One queue row: enough to draw it, badge it and open it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueMr {
+    /// The host it came from, when the queue merges several; `None` for the one `revu` started with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     pub number: u64,
     pub project: String,
     pub title: String,
@@ -76,6 +79,24 @@ pub struct Sections {
     pub done: Vec<QueueMr>,
 }
 
+impl Sections {
+    /// Several hosts' sections as one sidebar: each section holds every host's rows, newest first.
+    pub fn merge(parts: Vec<Sections>) -> Sections {
+        let mut merged = Sections::default();
+        for part in parts {
+            merged.to_review.extend(part.to_review);
+            merged.mine.extend(part.mine);
+            merged.watching.extend(part.watching);
+            merged.open.extend(part.open);
+            merged.done.extend(part.done);
+        }
+        for section in [&mut merged.to_review, &mut merged.mine, &mut merged.watching, &mut merged.open, &mut merged.done] {
+            section.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
+        }
+        merged
+    }
+}
+
 impl QueueMr {
     pub fn my_state(&self, me: &str) -> Option<ReviewState> {
         self.reviewers.iter().find(|r| r.username == me).map(|r| r.state)
@@ -86,11 +107,23 @@ impl QueueMr {
     }
 
     pub fn key(&self) -> MrKey {
-        MrKey::new(self.project.clone(), self.number)
+        MrKey { host: self.host.clone(), ..MrKey::new(self.project.clone(), self.number) }
     }
 }
 
 impl Queue {
+    /// Every row marked as coming from `host`, so opening it reaches the right forge.
+    pub fn on_host(self, host: &str) -> Self {
+        let tag = |rows: Vec<QueueMr>| rows.into_iter().map(|mr| QueueMr { host: Some(host.to_owned()), ..mr }).collect();
+        Self {
+            review_requested: tag(self.review_requested),
+            authored: tag(self.authored),
+            assigned: tag(self.assigned),
+            open: tag(self.open),
+            ..self
+        }
+    }
+
     pub fn sections(&self, watch_labels: &[String]) -> Sections {
         let me = self.me.as_str();
         let in_scope = |mr: &&QueueMr| self.project.as_ref().is_none_or(|p| &mr.project == p);
@@ -101,5 +134,34 @@ impl Queue {
         let watching = self.assigned.iter().chain(labelled).filter(in_scope).filter(|mr| seen.insert(mr.key())).cloned().collect();
         let open = self.open.iter().filter(|mr| seen.insert(mr.key())).cloned().collect();
         Sections { to_review, mine, watching, open, done }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+    use crate::forge::gitlab::fixture;
+
+    fn queue() -> Queue {
+        fixture::queue(include_str!("gitlab/fixtures/queue.json"))
+    }
+
+    #[test]
+    fn rows_from_another_host_carry_it_into_their_key() {
+        let tagged = queue().on_host("github.com");
+        let mr = &tagged.review_requested[0];
+        assert_eq!(mr.key().host.as_deref(), Some("github.com"));
+        assert_ne!(mr.key(), queue().review_requested[0].key(), "the same number on two hosts is two MRs");
+    }
+
+    #[test]
+    fn merged_sections_keep_every_host_newest_first() {
+        let here = queue().sections(&[]);
+        let there = queue().on_host("github.com").sections(&[]);
+        let merged = Sections::merge(vec![here.clone(), there]);
+        assert_eq!(merged.to_review.len(), here.to_review.len() * 2);
+        assert!(merged.mine.windows(2).all(|w| w[0].updated_at >= w[1].updated_at));
+        assert_eq!(merged.to_review.iter().filter(|mr| mr.host.is_some()).count(), here.to_review.len());
     }
 }
