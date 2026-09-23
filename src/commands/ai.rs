@@ -1,9 +1,13 @@
 //! `revu ai login|logout|status`: the AI keys live in the keychain, never in the config.
-use crate::ai::{self, KeyEnv, KeySource, Provider, Secret, Status};
+use crate::ai::context::{self, Prompt, Scope};
+use crate::ai::{self, KeyEnv, KeySource, Provider, Secret, Status, anthropic};
 use crate::auth::{self, SecretStore, SecurityCli};
-use crate::cli::{AiArgs, AiCommand, AiLoginArgs};
+use crate::cli::{AiArgs, AiAskArgs, AiCommand, AiLoginArgs};
+use crate::commands::{show, target};
 use crate::config::Config;
+use crate::ctx::Ctx;
 use crate::render::{Style, Theme};
+use crate::review::Review;
 use anyhow::{Context, Result, bail};
 use std::io::{IsTerminal, Read, Write};
 use std::process::Command;
@@ -12,13 +16,81 @@ const ANTHROPIC_API: &str = "https://api.anthropic.com";
 /// Where slack-tui keeps its TypeSafe key, which `revu ai login typesafe` offers to reuse.
 const SLACK_TUI_SERVICE: &str = "typesafe";
 
-/// Runs one `revu ai` subcommand.
+/// Runs one `revu ai` key subcommand; `ask` goes through [`ask`], which needs the forge.
 pub async fn run(args: AiArgs, json: bool) -> Result<()> {
     let store = SecurityCli::new(auth::SERVICE);
     match args.command {
         AiCommand::Login(login) => self::login(&login, &store).await,
         AiCommand::Logout { provider } => logout(provider, &store),
         AiCommand::Status => status(&store, json),
+        AiCommand::Ask(_) => bail!("`revu ai ask` needs the forge"),
+    }
+}
+
+/// `revu ai ask`: the question about the MR (or one file of it) to Claude, the answer streamed to stdout.
+pub async fn ask(ctx: &Ctx, args: AiArgs) -> Result<()> {
+    let AiCommand::Ask(args) = args.command else { bail!("not a question") };
+    let claude = claude(&ctx.config.ai)?;
+    let key = target::resolve(&ctx.forge, Some(&args.mr).filter(|mr| *mr != "-").map(String::as_str)).await?;
+    let (mr, diffs, discussions) = show::fetch(ctx, &key).await?;
+    let review = Review::new(mr, &diffs, discussions, &[]);
+    let (scope, prompt) = question(&args)?;
+    let request = context::ask(&review, &scope, &prompt, context::BUDGET);
+    let mut out = std::io::stdout();
+    let outcome = claude
+        .stream(&request, |event| match event {
+            anthropic::Event::Text(text) => {
+                let _ = out.write_all(text.as_bytes());
+                let _ = out.flush();
+            }
+            anthropic::Event::Restart => eprintln!("\n(the first model declined; another one answers from the start)"),
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    println!();
+    report(&outcome)
+}
+
+/// Claude, when the config switches it on and a key is found; the error says which step is missing.
+fn claude(ai: &crate::config::Ai) -> Result<anthropic::Claude> {
+    if !ai.anthropic.enabled {
+        bail!("Claude is off: set `[ai.anthropic] enabled = true` in {}", Config::path().display());
+    }
+    let (key, _) = ai::key(Provider::Anthropic, &KeyEnv::from_process(), &SecurityCli::new(auth::SERVICE))?
+        .context("no Anthropic key: run `revu ai login anthropic` or set ANTHROPIC_API_KEY")?;
+    Ok(anthropic::Claude::new(key, ai.anthropic.model()))
+}
+
+/// The scope and the question the arguments name: a summary or an explanation when no question is typed.
+fn question(args: &AiAskArgs) -> Result<(Scope, Prompt)> {
+    let typed = args.question.join(" ");
+    let scope = match (&args.file, &args.lines) {
+        (Some(path), Some(lines)) => Scope::Lines(path.clone(), lines_of(lines)?),
+        (Some(path), None) => Scope::File(path.clone()),
+        (None, _) => Scope::Mr,
+    };
+    let prompt = match (typed.trim().is_empty(), &scope) {
+        (false, _) => Prompt::Free(typed),
+        (true, Scope::Mr) => Prompt::Summary,
+        (true, _) => Prompt::Explain,
+    };
+    Ok((scope, prompt))
+}
+
+fn lines_of(text: &str) -> Result<std::ops::RangeInclusive<u32>> {
+    let (from, to) = text.split_once('-').unwrap_or((text, text));
+    let parse = |n: &str| n.trim().parse::<u32>().with_context(|| format!("`{text}` is not a line or a range like 13-20"));
+    Ok(parse(from)?..=parse(to)?)
+}
+
+/// The last line: which model answered and what caching saved; a refusal is an error with its reason.
+fn report(outcome: &anthropic::Outcome) -> Result<()> {
+    let usage = outcome.usage;
+    eprintln!("{} · {} in · {} cached · {} out", outcome.model, usage.input, usage.cache_read, usage.output);
+    match &outcome.stop {
+        anthropic::Stop::Done => Ok(()),
+        anthropic::Stop::Cut => bail!("the answer hit the token limit and is cut"),
+        anthropic::Stop::Refused(why) => bail!("Claude declined to answer{}", why.as_deref().map(|w| format!(": {w}")).unwrap_or_default()),
     }
 }
 
@@ -160,6 +232,30 @@ mod tests {
         verify_anthropic(&server.uri(), &Secret::new("sk-ant-good")).await.unwrap();
         let err = verify_anthropic(&server.uri(), &Secret::new("sk-ant-bad")).await.unwrap_err().to_string();
         assert!(err.contains("refused") && !err.contains("sk-ant-bad"), "{err}");
+    }
+
+    #[test]
+    fn the_arguments_pick_the_scope_and_a_default_question() {
+        let args = |file: Option<&str>, lines: Option<&str>, question: &[&str]| AiAskArgs {
+            mr: "!42".into(),
+            file: file.map(Into::into),
+            lines: lines.map(Into::into),
+            question: question.iter().map(|w| (*w).to_owned()).collect(),
+        };
+        assert_eq!(question(&args(None, None, &[])).unwrap(), (Scope::Mr, Prompt::Summary));
+        assert_eq!(question(&args(Some("a.rs"), None, &[])).unwrap(), (Scope::File("a.rs".into()), Prompt::Explain));
+        assert_eq!(
+            question(&args(Some("a.rs"), Some("13-20"), &["is", "this", "safe?"])).unwrap(),
+            (Scope::Lines("a.rs".into(), 13..=20), Prompt::Free("is this safe?".into()))
+        );
+        assert_eq!(lines_of("7").unwrap(), 7..=7);
+        assert!(lines_of("x").is_err());
+    }
+
+    #[test]
+    fn claude_needs_the_switch_before_anything_else() {
+        let err = claude(&crate::config::Ai::default()).unwrap_err().to_string();
+        assert!(err.contains("[ai.anthropic] enabled = true"), "{err}");
     }
 
     #[test]
