@@ -230,13 +230,15 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
         };
         match action {
             Action::LoadQueue { scope, from_cache } => {
-                if let Some(cached) = backend.cached_queue(scope.clone()).filter(|_| from_cache) {
+                let wanted = scope.clone();
+                if let Some(cached) = backend.off(move |b| b.cached_queue(wanted)).await.ok().flatten().filter(|_| from_cache) {
                     send(cached);
                 }
                 send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, &e)));
             }
             Action::Open(key) => {
-                if let Some(cached) = backend.open_cached(&key) {
+                let wanted = key.clone();
+                if let Some(cached) = backend.off(move |b| b.open_cached(&wanted)).await.ok().flatten() {
                     send(cached);
                 }
                 send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Open, &e)));
@@ -244,24 +246,24 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::SaveState { key, fold, viewed, split } => {
-                if let Err(e) = backend.save_state(&key, fold, viewed, split) {
+                if let Err(e) = backend.off(move |b| b.save_state(&key, fold, viewed, split)).await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::Notify { title, body } => {
-                if let Err(e) = notify(&title, &body) {
+                if let Err(e) = notify(&title, &body).await {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::OpenUrl(url) => {
-                send(open_url(&url).map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("opened in the browser".into())));
+                send(open_url(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("opened in the browser".into())));
             }
             Action::SaveTheme(name) => {
-                if let Err(e) = save_theme(&name) {
+                if let Err(e) = blocking(move || save_theme(&name)).await {
                     send(failed(Failure::Local, &e));
                 }
             }
-            Action::Yank(url) => send(copy(&url).map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
+            Action::Yank(url) => send(copy(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
             Action::SaveDraft { key, index, draft } => {
                 send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
             }
@@ -391,11 +393,23 @@ fn save_theme(name: &str) -> Result<()> {
     config.save()
 }
 
+/// Runs `work` on tokio's blocking pool: file I/O and CPU-heavy work stay off the threads that drive the network.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+    tokio::task::spawn_blocking(work).await.context("a background task stopped")?
+}
+
 fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
     Incoming::Failed { what, message: err.to_string() }
 }
 
 impl Backend {
+    /// `work` with this backend on tokio's blocking pool: the cache is plain file I/O, and
+    /// building a review highlights every hunk.
+    async fn off<T: Send + 'static>(&self, work: impl FnOnce(&Backend) -> T + Send + 'static) -> Result<T> {
+        let me = self.clone();
+        tokio::task::spawn_blocking(move || work(&me)).await.context("a background task stopped")
+    }
+
     /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
     /// Only a finished answer is kept, so a cut or refused one is asked again next time.
     async fn ask(&self, key: &MrKey, id: u64, request: &Ask, fresh: bool, send: &impl Fn(Incoming)) {
@@ -405,7 +419,9 @@ impl Backend {
             return;
         };
         let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
-        if let Some(saved) = self.cache_of(key).read::<SavedAnswer>(&cache_key).filter(|_| !fresh) {
+        let (wanted, reading) = (key.clone(), cache_key.clone());
+        let saved = self.off(move |b| b.cache_of(&wanted).read::<SavedAnswer>(&reading)).await.ok().flatten();
+        if let Some(saved) = saved.filter(|_| !fresh) {
             let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
             send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
             return;
@@ -426,7 +442,8 @@ impl Backend {
         match streamed {
             Ok(outcome) => {
                 if outcome.stop == Stop::Done {
-                    let _ = self.cache_of(key).write(&cache_key, &SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage });
+                    let (wanted, saved) = (key.clone(), SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage });
+                    let _ = self.off(move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
                 }
                 send(part(Part::Done { outcome, cached_text: None }));
             }
@@ -437,13 +454,15 @@ impl Backend {
     /// Jev's verdict on a queue MR, from the cache while the MR has not moved.
     async fn triage(&self, mr: &crate::forge::QueueMr) -> Result<Incoming, Unavailable> {
         let key = mr.key();
-        let cached: Option<Verdict> = self.cache_of(&key).read(&keys::verdict(&key));
+        let wanted = key.clone();
+        let cached: Option<Verdict> = self.off(move |b| b.cache_of(&wanted).read(&keys::verdict(&wanted))).await.ok().flatten();
         let verdict = if let Some(verdict) = cached.filter(|v| v.fresh_for(mr)) {
             verdict
         } else {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let verdict = triage::judge_mr(jev, mr, Utc::now()).await?;
-            let _ = self.cache_of(&key).write(&keys::verdict(&key), &verdict);
+            let (wanted, saved) = (key.clone(), verdict.clone());
+            let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::verdict(&wanted), &saved)).await;
             verdict
         };
         Ok(Incoming::Triaged { key, verdict })
@@ -457,12 +476,15 @@ impl Backend {
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
     ) -> Result<Incoming, Unavailable> {
-        let reading = if let Some(reading) = self.cache_of(&key).read(&keys::reading(&key, &head)) {
+        let (wanted, at) = (key.clone(), head.clone());
+        let cached = self.off(move |b| b.cache_of(&wanted).read(&keys::reading(&wanted, &at))).await.ok().flatten();
+        let reading = if let Some(reading) = cached {
             reading
         } else {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let reading = triage::judge_open(jev, waits, files).await?;
-            let _ = self.cache_of(&key).write(&keys::reading(&key, &head), &reading);
+            let (wanted, at, saved) = (key.clone(), head.clone(), reading.clone());
+            let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::reading(&wanted, &at), &saved)).await;
             reading
         };
         Ok(Incoming::Read { key, head, reading })
@@ -472,7 +494,8 @@ impl Backend {
     /// answer is left out rather than failing the whole queue.
     async fn load_queue(&self, scope: Option<String>) -> Result<Incoming> {
         let queue = self.forge.queue(scope.as_deref()).await?;
-        let _ = self.cache.write_entry(&keys::queue(scope.as_deref()), &queue);
+        let (wanted, saved) = (scope.clone(), queue.clone());
+        let _ = self.off(move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
         let others = if scope.is_none() {
             futures_util::future::join_all(self.others.iter().map(crate::ctx::Home::queue))
                 .await
@@ -542,14 +565,18 @@ impl Backend {
         let forge = self.forge_of(&key);
         let (mr, diffs, discussions, drafts) =
             tokio::try_join!(forge.mr(&key), forge.diffs(&key), forge.discussions(&key), forge.drafts(&key))?;
-        let _ = self.cache_of(&key).write_entry(&keys::mr(&key), &mr);
-        let _ = self.cache_of(&key).write(&keys::diffs(&key, &mr.refs.head), &diffs);
-        let _ = self.cache_of(&key).write(&keys::discussions(&key), &discussions);
-        let _ = self.cache_of(&key).write(&keys::drafts(&key), &drafts);
-        let state = MrState { opened_at: Some(Utc::now()), ..self.state(&key) };
-        let _ = self.cache_of(&key).write(&keys::state(&key), &state);
-        let review = self.build(&key, mr, &diffs, discussions, &drafts);
-        Ok(Incoming::Review { key, review: Box::new(review), cached: None })
+        self.off(move |b| {
+            let cache = b.cache_of(&key);
+            let _ = cache.write_entry(&keys::mr(&key), &mr);
+            let _ = cache.write(&keys::diffs(&key, &mr.refs.head), &diffs);
+            let _ = cache.write(&keys::discussions(&key), &discussions);
+            let _ = cache.write(&keys::drafts(&key), &drafts);
+            let state = MrState { opened_at: Some(Utc::now()), ..b.state(&key) };
+            let _ = cache.write(&keys::state(&key), &state);
+            let review = b.build(&key, mr, &diffs, discussions, &drafts);
+            Incoming::Review { key, review: Box::new(review), cached: None }
+        })
+        .await
     }
 
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
@@ -564,13 +591,15 @@ impl Backend {
 
     async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
         self.forge_of(&key).publish(&key, approve).await?;
-        let _ = self.cache_of(&key).write(&keys::drafts(&key), &Vec::<HeldDraft>::new());
+        let wanted = key.clone();
+        let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())).await;
         Ok(Incoming::Published { key, approved: approve, count })
     }
 
     async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
         let discussions = self.forge_of(&key).discussions(&key).await?;
-        let _ = self.cache_of(&key).write(&keys::discussions(&key), &discussions);
+        let (wanted, saved) = (key.clone(), discussions.clone());
+        let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::discussions(&wanted), &saved)).await;
         Ok(Incoming::Discussions { key, discussions })
     }
 
@@ -584,7 +613,8 @@ impl Backend {
             (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
         } else {
             let text = self.file_text(&key, path, sha).await?;
-            let (dir, file) = crate::open::write_private(path, text.as_bytes())?;
+            let name = path.to_owned();
+            let (dir, file) = blocking(move || crate::open::write_private(&name, text.as_bytes())).await?;
             (file, Some(std::sync::Arc::new(dir)), note)
         };
         let command = crate::open::command_for(path, &self.open, env("VISUAL").as_deref(), env("EDITOR").as_deref());
@@ -596,7 +626,8 @@ impl Backend {
     /// A file at a commit never changes, so the cache serves it forever.
     async fn file_text(&self, key: &MrKey, path: &str, sha: &str) -> Result<String> {
         let cache_key = keys::file(key, sha, path);
-        if let Some(text) = self.cache_of(key).read::<String>(&cache_key) {
+        let (wanted, reading) = (key.clone(), cache_key.clone());
+        if let Some(text) = self.off(move |b| b.cache_of(&wanted).read::<String>(&reading)).await.ok().flatten() {
             return Ok(text);
         }
         let short = sha.get(..8).unwrap_or(sha);
@@ -606,7 +637,8 @@ impl Backend {
             "too large to open here ({} MB) · o opens it in the browser",
             text.len() / (1024 * 1024)
         );
-        let _ = self.cache_of(key).write(&cache_key, &text);
+        let (wanted, saved) = (key.clone(), text.clone());
+        let _ = self.off(move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
         Ok(text)
     }
 
@@ -642,28 +674,31 @@ fn env(name: &str) -> Option<String> {
 }
 
 /// The text goes in as arguments, never into the script, so an MR title cannot run AppleScript.
-fn notify(title: &str, body: &str) -> Result<()> {
-    let status = std::process::Command::new("osascript")
+async fn notify(title: &str, body: &str) -> Result<()> {
+    let status = tokio::process::Command::new("osascript")
         .args(["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run"])
         .args([title, body])
         .stdout(std::process::Stdio::null())
         .status()
+        .await
         .context("running osascript")?;
     anyhow::ensure!(status.success(), "osascript failed");
     Ok(())
 }
 
-fn open_url(url: &str) -> Result<()> {
-    let status = std::process::Command::new("open").arg(url).status().context("running open")?;
+async fn open_url(url: &str) -> Result<()> {
+    let status = tokio::process::Command::new("open").arg(url).status().await.context("running open")?;
     anyhow::ensure!(status.success(), "open failed");
     Ok(())
 }
 
-fn copy(text: &str) -> Result<()> {
-    use std::io::Write;
-    let mut child = std::process::Command::new("pbcopy").stdin(std::process::Stdio::piped()).spawn().context("running pbcopy")?;
-    child.stdin.take().context("pbcopy stdin")?.write_all(text.as_bytes())?;
-    anyhow::ensure!(child.wait()?.success(), "pbcopy failed");
+async fn copy(text: &str) -> Result<()> {
+    use tokio::io::AsyncWriteExt;
+    let mut child = tokio::process::Command::new("pbcopy").stdin(std::process::Stdio::piped()).spawn().context("running pbcopy")?;
+    let mut stdin = child.stdin.take().context("pbcopy stdin")?;
+    stdin.write_all(text.as_bytes()).await?;
+    drop(stdin);
+    anyhow::ensure!(child.wait().await?.success(), "pbcopy failed");
     Ok(())
 }
 
@@ -674,6 +709,23 @@ mod tests {
     use crate::forge::gitlab::Client;
     use crate::forge::gitlab::fixture::key;
     use crate::forge::{LineRef, Position, Refs};
+
+    /// Never polled, so nothing runs: the types alone prove the helpers wait without blocking a runtime thread.
+    #[test]
+    fn the_macos_helpers_are_futures_so_they_never_block_the_runtime() {
+        fn future<F: std::future::Future<Output = Result<()>>>(_: F) {}
+        future(notify("title", "body"));
+        future(open_url("https://gitlab.com"));
+        future(copy("text"));
+    }
+
+    #[tokio::test]
+    async fn off_runs_the_work_with_the_backend_and_hands_back_its_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        backend.cache.write(&keys::queue(None), &7_u32).unwrap();
+        assert_eq!(backend.off(|b| b.cache.read::<u32>(&keys::queue(None))).await.unwrap(), Some(7));
+    }
 
     #[test]
     fn a_link_prints_only_where_its_text_is_still_on_screen() {
