@@ -29,12 +29,13 @@ pub struct Theme {
     pub danger: Color,
     /// Author names, picked by a hash of the name.
     pub users: [Color; 6],
-    /// Text of an added or removed line: the terminal's own foreground where a fill carries the
-    /// meaning (as on GitHub), plain green and red where the ground is unknown.
+    /// Text of an added or removed line. The terminal's own foreground: the fill, or on an unknown
+    /// ground the sign alone, carries the meaning, which leaves the text free for syntax colours.
     pub added: Color,
     pub removed: Color,
     /// Fill under a changed line, and the stronger one under its changed words.
     /// None where the ground is unknown: a fill guessed wrong paints text into invisibility.
+    /// [`Theme::with_ground`] computes them once the terminal says what its ground is.
     pub added_fill: Option<Color>,
     pub removed_fill: Option<Color>,
     pub added_word: Option<Color>,
@@ -56,6 +57,9 @@ const fn mix(from: u32, to: u32, pct: u32) -> Color {
 }
 
 const SURFACE_PCT: u32 = 3;
+/// Green and red a fill walks toward when the palette's own are ANSI names with no RGB value.
+const DIFF_GREEN: u32 = 0x3fb950;
+const DIFF_RED: u32 = 0xf85149;
 const FILL_PCT: u32 = 10;
 const WORD_PCT: u32 = 25;
 
@@ -86,6 +90,27 @@ impl Theme {
         }
     }
 
+    /// A palette that does not know its ground takes the terminal's: changed lines get the same
+    /// tinted fills the RGB palettes carry. A palette with an RGB ground keeps its own.
+    pub fn with_ground(self, ground: u32) -> Theme {
+        if matches!(self.base, Color::Rgb(..)) {
+            return self;
+        }
+        let hue = |colour: Color, fallback: u32| match colour {
+            Color::Rgb(r, g, b) => (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b),
+            _ => fallback,
+        };
+        let (green, red) = (hue(self.success, DIFF_GREEN), hue(self.danger, DIFF_RED));
+        Theme {
+            base: rgb(ground),
+            added_fill: Some(mix(ground, green, FILL_PCT)),
+            removed_fill: Some(mix(ground, red, FILL_PCT)),
+            added_word: Some(mix(ground, green, WORD_PCT)),
+            removed_word: Some(mix(ground, red, WORD_PCT)),
+            ..self
+        }
+    }
+
     pub fn user(&self, name: &str) -> Color {
         let idx = name.trim().bytes().fold(7usize, |h, b| h.wrapping_mul(33).wrapping_add(b as usize)) % self.users.len();
         self.users[idx]
@@ -109,8 +134,8 @@ const DEFAULT: Theme = Theme {
     warn: Color::Yellow,
     danger: Color::Red,
     users: [Color::Cyan, Color::Green, Color::Yellow, Color::Magenta, Color::Blue, Color::LightRed],
-    added: Color::Green,
-    removed: Color::Red,
+    added: Color::Reset,
+    removed: Color::Reset,
     added_fill: None,
     removed_fill: None,
     added_word: None,
@@ -339,18 +364,29 @@ mod tests {
     }
 
     #[test]
-    fn rgb_themes_fill_changed_lines_and_the_default_theme_colours_the_text() {
+    fn rgb_themes_fill_changed_lines_and_the_default_theme_waits_for_the_ground() {
         for name in Theme::NAMES {
             let theme = Theme::named(name).unwrap();
             let knows_its_ground = matches!(theme.base, Color::Rgb(..));
             assert_eq!(theme.added_fill.is_some(), knows_its_ground, "{name}");
             assert_eq!(theme.removed_word.is_some(), knows_its_ground, "{name}");
-            assert_eq!(theme.added == Color::Reset, knows_its_ground, "{name}");
+            assert_eq!((theme.added, theme.removed), (Color::Reset, Color::Reset), "{name}: text keeps the terminal colour");
         }
         let dracula = Theme::named("dracula").unwrap();
         assert_ne!(dracula.added_fill, dracula.removed_fill);
         assert_ne!(dracula.added_fill, Some(dracula.base));
-        assert_eq!((Theme::default().added, Theme::default().removed), (Color::Green, Color::Red));
+    }
+
+    #[test]
+    fn a_known_ground_tints_the_default_theme_and_leaves_rgb_themes_alone() {
+        let tinted = Theme::default().with_ground(0x1e1e2e);
+        assert_eq!(tinted.base, rgb(0x1e1e2e));
+        assert_eq!(tinted.added_fill, Some(mix(0x1e1e2e, DIFF_GREEN, FILL_PCT)));
+        assert_eq!(tinted.removed_word, Some(mix(0x1e1e2e, DIFF_RED, WORD_PCT)));
+        let light = Theme::default().with_ground(0xffffff);
+        assert_ne!(light.removed_fill, tinted.removed_fill, "a light terminal gets a light tint");
+        let nord = Theme::named("nord").unwrap();
+        assert_eq!(nord.with_ground(0xffffff), nord);
     }
 
     #[test]

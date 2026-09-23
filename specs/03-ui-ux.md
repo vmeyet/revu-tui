@@ -116,7 +116,10 @@ Between two hunks the elided lines show as `· · ·  38 lines` in `faded`; `+` 
 
 - Two 4-column right aligned gutters in `faded`; the selected line's gutters turn `fg`.
 - Sign column, 1 char, coloured; the text keeps the sign colour at 100 % for changed words and at 60 % (mixed toward the ground) for the rest of the line.
-- Removed and added lines get a fill edge to edge: `mix(base, danger, 10)` and `mix(base, success, 10)`, with the terminal's own text colour on top; changed words get `mix(base, colour, 25)` in the sign colour. The default theme does not know the terminal ground, so it paints no fill: the whole line takes the sign colour and changed words go bold. Every palette carries these six colours (`added`, `removed`, the two fills, the two word fills) so a theme decides the diff look, not the renderer.
+- Removed and added lines get a fill edge to edge: `mix(ground, danger, 10)` and `mix(ground, success, 10)`, with the terminal's own text colour on top; changed words get `mix(ground, colour, 25)` in the sign colour.
+- The ground is the theme's `base` when it is RGB. Otherwise revu asks the terminal at startup (OSC 11, then DA1 so a silent terminal still ends the read, 50 ms cap, `select(2)` on `/dev/tty`) and `Theme::with_ground` computes the same fills from its answer.
+- No answer (tmux without passthrough, older terminals): no fill at all. Only the sign column is coloured, the text keeps the terminal colour and changed words go bold, which leaves the text free for syntax colours.
+- Every palette carries these six colours (`added`, `removed`, the two fills, the two word fills), so a theme decides the diff look, not the renderer. A key typed in the first ~50 ms after launch may be read with the answer and lost.
 - Context lines are `fg` with no surface.
 - Tabs render as `→   `, trailing whitespace as `·` in `warn`, both only on changed lines.
 - Long lines are cut with `…`; `w` wraps them with a hanging indent under the text column.

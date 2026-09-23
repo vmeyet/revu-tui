@@ -2156,6 +2156,7 @@ dependencies = [
  "futures-util",
  "glob",
  "insta",
+ "libc",
  "owo-colors",
  "predicates",
  "ratatui",

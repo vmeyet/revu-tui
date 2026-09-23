@@ -767,8 +767,14 @@ fn removed_lines_read_on_every_theme_and_fill_the_row_where_the_theme_knows_its_
     let mut app = with_review();
     press(&mut app, "]cj");
     let (text, edge) = removed_line_cells(&mut app);
-    assert_eq!((text.fg, text.bg), (Color::Red, Color::Reset), "the default theme paints the text, never a fill it cannot see");
+    assert_eq!((text.fg, text.bg), (Color::Reset, Color::Reset), "on an unknown ground, no fill and the terminal's own text");
     assert_eq!(edge.bg, Color::Reset);
+    let sign = sign_of_removed_line(&mut app);
+    assert_eq!(sign.fg, Color::Red, "the sign alone says removed");
+    app.theme = Theme::default().with_ground(0x1e1e2e);
+    let (text, edge) = removed_line_cells(&mut app);
+    assert_eq!((text.fg, text.bg), (Color::Reset, app.theme.removed_fill.unwrap()), "a known ground gets the tint");
+    assert_eq!(edge.bg, app.theme.removed_fill.unwrap());
     app.theme = Theme::named("tokyonight").unwrap();
     let (text, edge) = removed_line_cells(&mut app);
     assert_eq!((text.fg, text.bg), (Color::Reset, app.theme.removed_fill.unwrap()), "the terminal's own text on the theme's fill");
@@ -1055,4 +1061,18 @@ fn the_old_word_is_struck_through_in_red_and_the_new_one_green() {
     app.theme = Theme::named("tokyonight").unwrap();
     let buffer = cells(&mut app, 100, 18);
     assert_eq!(cell_of(&buffer, "20;").bg, app.theme.added_word.unwrap(), "RGB themes fill the new word");
+}
+
+/// The sign column of the removed line: the one cell that still says `-` when there is no fill.
+fn sign_of_removed_line(app: &mut App) -> ratatui::buffer::Cell {
+    let buffer = cells(app, 120, 30);
+    let text = "let client = Client::new();";
+    let (x, y) = (0..30)
+        .find_map(|y| {
+            let row: String = (0..120).map(|x| buffer[(x, y)].symbol().to_owned()).collect();
+            row.find(text).map(|i| (row[..i].chars().count() as u16, y))
+        })
+        .expect("the removed line is on screen");
+    let sign = (0..x).rev().find(|&x| buffer[(x, y)].symbol() == "-").expect("a sign before the text");
+    buffer[(sign, y)].clone()
 }

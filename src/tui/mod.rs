@@ -4,6 +4,7 @@ mod brief_view;
 mod compose;
 mod diff_view;
 mod field;
+mod ground;
 mod publish_view;
 mod theme;
 mod thread_view;
@@ -56,6 +57,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", ")))?,
         None => theme::Theme::default(),
     };
+    let theme = ground::ask().map_or(theme, |ground| theme.with_ground(ground));
     let backend = Backend {
         forge: ctx.forge.clone(),
         cache: ctx.cache.clone(),
