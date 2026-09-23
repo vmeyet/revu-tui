@@ -89,7 +89,8 @@ revu publish !42                       # every draft you hold, as one review
 
 ## Settings
 
-`~/Library/Application Support/revu/config.toml`, every key optional:
+`~/.config/revu/config.toml` (or `$XDG_CONFIG_HOME/revu/`), every key optional.
+A config left in `~/Library/Application Support/revu/` by an earlier version moves there on the next run.
 
 ```toml
 [queue]

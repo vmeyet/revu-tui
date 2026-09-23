@@ -8,7 +8,12 @@ fn revu() -> Command {
     let home = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("home");
     std::fs::create_dir_all(&home).unwrap();
     let mut cmd = Command::cargo_bin("revu").unwrap();
-    cmd.env("HOME", home).env_remove("GITLAB_TOKEN").env_remove("GITLAB_HOST").env_remove("GITHUB_TOKEN").env_remove("GH_TOKEN");
+    cmd.env("HOME", home)
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("GITLAB_TOKEN")
+        .env_remove("GITLAB_HOST")
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GH_TOKEN");
     cmd
 }
 
