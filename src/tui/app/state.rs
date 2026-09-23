@@ -67,6 +67,8 @@ pub struct App {
     pub rate: crate::forge::RateLimit,
     /// What changed in the open MR since the reader last pressed a key: `● 2 new notes`.
     pub news: Option<String>,
+    /// A commit waiting for `y`; every key answers it first.
+    pub confirm: Option<super::Confirm>,
     pub closed_sections: std::collections::BTreeSet<&'static str>,
     pub queue_loading: bool,
     pub open: Option<Open>,
@@ -144,6 +146,7 @@ impl App {
             reading: false,
             rate: crate::forge::RateLimit::default(),
             news: None,
+            confirm: None,
             closed_sections: std::collections::BTreeSet::from(["DONE"]),
             queue_loading: true,
             open: None,

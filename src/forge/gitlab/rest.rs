@@ -100,6 +100,12 @@ impl Client {
         self.get_text(&format!("{}/repository/files/{}/raw?ref={sha}", project_path(project), url_encode(path))).await
     }
 
+    /// GitLab commits the suggestion itself, on the MR's branch, from its id.
+    pub async fn apply(&self, suggestion: &forge::Suggestion) -> Result<()> {
+        let Some(id) = suggestion.id else { return Err(anyhow!("GitLab did not list this suggestion as appliable")) };
+        self.send_empty(Method::PUT, &format!("suggestions/{id}/apply"), None).await
+    }
+
     /// The jobs of the MR's newest pipeline; `None` when it never ran one. GitLab creates a
     /// pipeline's jobs stage by stage, so their ids give the stage order.
     pub async fn checks(&self, key: &MrKey) -> Result<Option<Checks>> {
@@ -424,5 +430,20 @@ mod tests {
             .mount(&server)
             .await;
         assert_eq!(client(&server).checks(&key()).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn a_suggestion_is_applied_by_its_id() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/v4/suggestions/77/apply"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": 77})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let suggestion = forge::Suggestion { id: Some(77), path: "src/a.rs".into(), line: 3, above: 0, below: 0, text: "x".into() };
+        client(&server).apply(&suggestion).await.unwrap();
+        let unlisted = forge::Suggestion { id: None, ..suggestion };
+        assert!(client(&server).apply(&unlisted).await.unwrap_err().to_string().contains("appliable"));
     }
 }

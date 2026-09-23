@@ -60,6 +60,7 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `v` | The file as it is after the change, in your own program at this line (`:view old` for before) |
 | `c` | New thread on the line, written in a box at the bottom of the pane (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change); `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` keeps it for later |
 | `r` / `R` | Reply / resolve, in the right pane (`R` also on a marked line) |
+| `S` | Commit the suggestion of the note under the cursor on the MR branch, after a `y` |
 | `J` `K`, `e`, `d`, `x` | In the pane: next, previous thread; edit, delete my draft; close |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
 | `a` then `e` `r` `s` `t` `c` `a` | Ask Claude: explain the hunk, the file's risks, a summary of the MR, this thread, a comment about the lines, or anything (`:ask …` too) |

@@ -117,6 +117,30 @@ pub struct Note {
     pub resolvable: bool,
     pub resolved: bool,
     pub position: Option<Position>,
+    /// The suggestions the forge can apply for us, by id; GitHub has none, its suggestions live in the text only.
+    #[serde(default)]
+    pub suggestions: Vec<Applicable>,
+}
+
+/// A suggestion to commit on the MR's branch: GitLab applies it by `id`; elsewhere the lines around
+/// `line` of `path` are replaced by `text` (`above` lines before it, `below` after).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Suggestion {
+    pub id: Option<u64>,
+    pub path: String,
+    pub line: u32,
+    pub above: u32,
+    pub below: u32,
+    pub text: String,
+}
+
+/// A suggestion the forge applies itself when asked by its id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Applicable {
+    pub id: u64,
+    pub applied: bool,
+    /// False once the lines moved under it or the MR closed.
+    pub appliable: bool,
 }
 
 /// Which side of the diff a line number counts on.

@@ -274,6 +274,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.forge.file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
             }
+            Action::Apply { key, branch, suggestion } => {
+                let outcome = backend.forge.apply(&key, &branch, &suggestion).await;
+                send(outcome.map_or_else(|e| failed(Failure::Apply, &e), |()| Incoming::Applied { key, branch }));
+            }
             Action::LoadChecks { key, head } => {
                 let outcome = backend.forge.checks(&key, &head).await;
                 send(outcome.map_or_else(|e| failed(Failure::Checks, &e), |checks| Incoming::Checks { key, checks }));

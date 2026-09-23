@@ -15,6 +15,9 @@ impl App {
             self.help = help_scroll(scroll, key);
             return vec![];
         }
+        if self.confirm.is_some() {
+            return self.handle_confirm_key(key);
+        }
         if self.input.is_some() {
             return self.handle_input_key(key);
         }

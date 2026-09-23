@@ -299,6 +299,7 @@ impl Comment {
             resolvable,
             resolved,
             position,
+            suggestions: vec![],
         }
     }
 }

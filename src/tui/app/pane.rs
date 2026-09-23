@@ -170,6 +170,7 @@ impl App {
             KeyCode::Char('v') => return self.view_thread(),
             KeyCode::Char('r') => self.reply_here(),
             KeyCode::Char('R') => return self.toggle_resolved(),
+            KeyCode::Char('S') => self.apply_here(),
             KeyCode::Char('e') => {
                 if !self.edit_draft_here() {
                     self.toast("e edits one of your drafts");
