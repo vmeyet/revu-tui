@@ -1,6 +1,6 @@
 use crate::diff::words::InlineRule;
 use crate::forge::Kind;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -103,11 +103,27 @@ pub struct Queue {
     /// MRs carrying one of these labels land in Watching.
     #[serde(default)]
     pub watch_labels: Vec<String>,
+    /// Saved filters: `'` then a view's first letter, or `1`–`9` in name order, applies it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub views: BTreeMap<String, String>,
 }
 
 impl Queue {
     fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// Every view is a query that parses, and no two start with the same letter, since `'` picks by it.
+    fn check(&self) -> Result<()> {
+        let mut firsts: BTreeMap<char, &str> = BTreeMap::new();
+        for (name, query) in &self.views {
+            crate::query::Query::parse(query).map_err(|e| anyhow::anyhow!("`queue.views.{name}`: {e}"))?;
+            let Some(first) = name.chars().next() else { bail!("`queue.views` has a view with no name") };
+            if let Some(other) = firsts.insert(first.to_ascii_lowercase(), name) {
+                bail!("`queue.views.{other}` and `queue.views.{name}` both start with `{first}`: ' picks a view by its first letter");
+            }
+        }
+        Ok(())
     }
 }
 
@@ -344,6 +360,7 @@ impl Config {
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let config: Self = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
         config.open.check().with_context(|| format!("in {}", path.display()))?;
+        config.queue.check().with_context(|| format!("in {}", path.display()))?;
         config.ai.check().with_context(|| format!("in {}", path.display()))?;
         crate::keymap::Keymap::new(&config.keys).with_context(|| format!("in {}", path.display()))?;
         Ok(config)
@@ -411,6 +428,22 @@ mod tests {
         let err = format!("{:#}", Config::load_from(&path).unwrap_err());
         assert!(err.contains("[ai.anthropic] enabled = true"), "{err}");
         assert!(toml::from_str::<Config>("[ai.anthropic]\nkey = \"sk-ant\"\n").is_err(), "a key in the config is refused");
+    }
+
+    #[test]
+    fn views_must_parse_and_start_with_distinct_letters() {
+        let load = |toml: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, toml).unwrap();
+            Config::load_from(&path).map_err(|e| format!("{e:#}"))
+        };
+        let ok = load("[queue.views]\nfront = \"@me ~frontend\"\nbacklog = \"draft:no size:small\"\n").unwrap();
+        assert_eq!(ok.queue.views.len(), 2);
+        let bad = load("[queue.views]\nfront = \"size:huge\"\n").unwrap_err();
+        assert!(bad.contains("queue.views.front") && bad.contains("size: takes small or large") && bad.contains("config.toml"), "{bad}");
+        let clash = load("[queue.views]\nfront = \"@me\"\nfixes = \"fix\"\n").unwrap_err();
+        assert!(clash.contains("both start with `f`"), "{clash}");
     }
 
     #[test]

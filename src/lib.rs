@@ -13,6 +13,7 @@ mod keymap;
 mod legacy;
 mod mrref;
 mod open;
+mod query;
 mod render;
 mod review;
 mod syntax;

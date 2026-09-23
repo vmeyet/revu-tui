@@ -1,0 +1,28 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 24)"
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
+│   TO REVIEW                1   ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
+│ ▎ feat charge card╭ search · MRs · @author !42 ~label draft:no ──────────────╮                   │
+│ ▎ !42 · omar · 2h │ › @omar▌                                                 │                   │
+│   MINE            │                                                          │                   │
+│   fix flaky cache │ ▎◆ !42 feat: charge cards at checkout  omar              │2  ◆1 · 1 outdated │
+│   !41 · nina · 4h │  ◆ !35 infra: new runner  omar                           │                   │
+│   WATCHING        │   ↑↓ pick · enter opens · > commands · / files · esc     │d, amount: Money)… │
+│   infra: new runne│                                                          │;                  │
+│   !35 · omar · 2d │                                                          │key(idempotency_k… │
+│   DONE ▸          │                                                          │st();              │
+│                   │                                                          │ge(amount).await?; │
+│                   │                                                          │                   │
+│                   │                                                          │                   │
+│                   │                                                          │) -> Key {         │
+│                   │                                                          │                   │
+│                   │                                                          │card.expiry()))    │
+│                   ╰──────────────────────────────────────────────────────────╯w                  │
+│                                ││      42   44  }                                                │
+│                                ││                                                                │
+│                                ││  ▸ Cargo.lock                                    +1 −1  folded │
+│                                ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                            ? help

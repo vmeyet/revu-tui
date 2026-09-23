@@ -1,6 +1,48 @@
-//! The `:` command line: typed verbs with fuzzy tab completion, a ghost suggestion and history.
+//! The palette, `ctrl-k` or `⌘k`: one box that finds MRs, the open MR's files, or runs commands,
+//! picked by the first character as VS Code does. Nothing typed finds MRs (`@author`, `!42`,
+//! `~label` narrow them, see `query`), `/` finds files, `>` runs commands. `:` opens it on
+//! commands, with fuzzy tab completion, a ghost suggestion and history.
 use super::complete::{self, Cycle};
+use crate::forge::MrKey;
 use crate::fuzzy;
+
+/// What the palette searches, from the first character typed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    #[default]
+    Mrs,
+    Files,
+    Commands,
+}
+
+impl Mode {
+    /// The character that switches to this mode, and the word the prompt shows.
+    pub fn prompt(self) -> (&'static str, &'static str) {
+        match self {
+            Mode::Mrs => ("", "MRs · @author !42 ~label draft:no"),
+            Mode::Files => ("/", "files of the open MR"),
+            Mode::Commands => (">", "commands"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Target {
+    Mr(MrKey),
+    /// A file of the open MR, by its index in the review.
+    File(usize),
+}
+
+/// One row of the palette's list: what it shows, and where `enter` goes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Candidate {
+    pub label: String,
+    /// Dim text after the label: the author of an MR.
+    pub detail: String,
+    pub target: Target,
+}
+
+pub const MAX_SHOWN: usize = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -104,7 +146,11 @@ pub fn slot(line: &str) -> Slot {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Palette {
+    pub mode: Mode,
+    /// What is typed after the mode's character.
     pub input: String,
+    /// The highlighted row of the list, for MRs and files.
+    pub selected: usize,
     pub history: Vec<String>,
     history_at: Option<usize>,
     cycle: Option<Cycling>,
@@ -118,18 +164,37 @@ struct Cycling {
 }
 
 impl Palette {
-    pub fn with_history(history: Vec<String>) -> Self {
-        Self { history, ..Self::default() }
+    pub fn new(mode: Mode, history: Vec<String>) -> Self {
+        Self { mode, history, ..Self::default() }
     }
 
+    /// `>` or `/` as the very first character switches the mode instead of being typed.
     pub fn type_char(&mut self, c: char) {
-        self.input.push(c);
+        match (self.mode, self.input.is_empty(), c) {
+            (Mode::Mrs, true, '>') => self.mode = Mode::Commands,
+            (Mode::Mrs, true, '/') => self.mode = Mode::Files,
+            _ => self.input.push(c),
+        }
+        self.selected = 0;
         self.cycle = None;
     }
 
-    pub fn backspace(&mut self) {
-        self.input.pop();
+    /// Erases a character; on an empty line it steps back to MRs first. `false` once there is
+    /// nothing left to erase, which closes the palette.
+    pub fn backspace(&mut self) -> bool {
+        self.selected = 0;
         self.cycle = None;
+        if self.input.pop().is_some() {
+            return true;
+        }
+        let stepped = self.mode != Mode::Mrs;
+        self.mode = Mode::Mrs;
+        stepped
+    }
+
+    /// Moves the highlight in a list of `len` rows, staying inside it.
+    pub fn move_by(&mut self, delta: isize, len: usize) {
+        self.selected = if len == 0 { 0 } else { self.selected.saturating_add_signed(delta).min(len - 1) };
     }
 
     /// Replaces the token being typed with the next candidate for its slot.
@@ -218,7 +283,7 @@ mod tests {
     use super::*;
 
     fn typed(text: &str) -> Palette {
-        let mut p = Palette::default();
+        let mut p = Palette::new(Mode::Commands, vec![]);
         text.chars().for_each(|c| p.type_char(c));
         p
     }
@@ -265,6 +330,34 @@ mod tests {
         assert!(p.hint().unwrap().starts_with("[!42]"));
         p.complete(&mrs, false);
         assert_eq!(p.input, "go !41 ");
+    }
+
+    #[test]
+    fn the_first_character_picks_the_mode_and_backspace_steps_back() {
+        let mut p = Palette::default();
+        p.type_char('>');
+        assert_eq!((p.mode, p.input.as_str()), (Mode::Commands, ""));
+        p.type_char('>');
+        assert_eq!(p.input, ">", "only the first character switches");
+        assert!(p.backspace() && p.backspace());
+        assert_eq!(p.mode, Mode::Mrs, "an empty line steps back to MRs");
+        assert!(!p.backspace(), "nothing left: the palette closes");
+        p.type_char('/');
+        assert_eq!(p.mode, Mode::Files);
+        let mut p = Palette::default();
+        p.type_char('@');
+        assert_eq!((p.mode, p.input.as_str()), (Mode::Mrs, "@"), "@ ! # ~ narrow MRs, they are no modes");
+    }
+
+    #[test]
+    fn the_highlight_stays_inside_the_list() {
+        let mut p = Palette::default();
+        p.move_by(5, 3);
+        assert_eq!(p.selected, 2);
+        p.move_by(-9, 3);
+        assert_eq!(p.selected, 0);
+        p.move_by(1, 0);
+        assert_eq!(p.selected, 0);
     }
 
     #[test]

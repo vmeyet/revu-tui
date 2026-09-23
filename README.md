@@ -70,8 +70,10 @@ Other people's draft MRs wait apart in DRAFTS, folded; `zo` opens it.
 | `a` then `e` `r` `s` `t` `c` `a` | Ask Claude: explain the hunk, the file's risks, a summary of the MR, this thread, a comment about the lines, or anything (`:ask …` too) |
 | `c` `enter` `R` `y` (answer) | Turn the answer into a draft, ask a follow-up, ask again past the cache, copy it |
 | `o` / `y` | Open in the browser / copy the link |
-| `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:view old`, `:set theme=nord`; tab completes |
-| `ctrl-k` / `⌘k` | Jump to a file of the open MR, or to another MR (`⌘k` in terminals that forward it: Ghostty, Kitty, WezTerm, iTerm2) |
+| `ctrl-k` / `⌘k` | Search: MRs by title, `@author`, `!42`, `~label`; `/` files of the open MR; `>` commands (`⌘k` where the terminal forwards it: Ghostty, Kitty, WezTerm, iTerm2) |
+| `:` / `⌘⇧k` | The search on commands: `:go !42`, `:approve`, `:publish`, `:all`, `:view old`, `:set theme=nord`; tab completes |
+| `/` (queue) | Filter with the same terms, plus `draft:yes\|no`, `size:small\|large`, `is:failing`, `is:mine`; `esc` clears |
+| `'` then a letter, `1`–`9` | Apply a saved view from `[queue.views]` |
 | `?` | Every key |
 
 Comments stay drafts until `P`: GitLab draft notes, or your pending review on GitHub.
@@ -115,6 +117,10 @@ A config left in `~/Library/Application Support/revu/` by an earlier version mov
 ```toml
 [queue]
 watch_labels = ["infra"]      # MRs with these labels land in Watching
+
+[queue.views]                 # ' then the first letter, or 1-9 in name order
+mine = "is:mine"
+small = "draft:no size:small"
 
 [review]
 fold = ["*.lock", "*.snap"]   # files that open folded

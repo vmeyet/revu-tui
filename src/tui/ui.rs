@@ -20,14 +20,15 @@ const MEDIUM: u16 = 120;
 const SIDE_PCT: u16 = 40;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
-pub const HELP: [(&str, &str); 56] = [
+pub const HELP: [(&str, &str); 57] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
     ("h l", "pane to the left; open the MR, or a marked line's threads"),
     ("enter", "open the MR, a marked line's threads, or toggle the fold"),
     ("esc x", "close the right pane; esc again goes back to the queue"),
-    ("/", "filter the queue"),
+    ("/", "filter the queue: words @author !42 ~label draft:no size:small is:failing is:mine"),
+    ("' 1-9", "in the queue: a saved view by its first letter, or its rank ([queue.views])"),
     ("*", "in the queue: this repo only, or every project"),
     ("s", "in the queue: next order (updated, oldest, author, size, urgency)"),
     ("S", "in the queue: group Open and Drafts by author"),
@@ -72,8 +73,8 @@ pub const HELP: [(&str, &str); 56] = [
     ("S", "in the pane: commit the note's suggestion on the MR branch, after a y"),
     ("u", "in a thread: open its first link"),
     ("esc", "drop the selection; in the box, leave it, the text stays"),
-    (":", "command line: :go !42 · :view old · :set theme=nord · tab completes"),
-    ("^k", "jump to a file of the MR, or to another MR"),
+    ("^k", "search MRs (@author !42 ~label), / files of the open MR, > commands; ⌘k where the terminal forwards it"),
+    (":", "the search on commands: :go !42 · :view old · :set theme=nord · tab completes"),
     ("?", "this help"),
     ("q", "quit"),
     ("^c", "quit, always"),
@@ -90,7 +91,7 @@ pub struct Link {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
-    let input_rows = u16::from(app.filtering || app.palette.is_some());
+    let input_rows = u16::from(app.filtering);
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some() || o.pipeline.is_some());
@@ -116,13 +117,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     } else if side_open {
         pictures = thread_view::draw(f, app, side);
     }
-    if let Some(palette) = &app.palette {
-        draw_palette(f, app, palette, input);
-    } else if app.filtering {
+    if app.filtering {
         draw_filter(f, app, input);
     }
     draw_status(f, app, status);
-    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.jump.is_some();
+    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.palette.is_some();
     if modal {
         app.links.clear();
     }
@@ -144,8 +143,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.brief.is_some() {
         brief_view::draw(f, app, main);
     }
-    if let Some(jump) = &app.jump {
-        super::jump::draw(f, jump, main, app.theme);
+    if let Some(palette) = &app.palette {
+        super::palette_view::draw(f, app, palette, main);
     }
     if let Some(scroll) = app.help {
         draw_help(f, app, main, scroll);
@@ -221,28 +220,17 @@ fn draw_filter(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(line), area);
 }
 
-/// The `:` line: what is typed, the ghost of the best completion, and the options while tab cycles.
-fn draw_palette(f: &mut Frame, app: &App, palette: &super::palette::Palette, area: Rect) {
-    let theme = app.theme;
-    let candidates = app.completions_for(&palette.input);
-    let mut spans =
-        vec![Span::styled(":", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)), Span::raw(palette.input.clone())];
-    match (palette.hint(), palette.ghost(&candidates)) {
-        (Some(hint), _) => spans.push(Span::styled(format!("   {hint}"), Style::default().fg(theme.muted))),
-        (None, Some(ghost)) => spans.push(Span::styled(ghost, Style::default().fg(theme.faded))),
-        (None, None) => {}
-    }
-    spans.insert(2, Span::styled(" ", Style::default().add_modifier(Modifier::REVERSED)));
-    spans.push(Span::styled("  tab completes · enter runs · esc", Style::default().fg(theme.faded)));
-    f.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
 fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme;
     let muted = Style::default().fg(theme.muted);
     let dot = Span::styled(" · ", Style::default().fg(theme.faded));
     if let Some(confirm) = &app.confirm {
         let line = Line::from(Span::styled(format!(" ? {}", confirm.question()), Style::default().fg(theme.warn)));
+        f.render_widget(Paragraph::new(line), area);
+        return;
+    }
+    if app.pending == Some('\'') {
+        let line = Line::from(Span::styled(format!(" ' {}", app.views_hint()), Style::default().fg(theme.accent)));
         f.render_widget(Paragraph::new(line), area);
         return;
     }

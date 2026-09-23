@@ -2,17 +2,18 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
-╭ Queu╭ keys · 4–24 of 56 · j k scroll ──────────────────────────────────╮─────╮
+╭ Queu╭ keys · 4–24 of 57 · j k scroll ──────────────────────────────────╮─────╮
 │   TO│        h l  pane to the left; open the MR, or a marked line's th │     │
 │ ▎ fe│      enter  open the MR, a marked line's threads, or toggle the  │     │
 │ ▎ !4│      esc x  close the right pane; esc again goes back to the que │     │
-│   MI│          /  filter the queue                                     │     │
-│   fi│          *  in the queue: this repo only, or every project       │     │
-│   !4│          s  in the queue: next order (updated, oldest, author, s │     │
-│   WA│          S  in the queue: group Open and Drafts by author        │     │
-│   in│          i  the MR description                                   │     │
-│   !3│          r  refresh                                              │     │
-│   DO│          o  open in the browser (the line, in a diff)            │     │
+│   MI│          /  filter the queue: words @author !42 ~label draft:no  │     │
+│   fi│      ' 1-9  in the queue: a saved view by its first letter, or i │     │
+│   !4│          *  in the queue: this repo only, or every project       │     │
+│   WA│          s  in the queue: next order (updated, oldest, author, s │     │
+│   in│          S  in the queue: group Open and Drafts by author        │     │
+│   !3│          i  the MR description                                   │     │
+│   DO│          r  refresh                                              │     │
+│     │          o  open in the browser (the line, in a diff)            │     │
 │     │          y  copy the URL                                         │     │
 │     │  click !42  open the MR, in terminals that follow links          │     │
 │     │  tab S-tab  next, previous file                                  │     │
@@ -23,6 +24,5 @@ expression: "render(&mut app, 80, 24)"
 │     │          D  changed words inline, or every line split            │     │
 │     │      zc zo  close, open                                          │     │
 │     │      zM zR  fold, unfold every file                              │     │
-│     │      zo zc  in the queue: open, fold the section (enter too)     │     │
 ╰─────╰──────────────────────────────────────────────────────────────────╯─────╯
  gitlab.com · nina                                                       ? help

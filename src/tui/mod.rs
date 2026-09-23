@@ -8,8 +8,8 @@ mod diff_view;
 mod field;
 mod ground;
 mod images;
-mod jump;
 mod palette;
+mod palette_view;
 mod pipeline_view;
 mod publish_view;
 mod queue_view;
@@ -118,6 +118,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
         pictures,
         queue_layout: ctx.config.tui.queue,
+        views: ctx.config.queue.views.clone().into_iter().collect(),
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();
