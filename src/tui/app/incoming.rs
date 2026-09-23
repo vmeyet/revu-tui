@@ -24,6 +24,8 @@ impl App {
                 self.queue_settle();
                 self.schedule_queue();
                 self.ask_triage();
+                let notice = self.notify_new();
+                self.composed.extend(notice);
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
             Incoming::Discussions { key, discussions } => {

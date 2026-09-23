@@ -22,6 +22,8 @@ pub struct Config {
     pub ai: Ai,
     #[serde(default, skip_serializing_if = "Open::is_default")]
     pub open: Open,
+    #[serde(default, skip_serializing_if = "Notify::is_default")]
+    pub notify: Notify,
     /// Per-host settings, for a host whose name does not say which forge it runs.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub hosts: BTreeMap<String, Host>,
@@ -94,6 +96,30 @@ impl Review {
     pub fn inline(&self) -> InlineRule {
         InlineRule { max_words: self.inline_max_words, min_same: self.inline_min_same }
     }
+}
+
+/// `[notify]`: a macOS notification when an MR lands in To review while the TUI runs. On by default.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Notify {
+    #[serde(default = "on")]
+    pub enabled: bool,
+}
+
+impl Default for Notify {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+impl Notify {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+fn on() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -266,6 +292,7 @@ mod tests {
             ai: Ai::default(),
             open: Open { default: Some("hx".into()), files: BTreeMap::from([("*.md".into(), "glow -p".into())]) },
             hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })]),
+            notify: Notify { enabled: false },
         };
         let text = toml::to_string_pretty(&config).unwrap();
         assert!(text.contains("forge = \"github\""), "{text}");
@@ -301,5 +328,12 @@ mod tests {
     fn unknown_keys_fail_loudly() {
         let err = toml::from_str::<Config>("token = \"glpat-x\"").unwrap_err();
         assert!(err.to_string().contains("token"), "{err}");
+    }
+
+    #[test]
+    fn notifications_are_on_unless_switched_off() {
+        assert!(toml::from_str::<Config>("").unwrap().notify.enabled);
+        assert!(!toml::from_str::<Config>("[notify]\nenabled = false").unwrap().notify.enabled);
+        assert!(!toml::to_string_pretty(&Config::default()).unwrap().contains("[notify]"), "the default is not written");
     }
 }

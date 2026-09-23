@@ -28,6 +28,8 @@ pub struct Settings {
     pub triage: bool,
     /// Claude's model, when it is switched on and holds a key: `a` asks it.
     pub ask: Option<String>,
+    /// `[notify] enabled`: a macOS notification when an MR lands in To review.
+    pub notify: bool,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -69,6 +71,9 @@ pub struct App {
     pub news: Option<String>,
     /// A commit waiting for `y`; every key answers it first.
     pub confirm: Option<super::Confirm>,
+    pub notify: bool,
+    /// What To review held at the last fresh answer, so only newcomers are announced.
+    pub seen: Option<super::notify::Seen>,
     pub closed_sections: std::collections::BTreeSet<&'static str>,
     pub queue_loading: bool,
     pub open: Option<Open>,
@@ -147,6 +152,8 @@ impl App {
             rate: crate::forge::RateLimit::default(),
             news: None,
             confirm: None,
+            notify: settings.notify,
+            seen: None,
             closed_sections: std::collections::BTreeSet::from(["DONE"]),
             queue_loading: true,
             open: None,
