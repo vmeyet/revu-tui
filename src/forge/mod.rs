@@ -4,6 +4,7 @@ mod budget;
 pub mod checks;
 pub mod github;
 pub mod gitlab;
+pub mod image;
 mod model;
 mod queue;
 
@@ -162,6 +163,18 @@ impl Forge {
             Forge::GitLab(client) => client.file(&key.project, path, sha).await,
             Forge::GitHub(client) => client.file(&key.project, path, sha).await,
         }
+    }
+
+    /// The bytes of a picture a note of `key` points at, `url` as the note wrote it. Links off
+    /// the forge are refused, and a slow one gives up after [`image::TIMEOUT`].
+    pub async fn image(&self, key: &MrKey, url: &str) -> Result<Vec<u8>> {
+        let fetch = async {
+            match self {
+                Forge::GitLab(client) => client.image(&key.project, url).await,
+                Forge::GitHub(client) => client.image(url).await,
+            }
+        };
+        tokio::time::timeout(image::TIMEOUT, fetch).await.map_err(|_| anyhow::anyhow!("timed out"))?
     }
 
     /// Commits `suggestion` on the MR's source branch `branch`.

@@ -1,9 +1,11 @@
 //! The right pane: every conversation of one place, notes in order, bodies as light markdown.
 use super::app::{App, Entry, EntryKind, Focus, Open};
 use super::field::Field;
+use super::images::Thumbs;
 use super::theme::Theme;
 use super::ui::{pane, short_age};
 use crate::forge::Note;
+use crate::review::image::{self, Image};
 use crate::review::{Conversation, Place, Review, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -17,15 +19,40 @@ use unicode_width::UnicodeWidthStr;
 /// The compose box grows with its text up to this many rows, then scrolls.
 const COMPOSE_ROWS: usize = 8;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+/// One piece of a conversation as the pane lays it out: a line of text, or a picture that takes
+/// the rows its thumbnail needs, or a line of its own when it cannot be drawn.
+enum Piece {
+    Text(Line<'static>),
+    Picture(Image),
+}
+
+/// A picture ready to draw, and where: the loop paints it over the rows the pane left blank.
+pub struct Placement {
+    pub url: String,
+    pub area: Rect,
+}
+
+/// What a laid-out row carries besides its text.
+enum Mark {
+    /// The first of the rows reserved for a ready picture.
+    Picture { url: String, size: ratatui::layout::Size },
+    /// A picture shown as its `[image: …]` line, clickable to its web link.
+    Link { text: String, url: String },
+}
+
+/// The pane, and the pictures it made room for: the caller paints them last, above the fades.
+pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
     let theme = app.theme;
     let today = app.today;
     let me = app.me.clone();
     let focused = app.focus == Focus::Side;
     let compose = app.input.is_some().then(|| (app.input_label(), app.buffer.clone()));
-    let Some(open) = app.open.as_mut() else { return };
-    let Some((conversations, entries, current)) = open.pane_view() else { return };
-    let Some(pane) = open.pane.clone() else { return };
+    let host = app.host.clone();
+    let thumbs = &app.thumbs;
+    let Some(open) = app.open.as_mut() else { return vec![] };
+    let Some((conversations, entries, current)) = open.pane_view() else { return vec![] };
+    let Some(pane) = open.pane.clone() else { return vec![] };
+    let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&host), &open.key.project, url);
     let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
     let block = pane_block(theme, &title(&open.review, &pane.place, conversations.len(), here), focused);
     let inner = block.inner(area);
@@ -39,23 +66,30 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         None => inner,
     };
     let width = inner.width.saturating_sub(1) as usize;
-    let mut lines: Vec<(Option<Entry>, Line<'static>)> = vec![];
+    let mut lines: Vec<(Option<Entry>, Piece)> = vec![];
     for (index, conversation) in conversations.iter().enumerate() {
         if index > 0 {
-            lines.push((None, Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border)))));
+            lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
         lines.extend(conversation_lines(open, conversation, index, &entries, theme, today, &me));
     }
     let more = open.review.others_in_file(&pane.place);
     if more > 0 {
-        lines.push((None, Line::default()));
+        lines.push((None, Piece::Text(Line::default())));
         let footer = format!("{more} more thread{} in this file · ]n", if more == 1 { "" } else { "s" });
-        lines.push((None, Line::from(Span::styled(footer, Style::default().fg(theme.faded)))));
+        lines.push((None, Piece::Text(Line::from(Span::styled(footer, Style::default().fg(theme.faded))))));
     }
-    let rows: Vec<(bool, Line<'static>)> = lines
-        .into_iter()
-        .flat_map(|(entry, line)| wrap(line, width).into_iter().map(move |l| (entry.is_some() && entry == current, l)))
-        .collect();
+    let mut rows: Vec<(bool, Line<'static>)> = vec![];
+    let mut marks: Vec<(usize, Mark)> = vec![];
+    for (entry, piece) in lines {
+        let on = entry.is_some() && entry == current;
+        for (line, mark) in lay_out(piece, thumbs, width, theme, &web) {
+            if let Some(mark) = mark {
+                marks.push((rows.len(), mark));
+            }
+            rows.push((on, line));
+        }
+    }
     let height = inner.height as usize;
     let first = rows.iter().position(|(on, _)| *on).unwrap_or(0);
     let last = rows.iter().rposition(|(on, _)| *on).unwrap_or(0);
@@ -73,6 +107,47 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
     f.render_widget(Paragraph::new(drawn), inner);
+    let mut placements = vec![];
+    for (row, mark) in marks {
+        let Some(y) = row.checked_sub(scroll).filter(|y| *y < height) else { continue };
+        let (x, y) = (inner.x + 1, inner.y + y as u16);
+        match mark {
+            Mark::Picture { url, size } if row + usize::from(size.height) <= scroll + height => {
+                let width = size.width.min(inner.width.saturating_sub(1));
+                placements.push(Placement { url, area: Rect::new(x, y, width, size.height) });
+            }
+            Mark::Picture { .. } => {}
+            Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text, url }),
+        }
+    }
+    placements
+}
+
+/// A piece as rows: text wrapped to `width`; a ready picture as blank rows its thumbnail covers;
+/// any other picture as one line, still loading or `[image: alt]`, which clicks through to it.
+fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl Fn(&str) -> String) -> Vec<(Line<'static>, Option<Mark>)> {
+    let image = match piece {
+        Piece::Text(line) => return wrap(line, width).into_iter().map(|l| (l, None)).collect(),
+        Piece::Picture(image) => image,
+    };
+    let cols = u16::try_from(width).unwrap_or(u16::MAX);
+    if let Some(size) = thumbs.cells(&image.url, cols) {
+        let mark = Mark::Picture { url: image.url, size };
+        let mut rows = vec![(Line::default(), Some(mark))];
+        rows.extend((1..size.height).map(|_| (Line::default(), None)));
+        return rows;
+    }
+    if matches!(thumbs.get(&image.url), Some(super::images::Thumb::Loading)) {
+        return vec![(Line::from(Span::styled("… loading image", Style::default().fg(theme.faded))), None)];
+    }
+    let text = super::ui::truncate(&fallback(&image), width);
+    let mark = Mark::Link { text: text.clone(), url: web(&image.url) };
+    vec![(Line::from(Span::styled(text, Style::default().fg(theme.link))), Some(mark))]
+}
+
+/// How a picture reads where it cannot be drawn.
+fn fallback(image: &Image) -> String {
+    if image.alt.trim().is_empty() { "[image]".to_owned() } else { format!("[image: {}]", image.alt.trim()) }
 }
 
 /// Text rows the box shows: its own lines, at least one, at most 8 or 40 % of the pane, plus its border.
@@ -169,12 +244,12 @@ fn conversation_lines(
     theme: Theme,
     today: DateTime<Utc>,
     me: &str,
-) -> Vec<(Option<Entry>, Line<'static>)> {
+) -> Vec<(Option<Entry>, Piece)> {
     let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
     let mut lines = vec![];
     if let Some(thread) = conversation.thread.as_deref().and_then(|id| open.review.thread(id)) {
         let shown = entries.iter().filter(|e| e.conversation == index && matches!(e.kind, EntryKind::Note(_))).count();
-        lines.push((stop(EntryKind::Note(0)), status(thread, shown, theme)));
+        lines.push((stop(EntryKind::Note(0)), Piece::Text(status(thread, shown, theme))));
         let replaced = thread.first().position.as_ref().map(|p| open.review.text_at(p)).unwrap_or_default();
         for (n, note) in thread.notes.iter().take(shown).enumerate() {
             let entry = stop(EntryKind::Note(n));
@@ -185,7 +260,7 @@ fn conversation_lines(
         let entry = stop(EntryKind::Draft(draft));
         let draft = &open.review.drafts[draft];
         if conversation.thread.is_none() {
-            lines.push((entry, Line::from(Span::styled("◇ draft", Style::default().fg(theme.accent)))));
+            lines.push((entry, Piece::Text(Line::from(Span::styled("◇ draft", Style::default().fg(theme.accent))))));
         }
         let position = draft.position.as_ref().or_else(|| {
             let thread = conversation.thread.as_deref().and_then(|id| open.review.thread(id))?;
@@ -253,36 +328,43 @@ pub(super) fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
 }
 
 /// My draft: `you · draft ◇`, `unsaved` in danger until the forge holds it.
-fn draft_lines<'a>(draft: &crate::review::Draft, replaced: &[String], theme: Theme) -> Vec<Line<'a>> {
+fn draft_lines(draft: &crate::review::Draft, replaced: &[String], theme: Theme) -> Vec<Piece> {
     let (state, colour) = if draft.id.is_none() { ("unsaved", theme.danger) } else { ("draft", theme.muted) };
-    let mut lines = vec![Line::from(vec![
+    let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled("you", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {state} ◇"), Style::default().fg(colour)),
-    ])];
-    lines.extend(body_lines_over(&draft.body, replaced, theme));
+    ]))];
+    lines.extend(body_pieces(&draft.body, replaced, theme));
     lines
 }
 
 /// `replaced` is the text of the lines the thread hangs on, which a suggestion in the note replaces.
-fn note_lines<'a>(note: &Note, replaced: &[String], theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Line<'a>> {
+fn note_lines(note: &Note, replaced: &[String], theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Piece> {
     let author = if note.author.username == me { "you".to_owned() } else { note.author.username.clone() };
     let age = short_age((today - note.created_at).to_std().unwrap_or_default());
-    let mut lines = vec![Line::from(vec![
+    let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {age}"), Style::default().fg(theme.muted)),
-    ])];
-    lines.extend(body_lines_over(&note.body, replaced, theme));
+    ]))];
+    lines.extend(body_pieces(&note.body, replaced, theme));
     lines
 }
 
 /// Code spans, bullets and quotes; the rest is the text as written, wrapped by the widget.
+/// Pictures read as their `[image: …]` line, for the panes that never draw them.
 pub fn body_lines<'a>(body: &str, theme: Theme) -> Vec<Line<'a>> {
-    body_lines_over(body, &[], theme)
+    body_pieces(body, &[], theme)
+        .into_iter()
+        .map(|piece| match piece {
+            Piece::Text(line) => line,
+            Piece::Picture(image) => Line::from(Span::styled(fallback(&image), Style::default().fg(theme.link))),
+        })
+        .collect()
 }
 
-/// The same, with a suggestion block drawn as a small diff: the `replaced` lines struck as `-`,
-/// the suggested ones as `+`, in the diff colours.
-fn body_lines_over<'a>(body: &str, replaced: &[String], theme: Theme) -> Vec<Line<'a>> {
+/// A body as pieces, with a suggestion block drawn as a small diff (the `replaced` lines struck
+/// as `-`, the suggested ones as `+`, in the diff colours) and each picture under its line.
+fn body_pieces(body: &str, replaced: &[String], theme: Theme) -> Vec<Piece> {
     #[derive(PartialEq)]
     enum Fence {
         Out,
@@ -297,7 +379,7 @@ fn body_lines_over<'a>(body: &str, replaced: &[String], theme: Theme) -> Vec<Lin
             fence = match fence {
                 Fence::Out if opener.starts_with("```suggestion") => {
                     let old = Style::default().fg(theme.danger);
-                    lines.extend(replaced.iter().map(|text| Line::from(Span::styled(format!("- {text}"), old))));
+                    lines.extend(replaced.iter().map(|text| Piece::Text(Line::from(Span::styled(format!("- {text}"), old)))));
                     Fence::Suggestion
                 }
                 Fence::Out => Fence::Code,
@@ -307,23 +389,31 @@ fn body_lines_over<'a>(body: &str, replaced: &[String], theme: Theme) -> Vec<Lin
         }
         match fence {
             Fence::Code => {
-                lines.push(Line::from(Span::styled(format!("  {raw}"), Style::default().fg(theme.code))));
+                lines.push(Piece::Text(Line::from(Span::styled(format!("  {raw}"), Style::default().fg(theme.code)))));
                 continue;
             }
             Fence::Suggestion => {
-                lines.push(Line::from(Span::styled(format!("+ {raw}"), Style::default().fg(theme.success))));
+                lines.push(Piece::Text(Line::from(Span::styled(format!("+ {raw}"), Style::default().fg(theme.success)))));
                 continue;
             }
             Fence::Out => {}
         }
-        let line = match raw.trim_start() {
-            rest if rest.starts_with("- ") || rest.starts_with("* ") => Line::from(inline(&format!("• {}", &rest[2..]), theme)),
-            rest if rest.starts_with("> ") => Line::from(Span::styled(format!("▏{}", &rest[2..]), Style::default().fg(theme.muted))),
-            _ => Line::from(inline(raw, theme)),
-        };
-        lines.push(line);
+        let (text, pictures) = image::split(raw);
+        if pictures.is_empty() || !text.trim().is_empty() {
+            lines.push(Piece::Text(text_line(&text, theme)));
+        }
+        lines.extend(pictures.into_iter().map(Piece::Picture));
     }
     lines
+}
+
+/// One line of prose: bullets, quotes and code spans.
+fn text_line(raw: &str, theme: Theme) -> Line<'static> {
+    match raw.trim_start() {
+        rest if rest.starts_with("- ") || rest.starts_with("* ") => Line::from(inline(&format!("• {}", &rest[2..]), theme)),
+        rest if rest.starts_with("> ") => Line::from(Span::styled(format!("▏{}", &rest[2..]), Style::default().fg(theme.muted))),
+        _ => Line::from(inline(raw, theme)),
+    }
 }
 
 fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
@@ -349,6 +439,70 @@ mod tests {
         lines.iter().map(|l| l.spans.iter().map(|s| s.content.to_string()).collect()).collect()
     }
 
+    /// Pieces as the lines a pane without pictures shows.
+    fn texts(pieces: Vec<Piece>) -> Vec<Line<'static>> {
+        pieces
+            .into_iter()
+            .map(|piece| match piece {
+                Piece::Text(line) => line,
+                Piece::Picture(image) => Line::from(fallback(&image)),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_picture_leaves_its_line_and_sits_under_it() {
+        let body = "Before:\n![the chart](/uploads/ab12/chart.png) broke\n<img alt=\"after\" src=\"https://x/a.png\">\n```\n![not](https://x/code.png)\n```";
+        let pieces = body_pieces(body, &[], Theme::default());
+        let shape: Vec<String> = pieces
+            .iter()
+            .map(|p| match p {
+                Piece::Text(line) => format!("text {}", line.spans.iter().map(|s| s.content.to_string()).collect::<String>()),
+                Piece::Picture(image) => format!("picture {}", image.url),
+            })
+            .collect();
+        assert_eq!(
+            shape,
+            [
+                "text Before:",
+                "text  broke",
+                "picture /uploads/ab12/chart.png",
+                "picture https://x/a.png",
+                "text   ![not](https://x/code.png)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_picture_that_cannot_be_drawn_reads_as_its_alt_and_links_to_the_forge() {
+        let thumbs = Thumbs::off();
+        let web = |url: &str| crate::forge::image::web_url("gitlab.com", "acme/widgets", url);
+        let image = Image { alt: "the chart".into(), url: "/uploads/ab12/chart.png".into() };
+        let rows = lay_out(Piece::Picture(image), &thumbs, 40, Theme::default(), &web);
+        assert_eq!(text(&[rows[0].0.clone()]), ["[image: the chart]"]);
+        let Some(Mark::Link { url, .. }) = &rows[0].1 else { panic!("a link") };
+        assert_eq!(url, "https://gitlab.com/acme/widgets/uploads/ab12/chart.png");
+        assert_eq!(fallback(&Image { alt: " ".into(), url: "u".into() }), "[image]");
+        assert_eq!(text(&body_lines("![c](https://x/c.png)", Theme::default())), ["[image: c]"], "other panes show the line");
+    }
+
+    #[test]
+    fn a_ready_picture_takes_the_rows_of_its_thumbnail() {
+        let mut thumbs = super::super::images::tests::test_thumbs();
+        thumbs.arrived("https://x/a.png", Some(::image::DynamicImage::new_rgb8(200, 100)));
+        let image = Image { alt: String::new(), url: "https://x/a.png".into() };
+        let rows = lay_out(Piece::Picture(image.clone()), &thumbs, 40, Theme::default(), &|u: &str| u.to_owned());
+        assert_eq!(rows.len(), 5, "200x100 pixels at a 10x20 font is 20x5 cells");
+        assert!(matches!(&rows[0].1, Some(Mark::Picture { size, .. }) if size.width == 20 && size.height == 5));
+        assert!(rows[1..].iter().all(|(_, mark)| mark.is_none()));
+        thumbs.wanted(["https://x/b.png".to_owned()]);
+        let loading =
+            lay_out(Piece::Picture(Image { url: "https://x/b.png".into(), ..image }), &thumbs, 40, Theme::default(), &|u: &str| {
+                u.to_owned()
+            });
+        assert_eq!(text(&[loading[0].0.clone()]), ["… loading image"]);
+    }
+
     #[test]
     fn bodies_keep_code_bullets_and_quotes() {
         let body = "Use `Key::from` here.\n- one\n> said\n```\nlet x = 1;\n```";
@@ -368,7 +522,7 @@ mod tests {
     #[test]
     fn a_suggestion_reads_as_a_small_diff() {
         let body = "Try this:\n```suggestion:-0+0\nlet client = Client::default();\n```\nthanks";
-        let lines = text(&body_lines_over(body, &["let client = Client::new();".to_owned()], Theme::default()));
+        let lines = text(&texts(body_pieces(body, &["let client = Client::new();".to_owned()], Theme::default())));
         assert_eq!(lines, ["Try this:", "- let client = Client::new();", "+ let client = Client::default();", "thanks"]);
         assert_eq!(text(&body_lines("```rust\nlet x = 1;\n```", Theme::default())), ["  let x = 1;"], "other fences stay code");
     }

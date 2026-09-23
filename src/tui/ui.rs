@@ -106,6 +106,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if shown.diff {
         diff_view::draw(f, app, review);
     }
+    let mut pictures = vec![];
     if app.open.as_ref().is_some_and(|o| o.answer.is_some()) && side_open {
         super::answer_view::draw(f, app, side);
     } else if app.open.as_ref().is_some_and(|o| o.pipeline.is_some()) && side_open {
@@ -113,7 +114,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     } else if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
         super::tree_view::draw(f, app, side);
     } else if side_open {
-        thread_view::draw(f, app, side);
+        pictures = thread_view::draw(f, app, side);
     }
     if let Some(palette) = &app.palette {
         draw_palette(f, app, palette, input);
@@ -134,6 +135,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if side_open && (app.focus != Focus::Side || modal) {
         fade(f, side, app.theme.faded);
     }
+    if !modal {
+        draw_pictures(f, app, &pictures);
+    }
     if let Some(publish) = app.publish.clone() {
         publish_view::draw(f, app, &publish, main);
     }
@@ -145,6 +149,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if let Some(scroll) = app.help {
         draw_help(f, app, main, scroll);
+    }
+}
+
+/// Pictures go on last, after the fades: the terminal paints them as pixels or placeholder cells,
+/// and both must stay as the protocol wrote them. Under a modal they are left out, since pixels
+/// would show through it.
+fn draw_pictures(f: &mut Frame, app: &mut App, pictures: &[thread_view::Placement]) {
+    for picture in pictures {
+        if let Some(super::images::Thumb::Ready(protocol, _)) = app.thumbs.get_mut(&picture.url) {
+            let widget = ratatui_image::StatefulImage::<ratatui_image::protocol::StatefulProtocol>::default()
+                .resize(ratatui_image::Resize::Fit(Some(image::imageops::FilterType::Triangle)));
+            f.render_stateful_widget(widget, picture.area, protocol.as_mut());
+        }
     }
 }
 

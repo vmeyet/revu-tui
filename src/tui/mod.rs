@@ -7,6 +7,7 @@ mod compose;
 mod diff_view;
 mod field;
 mod ground;
+mod images;
 mod jump;
 mod palette;
 mod pipeline_view;
@@ -86,6 +87,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         None => theme::Theme::default(),
     };
     let ground = ground::ask();
+    let pictures = if ctx.config.tui.images.unwrap_or(true) { images::ask_terminal() } else { None };
     let theme = ground.map_or(theme, |ground| theme.with_ground(ground));
     let others = ctx.others();
     let hosts = ctx.hosts(&others);
@@ -112,6 +114,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         notify: ctx.config.notify.enabled,
         hosts,
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
+        pictures,
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -291,6 +294,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::Apply { key, branch, suggestion } => {
                 let outcome = backend.forge_of(&key).apply(&key, &branch, &suggestion).await;
                 send(outcome.map_or_else(|e| failed(Failure::Apply, &e), |()| Incoming::Applied { key, branch }));
+            }
+            Action::LoadImage { key, url } => {
+                let image = backend.image(&key, &url).await;
+                send(Incoming::Image { url, image });
             }
             Action::LoadChecks { key, head } => {
                 let outcome = backend.forge_of(&key).checks(&key, &head).await;
@@ -522,6 +529,29 @@ impl Backend {
     }
 
     /// The forge an MR lives on: its own host's when the queue merged several.
+    /// A picture from the disk cache, else from the forge and then kept; decoded off the loop.
+    /// Only a picture that decodes is kept, so a failed one is asked again next time.
+    async fn image(&self, key: &MrKey, url: &str) -> Option<image::DynamicImage> {
+        let (owner, name) = (key.clone(), keys::image(url));
+        let cached = self.off(move |b| b.cache_of(&owner).read_bytes(&name)).await.ok().flatten();
+        let fresh = cached.is_none();
+        let bytes = match cached {
+            Some(bytes) => bytes,
+            None => self.forge_of(key).image(key, url).await.ok()?,
+        };
+        let (owner, name) = (key.clone(), keys::image(url));
+        self.off(move |b| {
+            let picture = images::decode(&bytes)?;
+            if fresh {
+                let _ = b.cache_of(&owner).write_bytes(&name, &bytes);
+            }
+            Some(picture)
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+
     fn forge_of(&self, key: &MrKey) -> &Forge {
         self.home_of(key).map_or(&self.forge, |home| &home.forge)
     }

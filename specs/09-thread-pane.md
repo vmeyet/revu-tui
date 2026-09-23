@@ -85,6 +85,8 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - Threads in order: unresolved first, then drafts that start a new thread, then resolved; inside a group, oldest first.
 - A thread is a status line (`◆ unresolved`, `✓ resolved by nina`, `◇ draft`), then its notes: `author · age` in `muted` (the author in `theme.user(name)`, `you` for me), then the body in the light markdown `thread_view.rs` already renders (bold, code spans and fences, lists, quotes; links show their label, `u` opens the first one).
 - A suggestion block renders as a small diff (`-` old lines, `+` new lines) with the diff colours, not as a fenced block.
+- A picture (`![alt](url)` or GitHub's `<img src>`) sits under the line it was written in: a thumbnail up to 60 × 14 cells on terminals that draw pictures (Kitty, Ghostty, WezTerm, iTerm2), else one `[image: alt]` line that clicks through to it. `[tui] images = false` always shows the line.
+- Only the forge's own pictures are fetched: GitLab uploads through `GET /projects/:id/uploads/:secret/:file` with the token; GitHub attachments on the web host with the token, then the signed `*.githubusercontent.com` or S3 link it redirects to with a client that carries no token; repo files through the contents API. Anything else (badges, other sites) stays a line, so a comment cannot make revu call out. Pictures are capped at 5 MB and 15 s, cached per link on disk (0600), and never drawn under a modal.
 - My draft replies sit at the tail of their thread as `you · draft ◇`, `unsaved` in `danger` until the forge holds them.
 - Resolved threads fold to their status line and first note; `enter` on one unfolds it.
 - A thin `─` rule in `border` separates threads.

@@ -32,6 +32,8 @@ pub struct Settings {
     pub hosts: crate::forge::Hosts,
     /// `[keys]`: the user's keys, each standing for revu's default ones.
     pub keymap: crate::keymap::Keymap,
+    /// How the terminal draws pictures, asked once at start; `None` when it cannot or `[tui] images = false`.
+    pub pictures: Option<ratatui_image::picker::Picker>,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -98,6 +100,8 @@ pub struct App {
     pub brief: Option<Brief>,
     /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
     pub links: Vec<crate::tui::ui::Link>,
+    /// Pictures of the comments the right pane shows, each fetched once.
+    pub thumbs: crate::tui::images::Thumbs,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
     pub viewing: Option<crate::open::View>,
     /// What the editor's text turned into; the loop drains it after `apply`.
@@ -173,6 +177,7 @@ impl App {
             publish: None,
             brief: None,
             links: vec![],
+            thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
             viewing: None,
             composed: vec![],
             help: None,
@@ -224,7 +229,23 @@ impl App {
             actions.push(Action::RefreshDiscussions(key));
         }
         actions.extend(self.pipeline_tick());
+        actions.extend(self.picture_requests());
         actions
+    }
+
+    /// The pictures of the conversations the right pane shows that were never asked for.
+    fn picture_requests(&mut self) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let Some((conversations, _, _)) = open.pane_view() else { return vec![] };
+        let review = &open.review;
+        let bodies = conversations.iter().flat_map(|c| {
+            let notes =
+                c.thread.as_deref().and_then(|id| review.thread(id)).into_iter().flat_map(|t| t.notes.iter().map(|n| n.body.as_str()));
+            notes.chain(c.drafts.iter().map(|&d| review.drafts[d].body.as_str()))
+        });
+        let urls: Vec<String> = bodies.flat_map(crate::review::image::images_in).map(|image| image.url).collect();
+        let key = open.key.clone();
+        self.thumbs.wanted(urls).into_iter().map(|url| Action::LoadImage { key: key.clone(), url }).collect()
     }
 
     pub(super) fn schedule_queue(&mut self) {

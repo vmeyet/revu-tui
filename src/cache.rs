@@ -65,12 +65,21 @@ impl Cache {
     }
 
     pub fn write<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
+        self.write_bytes(key, &serde_json::to_vec(value)?)
+    }
+
+    /// A file that is not JSON, such as a downloaded picture; a missing one is a miss.
+    pub fn read_bytes(&self, key: &str) -> Option<Vec<u8>> {
+        std::fs::read(self.dir.join(key)).ok()
+    }
+
+    pub fn write_bytes(&self, key: &str, bytes: &[u8]) -> Result<()> {
         let path = self.dir.join(key);
         let parent = path.parent().context("cache key has no parent")?;
         create_private_dirs(&self.dir, parent)?;
         let temp = tempfile::Builder::new().prefix(".tmp-").tempfile_in(parent).context("creating a temp file")?;
         std::fs::set_permissions(temp.path(), private(FILE_MODE))?;
-        std::fs::write(temp.path(), serde_json::to_vec(value)?)?;
+        std::fs::write(temp.path(), bytes)?;
         temp.persist(&path).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
@@ -157,6 +166,11 @@ pub mod keys {
         format!("{}/discussions.json", dir(key))
     }
 
+    /// A downloaded picture, by the link a note gave; hashed, since the link holds slashes and queries.
+    pub fn image(url: &str) -> String {
+        format!("images/{}", sha1_smol::Sha1::from(url.as_bytes()).digest())
+    }
+
     pub fn drafts(key: &MrKey) -> String {
         format!("{}/drafts.json", dir(key))
     }
@@ -201,6 +215,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path().join("gitlab.com"));
         (dir, cache)
+    }
+
+    #[test]
+    fn pictures_are_kept_as_private_bytes_under_a_hashed_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path().join("host"));
+        let key = keys::image("https://github.com/user-attachments/assets/1f?x=1");
+        assert!(key.starts_with("images/") && !key.contains("github"), "{key}");
+        assert_eq!(cache.read_bytes(&key), None);
+        cache.write_bytes(&key, b"\x89PNG").unwrap();
+        assert_eq!(cache.read_bytes(&key).as_deref(), Some(&b"\x89PNG"[..]));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.path().join("host").join(&key)).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
     }
 
     #[test]

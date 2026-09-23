@@ -43,6 +43,7 @@ impl App {
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
+            Incoming::Image { url, image } => self.thumbs.arrived(&url, image),
             Incoming::Applied { key, branch } => {
                 if self.open.as_ref().is_some_and(|o| o.key == key) {
                     let follow = self.applied(&branch);
