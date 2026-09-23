@@ -48,8 +48,9 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `enter` / `l` | Open the MR, the thread, or toggle a fold |
 | `tab`, `]c`, `]n` | Next file, hunk, thread |
 | `za`, `zM` `zR` | Fold one, fold all, unfold all |
+| `D` | One-word changes inline (`2;` struck, `20;` after it), or every line split |
 | `i` | The MR description |
-| `c` | Comment on the line (`V` first for a range, `s` for a suggestion) |
+| `c` | Comment on the line (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change) |
 | `r` / `R` | Reply / resolve, in a thread |
 | `P` | Publish every draft as one review, optionally approving |
 | `o` / `y` | Open in the browser / copy the link |
@@ -81,6 +82,8 @@ watch_labels = ["infra"]      # MRs with these labels land in Watching
 
 [review]
 fold = ["*.lock", "*.snap"]   # files that open folded
+inline_max_words = 2          # a change reads inline when each side changes at most this many words…
+inline_min_same = 60          # …and both lines keep at least this percent of their text
 
 [tui]
 theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai

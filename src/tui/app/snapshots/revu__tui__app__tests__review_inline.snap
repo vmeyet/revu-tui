@@ -1,0 +1,22 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 18)"
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
+│   TO REVIEW                  1 ││  omar · feat/checkout → main · 2h · +2 −2 · 1 files · ✓ succes │
+│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 1 threads, 1 unresolved                   │
+│   MINE                       1 ││                                                                │
+│   !41 fix: flaky cache test  D ││                                                                │
+│   WATCHING                   1 ││  ▾ src/sum.rs                                        +2 −2  ◆1 │
+│   !35 infra: new runner      ⠋ ││     ▾ @@ -1,6 +1,6 @@ fn main                                  │
+│   DONE ▸                     1 ││     1    1  fn main() {                                        │
+│                                ││     2    2      let a = 1;                                     │
+│                                ││ ▎   3    3 ~    let b = 2;20;                                  │
+│                                ││     ◆ lea · Why twenty? · 1h                                   │
+│                                ││     4    4      println!("{}", a + b);                         │
+│                                ││     5      -    let d = 4;                                     │
+│                                ││          5 +    println!("{}", c);                             │
+│                                ││     6    6  }                                                  │
+│                                ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                            ? help

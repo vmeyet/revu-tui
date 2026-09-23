@@ -146,6 +146,7 @@ impl App {
             KeyCode::Char('G') => self.review_last(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
+            KeyCode::Char('D') => return self.toggle_split(),
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),

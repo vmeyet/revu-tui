@@ -17,7 +17,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 35] = [
+pub const HELP: [(&str, &str); 37] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -36,10 +36,12 @@ pub const HELP: [(&str, &str); 35] = [
     ("]n [n", "next, previous thread"),
     ("]f [f", "next, previous file with an open thread"),
     ("za", "toggle the fold under the cursor"),
+    ("D", "changed words inline, or every line split"),
     ("zc zo", "close, open"),
     ("zM zR", "fold, unfold every file"),
     ("zo", "in the queue: show the done section"),
     ("c", "comment on the line, as a draft"),
+    ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),
     ("E", "write the comment in $EDITOR"),
     ("s", "suggestion in the editor, prefilled with the lines"),

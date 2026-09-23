@@ -50,6 +50,7 @@ pub enum Action {
         key: MrKey,
         fold: FoldState,
         viewed: BTreeSet<String>,
+        split: bool,
     },
     OpenUrl(String),
     Yank(String),

@@ -37,24 +37,84 @@ fn run(lines: &[Line], from: usize, kind: LineKind) -> Range<usize> {
     from..end
 }
 
+/// One run of a changed pair read as a single row: text both lines keep, text only the old one
+/// had, text only the new one has. Consecutive runs of one kind are merged.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Segment {
+    Same(String),
+    Old(String),
+    New(String),
+}
+
+pub fn segments(old: &str, new: &str) -> Vec<Segment> {
+    let mut found: Vec<Segment> = Vec::new();
+    for change in TextDiff::from_words(old, new).iter_all_changes() {
+        let text = change.value();
+        match (found.last_mut(), change.tag()) {
+            (Some(Segment::Same(run)), ChangeTag::Equal)
+            | (Some(Segment::Old(run)), ChangeTag::Delete)
+            | (Some(Segment::New(run)), ChangeTag::Insert) => {
+                run.push_str(text);
+            }
+            (_, ChangeTag::Equal) => found.push(Segment::Same(text.to_owned())),
+            (_, ChangeTag::Delete) => found.push(Segment::Old(text.to_owned())),
+            (_, ChangeTag::Insert) => found.push(Segment::New(text.to_owned())),
+        }
+    }
+    found
+}
+
+/// When a changed pair reads better as one row: few changed words, and most of both lines kept.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InlineRule {
+    /// Most changed runs allowed on each side.
+    pub max_words: usize,
+    /// Least share of each line, in percent of its bytes, the two lines must keep.
+    pub min_same: u8,
+}
+
+impl Default for InlineRule {
+    fn default() -> Self {
+        Self { max_words: 2, min_same: 60 }
+    }
+}
+
+impl InlineRule {
+    pub fn fits(self, old: &str, new: &str) -> bool {
+        let parts = segments(old, new);
+        let olds = parts.iter().filter(|p| matches!(p, Segment::Old(_))).count();
+        let news = parts.iter().filter(|p| matches!(p, Segment::New(_))).count();
+        let same: usize = parts.iter().map(|p| if let Segment::Same(text) = p { text.len() } else { 0 }).sum();
+        let kept = |len: usize| len > 0 && same * 100 >= usize::from(self.min_same) * len;
+        olds + news > 0 && olds <= self.max_words && news <= self.max_words && kept(old.len()) && kept(new.len())
+    }
+}
+
+/// The `(removed, added)` line indexes of the pairs in `hunk` that `rule` lets read as one row.
+pub fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
+    pairs(&hunk.lines)
+        .into_iter()
+        .flat_map(|(removed, added)| removed.zip(added))
+        .filter(|&(r, a)| rule.fits(&hunk.lines[r].text, &hunk.lines[a].text))
+        .collect()
+}
+
 fn changed_ranges(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
-    let diff = TextDiff::from_words(old, new);
     let (mut old_at, mut new_at) = (0, 0);
     let (mut old_words, mut new_words) = (Vec::new(), Vec::new());
-    for change in diff.iter_all_changes() {
-        let len = change.value().len();
-        match change.tag() {
-            ChangeTag::Equal => {
-                old_at += len;
-                new_at += len;
+    for part in segments(old, new) {
+        match part {
+            Segment::Same(text) => {
+                old_at += text.len();
+                new_at += text.len();
             }
-            ChangeTag::Delete => {
-                push_merged(&mut old_words, old_at..old_at + len);
-                old_at += len;
+            Segment::Old(text) => {
+                push_merged(&mut old_words, old_at..old_at + text.len());
+                old_at += text.len();
             }
-            ChangeTag::Insert => {
-                push_merged(&mut new_words, new_at..new_at + len);
-                new_at += len;
+            Segment::New(text) => {
+                push_merged(&mut new_words, new_at..new_at + text.len());
+                new_at += text.len();
             }
         }
     }
@@ -115,5 +175,40 @@ mod tests {
         let marked = mark(&source[0]);
         assert!(marked.lines.iter().all(|l| l.words.is_empty()));
         assert!(source[0].lines.iter().all(|l| l.words.is_empty()));
+    }
+
+    #[test]
+    fn segments_keep_the_shared_text_between_the_changes() {
+        assert_eq!(
+            segments("let b = 2;", "let b = 20;"),
+            vec![Segment::Same("let b = ".into()), Segment::Old("2;".into()), Segment::New("20;".into())]
+        );
+    }
+
+    #[test]
+    fn the_inline_rule_takes_small_changes_and_leaves_rewrites_split() {
+        let rule = InlineRule::default();
+        let cases = [
+            ("let b = 2;", "let b = 20;", true, "one word"),
+            ("let total = price * qty;", "let total = cost * count;", true, "two words, most kept"),
+            ("a b c d e f g h", "a x c y e z g h", false, "three changed words"),
+            ("Key::from(card.number())", "Key::from((card.number(), card.expiry()))", false, "one token is the whole line"),
+            ("let a = 1;", "let a = 1;", false, "nothing changed"),
+            ("", "x", false, "an empty side keeps nothing"),
+        ];
+        for (old, new, fits, why) in cases {
+            assert_eq!(rule.fits(old, new), fits, "{why}: {old:?} -> {new:?}");
+        }
+        assert!(InlineRule { max_words: 3, min_same: 50 }.fits("a b c d e f g h", "a x c y e z g h"), "thresholds come from the rule");
+    }
+
+    #[test]
+    fn only_equal_runs_that_fit_the_rule_are_inline_pairs() {
+        let rule = InlineRule::default();
+        let hunk =
+            parse("@@ -1,3 +1,3 @@\n-let b = 2;\n-completely old text\n+let b = 20;\n+something else entirely\n let c = 3;\n")[0].clone();
+        assert_eq!(inline_pairs(&hunk, rule), vec![(0, 2)]);
+        let unequal = parse(include_str!("fixtures/tabs.diff"))[0].clone();
+        assert!(inline_pairs(&unequal, rule).is_empty(), "one removed, two added");
     }
 }
