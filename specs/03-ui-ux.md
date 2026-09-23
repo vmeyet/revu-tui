@@ -245,7 +245,11 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 
 ### Command line (`:`)
 
-`:go acme/widgets!42`, `:open`, `:approve`, `:publish`, `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:set theme=nord`, `:ai off`, `:ask <text>`, `:cache clear`, `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:all`, `:set theme=nord` (saved to the config), `:help`, `:quit`.
+Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `↑` `↓` walk the history.
+Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:ai off`, `:ask <text>`, `:cache clear`.
+
+`ctrl-k` (or `⌘k` where the terminal forwards it) opens one fuzzy list: the open MR's files first, then every MR of the queue.
 
 ## Toasts and errors
 
