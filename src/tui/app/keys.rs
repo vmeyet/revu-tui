@@ -45,7 +45,7 @@ impl App {
             KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
-            KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side => self.pending = key.code.as_char(),
+            KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
             _ => {
                 return match self.focus {
                     Focus::Queue => self.handle_queue_key(key),
@@ -68,7 +68,7 @@ impl App {
     fn focus_right(&mut self) -> Vec<Action> {
         self.focus = match (self.focus, &self.open) {
             (Focus::Queue, _) => return self.open_selected(),
-            (Focus::Review, Some(open)) if open.thread.is_some() => Focus::Side,
+            (Focus::Review, Some(open)) if open.thread.is_some() || open.tree.is_some() => Focus::Side,
             (Focus::Side, _) => Focus::Side,
             (focus, _) => focus,
         };
@@ -158,6 +158,7 @@ impl App {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('D') => return self.toggle_split(),
+            KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),
@@ -196,6 +197,7 @@ impl App {
             ('z', 'o') => return self.fold_at_cursor(Some(true)),
             ('z', 'c') => return self.fold_at_cursor(Some(false)),
             ('z', 'h') => self.header_folded = !self.header_folded,
+            ('z', 'v') => return self.toggle_viewed(),
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
             ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
@@ -209,7 +211,14 @@ impl App {
         vec![]
     }
 
+    fn tree_open(&self) -> bool {
+        self.open.as_ref().is_some_and(|o| o.tree.is_some())
+    }
+
     fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        if self.tree_open() {
+            return self.handle_tree_key(key);
+        }
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.thread_scroll(1),
             KeyCode::Char('k') | KeyCode::Up => self.thread_scroll(-1),

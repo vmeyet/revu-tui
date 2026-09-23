@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 40 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 42 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │
@@ -26,6 +26,8 @@ expression: "render(&mut app, 100, 40)"
 │               │      zM zR  fold, unfold every file                              │               │
 │               │      zo zc  in the queue: open, fold the section (enter too)     │               │
 │               │         zh  fold the MR header to one row                        │               │
+│               │          t  file tree: enter jumps to a file or folds a folder,  │               │
+│               │         zv  mark the file viewed: it folds, and comes back if it │               │
 │               │          c  comment on the line, as a draft                      │               │
 │               │          C  on a changed pair: comment on the old side           │               │
 │               │          V  select lines: c comments on them, y copies them      │               │
@@ -38,7 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │          R  in a thread: resolve, unresolve                      │               │
 │               │          u  in a thread: open its first link                     │               │
 │               │        esc  drop the selection, close the input                  │               │
-│               │          :  command line: :go !42 · :set theme=nord · tab comple │               │
-│               │         ^k  jump to a file of the MR, or to another MR           │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

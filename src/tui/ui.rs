@@ -17,7 +17,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 40] = [
+pub const HELP: [(&str, &str); 42] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -41,6 +41,8 @@ pub const HELP: [(&str, &str); 40] = [
     ("zM zR", "fold, unfold every file"),
     ("zo zc", "in the queue: open, fold the section (enter too)"),
     ("zh", "fold the MR header to one row"),
+    ("t", "file tree: enter jumps to a file or folds a folder, t closes"),
+    ("zv", "mark the file viewed: it folds, and comes back if it changes"),
     ("c", "comment on the line, as a draft"),
     ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),
@@ -74,13 +76,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let input_rows = u16::from(app.filtering || app.input.is_some() || app.palette.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
-    let side_open = app.open.as_ref().is_some_and(|o| o.thread.is_some());
+    let side_open = app.open.as_ref().is_some_and(|o| o.thread.is_some() || o.tree.is_some());
     let side_w = if side_open { SIDE_W.max(main.width * SIDE_PCT / 100) } else { 0 };
     let [queue, review, side] =
         Layout::horizontal([Constraint::Length(QUEUE_W), Constraint::Min(40), Constraint::Length(side_w)]).areas(main);
     draw_queue(f, app, queue);
     diff_view::draw(f, app, review);
-    if side_open {
+    if app.open.as_ref().is_some_and(|o| o.tree.is_some()) {
+        super::tree_view::draw(f, app, side);
+    } else if side_open {
         thread_view::draw(f, app, side);
     }
     if app.input.is_some() {

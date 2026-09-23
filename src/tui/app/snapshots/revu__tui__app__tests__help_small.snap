@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
-╭ Queu╭ keys · 4–24 of 40 · j k scroll ──────────────────────────────────╮─────╮
+╭ Queu╭ keys · 4–24 of 42 · j k scroll ──────────────────────────────────╮─────╮
 │   TO│        h l  pane to the left; open the MR, pane to the right     │     │
 │ ▎ !4│      enter  open the MR, the thread, or toggle the fold          │     │
 │   MI│        esc  back: close the thread, then the queue               │     │
@@ -23,6 +23,6 @@ expression: "render(&mut app, 80, 24)"
 │     │      zM zR  fold, unfold every file                              │     │
 │     │      zo zc  in the queue: open, fold the section (enter too)     │     │
 │     │         zh  fold the MR header to one row                        │     │
-│     │          c  comment on the line, as a draft                      │     │
+│     │          t  file tree: enter jumps to a file or folds a folder,  │     │
 ╰─────╰──────────────────────────────────────────────────────────────────╯─────╯
  gitlab.com · nina                                                       ? help
