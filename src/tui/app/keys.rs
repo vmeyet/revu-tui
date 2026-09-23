@@ -36,6 +36,17 @@ impl App {
         if self.filtering {
             return self.handle_filter_key(key);
         }
+        match self.keymap.feed(self.held.take(), key) {
+            crate::keymap::Feed::Hold(first) => {
+                self.held = Some(first);
+                vec![]
+            }
+            crate::keymap::Feed::Keys(keys) => keys.into_iter().flat_map(|key| self.dispatch(key)).collect(),
+        }
+    }
+
+    /// A key after the user's bindings turned it into revu's own: prefixes, then the pane's keys.
+    fn dispatch(&mut self, key: KeyEvent) -> Vec<Action> {
         if let Some(prefix) = self.pending.take() {
             return self.handle_prefixed(prefix, key);
         }

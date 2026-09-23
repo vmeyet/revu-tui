@@ -47,6 +47,7 @@ fn settings() -> Settings {
         ground: None,
         triage: false,
         ask: None,
+        keymap: crate::keymap::Keymap::default(),
     }
 }
 
@@ -1947,4 +1948,64 @@ fn a_queue_across_hosts_tags_each_row_and_opens_it_on_its_host() {
     let actions = app.handle_key(code(KeyCode::Enter));
     let [Action::Open(key)] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(key.host.as_deref(), Some("github.com"));
+}
+
+fn keymap(toml: &str) -> crate::keymap::Keymap {
+    let keys: crate::config::Keys = toml::from_str(toml).unwrap();
+    crate::keymap::Keymap::new(&keys).unwrap()
+}
+
+fn with_keys(toml: &str) -> App {
+    let mut app = with_review();
+    app.keymap = keymap(toml);
+    app
+}
+
+#[test]
+fn with_the_azerty_preset_parentheses_jump_like_brackets() {
+    let mut plain = with_review();
+    let before = plain.open.as_ref().unwrap().row().cloned();
+    press(&mut plain, ")n");
+    assert_eq!(plain.open.as_ref().unwrap().row().cloned(), before, "without the preset `)n` does nothing");
+    let mut app = with_keys(r#"layout = "azerty""#);
+    press(&mut app, ")c)c)n");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`)c` twice then `)n`, as `]c]c]n` would");
+    press(&mut app, ")n");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }));
+    press(&mut app, "(n");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`(n` goes back");
+    press(&mut app, "]n");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "brackets keep working");
+}
+
+#[test]
+fn a_bound_key_does_what_its_action_does_and_a_two_key_one_waits() {
+    let mut app = with_keys(r#"bind = { next_hunk = "N", next_thread = ["nt", "ctrl-e"] }"#);
+    press(&mut app, "N");
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
+    press(&mut app, "n");
+    assert!(app.held.is_some(), "`n` waits for its second key");
+    press(&mut app, "t");
+    assert!(app.held.is_none());
+    assert_eq!(
+        app.open.as_ref().unwrap().row(),
+        Some(&Row::Line { file: 0, hunk: 0, index: 1 }),
+        "`nt` is `]n`: the marked line after the hunk"
+    );
+    app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`ctrl-e` is `]n` too, and wraps to the MR's thread");
+}
+
+#[test]
+fn snapshot_help_with_the_azerty_preset_and_a_binding() {
+    let mut app = with_queue();
+    app.keymap = keymap(
+        r#"
+        layout = "azerty"
+        [bind]
+        next_thread = "N"
+        "#,
+    );
+    press(&mut app, "?");
+    insta::assert_snapshot!("help_azerty", render(&mut app, 100, 40));
 }

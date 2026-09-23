@@ -258,6 +258,16 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 
 In the compose box: `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
 
+### Your own keys (`[keys]`)
+
+`layout = "azerty"` makes `(` and `)` stand for `[` and `]`, which a Mac French keyboard types with `⌥⇧`; the brackets keep working.
+`[keys.bind]` maps an action name to one key, two keys, a named key (`ctrl-e`, `tab`) or a list of them.
+A user key never replaces a default: it stands for the default key of its action, so it does in each pane what that key does there.
+Keys are translated after text boxes, modals and the help had their turn, so typing `(` in a comment is still `(`.
+A two-key binding holds its first key; a second key that matches nothing hands both over as they are, so `z` then `a` stays `za`.
+The config fails to load, naming the file, on an unknown action, a key that does not parse, a key revu already reads (named with its action), and two actions on one key or on keys where one starts the other.
+`?` shows the keys in effect: with the preset, `]n [n` reads `)n (n`, and a bound key comes first (`N )n (n`).
+
 ### Command line (`:`)
 
 Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:help`, `:quit`.

@@ -30,6 +30,8 @@ pub struct Settings {
     pub notify: bool,
     /// The hosts the queue draws from: which forge each MR is on, and its row's tag.
     pub hosts: crate::forge::Hosts,
+    /// `[keys]`: the user's keys, each standing for revu's default ones.
+    pub keymap: crate::keymap::Keymap,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -80,6 +82,9 @@ pub struct App {
     /// The MR being fetched for the first time; the review pane shows a spinner until it lands.
     pub opening: Option<MrKey>,
     /// First half of `z`, `[` or `]`.
+    /// The first key of a two-key binding of the user's, waiting for its second.
+    pub held: Option<crossterm::event::KeyEvent>,
+    pub keymap: crate::keymap::Keymap,
     pub pending: Option<char>,
     /// The input row is open for this; `buffer` holds what is typed.
     pub input: Option<Input>,
@@ -158,6 +163,8 @@ impl App {
             queue_loading: true,
             open: None,
             opening: None,
+            held: None,
+            keymap: settings.keymap,
             pending: None,
             input: None,
             buffer: Field::default(),
