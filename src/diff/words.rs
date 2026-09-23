@@ -152,6 +152,84 @@ mod tests {
         line.words.iter().map(|r| &line.text[r.clone()]).collect()
     }
 
+    mod properties {
+        #![allow(clippy::unwrap_used, clippy::expect_used)]
+        use super::super::*;
+        use crate::diff::{arbitrary, parse};
+        use proptest::prelude::*;
+
+        fn line() -> impl Strategy<Value = String> {
+            "[a-z0-9 \t(){};=.,éü🦀]{0,40}"
+        }
+
+        fn joined(parts: &[Segment], keep: impl Fn(&Segment) -> Option<&str>) -> String {
+            parts.iter().filter_map(keep).collect()
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            #[test]
+            fn segments_rebuild_both_lines(old in line(), new in line()) {
+                let parts = segments(&old, &new);
+                let old_side = joined(&parts, |p| match p { Segment::Same(t) | Segment::Old(t) => Some(t.as_str()), Segment::New(_) => None });
+                let new_side = joined(&parts, |p| match p { Segment::Same(t) | Segment::New(t) => Some(t.as_str()), Segment::Old(_) => None });
+                prop_assert_eq!(old_side, old);
+                prop_assert_eq!(new_side, new);
+            }
+
+            #[test]
+            fn no_two_neighbours_are_the_same_kind(old in line(), new in line()) {
+                let parts = segments(&old, &new);
+                for pair in parts.windows(2) {
+                    prop_assert_ne!(std::mem::discriminant(&pair[0]), std::mem::discriminant(&pair[1]));
+                }
+            }
+
+            #[test]
+            fn changed_ranges_sit_on_character_boundaries_in_order(old in line(), new in line()) {
+                let (old_words, new_words) = changed_ranges(&old, &new);
+                for (text, ranges) in [(&old, &old_words), (&new, &new_words)] {
+                    for range in ranges {
+                        prop_assert!(range.start < range.end && range.end <= text.len());
+                        prop_assert!(text.is_char_boundary(range.start) && text.is_char_boundary(range.end));
+                    }
+                    for pair in ranges.windows(2) {
+                        prop_assert!(pair[0].end < pair[1].start, "merged ranges never touch");
+                    }
+                }
+            }
+
+            #[test]
+            fn marking_a_hunk_keeps_its_lines_and_marks_only_changed_ones(generated in arbitrary::diff()) {
+                for hunk in parse(&generated.text()) {
+                    let marked = mark(&hunk);
+                    prop_assert_eq!(marked.lines.len(), hunk.lines.len());
+                    for (before, after) in hunk.lines.iter().zip(&marked.lines) {
+                        prop_assert_eq!((&before.text, before.kind), (&after.text, after.kind));
+                        if after.kind == LineKind::Context {
+                            prop_assert!(after.words.is_empty());
+                        }
+                        for range in &after.words {
+                            prop_assert!(range.end <= after.text.len() && after.text.is_char_boundary(range.start));
+                        }
+                    }
+                }
+            }
+
+            #[test]
+            fn an_inline_pair_is_always_a_removed_line_then_its_added_twin(generated in arbitrary::diff()) {
+                for hunk in parse(&generated.text()) {
+                    for (removed, added) in inline_pairs(&hunk, InlineRule::default()) {
+                        prop_assert_eq!(hunk.lines[removed].kind, LineKind::Removed);
+                        prop_assert_eq!(hunk.lines[added].kind, LineKind::Added);
+                        prop_assert!(removed < added);
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_single_pair_marks_only_what_changed() {
         let hunk = mark(&parse(include_str!("fixtures/two_hunks.diff"))[0]);

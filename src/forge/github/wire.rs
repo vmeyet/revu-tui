@@ -308,6 +308,55 @@ mod tests {
         Refs { base: "a".into(), start: "a".into(), head: "b".into() }
     }
 
+    mod properties {
+        #![allow(clippy::unwrap_used, clippy::expect_used)]
+        use super::super::*;
+        use crate::diff::{LineKind, arbitrary};
+        use crate::review::position::{for_line, for_range};
+        use crate::review::tests::{lines_of, review_of};
+        use proptest::prelude::*;
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn removed_lines_go_left_and_every_other_line_right(generated in arbitrary::diff()) {
+                let review = review_of(&generated.text());
+                for (h, l) in lines_of(&review) {
+                    let line = &review.files[0].hunks[h].lines[l];
+                    let position = for_line(&review, 0, h, l).unwrap();
+                    let (side, number) = side_of(position.line).unwrap();
+                    match line.kind {
+                        LineKind::Removed => prop_assert_eq!((side, Some(number)), ("LEFT", line.old)),
+                        LineKind::Added | LineKind::Context => prop_assert_eq!((side, Some(number)), ("RIGHT", line.new)),
+                    }
+                    let back = line_on(side, number);
+                    prop_assert_eq!((back.side(), back.number()), (position.line.side(), position.line.number()));
+                }
+            }
+
+            #[test]
+            fn an_anchor_read_back_lands_on_the_same_side_and_line(generated in arbitrary::diff(), pick in any::<(prop::sample::Index, prop::sample::Index)>()) {
+                let review = review_of(&generated.text());
+                let lines = lines_of(&review);
+                let (a, b) = (pick.0.index(lines.len()), pick.1.index(lines.len()));
+                let (first, last) = (lines[a.min(b)], lines[a.max(b)]);
+                let position = for_range(&review, (0, first.0, first.1), (0, last.0, last.1)).unwrap();
+                let (side, line) = side_of(position.line).unwrap();
+                let (start_side, start_line) = side_of(position.start.unwrap()).unwrap();
+                let anchor: Anchor = serde_json::from_value(serde_json::json!({
+                    "path": position.new_path, "line": line, "diffSide": side, "startLine": start_line, "startDiffSide": start_side,
+                }))
+                .unwrap();
+                let back = anchor.position(&position.refs).unwrap();
+                prop_assert_eq!((back.line.side(), back.line.number()), (position.line.side(), position.line.number()));
+                if let Some(start) = back.start {
+                    prop_assert_eq!((start.side(), start.number()), (position.start.unwrap().side(), position.start.unwrap().number()));
+                }
+            }
+        }
+    }
+
     #[test]
     fn sides_map_both_ways() {
         let cases = [

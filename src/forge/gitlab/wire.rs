@@ -400,6 +400,57 @@ mod tests {
         forge::Position { refs: refs(), old_path: "src/pay/charge.rs".into(), new_path: "src/pay/charge.rs".into(), line, start }
     }
 
+    mod properties {
+        #![allow(clippy::unwrap_used, clippy::expect_used)]
+        use super::super::*;
+        use crate::diff::arbitrary;
+        use crate::review::position::{for_line, for_range};
+        use crate::review::tests::{lines_of, review_of};
+        use proptest::prelude::*;
+
+        fn check_edge(code: &LineCode, line: LineRef, position: &forge::Position) -> Result<(), TestCaseError> {
+            let (path, kind) = match (line.old, line.new) {
+                (Some(_), None) => (&position.old_path, Some("old")),
+                (None, Some(_)) => (&position.new_path, Some("new")),
+                _ => (&position.new_path, None),
+            };
+            prop_assert_eq!(code.kind.as_deref(), kind);
+            prop_assert_eq!((code.old_line, code.new_line), (line.old, line.new));
+            prop_assert_eq!(code.line_code.clone(), Some(line_code(path, line.old, line.new)));
+            Ok(())
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn a_line_goes_out_with_its_numbers_and_comes_back_whole(generated in arbitrary::diff()) {
+                let review = review_of(&generated.text());
+                for (h, l) in lines_of(&review) {
+                    let position = for_line(&review, 0, h, l).unwrap();
+                    let wire = Position::from_model(&position);
+                    prop_assert_eq!((wire.old_line, wire.new_line), (position.line.old, position.line.new));
+                    prop_assert_eq!(wire.line_range.clone(), None);
+                    prop_assert_eq!(wire.into_model(), Some(position));
+                }
+            }
+
+            #[test]
+            fn a_range_names_each_edge_the_way_gitlab_does(generated in arbitrary::diff(), pick in any::<(prop::sample::Index, prop::sample::Index)>()) {
+                let review = review_of(&generated.text());
+                let lines = lines_of(&review);
+                let (a, b) = (pick.0.index(lines.len()), pick.1.index(lines.len()));
+                let (first, last) = (lines[a.min(b)], lines[a.max(b)]);
+                let position = for_range(&review, (0, first.0, first.1), (0, last.0, last.1)).unwrap();
+                let wire = Position::from_model(&position);
+                let range = wire.line_range.clone().unwrap();
+                check_edge(&range.start, position.start.unwrap(), &position)?;
+                check_edge(&range.end, position.line, &position)?;
+                prop_assert_eq!(wire.into_model(), Some(position));
+            }
+        }
+    }
+
     #[test]
     fn error_message_reads_both_shapes() {
         assert_eq!(error_message(r#"{"message":"401 Unauthorized"}"#), "401 Unauthorized");
