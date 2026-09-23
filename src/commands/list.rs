@@ -2,6 +2,7 @@ use crate::cache::keys;
 use crate::cli::ListArgs;
 use crate::ctx::{Ctx, Home};
 use crate::forge::{Hosts, Queue, QueueMr, Sections};
+use crate::ready;
 use crate::render::{self, Cell, Style, Theme, cell, right};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -15,14 +16,42 @@ pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     let queue = if args.cached { cached(ctx)? } else { fetched(ctx).await? };
     let (labels, rules, now) = (&ctx.config.queue.watch_labels, &ctx.config.queue.rules, Utc::now());
     let others = if ctx.project.is_none() { ctx.others() } else { vec![] };
+    let other_queues = other_queues(&others, args.cached).await;
     let mut parts = vec![queue.sections_with(labels, rules, now)];
-    parts.extend(other_queues(&others, args.cached).await.iter().map(|q| q.sections_with(labels, rules, now)));
+    parts.extend(other_queues.iter().map(|q| q.sections_with(labels, rules, now)));
     let sections = Sections::merge(parts);
+    let queues: Vec<&Queue> = std::iter::once(&queue).chain(&other_queues).collect();
+    let sections = match ready(ctx, &others, &queues, args.cached).await {
+        Some(source) => source.apply(sections, ctx.forge.host(), &others, ctx.project.as_deref(), &queue.me, rules),
+        None => sections,
+    };
     if ctx.json {
         return crate::ctx::emit(&sections);
     }
     print!("{}", text(&ctx.hosts(&others), &sections, ctx.project.as_deref(), Theme::detect(), Utc::now()));
     Ok(())
+}
+
+/// The ready command's answer: fresh, else (on `--cached`, or when it fails, said on stderr)
+/// the last one kept for this scope.
+async fn ready(ctx: &Ctx, others: &[Home], queues: &[&Queue], cached: bool) -> Option<ready::Source> {
+    let command = ctx.config.queue.ready.command.as_ref()?;
+    let key = keys::ready(ctx.project.as_deref());
+    let kept = || ctx.cache.read::<ready::Source>(&key);
+    if cached {
+        return kept();
+    }
+    match ready::output(command).await {
+        Ok(output) => {
+            let source = ready::resolve(output, &ctx.forge, others, ctx.project.as_deref(), queues).await;
+            let _ = ctx.cache.write(&key, &source);
+            Some(source)
+        }
+        Err(e) => {
+            eprintln!("! {e:#}");
+            kept()
+        }
+    }
 }
 
 async fn other_queues(others: &[Home], cached: bool) -> Vec<Queue> {
@@ -50,6 +79,7 @@ pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, th
     let groups = [
         ("TO REVIEW", &sections.to_review),
         ("MINE", &sections.mine),
+        ("READY", &sections.ready),
         ("WATCHING", &sections.watching),
         ("OPEN", &sections.open),
         ("DRAFTS", &sections.drafts),

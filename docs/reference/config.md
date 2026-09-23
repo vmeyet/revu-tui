@@ -21,6 +21,12 @@ Tokens never go here: they live in the macOS keychain.
 | `groups` | list of text | `[]` | Not used yet. |
 | `projects` | list of text | `[]` | Not used yet. |
 
+## `[queue.ready]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `command` | command line | none | A program that prints MR links; the open ones that need you fill READY. |
+
 ## `[queue.rules]`
 
 | Key | Type | Default | Does |
@@ -111,6 +117,9 @@ username = "nina"
 
 [queue]
 watch_labels = ["infra"]
+
+[queue.ready]
+command = "slack messages '#review' --since 14d --json"
 
 [queue.rules]
 enabled = true

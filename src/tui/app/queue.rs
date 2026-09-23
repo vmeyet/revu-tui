@@ -44,9 +44,10 @@ impl App {
     /// still shows its header, except the ones that only exist when they hold something.
     pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
-        let groups: [(&'static str, &Vec<QueueMr>); 7] = [
+        let groups: [(&'static str, &Vec<QueueMr>); 8] = [
             ("TO REVIEW", &sections.to_review),
             ("MINE", &sections.mine),
+            ("READY", &sections.ready),
             ("WATCHING", &sections.watching),
             ("OPEN", &sections.open),
             ("DRAFTS", &sections.drafts),
@@ -57,7 +58,7 @@ impl App {
         for (name, mrs) in groups {
             let open = !self.closed_sections.contains(name);
             let matching = self.in_order(name, mrs.iter().filter(|mr| self.matches_filter(mr)).collect());
-            let only_when_filled = matches!(name, "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
+            let only_when_filled = matches!(name, "READY" | "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
             if only_when_filled || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;
             }

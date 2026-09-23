@@ -213,6 +213,8 @@ pub enum Failure {
     Checks,
     /// The suggestion was not committed.
     Apply,
+    /// The ready command failed; Ready keeps its last answer.
+    Ready,
 }
 
 #[derive(Clone, Debug, PartialEq)]

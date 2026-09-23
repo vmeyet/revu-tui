@@ -71,6 +71,7 @@ The "needs me" rules (`[queue.rules]`, on by default) then judge every MR of `TO
 | reviewed by others | `reviewed_comments` (3) or more comments, others commented, I did not | stays, sorted last | `reviewed by 3` |
 
 A review request to me by name pins an MR against stale and approved enough, not against not ready: nobody asks for a review by accident.
+A ready source (`[queue.ready] command`) adds `READY` right after `MINE`: every MR link its output names (GitLab `/-/merge_requests/N`, GitHub `/pull/N`), when the MR is someone else's, open, not reviewed by me, and not moved out by a rule, leaves `TO REVIEW`, `WATCHING` or `OPEN` for it. Inside a checkout only that project's links count; outside one, named MRs no list holds are fetched one by one (30 at most). The command runs as words (no shell), 10 s at most, 1 MB of output; its last answer is cached per scope (`ready.<scope>.json`) so the queue paints at once, and a failure keeps it and only warns.
 `OTHER` sits last, folded. The selected MR's reason shows in the status line; `revu list` prints it in a last, dim column and `--json` carries it as `reason`.
 The rules read only what the queue queries already return, plus `approvalsLeft` and `commenters` on GitLab (the MRs asking me and the project's open ones; each query stays under GitLab's complexity limit of 250) and `participants` on GitHub.
 The host tag (`gitlab`, `github`) shows only when rows from several hosts share the queue, never inside a checkout.

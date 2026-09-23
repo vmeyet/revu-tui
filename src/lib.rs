@@ -15,6 +15,7 @@ mod legacy;
 mod mrref;
 mod open;
 mod query;
+mod ready;
 mod render;
 mod review;
 mod syntax;

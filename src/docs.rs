@@ -48,6 +48,14 @@ pub const SETTINGS: &[Setting] = &[
     Setting { table: "queue", key: "groups", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting { table: "queue", key: "projects", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting {
+        table: "queue.ready",
+        key: "command",
+        kind: "command line",
+        default: "none",
+        meaning: "A program that prints MR links; the open ones that need you fill READY.",
+        example: "\"slack messages '#review' --since 14d --json\"",
+    },
+    Setting {
         table: "queue.rules",
         key: "enabled",
         kind: "true or false",
