@@ -40,6 +40,7 @@ impl App {
             Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(&key, index, id),
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
+            Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
             Incoming::Approved { key, approve } => {
                 self.set_approved(&key, approve);
                 self.toast(if approve { "approved" } else { "approval removed" });

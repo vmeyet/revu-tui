@@ -1,6 +1,7 @@
 //! One MR over REST: the MR, its diffs, its discussions and my drafts, and every write.
 use super::Client;
 use super::wire::{self, Approvals, Discussion, DraftNote, NewDraft};
+use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::{self, DiffFile, MrKey};
 use anyhow::{Context, Result, anyhow};
 use reqwest::Method;
@@ -24,6 +25,52 @@ fn project_path(project: &str) -> String {
 
 fn mr_path(key: &MrKey) -> String {
     format!("{}/merge_requests/{}", project_path(&key.project), key.number)
+}
+
+/// The newest pipeline of an MR, as `merge_requests/:iid/pipelines` lists it (newest first).
+#[derive(Deserialize)]
+struct PipelineRef {
+    id: u64,
+    #[serde(default)]
+    web_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct JobWire {
+    id: u64,
+    name: String,
+    stage: String,
+    status: String,
+    #[serde(default)]
+    duration: Option<f64>,
+    web_url: String,
+    #[serde(default)]
+    allow_failure: bool,
+}
+
+impl From<JobWire> for Found {
+    fn from(job: JobWire) -> Self {
+        let state = match job.status.as_str() {
+            "success" => JobState::Passed,
+            "failed" => JobState::Failed,
+            "running" => JobState::Running,
+            "manual" => JobState::Manual,
+            "canceled" | "canceling" => JobState::Canceled,
+            "skipped" => JobState::Skipped,
+            _ => JobState::Pending,
+        };
+        Found {
+            stage: job.stage,
+            order: format!("{:020}", job.id),
+            job: Job {
+                name: job.name,
+                state,
+                seconds: job.duration.map(|d| d.round() as u64),
+                web_url: job.web_url,
+                allowed_to_fail: job.allow_failure,
+            },
+        }
+    }
 }
 
 impl Client {
@@ -51,6 +98,15 @@ impl Client {
     /// The whole file at `sha`, to show the lines around a hunk.
     pub async fn file(&self, project: &str, path: &str, sha: &str) -> Result<String> {
         self.get_text(&format!("{}/repository/files/{}/raw?ref={sha}", project_path(project), url_encode(path))).await
+    }
+
+    /// The jobs of the MR's newest pipeline; `None` when it never ran one. GitLab creates a
+    /// pipeline's jobs stage by stage, so their ids give the stage order.
+    pub async fn checks(&self, key: &MrKey) -> Result<Option<Checks>> {
+        let pipelines: Vec<PipelineRef> = self.get(&format!("{}/pipelines?per_page=1", mr_path(key))).await?;
+        let Some(newest) = pipelines.into_iter().next() else { return Ok(None) };
+        let jobs: Vec<JobWire> = self.get_all(&format!("{}/pipelines/{}/jobs", project_path(&key.project), newest.id)).await?;
+        Ok(Some(Checks::from_jobs(newest.web_url, jobs.into_iter().map(Found::from).collect())))
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
@@ -331,5 +387,42 @@ mod tests {
             .mount(&server)
             .await;
         assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
+    }
+    #[tokio::test]
+    async fn checks_read_the_newest_pipeline_and_group_its_jobs_by_stage() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/pipelines"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{"id": 900, "status": "failed", "web_url": "https://x/p/900"}])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/pipelines/900/jobs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                {"id": 3, "name": "flaky", "stage": "test", "status": "failed", "duration": 7.3, "web_url": "https://x/j/3", "allow_failure": false},
+                {"id": 2, "name": "unit", "stage": "test", "status": "success", "duration": 12.2, "web_url": "https://x/j/2"},
+                {"id": 1, "name": "lint", "stage": "check", "status": "success", "duration": 7.1, "web_url": "https://x/j/1"}
+            ])))
+            .mount(&server)
+            .await;
+        let checks = client(&server).checks(&key()).await.unwrap().unwrap();
+        assert_eq!(checks.web_url.as_deref(), Some("https://x/p/900"));
+        let jobs: Vec<String> = checks
+            .stages
+            .iter()
+            .flat_map(|s| s.jobs.iter().map(move |j| format!("{} {} {:?} {:?}", s.name, j.name, j.state, j.seconds)))
+            .collect();
+        assert_eq!(jobs, ["check lint Passed Some(7)", "test flaky Failed Some(7)", "test unit Passed Some(12)"]);
+    }
+
+    #[tokio::test]
+    async fn an_mr_without_a_pipeline_has_no_checks() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/pipelines"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).checks(&key()).await.unwrap(), None);
     }
 }

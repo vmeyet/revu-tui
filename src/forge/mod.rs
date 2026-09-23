@@ -1,6 +1,7 @@
 //! The seam between the app and the forge that hosts the code: one neutral model, one enum that
 //! sends each call to the backend of the host.
 mod budget;
+pub mod checks;
 pub mod github;
 pub mod gitlab;
 mod model;
@@ -129,6 +130,14 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.file(&key.project, path, sha).await,
             Forge::GitHub(client) => client.file(&key.project, path, sha).await,
+        }
+    }
+
+    /// The CI run of the MR's head commit `head`; `None` when nothing ran on it.
+    pub async fn checks(&self, key: &MrKey, head: &str) -> Result<Option<checks::Checks>> {
+        match self {
+            Forge::GitLab(client) => client.checks(key).await,
+            Forge::GitHub(client) => client.checks(key, head).await,
         }
     }
 

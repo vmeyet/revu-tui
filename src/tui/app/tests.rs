@@ -1749,3 +1749,94 @@ fn snapshot_answer_pane() {
     });
     insta::assert_snapshot!("answer_pane", render(&mut app, 150, 20));
 }
+
+fn run() -> crate::forge::checks::Checks {
+    use crate::forge::checks::{Checks, Found, Job, JobState};
+    let job = |stage: &str, order: &str, name: &str, state: JobState, seconds: u64| Found {
+        stage: stage.into(),
+        order: order.into(),
+        job: Job {
+            name: name.into(),
+            state,
+            seconds: Some(seconds),
+            web_url: format!("https://ci.example/{name}"),
+            allowed_to_fail: false,
+        },
+    };
+    Checks::from_jobs(
+        Some("https://ci.example/run".into()),
+        vec![
+            job("check", "1", "lint", JobState::Passed, 7),
+            job("test", "2", "unit", JobState::Passed, 63),
+            job("test", "3", "flaky", JobState::Failed, 4),
+        ],
+    )
+}
+
+fn with_pipeline() -> App {
+    let mut app = with_review();
+    let head = app.open.as_ref().unwrap().review.mr.refs.head.clone();
+    assert_eq!(press(&mut app, "p"), vec![Action::LoadChecks { key: mr_key(), head }]);
+    app.apply(Incoming::Checks { key: mr_key(), checks: Some(run()) });
+    app
+}
+
+#[test]
+fn p_opens_the_pipeline_on_its_first_failure_and_o_opens_that_job() {
+    let mut app = with_pipeline();
+    assert_eq!(app.focus, Focus::Side);
+    let pipeline = app.open.as_ref().unwrap().pipeline.clone().unwrap();
+    assert_eq!(pipeline.jobs()[pipeline.selected].name, "flaky", "the cursor lands on the failure");
+    assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl("https://ci.example/flaky".into())]);
+    press(&mut app, "j");
+    assert_eq!(press(&mut app, "y"), vec![Action::Yank("https://ci.example/unit".into())]);
+    press(&mut app, "p");
+    assert!(app.open.as_ref().unwrap().pipeline.is_none());
+    assert_eq!(app.focus, Focus::Review);
+}
+
+#[test]
+fn a_run_still_going_is_asked_again_while_the_pane_shows_it() {
+    use crate::forge::checks::JobState;
+    let mut app = with_review();
+    press(&mut app, "p");
+    let mut going = run();
+    going.stages[1].jobs[0].state = JobState::Running;
+    app.apply(Incoming::Checks { key: mr_key(), checks: Some(going) });
+    assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadChecks { .. })), "not before its time");
+    app.now += Duration::from_secs(16);
+    assert!(app.tick().iter().any(|a| matches!(a, Action::LoadChecks { .. })));
+    assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadChecks { .. })), "asked once");
+    app.apply(Incoming::Checks { key: mr_key(), checks: Some(run()) });
+    app.now += Duration::from_secs(60);
+    assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadChecks { .. })), "a finished run is left alone");
+}
+
+#[test]
+fn r_asks_again_and_a_failure_or_no_run_says_so_in_the_pane() {
+    let mut app = with_pipeline();
+    assert!(matches!(press(&mut app, "r").as_slice(), [Action::LoadChecks { .. }]));
+    app.apply(Incoming::Failed { what: Failure::Checks, message: "HTTP 500".into() });
+    assert_eq!(app.open.as_ref().unwrap().pipeline.as_ref().unwrap().run, Run::Failed("HTTP 500".into()));
+    app.apply(Incoming::Checks { key: mr_key(), checks: None });
+    assert_eq!(app.open.as_ref().unwrap().pipeline.as_ref().unwrap().run, Run::Nothing);
+}
+
+#[test]
+fn the_pipeline_and_the_file_tree_share_the_right_pane() {
+    let mut app = with_pipeline();
+    press(&mut app, "h");
+    press(&mut app, "t");
+    let open = app.open.as_ref().unwrap();
+    assert!(open.tree.is_some() && open.pipeline.is_none());
+    app.handle_key(code(KeyCode::Esc));
+    press(&mut app, "p");
+    let open = app.open.as_ref().unwrap();
+    assert!(open.pipeline.is_some() && open.tree.is_none());
+}
+
+#[test]
+fn snapshot_pipeline_pane() {
+    let mut app = with_pipeline();
+    insta::assert_snapshot!("pipeline", render(&mut app, 150, 20));
+}

@@ -1,0 +1,24 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 150, 20)"
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at che… ────────╮╭ Pipeline · failed ───────────────────────────────────────╮
+│   TO REVIEW                  1 ││  omar · feat/checko… · 2h · +5 −3 · 2 files · ✓ succ ││  1 failed · 2 passed                                     │
+│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 unresolved         ││                                                          │
+│   MINE                       1 ││  ◆ 1 on the MR  enter opens                          ││  CHECK                                                   │
+│   !41 fix: flaky cache test  D ││                                                      ││   ✓ lint                                              7s │
+│   WATCHING                   1 ││ ▎▾ src/pay/charge.rs          +4 −2  ◆1 · 1 outdated ││                                                          │
+│   !35 infra: new runner      ⠋ ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge          ││  TEST                                                    │
+│   DONE ▸                     1 ││      12   12  pub async fn charge(card: &Card, amou… ││ ▎ ✗ flaky                                             4s │
+│                                ││  ✓   13      -    let client = Client::new();        ││   ✓ unit                                           1m03s │
+│                                ││           13 +    let client = Client::with_key(ide… ││                                                          │
+│                                ││           14 +    let attempt = Attempt::first();    ││                                                          │
+│                                ││      14   15      let response = client.charge(amou… ││                                                          │
+│                                ││      15   16      audit::record(&response);          ││                                                          │
+│                                ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key           ││                                                          │
+│                                ││      40   41  fn idempotency_key(card: &Card) -> Ke… ││                                                          │
+│                                ││      41      -    Key::from(card.number())           ││                                                          │
+│                                ││           42 +    Key::from((card.number(), card.ex… ││                                                          │
+│                                ││           43 +    // hunk two, line 43 is new        ││                                                          │
+╰────────────────────────────────╯╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                                                                              ? help

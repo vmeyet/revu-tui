@@ -67,8 +67,20 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         open.scroll += 1;
     }
     let lines: Vec<Line> = (open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height).collect();
+    let pipeline = if folded { None } else { pipeline_link(&open.review, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
+    app.links.extend(pipeline);
+}
+
+/// The pipeline word ends the header's first row; it links to the run on the forge.
+fn pipeline_link(review: &Review, header: &[Line], area: Rect) -> Option<super::ui::Link> {
+    let url = review.mr.pipeline.as_ref()?.web_url.clone()?;
+    let spans = &header.first()?.spans;
+    let (last, before) = spans.split_last()?;
+    let x = before.iter().map(Span::width).sum::<usize>();
+    let x = area.x + u16::try_from(x).ok()?;
+    (x + u16::try_from(last.width()).ok()? <= area.right()).then(|| super::ui::Link { x, y: area.y, text: last.content.to_string(), url })
 }
 
 /// The width a line is drawn at before `w` cuts it into screen rows; wide enough for any real line.

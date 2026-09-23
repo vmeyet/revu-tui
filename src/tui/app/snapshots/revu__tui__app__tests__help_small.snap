@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
-╭ Queu╭ keys · 4–24 of 52 · j k scroll ──────────────────────────────────╮─────╮
+╭ Queu╭ keys · 4–24 of 53 · j k scroll ──────────────────────────────────╮─────╮
 │   TO│        h l  pane to the left; open the MR, or a marked line's th │     │
 │ ▎ !4│      enter  open the MR, a marked line's threads, or toggle the  │     │
 │   MI│      esc x  close the right pane; esc again goes back to the que │     │
