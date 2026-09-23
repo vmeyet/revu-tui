@@ -1,5 +1,5 @@
 use super::{Action, Brief, Focus, Input, MrKey, Open, Publish, Toast};
-use crate::forge::{Kind, Sections};
+use crate::forge::Sections;
 use crate::tui::field::Field;
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
@@ -17,8 +17,6 @@ const SLOW_DOWN: u32 = 5;
 pub struct Settings {
     pub theme: Theme,
     pub host: String,
-    /// Which forge `host` runs: how an MR is named and how a line is linked.
-    pub kind: Kind,
     pub me: String,
     /// The project of the checkout `revu` runs in; `None` outside one or with `--all`.
     pub project: Option<String>,
@@ -30,6 +28,8 @@ pub struct Settings {
     pub ask: Option<String>,
     /// `[notify] enabled`: a macOS notification when an MR lands in To review.
     pub notify: bool,
+    /// The hosts the queue draws from: which forge each MR is on, and its row's tag.
+    pub hosts: crate::forge::Hosts,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -44,7 +44,6 @@ pub struct Poll {
 pub struct App {
     pub theme: Theme,
     pub host: String,
-    pub kind: Kind,
     pub me: String,
     pub focus: Focus,
     /// The checkout's project; the queue shows only it unless `everywhere`.
@@ -72,6 +71,7 @@ pub struct App {
     /// A commit waiting for `y`; every key answers it first.
     pub confirm: Option<super::Confirm>,
     pub notify: bool,
+    pub hosts: crate::forge::Hosts,
     /// What To review held at the last fresh answer, so only newcomers are announced.
     pub seen: Option<super::notify::Seen>,
     pub closed_sections: std::collections::BTreeSet<&'static str>,
@@ -135,7 +135,6 @@ impl App {
         Self {
             theme: settings.theme,
             host: settings.host,
-            kind: settings.kind,
             me: settings.me,
             focus: Focus::default(),
             everywhere: settings.project.is_none(),
@@ -153,6 +152,7 @@ impl App {
             news: None,
             confirm: None,
             notify: settings.notify,
+            hosts: settings.hosts,
             seen: None,
             closed_sections: std::collections::BTreeSet::from(["DONE"]),
             queue_loading: true,

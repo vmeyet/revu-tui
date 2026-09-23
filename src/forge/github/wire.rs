@@ -228,6 +228,7 @@ impl From<QueuePr> for QueueMr {
             .filter_map(|r| r.author.as_ref().map(|a| a.login.clone()))
             .collect();
         Self {
+            host: None,
             number: pr.number,
             project: pr.repository.name_with_owner,
             title: pr.title,

@@ -45,7 +45,7 @@ impl App {
     pub fn completions_for(&self, line: &str) -> Vec<String> {
         match palette::slot(line) {
             Slot::Verb => palette::VERBS.iter().map(|(verb, _)| (*verb).to_owned()).collect(),
-            Slot::Mr => self.queue_mrs().iter().map(|mr| format!("{}{}", self.kind.sigil(), mr.number)).collect(),
+            Slot::Mr => self.queue_mrs().iter().map(|mr| format!("{}{}", self.hosts.kind_of(&mr.key()).sigil(), mr.number)).collect(),
             Slot::Setting => vec!["theme=".to_owned()],
             Slot::Theme => Theme::NAMES.iter().map(|name| format!("theme={name}")).collect(),
             Slot::File => {
@@ -96,7 +96,7 @@ impl App {
     fn resolve(&self, reference: &str) -> Option<MrKey> {
         let reference = reference.trim();
         if let Some((project, number)) = reference.rsplit_once(['!', '#']).filter(|(p, _)| !p.is_empty()) {
-            return Some(MrKey { project: project.to_owned(), number: number.parse().ok()? });
+            return Some(MrKey::new(project, number.parse().ok()?));
         }
         let number: u64 = reference.trim_start_matches(['!', '#']).parse().ok()?;
         self.queue_mrs().into_iter().find(|mr| mr.number == number).map(crate::forge::QueueMr::key)
@@ -104,7 +104,7 @@ impl App {
 
     fn open_in_browser(&self) -> Vec<Action> {
         match (&self.open, self.focus) {
-            (Some(open), Focus::Review | Focus::Side) => vec![Action::OpenUrl(open.line_url(self.kind))],
+            (Some(open), Focus::Review | Focus::Side) => vec![Action::OpenUrl(open.line_url(self.hosts.kind_of(&open.key)))],
             _ => self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
         }
     }
@@ -127,11 +127,10 @@ impl App {
         let files = self.open.iter().flat_map(|open| {
             open.review.files.iter().enumerate().map(|(i, file)| Candidate { label: file.new_path.clone(), target: Target::File(i) })
         });
-        let sigil = self.kind.sigil();
-        let mrs = self
-            .queue_mrs()
-            .into_iter()
-            .map(|mr| Candidate { label: format!("{sigil}{} {}", mr.number, mr.title), target: Target::Mr(mr.key()) });
+        let mrs = self.queue_mrs().into_iter().map(|mr| {
+            let sigil = self.hosts.kind_of(&mr.key()).sigil();
+            Candidate { label: format!("{sigil}{} {}", mr.number, mr.title), target: Target::Mr(mr.key()) }
+        });
         self.jump = Some(Jump::new(files.chain(mrs).collect()));
     }
 

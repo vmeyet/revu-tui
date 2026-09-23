@@ -105,6 +105,7 @@ impl TryFrom<WireMr> for QueueMr {
     fn try_from(w: WireMr) -> Result<Self> {
         let stats = w.diff_stats_summary.unwrap_or_default();
         Ok(Self {
+            host: None,
             number: w.iid.parse().with_context(|| format!("iid {:?}", w.iid))?,
             project: w.project.full_path,
             title: w.title,

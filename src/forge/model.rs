@@ -7,13 +7,16 @@ use serde::{Deserialize, Serialize};
 /// and its number there.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct MrKey {
+    /// The host it lives on, when that is not the one `revu` started with: a queue can hold several.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     pub project: String,
     pub number: u64,
 }
 
 impl MrKey {
     pub fn new(project: impl Into<String>, number: u64) -> Self {
-        Self { project: project.into(), number }
+        Self { host: None, project: project.into(), number }
     }
 }
 
