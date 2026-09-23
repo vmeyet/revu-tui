@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 52 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 53 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │
@@ -27,6 +27,7 @@ expression: "render(&mut app, 100, 40)"
 │               │      zo zc  in the queue: open, fold the section (enter too)     │               │
 │               │         zh  fold the MR header to one row                        │               │
 │               │          t  file tree: enter jumps to a file or folds a folder,  │               │
+│               │          p  pipeline: jobs by stage, failures first; o opens a j │               │
 │               │         zv  mark the file viewed: it folds, and comes back if it │               │
 │               │         zz  reading mode: the diff alone, centered; h brings the │               │
 │               │          w  wrap long lines under their text                     │               │
@@ -39,6 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │          E  write the comment in $EDITOR                         │               │
 │               │          s  new thread prefilled with a suggestion of the lines  │               │
 │               │  ⌥enter ^o  in the box: newline, move the text to $EDITOR        │               │
-│               │        e d  in the pane: edit, delete my draft                   │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

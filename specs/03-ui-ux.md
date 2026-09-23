@@ -162,6 +162,7 @@ One of:
 
 - **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, or a file's outdated threads), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff. The compose box sits at its bottom. It follows the cursor onto marked lines. Width: three columns from 150, the queue steps aside from 120, a page of its own below.
 - **Overview** (`o` on the header, or on open when there is no thread): description as markdown, labels, reviewers with their state, approvals, pipeline link, then the activity list (system notes) in `muted`.
+- **Pipeline** (`p`): the CI run of the head commit (GitLab's newest MR pipeline, GitHub's check runs grouped by workflow): a count per state, then each stage in the order it ran with its jobs, counted failures first, glyph, name and duration; the cursor starts on the first failure; `o` opens the job, `y` copies its link, `r` asks again, and a run still going is asked again every 15 s while the pane shows it. A failure the forge lets pass shows `!` in the warning colour. The header's pipeline word links to the run.
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
 
 `zv` (in the diff or the tree) marks the file viewed and folds it. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
@@ -228,6 +229,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `zM` `zR` | fold, unfold every file | M1 |
 | `zv` | mark viewed (folds) | M3 |
 | `t` | file tree | M3 |
+| `p` | pipeline: jobs by stage, failures first, `o` opens a job | M5 |
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
 | `+` | more context around the hunk | M3 |

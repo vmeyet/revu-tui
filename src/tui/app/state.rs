@@ -206,6 +206,7 @@ impl App {
             self.poll.discussions_due = None;
             actions.push(Action::RefreshDiscussions(key));
         }
+        actions.extend(self.pipeline_tick());
         actions
     }
 

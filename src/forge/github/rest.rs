@@ -2,6 +2,7 @@
 //! and the lookups the command line needs.
 use super::Client;
 use super::wire::{self, RestUser};
+use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::{self, DiffFile, Discussion, MrKey, Note, Position};
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
@@ -81,7 +82,86 @@ fn repo_path(project: &str) -> String {
     format!("repos/{project}")
 }
 
+#[derive(Deserialize)]
+struct CheckRuns {
+    check_runs: Vec<CheckRun>,
+}
+
+#[derive(Deserialize)]
+struct CheckRun {
+    name: String,
+    status: String,
+    #[serde(default)]
+    conclusion: Option<String>,
+    #[serde(default)]
+    started_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    completed_at: Option<DateTime<Utc>>,
+    html_url: String,
+    app: CheckApp,
+}
+
+#[derive(Deserialize)]
+struct CheckApp {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct WorkflowRuns {
+    workflow_runs: Vec<WorkflowRun>,
+}
+
+#[derive(Deserialize)]
+struct WorkflowRun {
+    id: u64,
+    name: String,
+}
+
+impl CheckRun {
+    /// `status` says whether it finished, `conclusion` how.
+    fn state(&self) -> JobState {
+        match (self.status.as_str(), self.conclusion.as_deref()) {
+            ("completed", Some("success" | "neutral")) => JobState::Passed,
+            ("completed", Some("skipped" | "stale")) => JobState::Skipped,
+            ("completed", Some("cancelled")) => JobState::Canceled,
+            ("completed", Some("action_required")) => JobState::Manual,
+            ("completed", _) => JobState::Failed,
+            ("in_progress", _) => JobState::Running,
+            _ => JobState::Pending,
+        }
+    }
+
+    /// The Actions run it belongs to, read from its page: `…/actions/runs/<id>/job/<id>`.
+    fn run_id(&self) -> Option<u64> {
+        self.html_url.split("/actions/runs/").nth(1)?.split('/').next()?.parse().ok()
+    }
+
+    /// Grouped under its workflow's name when Actions ran it, else under the app that did.
+    fn found(self, workflows: &[WorkflowRun]) -> Found {
+        let stage =
+            self.run_id().and_then(|id| workflows.iter().find(|w| w.id == id)).map_or_else(|| self.app.name.clone(), |w| w.name.clone());
+        let seconds = self.started_at.zip(self.completed_at).map(|(from, to)| (to - from).num_seconds().max(0).unsigned_abs());
+        let order = self.started_at.map_or_else(|| "~".to_owned(), |at| at.to_rfc3339());
+        let state = self.state();
+        Found { stage, order, job: Job { name: self.name, state, seconds, web_url: self.html_url, allowed_to_fail: false } }
+    }
+}
+
 impl Client {
+    /// The check runs on `head`, grouped by workflow; `None` when nothing ran on it.
+    pub async fn checks(&self, key: &MrKey, head: &str) -> Result<Option<Checks>> {
+        let repo = repo_path(&key.project);
+        let runs_path = format!("{repo}/commits/{head}/check-runs?per_page=100");
+        let workflows_path = format!("{repo}/actions/runs?head_sha={head}&per_page=100");
+        let (runs, workflows) = tokio::try_join!(self.get::<CheckRuns>(&runs_path), self.get::<WorkflowRuns>(&workflows_path))?;
+        if runs.check_runs.is_empty() {
+            return Ok(None);
+        }
+        let found = runs.check_runs.into_iter().map(|run| run.found(&workflows.workflow_runs)).collect();
+        let web_url = format!("https://{}/{}/pull/{}/checks", self.host(), key.project, key.number);
+        Ok(Some(Checks::from_jobs(Some(web_url), found)))
+    }
+
     pub async fn me(&self) -> Result<forge::User> {
         self.get::<RestUser>("user").await.map(forge::User::from)
     }
@@ -272,5 +352,35 @@ mod tests {
             .mount(&server)
             .await;
         assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
+    }
+    #[tokio::test]
+    async fn checks_group_check_runs_by_their_workflow() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/commits/beef/check-runs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"total_count": 3, "check_runs": [
+                {"name": "flaky", "status": "completed", "conclusion": "failure", "started_at": "2026-09-23T11:10:40Z", "completed_at": "2026-09-23T11:10:44Z",
+                 "html_url": "https://github.com/acme/widgets/actions/runs/77/job/3", "app": {"name": "GitHub Actions"}},
+                {"name": "lint", "status": "completed", "conclusion": "success", "started_at": "2026-09-23T11:10:33Z", "completed_at": "2026-09-23T11:10:36Z",
+                 "html_url": "https://github.com/acme/widgets/actions/runs/77/job/1", "app": {"name": "GitHub Actions"}},
+                {"name": "coverage", "status": "queued", "conclusion": null, "started_at": null, "completed_at": null,
+                 "html_url": "https://codecov.example/run/9", "app": {"name": "Codecov"}}
+            ]})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/actions/runs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"workflow_runs": [{"id": 77, "name": "ci"}]})))
+            .mount(&server)
+            .await;
+        let checks = client(&server).checks(&key(), "beef").await.unwrap().unwrap();
+        let stages: Vec<(&str, Vec<(&str, JobState)>)> =
+            checks.stages.iter().map(|s| (s.name.as_str(), s.jobs.iter().map(|j| (j.name.as_str(), j.state)).collect())).collect();
+        assert_eq!(
+            stages,
+            vec![("ci", vec![("flaky", JobState::Failed), ("lint", JobState::Passed)]), ("Codecov", vec![("coverage", JobState::Pending)])]
+        );
+        assert_eq!(checks.web_url.as_deref(), Some("https://github.com/acme/widgets/pull/42/checks"));
+        assert_eq!(checks.stages[0].jobs[0].seconds, Some(4));
     }
 }
