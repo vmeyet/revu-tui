@@ -44,6 +44,7 @@ The diff is coloured by syntax for TypeScript, JavaScript, Python and JSON.
 Inside a checkout the queue shows that repo only: what waits on you, yours, what you watch, and every other open MR.
 `*` widens it to every project.
 Other people's draft MRs wait apart in DRAFTS, folded; `zo` opens it.
+One author's MRs that build on each other fold into one stack row; `enter` or `zo` unfolds it, `zc` folds it back.
 `s` changes the order (oldest, author, size, urgency with Jev) and `S` groups Open and Drafts by author; revu remembers both per repo.
 
 | Key | Action |

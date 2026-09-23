@@ -39,7 +39,7 @@ pub const GROUPS: [Group; 7] = [
             ("*", "this repo, or every project"),
             ("s", "next sort order"),
             ("S", "group by author"),
-            ("zo zc", "open, fold the section"),
+            ("zo zc", "open, fold the section or stack"),
         ],
     },
     Group {

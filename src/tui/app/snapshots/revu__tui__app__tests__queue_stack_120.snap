@@ -1,6 +1,6 @@
 ---
 source: src/tui/app/tests.rs
-expression: "render(&mut app, 120, 20)"
+expression: "render(&mut app, 120, 26)"
 ---
 ╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ─────────── ││                                                                                    │
@@ -10,15 +10,21 @@ expression: "render(&mut app, 120, 20)"
 │   ── MINE · 1 ──────────────── ││                                                                                    │
 │   fix flaky cache test       D ││                                                                                    │
 │   nina · !41 · +3 −1        4h ││                                                                                    │
-│                                ││                                open a merge request                                │
-│   ── WATCHING · 0 ──────────── ││                                to read its diff here                               │
 │                                ││                                                                                    │
-│   ── OPEN · 1 ──────────────── ││                                                                                    │
-│   chore bump deps              ││                                                                                    │
+│   ── WATCHING · 0 ──────────── ││                                                                                    │
+│                                ││                                                                                    │
+│   ── OPEN · 4 ──────────────── ││                                open a merge request                                │
+│   chore bump deps              ││                                to read its diff here                               │
 │   lea · !51 · +412 −38      2h ││                                                                                    │
+│   ▸ feat read shared PDFs    ✗ ││                                                                                    │
+│     romain · 3 MRs · stack  2h ││                                                                                    │
 │                                ││                                                                                    │
 │   ── ▸ DRAFTS · 1 ──────────── ││                                                                                    │
 │                                ││                                                                                    │
 │   ── ▸ DONE · 1 ────────────── ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina                                                                                               ? help

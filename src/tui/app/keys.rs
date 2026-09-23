@@ -241,13 +241,20 @@ impl App {
             return vec![];
         }
         if self.focus == Focus::Queue {
-            match (prefix, c) {
-                ('z', 'o') => self.fold_section(Some(true)),
-                ('z', 'c') => self.fold_section(Some(false)),
-                ('z', 'a') => self.fold_section(None),
-                ('z', 'z') => self.toggle_reading(),
-                _ => {}
+            let open = match (prefix, c) {
+                ('z', 'o') => Some(true),
+                ('z', 'c') => Some(false),
+                ('z', 'a') => None,
+                ('z', 'z') => {
+                    self.toggle_reading();
+                    return vec![];
+                }
+                _ => return vec![],
+            };
+            if let Some(actions) = self.fold_stack(open) {
+                return actions;
             }
+            self.fold_section(open);
             return vec![];
         }
         if prefix == 'a' {

@@ -1,0 +1,34 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 170, 30)"
+---
+╭ Queue · acme/widgets ────────────────────╮╭ Review ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                            │
+│   feat charge cards at checkout          ││                                                                                                                            │
+│   omar · !42 · +412 −38               2h ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── MINE · 1 ────────────────────────── ││                                                                                                                            │
+│   fix flaky cache test                 D ││                                                                                                                            │
+│   nina · !41 · +3 −1                  4h ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── WATCHING · 0 ────────────────────── ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── OPEN · 4 ────────────────────────── ││                                                                                                                            │
+│   chore bump deps                        ││                                                                                                                            │
+│   lea · !51 · +412 −38                2h ││                                                    open a merge request                                                    │
+│ ▎ ▾ feat read shared PDFs              ✗ ││                                                    to read its diff here                                                   │
+│ ▎   romain · 3 MRs · stack            2h ││                                                                                                                            │
+│   │ feat read shared PDFs from the dr…   ││                                                                                                                            │
+│   │ romain · !61 · +412 −38           2h ││                                                                                                                            │
+│   │ feat read shared PDFs page by page ✗ ││                                                                                                                            │
+│   │ romain · !62 · +412 −38           2h ││                                                                                                                            │
+│   │ feat read shared PDFs with OCR       ││                                                                                                                            │
+│   │ romain · !63 · +412 −38           2h ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── ▸ DRAFTS · 1 ────────────────────── ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── ▸ DONE · 1 ──────────────────────── ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+╰──────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                                                                                 ? help

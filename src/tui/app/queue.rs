@@ -1,9 +1,10 @@
 use super::order::{self, Order};
+use super::stack::{self, Item};
 use super::{Action, App};
 use crate::forge::{QueueMr, Sections};
 
 /// The one glyph at the right edge of a queue row, most pressing first.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Badge {
     Failed,
     Running,
@@ -25,6 +26,14 @@ pub enum QueueRow<'a> {
         count: usize,
     },
     Mr(&'a QueueMr),
+    /// A chain of one author's MRs, each built on the one below; folded, it is this one row.
+    Stack {
+        id: String,
+        mrs: Vec<&'a QueueMr>,
+        open: bool,
+    },
+    /// A member of an unfolded stack, drawn under its stack row.
+    Stacked(&'a QueueMr),
 }
 
 /// The sections `S` splits by author: the ones that pile up other people's MRs.
@@ -58,10 +67,27 @@ impl App {
             if self.queue_view.by_author && GROUPED.contains(&name) {
                 for (author, group) in order::by_author(matching) {
                     rows.push(QueueRow::Author { name: author, count: group.len() });
-                    rows.extend(group.into_iter().map(QueueRow::Mr));
+                    rows.extend(self.stacked(&group));
                 }
             } else {
-                rows.extend(matching.into_iter().map(QueueRow::Mr));
+                rows.extend(self.stacked(&matching));
+            }
+        }
+        rows
+    }
+
+    /// `mrs` as rows, each chain as one stack row, followed by its MRs when it is unfolded.
+    fn stacked<'m>(&self, mrs: &[&'m QueueMr]) -> Vec<QueueRow<'m>> {
+        let mut rows = vec![];
+        for item in stack::group(mrs) {
+            match item {
+                Item::Single(mr) => rows.push(QueueRow::Mr(mr)),
+                Item::Stack(stack) => {
+                    let open = self.queue_view.open_stacks.contains(&stack.id);
+                    let members: Vec<&QueueMr> = if open { stack.mrs.clone() } else { vec![] };
+                    rows.push(QueueRow::Stack { id: stack.id, mrs: stack.mrs, open });
+                    rows.extend(members.into_iter().map(QueueRow::Stacked));
+                }
             }
         }
         rows
@@ -89,7 +115,7 @@ impl App {
 
     fn save_queue_view(&mut self) -> Vec<Action> {
         self.queue_settle();
-        vec![Action::SaveQueueView { scope: self.scope(), view: self.queue_view }]
+        vec![Action::SaveQueueView { scope: self.scope(), view: self.queue_view.clone() }]
     }
 
     /// What the queue title says after the scope: the filter (or the view that set it), the
@@ -135,9 +161,14 @@ impl App {
 
     pub fn selected_mr(&self) -> Option<&QueueMr> {
         match self.queue_rows().get(self.queue_selected) {
-            Some(QueueRow::Mr(mr)) => Some(mr),
+            Some(QueueRow::Mr(mr) | QueueRow::Stacked(mr)) => Some(mr),
             _ => None,
         }
+    }
+
+    /// A stack's badge: the most pressing of its MRs' badges.
+    pub fn stack_badge(&self, mrs: &[&QueueMr]) -> Option<Badge> {
+        mrs.iter().filter_map(|mr| self.badge(mr)).min()
     }
 
     /// The row's host, named only when rows from several hosts share the queue.
@@ -178,7 +209,9 @@ impl App {
         self.queue_rows()
             .iter()
             .enumerate()
-            .filter(|(_, r)| matches!(r, QueueRow::Mr(_) | QueueRow::Section { open: false, .. }))
+            .filter(|(_, r)| {
+                matches!(r, QueueRow::Mr(_) | QueueRow::Stack { .. } | QueueRow::Stacked(_) | QueueRow::Section { open: false, .. })
+            })
             .map(|(i, _)| i)
             .collect()
     }
@@ -204,7 +237,7 @@ impl App {
     fn section_here(&self) -> Option<&'static str> {
         self.queue_rows().into_iter().take(self.queue_selected + 1).rev().find_map(|row| match row {
             QueueRow::Section { name, .. } => Some(name),
-            QueueRow::Author { .. } | QueueRow::Mr(_) => None,
+            QueueRow::Author { .. } | QueueRow::Mr(_) | QueueRow::Stack { .. } | QueueRow::Stacked(_) => None,
         })
     }
 
@@ -224,10 +257,40 @@ impl App {
         self.queue_move(0);
     }
 
+    /// The stack under the cursor: its row, or the row of the stack an unfolded MR belongs to.
+    fn stack_here(&self) -> Option<(usize, String)> {
+        let rows = self.queue_rows();
+        match rows.get(self.queue_selected)? {
+            QueueRow::Stack { id, .. } => Some((self.queue_selected, id.clone())),
+            QueueRow::Stacked(_) => rows[..self.queue_selected].iter().enumerate().rev().find_map(|(i, row)| match row {
+                QueueRow::Stack { id, .. } => Some((i, id.clone())),
+                _ => None,
+            }),
+            _ => None,
+        }
+    }
+
+    /// `zo`, `zc`, `za` and `enter` on a stack: unfold it MR by MR, or fold it back into its row,
+    /// the cursor on that row. `None` when the cursor is on no stack, so the section folds instead.
+    pub(super) fn fold_stack(&mut self, open: Option<bool>) -> Option<Vec<Action>> {
+        let (row, id) = self.stack_here()?;
+        let now_open = open.unwrap_or_else(|| !self.queue_view.open_stacks.contains(&id));
+        if now_open {
+            self.queue_view.open_stacks.insert(id);
+        } else {
+            self.queue_view.open_stacks.remove(&id);
+            self.queue_selected = row;
+        }
+        Some(self.save_queue_view())
+    }
+
     pub(super) fn open_selected(&mut self) -> Vec<Action> {
         if matches!(self.queue_rows().get(self.queue_selected), Some(QueueRow::Section { .. })) {
             self.fold_section(None);
             return vec![];
+        }
+        if matches!(self.queue_rows().get(self.queue_selected), Some(QueueRow::Stack { .. })) {
+            return self.fold_stack(None).unwrap_or_default();
         }
         let Some(mr) = self.selected_mr() else { return vec![] };
         let key = mr.key();

@@ -3,19 +3,19 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 30)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   TO REVIEW          ╭ keys ──────────────────────────────────────────────╮ · 2 files · ✓ succes │
+│   ── TO REVIEW · 1 ──╭ keys ──────────────────────────────────────────────╮ · 2 files · ✓ succes │
 │ ▎ feat charge cards a│                                                    │ved                   │
-│ ▎ !42 · omar · 2h · +│  MOVE                                              │                      │
-│   MINE               │        j k  move                                   │                      │
-│   fix flaky cache tes│        g G  first, last                            │4 −2  ◆1 · 1 outdated │
-│   !41 · nina · 4h · +│      ^d ^u  half a page                            │ge                    │
-│   WATCHING           │        h l  pane to the left, to the right         │Card, amount: Money)… │
-│   infra: new runner  │      enter  open, or toggle the fold               │w();                  │
-│   !35 · omar · 2d · +│      esc x  close the pane, back to the queue      │th_key(idempotency_k… │
-│   DONE ▸             │  tab S-tab  next, previous file                    │first();              │
-│                      │      ]c [c  next, previous hunk                    │harge(amount).await?; │
+│ ▎ omar · !42 · +412 −│  MOVE                                              │                      │
+│                      │        j k  move                                   │                      │
+│   ── MINE · 1 ───────│        g G  first, last                            │4 −2  ◆1 · 1 outdated │
+│   fix flaky cache tes│      ^d ^u  half a page                            │ge                    │
+│   nina · !41 · +3 −1 │        h l  pane to the left, to the right         │Card, amount: Money)… │
+│                      │      enter  open, or toggle the fold               │w();                  │
+│   ── WATCHING · 1 ───│      esc x  close the pane, back to the queue      │th_key(idempotency_k… │
+│   infra: new runner  │  tab S-tab  next, previous file                    │first();              │
+│   omar · !35 · +0 −0 │      ]c [c  next, previous hunk                    │harge(amount).await?; │
 │                      │      ]n [n  next, previous conversation            │);                    │
-│                      │      ]f [f  next, previous file with a thread      │y                     │
+│   ── ▸ DONE · 1 ─────│      ]f [f  next, previous file with a thread      │y                     │
 │                      │                                                    │ard) -> Key {         │
 │                      │  QUEUE                                             │)                     │
 │                      │          /  filter: words @author !42 ~label       │), card.expiry()))    │
@@ -23,7 +23,7 @@ expression: "render(&mut app, 100, 30)"
 │                      │          *  this repo, or every project            │                      │
 │                      │          s  next sort order                        │                      │
 │                      │          S  group by author                        │        +1 −1  folded │
-│                      │      zo zc  open, fold the section                 │                      │
+│                      │      zo zc  open, fold the section or stack        │                      │
 │                      │                                                    │                      │
 │                      │  VIEW                                              │                      │
 │                      │          i  the MR description                     │                      │

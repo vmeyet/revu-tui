@@ -3,19 +3,19 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   TO REVIEW                1   ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
 │ ▎ feat c╭ !42 feat: charge cards at checkout ──────────────────────────────────────────╮         │
-│ ▎ !42 · │ omar · feat/checkout → main                                                  │         │
-│   MINE  │                                                                              │         │
-│   fix fl│ ## Why                                                                       │outdated │
-│   !41 · │                                                                              │         │
-│   WATCHI│ Cards were charged twice.                                                    │ Money)… │
-│   infra:│                                                                              │         │
-│   !35 · │ • retry with idempotency_key                                                 │tency_k… │
-│   DONE ▸│ • log the attempt                                                            │         │
-│         │                                                                              │.await?; │
+│ ▎ omar ·│ omar · feat/checkout → main                                                  │         │
 │         │                                                                              │         │
+│   ── MIN│ ## Why                                                                       │outdated │
+│   fix fl│                                                                              │         │
+│   nina ·│ Cards were charged twice.                                                    │ Money)… │
 │         │                                                                              │         │
+│   ── WAT│ • retry with idempotency_key                                                 │tency_k… │
+│   infra:│ • log the attempt                                                            │         │
+│   omar ·│                                                                              │.await?; │
+│         │                                                                              │         │
+│   ── ▸ D│                                                                              │         │
 │         │                                                                              │         │
 │         │                                                                              │         │
 │         │                                                                              │y()))    │

@@ -2,27 +2,27 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 160, 24)"
 ---
-╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────╮╭ charge.rs:-13 · 1 thread ────────────────────────────────────╮
-│   TO REVIEW                1   ││  omar · feat/checkout → m… · 2h · +5 −3 · 2 files · ✓ succ ││ ▎✓ resolved                                                  │
-│ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved               ││ ▎you · 2h                                                    │
-│ ▎ !42 · omar · 2h · +412 −38   ││  ◆ 1 on the MR  enter opens                                ││ ▎Why drop the plain client?                                  │
-│   MINE                     1   ││                                                            ││                                                              │
-│   fix flaky cache test       D ││  ▾ src/pay/charge.rs                +4 −2  ◆1 · 1 outdated ││                                                              │
-│   !41 · nina · 4h · +3 −1      ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                ││                                                              │
-│   WATCHING                 1   ││      12   12  pub async fn charge(card: &Card, amount: Mo… ││                                                              │
-│   infra: new runner          ⠋ ││ ▎✓   13      -    let client = Client::new();              ││                                                              │
-│   !35 · omar · 2d · +0 −0      ││           13 +    let client = Client::with_key(idempoten… ││                                                              │
-│   DONE ▸                   1   ││           14 +    let attempt = Attempt::first();          ││                                                              │
-│                                ││      14   15      let response = client.charge(amount).aw… ││                                                              │
-│                                ││      15   16      audit::record(&response);                ││                                                              │
-│                                ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                 ││                                                              │
-│                                ││      40   41  fn idempotency_key(card: &Card) -> Key {     ││                                                              │
-│                                ││      41      -    Key::from(card.number())                 ││                                                              │
-│                                ││           42 +    Key::from((card.number(), card.expiry()… ││                                                              │
-│                                ││           43 +    // hunk two, line 43 is new              ││ ╭ reply to nina ───────────────────────────────────────────╮ │
-│                                ││      42   44  }                                            ││ │agreed                                                    │ │
-│                                ││                                                            ││ │keys are per card                                         │ │
-│                                ││  ▸ Cargo.lock                                +1 −1  folded ││ │and per amount                                            │ │
-│                                ││                                                            ││ ╰ enter save · ⌥enter newline ─────────────────────────────╯ │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
+╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ charge.rs:-13 · 1 thread ────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││  omar · 2h · +5 −3 · 2 files · ✓ success         ││ ▎✓ resolved                                                  │
+│ ▎ feat charge cards at checkout          ││   1 of 2 approvals · 3 threads, 1 unresolved     ││ ▎you · 2h                                                    │
+│ ▎ omar · !42 · +412 −38               2h ││  ◆ 1 on the MR  enter opens                      ││ ▎Why drop the plain client?                                  │
+│                                          ││                                                  ││                                                              │
+│   ── MINE · 1 ────────────────────────── ││  ▾ src/pay/charge.rs      +4 −2  ◆1 · 1 outdated ││                                                              │
+│   fix flaky cache test                 D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge      ││                                                              │
+│   nina · !41 · +3 −1                  4h ││      12   12  pub async fn charge(card: &Card, … ││                                                              │
+│                                          ││ ▎✓   13      -    let client = Client::new();    ││                                                              │
+│   ── WATCHING · 1 ────────────────────── ││           13 +    let client = Client::with_key… ││                                                              │
+│   infra: new runner                    ⠋ ││           14 +    let attempt = Attempt::first(… ││                                                              │
+│   omar · !35 · +0 −0                  2d ││      14   15      let response = client.charge(… ││                                                              │
+│                                          ││      15   16      audit::record(&response);      ││                                                              │
+│   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││                                                              │
+│                                          ││      40   41  fn idempotency_key(card: &Card) -… ││                                                              │
+│                                          ││      41      -    Key::from(card.number())       ││                                                              │
+│                                          ││           42 +    Key::from((card.number(), car… ││                                                              │
+│                                          ││           43 +    // hunk two, line 43 is new    ││ ╭ reply to nina ───────────────────────────────────────────╮ │
+│                                          ││      42   44  }                                  ││ │agreed                                                    │ │
+│                                          ││                                                  ││ │keys are per card                                         │ │
+│                                          ││  ▸ Cargo.lock                      +1 −1  folded ││ │and per amount                                            │ │
+│                                          ││                                                  ││ ╰ enter save · ⌥enter newline ─────────────────────────────╯ │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                                                                                        ? help

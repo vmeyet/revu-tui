@@ -1,0 +1,24 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 170, 20)"
+---
+╭ Queue · acme/widgets ────────────────────╮╭ Review ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                            │
+│   !42 feat: charge cards at checkout     ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── MINE · 1 ────────────────────────── ││                                                                                                                            │
+│   !41 fix: flaky cache test            D ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── WATCHING · 0 ────────────────────── ││                                                                                                                            │
+│                                          ││                                                    open a merge request                                                    │
+│   ── OPEN · 4 ────────────────────────── ││                                                    to read its diff here                                                   │
+│   !51 chore: bump deps                   ││                                                                                                                            │
+│ ▎ ▾ romain · 3 MRs · read shared PDFs  ✗ ││                                                                                                                            │
+│   │ !61 feat: read shared PDFs from t…   ││                                                                                                                            │
+│   │ !62 feat: read shared PDFs page b… ✗ ││                                                                                                                            │
+│   │ !63 feat: read shared PDFs with O…   ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+│   ── ▸ DRAFTS · 1 ────────────────────── ││                                                                                                                            │
+│                                          ││                                                                                                                            │
+╰──────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                                                                                 ? help

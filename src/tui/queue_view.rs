@@ -1,4 +1,5 @@
-//! The queue pane: sections of MRs, two lines per MR by default, one with `[tui] queue = "compact"`.
+//! The queue pane: sections under faded rules, two lines per MR by default (one with
+//! `[tui] queue = "compact"`), and one author's chained MRs folded into a stack.
 use super::app::{App, Badge, Focus, Mark, QueueRow};
 use super::theme::Theme;
 use super::ui::{Link, draw_empty, pane, short_age, spinner, truncate};
@@ -14,8 +15,8 @@ use unicode_width::UnicodeWidthStr;
 const SKELETON_ROWS: usize = 3;
 /// The cursor bar and the space after it, in front of every row.
 const BAR_W: usize = 2;
-/// The author keeps at least this many cells before the size or the host may show.
-const MIN_AUTHOR: usize = 6;
+/// The rule `│` and a space in front of an unfolded stack's MRs.
+const INDENT: usize = 2;
 
 /// Conventional-commit kinds shown as a chip in front of the title.
 const KINDS: [&str; 12] = ["feat", "fix", "docs", "refactor", "test", "chore", "perf", "ci", "build", "style", "tech", "revert"];
@@ -36,7 +37,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let height = inner.height as usize;
     let rows = app.queue_rows();
-    let heights: Vec<usize> = rows.iter().map(|row| height_of(app.queue_layout, row)).collect();
+    let heights: Vec<usize> = rows.iter().enumerate().map(|(i, row)| height_of(app.queue_layout, row, i == 0)).collect();
     let scroll = settle(app.queue_scroll, app.queue_selected, &heights, height);
     let mut lines: Vec<Line<'static>> = vec![];
     let mut links = vec![];
@@ -45,10 +46,11 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
             break;
         }
         let top = lines.len();
-        if let Some(link) = link_of(app, row).filter(|link| top + link.line < height) {
+        let (drawn, link) = row_lines(app, row, i == app.queue_selected, i == 0, inner.width as usize);
+        if let Some(link) = link.filter(|link| top + link.line < height) {
             links.push(Link { x: inner.x + link.x, y: inner.y + (top + link.line) as u16, text: link.text, url: link.url });
         }
-        lines.extend(row_lines(app, row, i == app.queue_selected, inner.width as usize));
+        lines.extend(drawn);
     }
     lines.truncate(height);
     drop(rows);
@@ -65,19 +67,12 @@ struct RowLink {
     url: String,
 }
 
-fn link_of(app: &App, row: &QueueRow<'_>) -> Option<RowLink> {
-    let QueueRow::Mr(mr) = row else { return None };
-    let text = format!("{}{}", app.hosts.kind_of(&mr.key()).sigil(), mr.number);
-    let url = mr.web_url.clone();
-    Some(match app.queue_layout {
-        QueueLayout::Comfortable => RowLink { line: 1, x: BAR_W as u16, text, url },
-        QueueLayout::Compact => RowLink { line: 0, x: (BAR_W + mark_w(app)) as u16, text, url },
-    })
-}
-
-fn height_of(layout: QueueLayout, row: &QueueRow<'_>) -> usize {
+/// A header takes a blank line above it, except at the very top; an MR or a stack takes two
+/// lines when rows are comfortable.
+fn height_of(layout: QueueLayout, row: &QueueRow<'_>, first: bool) -> usize {
     match (layout, row) {
-        (QueueLayout::Comfortable, QueueRow::Mr(_)) => 2,
+        (_, QueueRow::Section { .. }) if !first => 2,
+        (QueueLayout::Comfortable, QueueRow::Mr(_) | QueueRow::Stack { .. } | QueueRow::Stacked(_)) => 2,
         _ => 1,
     }
 }
@@ -96,104 +91,215 @@ fn settle(scroll: usize, selected: usize, heights: &[usize], height: usize) -> u
     scroll
 }
 
-fn row_lines(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -> Vec<Line<'static>> {
+fn row_lines(app: &App, row: &QueueRow<'_>, selected: bool, first: bool, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
     match row {
         QueueRow::Section { name, count, open } => {
-            let mark = if *open { "" } else { " ▸" };
-            vec![header(theme, &format!("  {name}{mark}"), *count, width)]
+            let mut lines = if first { vec![] } else { vec![Line::default()] };
+            lines.push(rule(theme, name, *count, *open, selected, width));
+            (lines, None)
         }
-        QueueRow::Author { name, count } => vec![header(theme, &format!("    {name}"), *count, width)],
-        QueueRow::Mr(mr) => match app.queue_layout {
-            QueueLayout::Comfortable => comfortable(app, mr, selected, width),
-            QueueLayout::Compact => vec![compact(app, mr, selected, width)],
-        },
+        QueueRow::Author { name, count } => (vec![author_header(theme, name, *count)], None),
+        QueueRow::Mr(mr) => mr_lines(app, mr, selected, 0, width),
+        QueueRow::Stacked(mr) => mr_lines(app, mr, selected, INDENT, width),
+        QueueRow::Stack { mrs, open, .. } => (stack_lines(app, mrs, *open, selected, width), None),
     }
 }
 
-/// A section or author header: its name faded, its count at the right edge.
-fn header(theme: Theme, name: &str, count: usize, width: usize) -> Line<'static> {
-    let count = count.to_string();
-    let pad = width.saturating_sub(name.width() + count.width() + 2);
+fn mr_lines(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
+    match app.queue_layout {
+        QueueLayout::Comfortable => comfortable(app, mr, selected, indent, width),
+        QueueLayout::Compact => compact(app, mr, selected, indent, width),
+    }
+}
+
+/// `── OPEN · 28 ─────────`: a faded rule, so a section reads as a break, not as one more row.
+/// A folded section shows `▸`; the cursor on it brightens the name.
+fn rule(theme: Theme, name: &str, count: usize, open: bool, selected: bool, width: usize) -> Line<'static> {
+    let faded = Style::default().fg(theme.faded);
+    let fold = if open { "" } else { "▸ " };
+    let label = format!(" {fold}{name} · {count} ");
+    let lead = "──";
+    let tail = width.saturating_sub(BAR_W + lead.width() + label.width());
+    let label_style = if selected { Style::default().fg(theme.muted).add_modifier(Modifier::BOLD) } else { faded };
     Line::from(vec![
-        Span::styled(name.to_owned(), Style::default().fg(theme.faded)),
-        Span::styled(format!("{}{count}", " ".repeat(pad)), Style::default().fg(theme.faded)),
+        bar(theme, selected),
+        Span::styled(lead, faded),
+        Span::styled(label, label_style),
+        Span::styled("─".repeat(tail), faded),
     ])
+}
+
+/// One author's sub-header when `S` groups: quieter than a section, no rule.
+fn author_header(theme: Theme, name: &str, count: usize) -> Line<'static> {
+    Line::from(Span::styled(format!("{}{} · {count}", " ".repeat(BAR_W + 1), short_name(name)), Style::default().fg(theme.faded)))
 }
 
 fn bar(theme: Theme, selected: bool) -> Span<'static> {
     Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent))
 }
 
-/// Line one: the kind as a chip, the title, the badge. Line two, dim: number, author, age, size.
-fn comfortable(app: &App, mr: &QueueMr, selected: bool, width: usize) -> Vec<Line<'static>> {
+/// The line under an unfolded stack's row joins its MRs to it.
+fn indent_span(theme: Theme, indent: usize) -> Option<Span<'static>> {
+    (indent > 0).then(|| Span::styled(format!("{:<indent$}", "│"), Style::default().fg(theme.faded)))
+}
+
+/// Line one: the kind as a chip, the title, then Jev's mark and the badge at the right edge.
+/// Line two, all faded: who, the number, the size when it fits, and the age at the right edge.
+fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
     let (kind, rest) = conventional(&mr.title);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
-    let mark = app.triaged().then(|| mark_span(app, app.mark(mr)));
-    let badge = app.badge(mr).map(|b| badge_span(app, b));
-    let used = BAR_W + mark_w(app) + chip.as_ref().map_or(0, Span::width) + 2;
+    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.badge(mr));
+    let used = BAR_W + indent + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
     let title = truncate(rest, width.saturating_sub(used));
     let pad = width.saturating_sub(used + title.width()) + 1;
     let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
     let mut first = vec![bar(theme, selected)];
-    first.extend(mark);
+    first.extend(indent_span(theme, indent));
     first.extend(chip);
     first.extend([Span::styled(title, title_style), Span::raw(" ".repeat(pad))]);
-    first.extend(badge);
+    first.extend(tail);
+    let (meta, number_at) = meta(app, mr, width.saturating_sub(BAR_W + indent));
     let mut second = vec![bar(theme, selected)];
-    second.extend(meta(app, mr, width.saturating_sub(BAR_W)));
-    vec![Line::from(first), Line::from(second)]
+    second.extend(indent_span(theme, indent));
+    second.extend(meta);
+    let link = RowLink { line: 1, x: (BAR_W + indent + number_at) as u16, text: number_of(app, mr), url: mr.web_url.clone() };
+    (vec![Line::from(first), Line::from(second)], Some(link))
 }
 
-/// `!1788 · loic · 2d · +120 −4`, and the host when the queue mixes several. When the pane is
-/// too narrow, the host goes first, then the size, then the author shortens.
-fn meta(app: &App, mr: &QueueMr, room: usize) -> Vec<Span<'static>> {
-    let theme = app.theme;
-    let dim = Style::default().fg(theme.faded);
-    let number = format!("{}{}", app.hosts.kind_of(&mr.key()).sigil(), mr.number);
+/// `romain · !1797 · +7 −5` then the age flush right, one faded colour so the eye goes from
+/// title to title. The size, then the host, drop first when the pane is narrow. Also where the
+/// number starts, for its link.
+fn meta(app: &App, mr: &QueueMr, room: usize) -> (Vec<Span<'static>>, usize) {
+    let dim = Style::default().fg(app.theme.faded);
+    let who = short_name(&mr.author);
+    let number = number_of(app, mr);
     let age = short_age((app.today - mr.updated_at).to_std().unwrap_or_default());
-    let size = format!("+{} −{}", mr.additions, mr.deletions);
-    let host = app.host_tag(mr).unwrap_or_default();
-    let base = number.width() + " · ".width() * 2 + age.width();
-    let with = |extra: &str| if extra.is_empty() { 0 } else { " · ".width() + extra.width() };
-    let fits = |parts: usize| base + mr.author.width().min(MIN_AUTHOR) + parts <= room;
-    let show_size = fits(with(&size));
-    let show_host = show_size && fits(with(&size) + with(&host));
-    let tail = with(if show_size { &size } else { "" }) + with(if show_host { &host } else { "" });
-    let author = truncate(&mr.author, room.saturating_sub(base + tail).max(1));
-    let mut spans = vec![Span::styled(number, Style::default().fg(theme.muted)), Span::styled(format!(" · {author} · {age}"), dim)];
-    if show_size {
-        spans.extend([
-            Span::styled(" · ", dim),
-            Span::styled(format!("+{}", mr.additions), Style::default().fg(theme.success)),
-            Span::styled(format!(" −{}", mr.deletions), Style::default().fg(theme.danger)),
-        ]);
-    }
-    if show_host && !host.is_empty() {
-        spans.push(Span::styled(format!(" · {host}"), dim));
-    }
-    spans
+    let host = app.host_tag(mr).map(|h| format!(" · {h}")).unwrap_or_default();
+    let size = format!(" · +{} −{}", mr.additions, mr.deletions);
+    let base = number.width() + 3 + 1 + age.width();
+    let who = truncate(who, room.saturating_sub(base).max(1));
+    let left = |extra: &str| who.width() + 3 + number.width() + extra.width();
+    let host = if left(&host) + 1 + age.width() <= room { host } else { String::new() };
+    let size = if left(&(host.clone() + &size)) + 1 + age.width() <= room { size } else { String::new() };
+    let text = format!("{who} · {number}{host}{size}");
+    let pad = room.saturating_sub(text.width() + age.width());
+    let number_at = who.width() + 3;
+    (vec![Span::styled(text, dim), Span::styled(format!("{}{age}", " ".repeat(pad)), dim)], number_at)
 }
 
-/// One line per MR: `!iid title`, the host when mixed, the badge.
-fn compact(app: &App, mr: &QueueMr, selected: bool, width: usize) -> Line<'static> {
+fn number_of(app: &App, mr: &QueueMr) -> String {
+    format!("{}{}", app.hosts.kind_of(&mr.key()).sigil(), mr.number)
+}
+
+/// One line per MR: `!iid title`, the host when mixed, Jev's mark and the badge.
+fn compact(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
-    let badge = app.badge(mr).map(|b| badge_span(app, b));
-    let mark = app.triaged().then(|| mark_span(app, app.mark(mr)));
-    let iid = format!("{}{} ", app.hosts.kind_of(&mr.key()).sigil(), mr.number);
+    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.badge(mr));
+    let iid = format!("{} ", number_of(app, mr));
     let tag = app.host_tag(mr).map(|t| format!("{t} "));
     let tag_w = tag.as_ref().map_or(0, |t| t.width());
-    let room = width.saturating_sub(BAR_W + mark_w(app) + iid.width() + tag_w + 2);
+    let room = width.saturating_sub(BAR_W + indent + iid.width() + tag_w + tail_w(&tail) + 1);
     let title = truncate(&mr.title, room);
     let pad = room.saturating_sub(title.width()) + 1;
     let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
     let mut spans = vec![bar(theme, selected)];
-    spans.extend(mark);
-    spans.extend([Span::styled(iid, Style::default().fg(theme.muted)), Span::styled(title, title_style), Span::raw(" ".repeat(pad))]);
+    spans.extend(indent_span(theme, indent));
+    spans.extend([
+        Span::styled(iid.clone(), Style::default().fg(theme.muted)),
+        Span::styled(title, title_style),
+        Span::raw(" ".repeat(pad)),
+    ]);
     spans.extend(tag.map(|t| Span::styled(t, Style::default().fg(theme.faded))));
-    spans.extend(badge);
-    Line::from(spans)
+    spans.extend(tail);
+    let link = RowLink { line: 0, x: (BAR_W + indent) as u16, text: iid.trim_end().to_owned(), url: mr.web_url.clone() };
+    (vec![Line::from(spans)], Some(link))
+}
+
+/// A folded stack as one row: `▸ feat read shared PDFs` then `romain · 7 MRs` with the newest
+/// age. Unfolded, `▾`, and its MRs follow indented.
+fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: usize) -> Vec<Line<'static>> {
+    let theme = app.theme;
+    let dim = Style::default().fg(theme.faded);
+    let Some(base) = mrs.first() else { return vec![] };
+    let fold = Span::styled(if open { "▾ " } else { "▸ " }, Style::default().fg(theme.muted));
+    let (kind, title) = stack_title(mrs);
+    let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
+    let tail = right_marks(app, None, app.stack_badge(mrs));
+    let who = short_name(&base.author);
+    let count = format!("{} MRs", mrs.len());
+    let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
+    match app.queue_layout {
+        QueueLayout::Comfortable => {
+            let used = BAR_W + 2 + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
+            let title = truncate(&title, width.saturating_sub(used));
+            let pad = width.saturating_sub(used + title.width()) + 1;
+            let mut first = vec![bar(theme, selected), fold];
+            first.extend(chip);
+            first.extend([Span::styled(title, title_style), Span::raw(" ".repeat(pad))]);
+            first.extend(tail);
+            let newest = mrs.iter().map(|mr| mr.updated_at).max().unwrap_or(base.updated_at);
+            let age = short_age((app.today - newest).to_std().unwrap_or_default());
+            let room = width.saturating_sub(BAR_W + 2);
+            let text = format!("{who} · {count} · stack");
+            let pad = room.saturating_sub(text.width() + age.width());
+            let second = vec![
+                bar(theme, selected),
+                Span::raw("  "),
+                Span::styled(text, dim),
+                Span::styled(format!("{}{age}", " ".repeat(pad)), dim),
+            ];
+            vec![Line::from(first), Line::from(second)]
+        }
+        QueueLayout::Compact => {
+            let head = format!("{who} · {count} · ");
+            let room = width.saturating_sub(BAR_W + 2 + head.width() + tail_w(&tail) + 1);
+            let title = truncate(&title, room);
+            let pad = room.saturating_sub(title.width()) + 1;
+            let mut spans =
+                vec![bar(theme, selected), fold, Span::styled(head, dim), Span::styled(title, title_style), Span::raw(" ".repeat(pad))];
+            spans.extend(tail);
+            vec![Line::from(spans)]
+        }
+    }
+}
+
+/// What a stack is about: the words its titles share when they share two or more, else the
+/// base MR's title. The kind chip shows when every MR has the same one.
+fn stack_title<'m>(mrs: &[&'m QueueMr]) -> (Option<&'m str>, String) {
+    let parts: Vec<(Option<&str>, &str)> = mrs.iter().map(|mr| conventional(&mr.title)).collect();
+    let kind = parts.first().and_then(|(k, _)| *k).filter(|k| parts.iter().all(|(other, _)| *other == Some(*k)));
+    let words: Vec<Vec<&str>> = parts.iter().map(|(_, rest)| rest.split_whitespace().collect()).collect();
+    let shared = words.first().map_or(0, |first| (0..first.len()).take_while(|&i| words.iter().all(|w| w.get(i) == first.get(i))).count());
+    let title = match (shared, words.first()) {
+        (2.., Some(first)) => first[..shared].join(" "),
+        _ => parts.first().map_or_else(String::new, |(_, rest)| (*rest).to_owned()),
+    };
+    (kind, title)
+}
+
+/// `romain.courtois` is `romain`: the handle up to its first `.`, `_` or `-`, the rest being a
+/// surname or a company suffix the eye does not need.
+pub fn short_name(author: &str) -> &str {
+    match author.split(['.', '_', '-']).next() {
+        Some(first) if !first.is_empty() => first,
+        _ => author,
+    }
+}
+
+/// Jev's mark (two cells when Jev is on) then the badge, flush right, so titles keep one width.
+fn right_marks(app: &App, mark: Option<Mark>, badge: Option<Badge>) -> Vec<Span<'static>> {
+    let mut spans = vec![];
+    if app.triaged() {
+        spans.push(mark_span(app, mark));
+    }
+    spans.push(badge.map_or_else(|| Span::raw(" "), |b| badge_span(app, b)));
+    spans
+}
+
+fn tail_w(tail: &[Span<'_>]) -> usize {
+    tail.iter().map(Span::width).sum()
 }
 
 /// `feat(notion): sync users` is `feat` and `sync users`; a draft prefix goes, since the row's
@@ -219,11 +325,6 @@ fn kind_colour(theme: Theme, kind: &str) -> Color {
         "perf" => theme.warn,
         _ => theme.muted,
     }
-}
-
-/// Jev's mark takes two cells when Jev is on, so titles stay aligned whether a row has one or not.
-fn mark_w(app: &App) -> usize {
-    if app.triaged() { 2 } else { 0 }
 }
 
 /// The activity dot breathes: bright one second, faded the next.
@@ -286,6 +387,43 @@ mod tests {
         for (title, kind, rest) in cases {
             assert_eq!(conventional(title), (kind, rest), "{title}");
         }
+    }
+
+    #[test]
+    fn a_handle_shortens_to_its_first_part() {
+        let cases = [
+            ("romain.courtois", "romain"),
+            ("cyrille_enroll", "cyrille"),
+            ("adumoulin-enroll", "adumoulin"),
+            ("vivien11", "vivien11"),
+            ("nina", "nina"),
+            ("_hidden", "_hidden"),
+            (".dot", ".dot"),
+            ("", ""),
+        ];
+        for (handle, short) in cases {
+            assert_eq!(short_name(handle), short, "{handle}");
+        }
+    }
+
+    fn titled(titles: &[&str]) -> Vec<QueueMr> {
+        let seed: QueueMr =
+            serde_json::from_value(serde_json::json!({"number": 1, "project": "a/b", "title": "", "draft": false, "web_url": "",
+                "updated_at": "2026-09-01T00:00:00Z", "created_at": "2026-09-01T00:00:00Z", "source_branch": "", "target_branch": "",
+                "conflicts": false, "author": "nina", "author_name": "Nina", "approved": false, "approved_by": [], "reviewers": [],
+                "pipeline": null, "additions": 0, "deletions": 0, "files": 0, "unresolved": 0, "labels": [], "notes": 0}))
+            .unwrap();
+        titles.iter().map(|t| QueueMr { title: (*t).to_owned(), ..seed.clone() }).collect()
+    }
+
+    #[test]
+    fn a_stack_is_named_by_the_words_its_titles_share_else_by_its_base() {
+        let shared = titled(&["feat: read shared PDFs from the drive", "feat: read shared PDFs page by page"]);
+        let refs: Vec<&QueueMr> = shared.iter().collect();
+        assert_eq!(stack_title(&refs), (Some("feat"), "read shared PDFs".to_owned()));
+        let apart = titled(&["feat: store the page", "fix: label PDFs"]);
+        let refs: Vec<&QueueMr> = apart.iter().collect();
+        assert_eq!(stack_title(&refs), (None, "store the page".to_owned()), "one shared word is not a name; mixed kinds show no chip");
     }
 
     #[test]
