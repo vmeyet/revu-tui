@@ -5,16 +5,27 @@ use std::path::Path;
 
 const OLD_NAME: &str = "gitlabmr";
 
-/// Moves the old config and cache directories to their new names, once.
-/// Never overwrites: when both exist, the new one wins and the old one stays for the user to delete.
+/// Moves what earlier versions left elsewhere, once: the config from the OS folder (under either
+/// name) to `~/.config/revu`, the cache from its old name. Never overwrites: when both exist,
+/// the new one wins and the old one stays for the user to delete.
 pub fn move_dirs() {
-    for base in [dirs::config_dir(), dirs::cache_dir()].into_iter().flatten() {
-        let _ = move_dir(&base.join(OLD_NAME), &base.join(crate::auth::SERVICE));
+    let config = crate::config::dir();
+    for old in dirs::config_dir().into_iter().flat_map(|os| [os.join(crate::auth::SERVICE), os.join(OLD_NAME)]) {
+        let _ = move_dir(&old, &config);
+    }
+    if let Some(cache) = dirs::cache_dir() {
+        let _ = move_dir(&cache.join(OLD_NAME), &cache.join(crate::auth::SERVICE));
     }
 }
 
 fn move_dir(old: &Path, new: &Path) -> std::io::Result<()> {
-    if old.is_dir() && !new.exists() { std::fs::rename(old, new) } else { Ok(()) }
+    if old == new || !old.is_dir() || new.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = new.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(old, new)
 }
 
 /// The keychain under the current name, falling back to the old one: a token found there is
@@ -92,5 +103,18 @@ mod tests {
         std::fs::create_dir(&old).unwrap();
         move_dir(&old, &new).unwrap();
         assert!(old.exists(), "an old directory next to a new one is left alone");
+    }
+
+    #[test]
+    fn a_directory_moves_into_a_parent_that_does_not_exist_yet() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join("Library/Application Support/revu");
+        let new = root.path().join(".config/revu");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("config.toml"), "").unwrap();
+        move_dir(&old, &new).unwrap();
+        assert!(new.join("config.toml").exists() && !old.exists());
+        move_dir(&new, &new).unwrap();
+        assert!(new.exists(), "moving a directory onto itself is a no-op");
     }
 }
