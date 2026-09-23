@@ -130,7 +130,7 @@ Work:
 - `anthropic.rs` streaming client, prompt caching, refusal handling.
 - Context builder with its budget rules.
 - `a` menu, answer pane, `c` to draft from an answer, cache.
-- `revu ai login <provider>`, `[ai]` config, `:ai off`.
+- `revu ai login <provider>`, `[ai]` config, `:ai off`, `:ai on`.
 
 Acceptance: `a s` on an open MR streams a summary in under two seconds to the first token; a second `a e` on the same file reports cache reads in the debug log.
 

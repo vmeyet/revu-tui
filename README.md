@@ -184,7 +184,7 @@ Answers are cached per MR state, so an unchanged MR is never asked twice; if Jev
 
 With `[ai.anthropic]` on, `a` asks Claude about what is under the cursor and the answer streams into the right pane.
 The same question on the same diff comes back from the cache at once (`R` asks again); the footer names the model and the tokens the prompt cache saved.
-`:ai off` stops every AI call until revu starts again.
+`:ai off` stops every AI call; `:ai on` brings back what the config switched on.
 
 ## Development
 

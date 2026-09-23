@@ -61,6 +61,8 @@ pub enum Command {
     View(String),
     /// `:ai off`: no more AI calls this session.
     AiOff,
+    /// `:ai on`: the providers the config switched on answer again.
+    AiOn,
     /// `:ask <question>`: a free question to Claude about what is under the cursor.
     Ask(String),
     Help,
@@ -76,7 +78,7 @@ pub const VERBS: [(&str, &str); 11] = [
     ("set", "change and save a setting: :set theme=nord"),
     ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     ("ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
-    ("ai", "switch AI off for this session: :ai off"),
+    ("ai", "switch AI off or back on for this session: :ai off, :ai on"),
     ("help", "show the keys"),
     ("quit", "leave"),
 ];
@@ -98,7 +100,8 @@ pub fn parse(line: &str) -> Result<Command, String> {
         }
         "view" | "v" => Ok(Command::View(rest.to_owned())),
         "ai" if rest == "off" => Ok(Command::AiOff),
-        "ai" => Err(":ai off stops AI calls for this session; the config switches them on".into()),
+        "ai" if rest == "on" => Ok(Command::AiOn),
+        "ai" => Err(":ai off or :ai on; the config says which providers exist".into()),
         "ask" if rest.is_empty() => Err(":ask needs a question".into()),
         "ask" => Ok(Command::Ask(rest.to_owned())),
         "help" | "h" | "?" => Ok(Command::Help),

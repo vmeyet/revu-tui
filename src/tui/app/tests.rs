@@ -1762,7 +1762,7 @@ fn a_c_asks_for_the_concern_then_drafts_a_comment_about_it() {
     assert!(press(&mut app, "ac").is_empty());
     assert_eq!(app.input_label(), "comment about");
     let (_, request, _) = the_ask(&type_text(&mut app, "naming"));
-    assert!(request.turns[0].text.ends_with("about: naming"));
+    assert!(request.turns[0].text.contains("about: naming."));
     assert!(matches!(answer(&app).target, super::ask::Target::Lines(_)));
 }
 
@@ -1782,6 +1782,28 @@ fn a_t_summarises_the_thread_and_its_answer_becomes_a_reply() {
     });
     press(&mut app, "c");
     assert!(matches!(app.input, Some(Input::Reply { .. })), "{:?}", app.input);
+}
+
+#[test]
+fn ai_on_brings_back_what_the_config_switched_on() {
+    let mut app = asking();
+    app.ai_configured = (true, app.ask_model.clone());
+    press(&mut app, ":ai off");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!((app.ask_model.is_some(), app.triage), (false, false));
+    press(&mut app, ":ai on");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!((app.ask_model.is_some(), app.triage), (true, true));
+}
+
+#[test]
+fn ai_on_without_a_provider_in_the_config_says_so() {
+    let mut app = asking();
+    app.ai_configured = (false, None);
+    press(&mut app, ":ai on");
+    app.handle_key(code(KeyCode::Enter));
+    assert!(app.ask_model.is_some(), "nothing changes");
+    assert!(app.live_toast().unwrap().text.contains("revu ai status"));
 }
 
 #[test]
