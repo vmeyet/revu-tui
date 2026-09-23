@@ -145,6 +145,14 @@ pub mod keys {
         }
     }
 
+    /// How the queue of one scope is sorted and grouped, next to its list.
+    pub fn queue_view(project: Option<&str>) -> String {
+        match project {
+            Some(path) => format!("queue_view.{}.json", slug(path)),
+            None => "queue_view.json".into(),
+        }
+    }
+
     /// The directory of one MR: its project path with `+` for `/`, then its number.
     fn dir(key: &MrKey) -> String {
         format!("mr/{}/{}", slug(&key.project), key.number)

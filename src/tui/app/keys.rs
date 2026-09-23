@@ -129,6 +129,8 @@ impl App {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(-HALF_PAGE),
             KeyCode::Char('/') => self.filtering = true,
             KeyCode::Char('*') => return self.toggle_scope(),
+            KeyCode::Char('s') => return self.sort_queue(),
+            KeyCode::Char('S') => return self.group_queue(),
             KeyCode::Char('i') => self.brief = self.selected_mr().map(|mr| Brief::of_queue(mr, self.hosts.kind_of(&mr.key()).sigil())),
             KeyCode::Enter => return self.open_selected(),
             KeyCode::Char('r') => return self.refresh_queue(),

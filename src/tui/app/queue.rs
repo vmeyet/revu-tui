@@ -1,3 +1,4 @@
+use super::order::{self, Order};
 use super::{Action, App};
 use crate::forge::{QueueMr, Sections};
 
@@ -13,38 +14,90 @@ pub enum Badge {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum QueueRow<'a> {
-    Section { name: &'static str, count: usize, open: bool },
+    Section {
+        name: &'static str,
+        count: usize,
+        open: bool,
+    },
+    /// One author's MRs follow, when `S` groups Open and Drafts.
+    Author {
+        name: &'a str,
+        count: usize,
+    },
     Mr(&'a QueueMr),
 }
 
+/// The sections `S` splits by author: the ones that pile up other people's MRs.
+const GROUPED: [&str; 2] = ["OPEN", "DRAFTS"];
+
 impl App {
-    /// Sections and their rows after the filter; a section with no match still shows its header.
+    /// Sections and their rows after the filter, in the chosen order; a section with no match
+    /// still shows its header, except the ones that only exist when they hold something.
     pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
-        let groups: [(&'static str, &Vec<QueueMr>); 5] = [
+        let groups: [(&'static str, &Vec<QueueMr>); 6] = [
             ("TO REVIEW", &sections.to_review),
             ("MINE", &sections.mine),
             ("WATCHING", &sections.watching),
             ("OPEN", &sections.open),
+            ("DRAFTS", &sections.drafts),
             ("DONE", &sections.done),
         ];
         let mut rows = Vec::new();
         for (name, mrs) in groups {
             let open = !self.closed_sections.contains(name);
-            let mut matching: Vec<&QueueMr> = mrs.iter().filter(|mr| self.matches_filter(mr)).collect();
-            if name == "TO REVIEW" && self.triaged() {
-                matching.sort_by(|a, b| self.urgency(b).total_cmp(&self.urgency(a)));
-            }
-            let unscoped = name == "OPEN" && mrs.is_empty();
-            if unscoped || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
+            let matching = self.in_order(name, mrs.iter().filter(|mr| self.matches_filter(mr)).collect());
+            let only_when_filled = matches!(name, "OPEN" | "DRAFTS") && mrs.is_empty();
+            if only_when_filled || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;
             }
             rows.push(QueueRow::Section { name, count: matching.len(), open });
-            if open {
+            if !open {
+                continue;
+            }
+            if self.queue_view.by_author && GROUPED.contains(&name) {
+                for (author, group) in order::by_author(matching) {
+                    rows.push(QueueRow::Author { name: author, count: group.len() });
+                    rows.extend(group.into_iter().map(QueueRow::Mr));
+                }
+            } else {
                 rows.extend(matching.into_iter().map(QueueRow::Mr));
             }
         }
         rows
+    }
+
+    /// A section's rows in the chosen order. With the default order Jev still ranks To review.
+    fn in_order<'m>(&self, section: &str, rows: Vec<&'m QueueMr>) -> Vec<&'m QueueMr> {
+        let order = match self.queue_view.order {
+            Order::Updated if section == "TO REVIEW" && self.triaged() => Order::Urgency,
+            order => order,
+        };
+        order::sorted(rows, order, |mr| self.urgency(mr))
+    }
+
+    /// `s`: the next order; `S`: grouping by author on or off. Both are remembered for this scope.
+    pub(super) fn sort_queue(&mut self) -> Vec<Action> {
+        self.queue_view.order = self.queue_view.order.next(self.triaged());
+        self.save_queue_view()
+    }
+
+    pub(super) fn group_queue(&mut self) -> Vec<Action> {
+        self.queue_view.by_author = !self.queue_view.by_author;
+        self.save_queue_view()
+    }
+
+    fn save_queue_view(&mut self) -> Vec<Action> {
+        self.queue_settle();
+        vec![Action::SaveQueueView { scope: self.scope(), view: self.queue_view }]
+    }
+
+    /// What the queue title says after the scope: the order, and grouping.
+    pub fn queue_view_label(&self) -> Option<String> {
+        let order = self.queue_view.order.label();
+        let grouped = self.queue_view.by_author.then_some("grouped by author");
+        let words: Vec<&str> = order.into_iter().chain(grouped).collect();
+        (!words.is_empty()).then(|| words.join(", "))
     }
 
     pub fn queue_is_empty(&self) -> bool {
@@ -130,7 +183,7 @@ impl App {
     fn section_here(&self) -> Option<&'static str> {
         self.queue_rows().into_iter().take(self.queue_selected + 1).rev().find_map(|row| match row {
             QueueRow::Section { name, .. } => Some(name),
-            QueueRow::Mr(_) => None,
+            QueueRow::Author { .. } | QueueRow::Mr(_) => None,
         })
     }
 
@@ -143,10 +196,11 @@ impl App {
             self.closed_sections.remove(name);
         } else {
             self.closed_sections.insert(name);
-            if let Some(header) = self.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: n, .. } if *n == name)) {
-                self.queue_selected = header;
-            }
         }
+        if let Some(header) = self.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: n, .. } if *n == name)) {
+            self.queue_selected = header;
+        }
+        self.queue_move(0);
     }
 
     pub(super) fn open_selected(&mut self) -> Vec<Action> {

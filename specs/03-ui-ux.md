@@ -59,9 +59,14 @@ Focus moves with `h` `l` between the three panes, like slack-tui's channels, mes
 Inside a GitLab checkout the queue shows that project only, named in the pane title (`Queue · acme/widgets`); outside one, or after `*`, it shows every project (`Queue · all`).
 Each scope has its own cache file, so a switch paints the right list at once and never the other one.
 Scoped, an `OPEN` section lists the project's other open MRs, between `WATCHING` and `DONE`.
+Other people's draft MRs leave `WATCHING` and `OPEN` for a `DRAFTS` section, folded by default, between `OPEN` and `DONE`; my own drafts stay in `MINE` with `D`, and a review request on a draft stays in `TO REVIEW`.
+The host tag (`gitlab`, `github`) shows only when rows from several hosts share the queue, never inside a checkout.
 
 Sections are uppercase `faded` headers with a right aligned count.
-A row is `▎` bar when selected, `!iid` in `muted`, the title, then one badge column at the right edge:
+A row takes two lines (`[tui] queue = "comfortable"`, the default).
+Line one: the `▎` bar when selected, Jev's mark, the conventional-commit kind as a coloured chip (`feat` success, `fix` danger, `docs` link, `refactor`/`tech` mention, `test` code, `perf` warn, the rest muted; the scope is dropped), the rest of the title, the badge.
+Line two, dim: `!iid · author · age · +adds −dels`, then the host when mixed; when the pane is narrow the host goes first, then the size, then the author shortens.
+`[tui] queue = "compact"` keeps one line: `!iid` in `muted`, the title, then one badge column at the right edge:
 
 | Badge | Means |
 |---|---|
@@ -72,8 +77,9 @@ A row is `▎` bar when selected, `!iid` in `muted`, the title, then one badge c
 | `◆` warn | waits on me (Jev `waits_on_me`, M4) |
 | `D` muted | draft MR |
 
-Rows sort by `updated_at` desc inside a section; M4 adds the Jev urgency sort in `To review`.
-Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done` starts folded. The cursor skips the headers of open sections and stops on folded ones, their only row.
+Rows sort by `updated_at` desc inside a section, and Jev ranks `To review` by urgency when it is on.
+`s` cycles the order inside every section: updated (default), oldest first (created), by author, smallest first (additions + deletions), most urgent first (only when Jev is on). `S` groups `OPEN` and `DRAFTS` by author with a faded sub-header per author. The pane title says both (`Queue · acme/widgets · by author, grouped by author`), and both are remembered per scope in the cache (`queue_view.<scope>.json`).
+Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done` and `Drafts` start folded. The cursor skips the headers of open sections and author headers, stops on folded ones, their only row, and opening a section puts it on its first MR.
 Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
 `i` opens the description modal: `!iid title`, author, branches, labels, then the description as light markdown; `j k ^d ^u g G` scroll, `o` opens the MR, `esc` `i` `q` close.
 The filter `/` narrows rows by title, author and iid, live.

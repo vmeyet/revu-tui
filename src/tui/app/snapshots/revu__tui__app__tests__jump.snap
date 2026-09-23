@@ -4,15 +4,15 @@ expression: "render(&mut app, 100, 20)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
 │   TO REVIEW       ╭ jump ────────────────────────────────────────────────────╮2 files · ✓ succes │
-│ ▎ !42 feat: charge│ › ch▌                                                    │                   │
-│   MINE            │ ▎· src/pay/charge.rs                                     │                   │
-│   !41 fix: flaky c│  ◆ !42 feat: charge cards at checkout                    │                   │
-│   WATCHING        │  ◆ !41 fix: flaky cache test                             │2  ◆1 · 1 outdated │
-│   !35 infra: new r│                                                          │                   │
-│   DONE ▸          │                                                          │d, amount: Money)… │
-│                   │                                                          │;                  │
-│                   │                                                          │key(idempotency_k… │
-│                   │                                                          │st();              │
+│ ▎ feat charge card│ › ch▌                                                    │                   │
+│ ▎ !42 · omar · 2h │ ▎· src/pay/charge.rs                                     │                   │
+│   MINE            │  ◆ !42 feat: charge cards at checkout                    │                   │
+│   fix flaky cache │  ◆ !41 fix: flaky cache test                             │2  ◆1 · 1 outdated │
+│   !41 · nina · 4h │                                                          │                   │
+│   WATCHING        │                                                          │d, amount: Money)… │
+│   infra: new runne│                                                          │;                  │
+│   !35 · omar · 2d │                                                          │key(idempotency_k… │
+│   DONE ▸          │                                                          │st();              │
 │                   │                                                          │ge(amount).await?; │
 │                   │                                                          │                   │
 │                   │                                                          │                   │

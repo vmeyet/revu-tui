@@ -52,6 +52,7 @@ pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, th
         ("MINE", &sections.mine),
         ("WATCHING", &sections.watching),
         ("OPEN", &sections.open),
+        ("DRAFTS", &sections.drafts),
         ("DONE", &sections.done),
     ];
     let mixed = sections.mixes_hosts();
@@ -146,7 +147,8 @@ mod tests {
         let sections = fixture::queue_in(include_str!("../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets").sections(&[]);
         let out = text(&Hosts::one("gitlab.com", crate::forge::Kind::GitLab), &sections, Some("acme/widgets"), Theme::plain(), Utc::now());
         assert!(out.starts_with("acme/widgets · --all for every project\n\nTO REVIEW 1\n"), "{out}");
-        let open = out.find("\nOPEN 2\n").expect("an OPEN section");
-        assert!(out.find("\nMINE 1\n").unwrap() < open && open < out.find("\nDONE 1\n").unwrap(), "{out}");
+        let open = out.find("\nOPEN 1\n").expect("an OPEN section");
+        let drafts = out.find("\nDRAFTS 1\n").expect("a DRAFTS section");
+        assert!(out.find("\nMINE 1\n").unwrap() < open && open < drafts && drafts < out.find("\nDONE 1\n").unwrap(), "{out}");
     }
 }

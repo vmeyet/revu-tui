@@ -76,6 +76,8 @@ pub struct Sections {
     pub watching: Vec<QueueMr>,
     /// The rest of the project's open MRs, only when the queue is scoped to one.
     pub open: Vec<QueueMr>,
+    /// Other people's draft MRs from Watching and Open: not ready, so out of the way.
+    pub drafts: Vec<QueueMr>,
     pub done: Vec<QueueMr>,
 }
 
@@ -88,9 +90,12 @@ impl Sections {
             merged.mine.extend(part.mine);
             merged.watching.extend(part.watching);
             merged.open.extend(part.open);
+            merged.drafts.extend(part.drafts);
             merged.done.extend(part.done);
         }
-        for section in [&mut merged.to_review, &mut merged.mine, &mut merged.watching, &mut merged.open, &mut merged.done] {
+        for section in
+            [&mut merged.to_review, &mut merged.mine, &mut merged.watching, &mut merged.open, &mut merged.drafts, &mut merged.done]
+        {
             section.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
         }
         merged
@@ -100,7 +105,7 @@ impl Sections {
 impl Sections {
     /// Every row, section after section.
     pub fn all(&self) -> impl Iterator<Item = &QueueMr> {
-        [&self.to_review, &self.mine, &self.watching, &self.open, &self.done].into_iter().flatten()
+        [&self.to_review, &self.mine, &self.watching, &self.open, &self.drafts, &self.done].into_iter().flatten()
     }
 
     /// Rows from more than one host share the queue: only then does a row need its host's tag.
@@ -145,9 +150,13 @@ impl Queue {
         let mine: Vec<QueueMr> = self.authored.iter().filter(in_scope).cloned().collect();
         let mut seen: HashSet<MrKey> = to_review.iter().chain(&mine).chain(&done).map(QueueMr::key).collect();
         let labelled = self.review_requested.iter().chain(&self.authored).filter(|mr| mr.labels.iter().any(|l| watch_labels.contains(l)));
-        let watching = self.assigned.iter().chain(labelled).filter(in_scope).filter(|mr| seen.insert(mr.key())).cloned().collect();
-        let open = self.open.iter().filter(|mr| seen.insert(mr.key())).cloned().collect();
-        Sections { to_review, mine, watching, open, done }
+        let watching: Vec<QueueMr> =
+            self.assigned.iter().chain(labelled).filter(in_scope).filter(|mr| seen.insert(mr.key())).cloned().collect();
+        let open: Vec<QueueMr> = self.open.iter().filter(|mr| seen.insert(mr.key())).cloned().collect();
+        let (watching_drafts, watching): (Vec<_>, Vec<_>) = watching.into_iter().partition(|mr| mr.draft);
+        let (open_drafts, open): (Vec<_>, Vec<_>) = open.into_iter().partition(|mr| mr.draft);
+        let drafts = watching_drafts.into_iter().chain(open_drafts).collect();
+        Sections { to_review, mine, watching, open, drafts, done }
     }
 }
 

@@ -3,16 +3,16 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 160, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────╮╭ charge.rs:-13 · 1 thread ────────────────────────────────────╮
-│   TO REVIEW                  1 ││  omar · feat/checkout → m… · 2h · +5 −3 · 2 files · ✓ succ ││ ▎✓ resolved                                                  │
-│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 unresolved               ││ ▎you · 2h                                                    │
-│   MINE                       1 ││  ◆ 1 on the MR  enter opens                                ││ ▎Why drop the plain client?                                  │
-│   !41 fix: flaky cache test  D ││                                                            ││                                                              │
-│   WATCHING                   1 ││  ▾ src/pay/charge.rs                +4 −2  ◆1 · 1 outdated ││                                                              │
-│   !35 infra: new runner      ⠋ ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                ││                                                              │
-│   DONE ▸                     1 ││      12   12  pub async fn charge(card: &Card, amount: Mo… ││                                                              │
-│                                ││ ▎✓   13      -    let client = Client::new();              ││                                                              │
-│                                ││           13 +    let client = Client::with_key(idempoten… ││                                                              │
-│                                ││           14 +    let attempt = Attempt::first();          ││                                                              │
+│   TO REVIEW                1   ││  omar · feat/checkout → m… · 2h · +5 −3 · 2 files · ✓ succ ││ ▎✓ resolved                                                  │
+│ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved               ││ ▎you · 2h                                                    │
+│ ▎ !42 · omar · 2h · +412 −38   ││  ◆ 1 on the MR  enter opens                                ││ ▎Why drop the plain client?                                  │
+│   MINE                     1   ││                                                            ││                                                              │
+│   fix flaky cache test       D ││  ▾ src/pay/charge.rs                +4 −2  ◆1 · 1 outdated ││                                                              │
+│   !41 · nina · 4h · +3 −1      ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                ││                                                              │
+│   WATCHING                 1   ││      12   12  pub async fn charge(card: &Card, amount: Mo… ││                                                              │
+│   infra: new runner          ⠋ ││ ▎✓   13      -    let client = Client::new();              ││                                                              │
+│   !35 · omar · 2d · +0 −0      ││           13 +    let client = Client::with_key(idempoten… ││                                                              │
+│   DONE ▸                   1   ││           14 +    let attempt = Attempt::first();          ││                                                              │
 │                                ││      14   15      let response = client.charge(amount).aw… ││                                                              │
 │                                ││      15   16      audit::record(&response);                ││                                                              │
 │                                ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                 ││                                                              │

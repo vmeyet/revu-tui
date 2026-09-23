@@ -358,7 +358,9 @@ mod tests {
         assert_eq!(iids(&sections.mine), [41]);
         assert_eq!(iids(&sections.done), [40]);
         assert_eq!(iids(&sections.watching), [] as [u64; 0], "the assigned MR lives in another project");
-        assert_eq!(iids(&sections.open), [50, 51], "42 is already in To review");
+        assert_eq!(iids(&sections.open), [51], "42 is already in To review");
+        assert_eq!(iids(&sections.drafts), [50], "someone else's draft waits apart");
+        assert_eq!(iids(&sections.mine), [41], "my own draft stays with mine");
     }
 
     #[test]

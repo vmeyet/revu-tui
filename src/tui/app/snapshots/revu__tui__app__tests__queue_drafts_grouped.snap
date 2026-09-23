@@ -1,19 +1,23 @@
 ---
 source: src/tui/app/tests.rs
-expression: "render(&mut app, 120, 20)"
+expression: "render(&mut app, 120, 24)"
 ---
-╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
+╭ Queue · acme/widgets · groupe… ╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
 │   TO REVIEW                1   ││                                                                                    │
-│ ▎ feat charge cards at chec…   ││                                                                                    │
-│ ▎ !42 · omar · 2h · +412 −38   ││                                                                                    │
+│   feat charge cards at chec…   ││                                                                                    │
+│   !42 · omar · 2h · +412 −38   ││                                                                                    │
 │   MINE                     1   ││                                                                                    │
 │   fix flaky cache test       D ││                                                                                    │
 │   !41 · nina · 4h · +3 −1      ││                                                                                    │
 │   WATCHING                 0   ││                                                                                    │
-│   OPEN                     1   ││                                open a merge request                                │
-│   chore bump deps              ││                                to read its diff here                               │
-│   !51 · lea · 2h · +412 −38    ││                                                                                    │
-│   DRAFTS ▸                 1   ││                                                                                    │
+│   OPEN                     1   ││                                                                                    │
+│     lea                    1   ││                                                                                    │
+│   chore bump deps              ││                                open a merge request                                │
+│   !51 · lea · 2h · +412 −38    ││                                to read its diff here                               │
+│   DRAFTS                   1   ││                                                                                    │
+│     omar                   1   ││                                                                                    │
+│ ▎ feat refunds               D ││                                                                                    │
+│ ▎ !50 · omar · 2h · +412 −38   ││                                                                                    │
 │   DONE ▸                   1   ││                                                                                    │
 │                                ││                                                                                    │
 │                                ││                                                                                    │

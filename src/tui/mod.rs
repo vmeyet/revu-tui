@@ -12,6 +12,7 @@ mod jump;
 mod palette;
 mod pipeline_view;
 mod publish_view;
+mod queue_view;
 mod screen;
 mod theme;
 mod thread_view;
@@ -29,7 +30,7 @@ use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
-use app::{Action, App, Failure, Incoming, Input, Part, Settings};
+use app::{Action, App, Failure, Incoming, Input, Part, QueueView, Settings};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
@@ -116,6 +117,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         hosts,
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
         pictures,
+        queue_layout: ctx.config.tui.queue,
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();
@@ -239,11 +241,25 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
         };
         match action {
             Action::LoadQueue { scope, from_cache } => {
+                if from_cache {
+                    let wanted = scope.clone();
+                    if let Some(view) =
+                        backend.off(move |b| b.cache.read::<QueueView>(&keys::queue_view(wanted.as_deref()))).await.ok().flatten()
+                    {
+                        send(Incoming::QueueView { scope: scope.clone(), view });
+                    }
+                }
                 let wanted = scope.clone();
                 if let Some(cached) = backend.off(move |b| b.cached_queue(wanted)).await.ok().flatten().filter(|_| from_cache) {
                     send(cached);
                 }
                 send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, &e)));
+            }
+            Action::SaveQueueView { scope, view } => {
+                let saved = backend.off(move |b| b.cache.write(&keys::queue_view(scope.as_deref()), &view)).await;
+                if let Err(e) = saved.and_then(|written| written) {
+                    send(failed(Failure::Local, &e));
+                }
             }
             Action::Open(key) => {
                 let wanted = key.clone();
@@ -572,9 +588,8 @@ impl Backend {
     }
 
     fn opened_at(&self, sections: &Sections) -> HashMap<MrKey, DateTime<Utc>> {
-        [&sections.to_review, &sections.mine, &sections.watching, &sections.open, &sections.done]
-            .into_iter()
-            .flatten()
+        sections
+            .all()
             .filter_map(|mr| {
                 let key = mr.key();
                 let state: MrState = self.cache_of(&key).read(&keys::state(&key))?;
