@@ -164,7 +164,6 @@ impl App {
 
     /// Every MR the queue holds, whatever the filter and the folded sections.
     fn queue_mrs(&self) -> Vec<&crate::forge::QueueMr> {
-        let Some(s) = &self.sections else { return vec![] };
-        s.to_review.iter().chain(&s.mine).chain(&s.watching).chain(&s.open).chain(&s.done).collect()
+        self.sections.iter().flat_map(crate::forge::Sections::all).collect()
     }
 }

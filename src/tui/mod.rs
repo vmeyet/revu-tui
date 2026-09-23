@@ -588,9 +588,8 @@ impl Backend {
     }
 
     fn opened_at(&self, sections: &Sections) -> HashMap<MrKey, DateTime<Utc>> {
-        [&sections.to_review, &sections.mine, &sections.watching, &sections.open, &sections.done]
-            .into_iter()
-            .flatten()
+        sections
+            .all()
             .filter_map(|mr| {
                 let key = mr.key();
                 let state: MrState = self.cache_of(&key).read(&keys::state(&key))?;

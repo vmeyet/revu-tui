@@ -2174,3 +2174,13 @@ fn others_drafts_wait_folded_in_their_own_section_and_mine_stay_mine() {
     assert!(open < drafts && drafts < done);
     assert!(rows.iter().any(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 41 && mr.draft)), "my own draft is in Mine");
 }
+
+#[test]
+fn go_and_the_jump_reach_a_draft_folded_away_in_drafts() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    assert_eq!(app.completions_for("go "), ["!42", "!41", "!51", "!50", "!40"]);
+    press(&mut app, ":");
+    type_text(&mut app, "go !50");
+    assert_eq!(app.opening, Some(MrKey::new("acme/widgets", 50)));
+}
