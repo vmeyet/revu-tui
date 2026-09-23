@@ -1,44 +1,105 @@
-//! The `:` command line and the `ctrl-k` jump: typing a verb or a name instead of walking to it.
+//! The palette: MRs, the open MR's files, or commands, typed instead of walked to.
 use super::{Action, App, Focus};
 use crate::forge::MrKey;
+use crate::fuzzy;
+use crate::query::Query;
 use crate::review::Row;
-use crate::tui::jump::{Candidate, Jump, Target};
-use crate::tui::palette::{self, Command, Palette, Slot};
+use crate::tui::palette::{self, Candidate, Command, MAX_SHOWN, Mode, Palette, Slot, Target};
 use crate::tui::theme::Theme;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
-    pub(super) fn open_palette(&mut self) {
-        self.palette = Some(Palette::with_history(self.palette_history.clone()));
+    /// `ctrl-k` and `⌘k` open it on MRs, `:` and `⌘⇧k` on commands.
+    pub(super) fn open_palette(&mut self, mode: Mode) {
+        self.palette = Some(Palette::new(mode, self.palette_history.clone()));
     }
 
     pub(super) fn handle_palette_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(mut palette) = self.palette.take() else { return vec![] };
-        let candidates = self.completions_for(&palette.input);
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => return vec![],
-            KeyCode::Backspace if palette.input.is_empty() => return vec![],
-            KeyCode::Backspace => palette.backspace(),
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => palette.type_char(c),
-            KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, key.code == KeyCode::BackTab),
-            KeyCode::Right | KeyCode::End => palette.accept(&candidates),
-            KeyCode::Up => palette.history_up(),
-            KeyCode::Down => palette.history_down(),
-            KeyCode::Enter => {
-                let line = palette.submit();
-                self.palette_history.clone_from(&palette.history);
-                return match palette::parse(&line) {
-                    Ok(command) => self.run_command(command),
-                    Err(reason) => {
-                        self.warn(reason);
-                        vec![]
-                    }
-                };
-            }
+            KeyCode::Backspace if !palette.backspace() => return vec![],
+            KeyCode::Backspace => {}
+            KeyCode::Enter => return self.palette_enter(palette),
+            KeyCode::Char('n') if ctrl => palette.move_by(1, self.palette_candidates(&palette).len()),
+            KeyCode::Char('p') if ctrl => palette.move_by(-1, self.palette_candidates(&palette).len()),
+            KeyCode::Char(c) if !ctrl => palette.type_char(c),
+            _ if palette.mode == Mode::Commands => self.command_key(&mut palette, key.code),
+            KeyCode::Down | KeyCode::Tab => palette.move_by(1, self.palette_candidates(&palette).len()),
+            KeyCode::Up | KeyCode::BackTab => palette.move_by(-1, self.palette_candidates(&palette).len()),
             _ => {}
         }
         self.palette = Some(palette);
         vec![]
+    }
+
+    /// Tab completes, → takes the ghost, ↑ ↓ walk the history: a shell's command line.
+    fn command_key(&self, palette: &mut Palette, code: KeyCode) {
+        let candidates = self.completions_for(&palette.input);
+        match code {
+            KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, code == KeyCode::BackTab),
+            KeyCode::Right | KeyCode::End => palette.accept(&candidates),
+            KeyCode::Up => palette.history_up(),
+            KeyCode::Down => palette.history_down(),
+            _ => {}
+        }
+    }
+
+    fn palette_enter(&mut self, mut palette: Palette) -> Vec<Action> {
+        if palette.mode == Mode::Commands {
+            let line = palette.submit();
+            self.palette_history.clone_from(&palette.history);
+            return match palette::parse(&line) {
+                Ok(command) => self.run_command(command),
+                Err(reason) => {
+                    self.warn(reason);
+                    vec![]
+                }
+            };
+        }
+        match self.palette_candidates(&palette).into_iter().nth(palette.selected).map(|c| c.target) {
+            Some(Target::Mr(key)) => self.open_key(key),
+            Some(Target::File(index)) => {
+                self.focus = Focus::Review;
+                self.review_jump_to(|row| matches!(row, Row::File { index: i, .. } if *i == index));
+                vec![]
+            }
+            None => vec![],
+        }
+    }
+
+    /// The rows the palette lists for what is typed: MRs the query keeps, ranked by its free
+    /// words; the open MR's files by fuzzy path; nothing for commands, which complete in place.
+    pub fn palette_candidates(&self, palette: &Palette) -> Vec<Candidate> {
+        match palette.mode {
+            Mode::Mrs => self.mr_candidates(&palette.input),
+            Mode::Files => self.file_candidates(&palette.input),
+            Mode::Commands => vec![],
+        }
+    }
+
+    fn mr_candidates(&self, typed: &str) -> Vec<Candidate> {
+        let query = Query::lenient(typed);
+        let kept = self.queue_mrs().into_iter().filter(|mr| query.keeps(mr, &self.me)).map(|mr| {
+            let sigil = self.hosts.kind_of(&mr.key()).sigil();
+            let candidate =
+                Candidate { label: format!("{sigil}{} {}", mr.number, mr.title), detail: mr.author.clone(), target: Target::Mr(mr.key()) };
+            (format!("{} {} {}", candidate.label, mr.author, mr.source_branch), candidate)
+        });
+        let words = query.words.join(" ");
+        let ranked: Vec<Candidate> =
+            if words.is_empty() { kept.map(|(_, c)| c).collect() } else { fuzzy::rank(&words, kept).into_iter().map(|(_, c)| c).collect() };
+        ranked.into_iter().take(MAX_SHOWN).collect()
+    }
+
+    fn file_candidates(&self, typed: &str) -> Vec<Candidate> {
+        let files = self.open.iter().flat_map(|open| {
+            open.review.files.iter().enumerate().map(|(i, file)| {
+                (file.new_path.clone(), Candidate { label: file.new_path.clone(), detail: String::new(), target: Target::File(i) })
+            })
+        });
+        fuzzy::rank(typed, files).into_iter().map(|(_, c)| c).take(MAX_SHOWN).collect()
     }
 
     /// What the token under the cursor completes to, for tab and the ghost text.
@@ -121,45 +182,6 @@ impl App {
         self.theme = self.ground.map_or(theme, |ground| theme.with_ground(ground));
         self.toast(format!("theme {}, saved", theme.name));
         vec![Action::SaveTheme(theme.name.to_owned())]
-    }
-
-    pub(super) fn open_jump(&mut self) {
-        let files = self.open.iter().flat_map(|open| {
-            open.review.files.iter().enumerate().map(|(i, file)| Candidate { label: file.new_path.clone(), target: Target::File(i) })
-        });
-        let mrs = self.queue_mrs().into_iter().map(|mr| {
-            let sigil = self.hosts.kind_of(&mr.key()).sigil();
-            Candidate { label: format!("{sigil}{} {}", mr.number, mr.title), target: Target::Mr(mr.key()) }
-        });
-        self.jump = Some(Jump::new(files.chain(mrs).collect()));
-    }
-
-    pub(super) fn handle_jump_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        let Some(mut jump) = self.jump.take() else { return vec![] };
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        match key.code {
-            KeyCode::Esc => return vec![],
-            KeyCode::Down | KeyCode::Tab => jump.move_by(1),
-            KeyCode::Up | KeyCode::BackTab => jump.move_by(-1),
-            KeyCode::Char('n') if ctrl => jump.move_by(1),
-            KeyCode::Char('p') if ctrl => jump.move_by(-1),
-            KeyCode::Backspace => jump.backspace(),
-            KeyCode::Char(c) if !ctrl => jump.type_char(c),
-            KeyCode::Enter => {
-                return match jump.chosen().map(|c| c.target) {
-                    Some(Target::Mr(key)) => self.open_key(key),
-                    Some(Target::File(index)) => {
-                        self.focus = Focus::Review;
-                        self.review_jump_to(|row| matches!(row, Row::File { index: i, .. } if *i == index));
-                        vec![]
-                    }
-                    None => vec![],
-                };
-            }
-            _ => {}
-        }
-        self.jump = Some(jump);
-        vec![]
     }
 
     /// Every MR the queue holds, whatever the filter and the folded sections.

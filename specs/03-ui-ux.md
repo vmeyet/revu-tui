@@ -274,13 +274,30 @@ A two-key binding holds its first key; a second key that matches nothing hands b
 The config fails to load, naming the file, on an unknown action, a key that does not parse, a key revu already reads (named with its action), and two actions on one key or on keys where one starts the other.
 `?` shows the keys in effect: with the preset, `]n [n` reads `)n (n`, and a bound key comes first (`N )n (n`).
 
-### Command line (`:`)
+### Search: `ctrl-k`, `⌘k`, `:`
+
+One popup finds MRs, files and commands, picked by the first character as VS Code does.
+Nothing typed searches the queue's MRs; `/` first searches the open MR's files; `>` first runs commands, and `⌫` on an empty line steps back to MRs.
+`ctrl-k` and `⌘k` open it on MRs; `:` and `⌘⇧k` (where the terminal tells it apart) open it on commands.
+The prompt shows the mode (`›`, `/`, `>`) and the title says what it searches.
+
+MR terms (`src/query.rs`, shared with the queue filter and saved views): free words, `"quoted words"`, `@author` (`@me`; several are any of them), `!42` or `#42` (several are any of them), `~label` (`~"two words"`; several are all of them).
+The terms keep MRs, then the free words rank them fuzzily; `@loic ~infra slack` finds Loïc's infra MRs about slack.
+
+### Queue filter and saved views
+
+`/` in the queue filters in place with the same terms, plus `draft:yes|no`, `size:small|large` (up to 100 changed lines, from 500), `is:failing` (pipeline failed or conflicts) and `is:mine`; free words must appear in the title, author, project or branch.
+A term still being typed (`draft:`, a lone `@`) is left out until it makes sense.
+The active filter shows in the queue title; `esc` clears it.
+`[queue.views]` saves filters by name; `'` then a view's first letter, or `1`–`9` in name order, applies one, and the title names the view.
+While `'` waits, the status line lists the views. Views are checked when the config loads: a term that does not parse, or two views starting with the same letter, fail loudly with the file and the view named.
+
+### Command line (`>` in the search)
 
 Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:help`, `:quit`.
 Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `↑` `↓` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:ai off`, `:ask <text>`, `:cache clear`.
 
-`ctrl-k` (or `⌘k` where the terminal forwards it) opens one fuzzy list: the open MR's files first, then every MR of the queue.
 
 ## Notifications (M5)
 

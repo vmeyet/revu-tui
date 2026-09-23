@@ -2,17 +2,18 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 56 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 57 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ feat charge │        g G  first, last                                          │               │
 │ ▎ !42 · omar ·│      ^d ^u  half page                                            │               │
 │   MINE        │        h l  pane to the left; open the MR, or a marked line's th │               │
 │   fix flaky ca│      enter  open the MR, a marked line's threads, or toggle the  │               │
 │   !41 · nina ·│      esc x  close the right pane; esc again goes back to the que │               │
-│   WATCHING    │          /  filter the queue                                     │               │
-│   infra: new r│          *  in the queue: this repo only, or every project       │               │
-│   !35 · omar ·│          s  in the queue: next order (updated, oldest, author, s │               │
-│   DONE ▸      │          S  in the queue: group Open and Drafts by author        │               │
+│   WATCHING    │          /  filter the queue: words @author !42 ~label draft:no  │               │
+│   infra: new r│      ' 1-9  in the queue: a saved view by its first letter, or i │               │
+│   !35 · omar ·│          *  in the queue: this repo only, or every project       │               │
+│   DONE ▸      │          s  in the queue: next order (updated, oldest, author, s │               │
+│               │          S  in the queue: group Open and Drafts by author        │               │
 │               │          i  the MR description                                   │               │
 │               │          r  refresh                                              │               │
 │               │          o  open in the browser (the line, in a diff)            │               │
@@ -39,6 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │          c  new thread on the line: a compose box opens in the p │               │
 │               │          C  on a changed pair: comment on the old side           │               │
 │               │          V  select lines: c comments on them, y copies them      │               │
-│               │          E  write the comment in $EDITOR                         │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

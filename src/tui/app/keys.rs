@@ -24,9 +24,6 @@ impl App {
         if self.palette.is_some() {
             return self.handle_palette_key(key);
         }
-        if self.jump.is_some() {
-            return self.handle_jump_key(key);
-        }
         if self.publish.is_some() {
             return self.handle_publish_key(key);
         }
@@ -50,12 +47,12 @@ impl App {
         if let Some(prefix) = self.pending.take() {
             return self.handle_prefixed(prefix, key);
         }
-        if key.code == KeyCode::Char('k') && key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER) {
-            self.open_jump();
+        if let Some(mode) = palette_key(key) {
+            self.open_palette(mode);
             return vec![];
         }
         match key.code {
-            KeyCode::Char(':') => self.open_palette(),
+            KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
@@ -106,13 +103,18 @@ impl App {
         match key.code {
             KeyCode::Esc => {
                 self.filter.clear();
+                self.view = None;
                 self.filtering = false;
             }
             KeyCode::Enter => self.filtering = false,
             KeyCode::Backspace => {
                 self.filter.pop();
+                self.view = None;
             }
-            KeyCode::Char(c) => self.filter.push(c),
+            KeyCode::Char(c) => {
+                self.filter.push(c);
+                self.view = None;
+            }
             _ => {}
         }
         self.queue_settle();
@@ -130,6 +132,8 @@ impl App {
             KeyCode::Char('/') => self.filtering = true,
             KeyCode::Char('*') => return self.toggle_scope(),
             KeyCode::Char('s') => return self.sort_queue(),
+            KeyCode::Char('\'') => self.pending = Some('\''),
+            KeyCode::Char(c @ '1'..='9') => self.apply_view(c),
             KeyCode::Char('S') => return self.group_queue(),
             KeyCode::Char('i') => self.brief = self.selected_mr().map(|mr| Brief::of_queue(mr, self.hosts.kind_of(&mr.key()).sigil())),
             KeyCode::Enter => return self.open_selected(),
@@ -138,6 +142,7 @@ impl App {
             KeyCode::Char('y') => return self.selected_mr().map(|mr| vec![Action::Yank(mr.web_url.clone())]).unwrap_or_default(),
             KeyCode::Esc if !self.filter.is_empty() => {
                 self.filter.clear();
+                self.view = None;
                 self.queue_settle();
             }
             _ => {}
@@ -231,6 +236,10 @@ impl App {
 
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
+        if prefix == '\'' {
+            self.apply_view(c);
+            return vec![];
+        }
         if self.focus == Focus::Queue {
             match (prefix, c) {
                 ('z', 'o') => self.fold_section(Some(true)),
@@ -311,6 +320,19 @@ fn help_scroll(scroll: usize, key: KeyEvent) -> Option<usize> {
         KeyCode::Char('u') if ctrl => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
         KeyCode::Char('g') => Some(0),
         KeyCode::Char('G') => Some(last),
+        _ => None,
+    }
+}
+
+/// `ctrl-k` and `⌘k` open the palette on MRs; `⌘⇧k`, where the terminal tells it apart, on commands.
+fn palette_key(key: KeyEvent) -> Option<crate::tui::palette::Mode> {
+    use crate::tui::palette::Mode;
+    let k = matches!(key.code, KeyCode::Char('k' | 'K'));
+    let command = key.modifiers.contains(KeyModifiers::SUPER);
+    match (k, command, key.modifiers.contains(KeyModifiers::SHIFT) || key.code == KeyCode::Char('K')) {
+        (true, true, true) => Some(Mode::Commands),
+        (true, true, false) => Some(Mode::Mrs),
+        _ if key.code == KeyCode::Char('k') && key.modifiers.contains(KeyModifiers::CONTROL) => Some(Mode::Mrs),
         _ => None,
     }
 }

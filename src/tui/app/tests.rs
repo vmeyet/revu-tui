@@ -50,6 +50,7 @@ fn settings() -> Settings {
         keymap: crate::keymap::Keymap::default(),
         pictures: None,
         queue_layout: crate::config::QueueLayout::default(),
+        views: vec![],
     }
 }
 
@@ -1248,29 +1249,78 @@ fn tab_completes_verbs_mrs_and_themes_and_up_recalls() {
     assert_eq!(app.palette.as_ref().unwrap().input, "help");
 }
 
-#[test]
-fn ctrl_k_jumps_to_a_file_of_the_open_mr_or_to_another_mr() {
-    let mut app = with_review();
-    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
-    let first_file = app.jump.as_ref().unwrap().matches()[0].clone();
-    assert!(matches!(first_file.target, crate::tui::jump::Target::File(0)), "files of the open MR come first");
-    app.handle_key(code(KeyCode::Enter));
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
-    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
-    press(&mut app, "!41");
-    let actions = app.handle_key(code(KeyCode::Enter));
-    assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41));
+fn ctrl_k() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL)
+}
+
+fn palette_labels(app: &App) -> Vec<String> {
+    app.palette_candidates(app.palette.as_ref().unwrap()).into_iter().map(|c| c.label).collect()
 }
 
 #[test]
-fn snapshot_palette_and_jump() {
+fn ctrl_k_finds_mrs_and_a_slash_finds_the_open_mrs_files() {
+    let mut app = with_review();
+    app.handle_key(ctrl_k());
+    assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
+    press(&mut app, "!41");
+    assert_eq!(palette_labels(&app), ["!41 fix: flaky cache test"]);
+    let actions = app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41));
+    let mut app = with_review();
+    app.handle_key(ctrl_k());
+    press(&mut app, "/");
+    assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Files);
+    assert!(matches!(app.palette_candidates(app.palette.as_ref().unwrap())[0].target, crate::tui::palette::Target::File(0)));
+    app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
+}
+
+#[test]
+fn the_mr_search_combines_author_label_number_and_words() {
+    let mut app = with_queue();
+    app.handle_key(ctrl_k());
+    press(&mut app, "@omar");
+    assert_eq!(palette_labels(&app), ["!42 feat: charge cards at checkout", "!35 infra: new runner"]);
+    press(&mut app, " run");
+    assert_eq!(palette_labels(&app), ["!35 infra: new runner"], "words rank what the terms keep");
+    app.handle_key(code(KeyCode::Esc));
+    app.handle_key(ctrl_k());
+    press(&mut app, "@nobody");
+    assert!(palette_labels(&app).is_empty());
+}
+
+#[test]
+fn greater_than_switches_to_commands_and_backspace_comes_back_to_mrs() {
+    let mut app = with_queue();
+    app.handle_key(ctrl_k());
+    press(&mut app, ">he");
+    assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Commands);
+    app.handle_key(code(KeyCode::Tab));
+    assert_eq!(app.palette.as_ref().unwrap().input, "help ");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.help, Some(0));
+    press(&mut app, "x");
+    app.handle_key(ctrl_k());
+    press(&mut app, ">");
+    app.handle_key(code(KeyCode::Backspace));
+    assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
+    app.handle_key(code(KeyCode::Backspace));
+    assert!(app.palette.is_none(), "a backspace on nothing closes it");
+}
+
+#[test]
+fn snapshot_palette_in_each_mode() {
     let mut app = with_review();
     press(&mut app, ":pu");
-    insta::assert_snapshot!("palette_ghost", render(&mut app, 100, 20));
+    insta::assert_snapshot!("palette_commands", render(&mut app, 100, 24));
     app.handle_key(code(KeyCode::Esc));
-    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
-    press(&mut app, "ch");
-    insta::assert_snapshot!("jump", render(&mut app, 100, 20));
+    app.handle_key(ctrl_k());
+    press(&mut app, "@omar");
+    insta::assert_snapshot!("palette_mrs", render(&mut app, 100, 24));
+    app.handle_key(code(KeyCode::Esc));
+    app.handle_key(ctrl_k());
+    press(&mut app, "/ch");
+    insta::assert_snapshot!("palette_files", render(&mut app, 100, 24));
 }
 
 #[test]
@@ -2093,10 +2143,17 @@ fn the_merged_queue_tags_each_row_with_its_host() {
 }
 
 #[test]
-fn command_k_opens_the_jump_like_ctrl_k() {
+fn command_k_opens_the_palette_on_mrs_and_command_shift_k_on_commands() {
+    use crate::tui::palette::Mode;
     let mut app = with_queue();
     app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER));
-    assert!(app.jump.is_some());
+    assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Mrs));
+    app.handle_key(code(KeyCode::Esc));
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER | KeyModifiers::SHIFT));
+    assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Commands));
+    app.handle_key(code(KeyCode::Esc));
+    press(&mut app, ":");
+    assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Commands), "`:` keeps its muscle memory");
 }
 
 #[test]
@@ -2183,4 +2240,49 @@ fn go_and_the_jump_reach_a_draft_folded_away_in_drafts() {
     press(&mut app, ":");
     type_text(&mut app, "go !50");
     assert_eq!(app.opening, Some(MrKey::new("acme/widgets", 50)));
+}
+
+#[test]
+fn the_queue_filter_speaks_the_query_language_and_esc_clears_it() {
+    let mut app = with_queue();
+    press(&mut app, "/");
+    type_text(&mut app, "@omar is:failing");
+    let shown: Vec<u64> = app.queue_rows().iter().filter_map(|r| if let QueueRow::Mr(mr) = r { Some(mr.number) } else { None }).collect();
+    assert!(shown.iter().all(|n| [42, 35].contains(n)), "{shown:?}");
+    assert_eq!(app.queue_view_label().as_deref(), Some("@omar is:failing"));
+    press(&mut app, "/");
+    app.handle_key(code(KeyCode::Esc));
+    assert!(app.filter.is_empty() && app.queue_view_label().is_none());
+}
+
+fn with_views() -> App {
+    let views = vec![("backlog".to_owned(), "size:small".to_owned()), ("omar".to_owned(), "@omar".to_owned())];
+    let mut app = App::new(Settings { views, ..settings() });
+    app.today = today();
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    app
+}
+
+#[test]
+fn quote_then_a_letter_or_a_digit_applies_a_saved_view() {
+    let mut app = with_views();
+    press(&mut app, "'");
+    assert!(app.views_hint().contains("b backlog · o omar"), "{}", app.views_hint());
+    press(&mut app, "o");
+    assert_eq!((app.filter.as_str(), app.view.as_deref()), ("@omar", Some("omar")));
+    assert_eq!(app.queue_view_label().as_deref(), Some("omar"), "the title names the view");
+    press(&mut app, "1");
+    assert_eq!(app.view.as_deref(), Some("backlog"), "digits take views in name order");
+    press(&mut app, "'z");
+    assert!(app.live_toast().unwrap().text.contains("no view on `z`"));
+    app.handle_key(code(KeyCode::Esc));
+    assert!(app.filter.is_empty() && app.view.is_none());
+}
+
+#[test]
+fn the_status_line_lists_views_while_quote_waits() {
+    let mut app = with_views();
+    press(&mut app, "'");
+    let screen = render(&mut app, 100, 12);
+    assert!(screen.lines().last().unwrap().contains("' views: b backlog · o omar"), "{screen}");
 }

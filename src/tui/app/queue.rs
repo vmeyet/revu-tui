@@ -92,11 +92,13 @@ impl App {
         vec![Action::SaveQueueView { scope: self.scope(), view: self.queue_view }]
     }
 
-    /// What the queue title says after the scope: the order, and grouping.
+    /// What the queue title says after the scope: the filter (or the view that set it), the
+    /// order, and grouping.
     pub fn queue_view_label(&self) -> Option<String> {
-        let order = self.queue_view.order.label();
-        let grouped = self.queue_view.by_author.then_some("grouped by author");
-        let words: Vec<&str> = order.into_iter().chain(grouped).collect();
+        let filter = if self.filter.is_empty() { None } else { Some(self.view.clone().unwrap_or_else(|| self.filter.clone())) };
+        let order = self.queue_view.order.label().map(str::to_owned);
+        let grouped = self.queue_view.by_author.then(|| "grouped by author".to_owned());
+        let words: Vec<String> = filter.into_iter().chain(order).chain(grouped).collect();
         (!words.is_empty()).then(|| words.join(", "))
     }
 
@@ -105,11 +107,30 @@ impl App {
     }
 
     fn matches_filter(&self, mr: &QueueMr) -> bool {
-        if self.filter.is_empty() {
-            return true;
-        }
-        let needle = self.filter.to_lowercase();
-        mr.title.to_lowercase().contains(&needle) || mr.author.to_lowercase().contains(&needle) || mr.number.to_string().contains(&needle)
+        self.filter.is_empty() || crate::query::Query::lenient(&self.filter).matches(mr, &self.me)
+    }
+
+    /// `'` then a letter, or a digit: the saved view of that first letter, or that rank, filters
+    /// the queue; the title names it. Anything else leaves the queue as it was.
+    pub(super) fn apply_view(&mut self, pick: char) {
+        let chosen = match pick.to_digit(10) {
+            Some(rank @ 1..=9) => self.views.get(rank as usize - 1),
+            _ => self.views.iter().find(|(name, _)| name.chars().next().is_some_and(|c| c.eq_ignore_ascii_case(&pick))),
+        };
+        let Some((name, query)) = chosen.cloned() else {
+            self.toast(format!("no view on `{pick}` · [queue.views] in the config"));
+            return;
+        };
+        self.filter = query;
+        self.view = Some(name);
+        self.queue_settle();
+    }
+
+    /// What `'` offers while it waits for its letter: `f front · b backlog`.
+    pub fn views_hint(&self) -> String {
+        let listed: Vec<String> =
+            self.views.iter().filter_map(|(name, _)| name.chars().next().map(|first| format!("{first} {name}"))).collect();
+        if listed.is_empty() { "no saved views: [queue.views] in the config".into() } else { format!("views: {}", listed.join(" · ")) }
     }
 
     pub fn selected_mr(&self) -> Option<&QueueMr> {

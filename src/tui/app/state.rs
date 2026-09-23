@@ -36,6 +36,8 @@ pub struct Settings {
     pub pictures: Option<ratatui_image::picker::Picker>,
     /// `[tui] queue`: two-line rows, or one.
     pub queue_layout: crate::config::QueueLayout,
+    /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
+    pub views: Vec<(String, String)>,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -61,6 +63,9 @@ pub struct App {
     pub queue_selected: usize,
     pub queue_scroll: usize,
     pub filter: String,
+    /// The saved view the filter came from, named in the queue title until the filter changes.
+    pub view: Option<String>,
+    pub views: Vec<(String, String)>,
     /// The filter row is taking keys.
     pub filtering: bool,
     /// Queue sections folded to their header; Done starts folded.
@@ -115,7 +120,6 @@ pub struct App {
     pub help: Option<usize>,
     pub palette: Option<crate::tui::palette::Palette>,
     pub palette_history: Vec<String>,
-    pub jump: Option<crate::tui::jump::Jump>,
     pub ground: Option<u32>,
     /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off for good once it fails.
     pub triage: bool,
@@ -158,6 +162,8 @@ impl App {
             queue_selected: 0,
             queue_scroll: 0,
             filter: String::new(),
+            view: None,
+            views: settings.views,
             filtering: false,
             header_folded: false,
             wrap: false,
@@ -190,7 +196,6 @@ impl App {
             help: None,
             palette: None,
             palette_history: vec![],
-            jump: None,
             ground: settings.ground,
             triage: settings.triage,
             ask_model: settings.ask,
