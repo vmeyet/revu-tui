@@ -54,6 +54,7 @@ pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, th
         ("OPEN", &sections.open),
         ("DONE", &sections.done),
     ];
+    let mixed = sections.mixes_hosts();
     let filled: Vec<_> = groups.iter().filter(|(_, mrs)| !mrs.is_empty()).collect();
     if filled.is_empty() {
         return format!("{scope}{}\n", theme.paint("nothing open", Style::Dim));
@@ -62,16 +63,17 @@ pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, th
         .iter()
         .map(|(name, mrs)| {
             let header = format!("{} {}\n", theme.paint(name, Style::Bold), theme.paint(&mrs.len().to_string(), Style::Dim));
-            let rows: Vec<Vec<Cell>> = mrs.iter().map(|mr| row(hosts, mr, now)).collect();
+            let rows: Vec<Vec<Cell>> = mrs.iter().map(|mr| row(hosts, mr, mixed, now)).collect();
             format!("{header}{}\n", theme.table(&rows))
         })
         .collect();
     format!("{scope}{blocks}")
 }
 
-fn row(hosts: &Hosts, mr: &QueueMr, now: DateTime<Utc>) -> Vec<Cell> {
+fn row(hosts: &Hosts, mr: &QueueMr, mixed: bool, now: DateTime<Utc>) -> Vec<Cell> {
     let key = mr.key();
-    let project = hosts.tag(&key).map_or_else(|| mr.project.clone(), |tag| format!("{tag}:{}", mr.project));
+    let tag = hosts.tag(&key).filter(|_| mixed);
+    let project = tag.map_or_else(|| mr.project.clone(), |tag| format!("{tag}:{}", mr.project));
     let title = if mr.draft { format!("Draft: {}", mr.title) } else { mr.title.clone() };
     vec![
         cell(format!("  {}{}", hosts.kind_of(&key).sigil(), mr.number), Style::Accent),

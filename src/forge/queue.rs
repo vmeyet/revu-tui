@@ -97,6 +97,20 @@ impl Sections {
     }
 }
 
+impl Sections {
+    /// Every row, section after section.
+    pub fn all(&self) -> impl Iterator<Item = &QueueMr> {
+        [&self.to_review, &self.mine, &self.watching, &self.open, &self.done].into_iter().flatten()
+    }
+
+    /// Rows from more than one host share the queue: only then does a row need its host's tag.
+    /// A queue scoped to a checkout holds one host's rows even when several hosts are logged in.
+    pub fn mixes_hosts(&self) -> bool {
+        let mut hosts = self.all().map(|mr| mr.host.as_deref());
+        hosts.next().is_some_and(|first| hosts.any(|host| host != first))
+    }
+}
+
 impl QueueMr {
     pub fn my_state(&self, me: &str) -> Option<ReviewState> {
         self.reviewers.iter().find(|r| r.username == me).map(|r| r.state)
@@ -153,6 +167,15 @@ mod tests {
         let mr = &tagged.review_requested[0];
         assert_eq!(mr.key().host.as_deref(), Some("github.com"));
         assert_ne!(mr.key(), queue().review_requested[0].key(), "the same number on two hosts is two MRs");
+    }
+
+    #[test]
+    fn sections_mix_hosts_only_when_rows_come_from_two_of_them() {
+        let here = queue().sections(&[]);
+        assert!(!here.mixes_hosts());
+        assert!(!queue().on_host("github.com").sections(&[]).mixes_hosts(), "one other host alone is still one host");
+        assert!(Sections::merge(vec![here, queue().on_host("github.com").sections(&[])]).mixes_hosts());
+        assert!(!Sections::default().mixes_hosts());
     }
 
     #[test]

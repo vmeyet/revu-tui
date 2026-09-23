@@ -72,11 +72,9 @@ impl Hosts {
         key.host.as_deref().and_then(|h| self.others.iter().find(|(host, _)| host == h)).map_or(self.main.1, |(_, kind)| *kind)
     }
 
-    /// `gitlab`, `github`: the host's first name, only when rows from several hosts share the queue.
+    /// `gitlab`, `github`: the first name of the host `key` lives on. Callers show it only when
+    /// the rows on screen come from several hosts (`Sections::mixes_hosts`).
     pub fn tag(&self, key: &MrKey) -> Option<String> {
-        if self.others.is_empty() {
-            return None;
-        }
         let host = key.host.as_deref().unwrap_or(&self.main.0);
         host.split('.').next().map(str::to_owned)
     }
@@ -299,10 +297,10 @@ mod tests {
     }
 
     #[test]
-    fn hosts_say_which_forge_an_mr_lives_on_and_tag_rows_only_when_mixed() {
+    fn hosts_say_which_forge_an_mr_lives_on_and_name_its_host() {
         let alone = Hosts::one("gitlab.com", Kind::GitLab);
         let key = MrKey::new("acme/widgets", 42);
-        assert_eq!((alone.kind_of(&key), alone.tag(&key)), (Kind::GitLab, None));
+        assert_eq!((alone.kind_of(&key), alone.tag(&key).as_deref()), (Kind::GitLab, Some("gitlab")));
         let both = Hosts { others: vec![("github.com".into(), Kind::GitHub)], ..alone };
         let there = MrKey { host: Some("github.com".into()), ..key.clone() };
         assert_eq!((both.kind_of(&there), both.tag(&there).as_deref()), (Kind::GitHub, Some("github")));

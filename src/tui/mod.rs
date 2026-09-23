@@ -12,6 +12,7 @@ mod jump;
 mod palette;
 mod pipeline_view;
 mod publish_view;
+mod screen;
 mod theme;
 mod thread_view;
 mod tree_view;
@@ -117,13 +118,13 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         pictures,
     };
     let mut app = App::new(settings);
-    let mut terminal = ratatui::init();
-    let outcome = event_loop(&mut terminal, &mut app, &backend).await;
-    ratatui::restore();
+    let (mut terminal, screen) = screen::Screen::enter();
+    let outcome = event_loop(&mut terminal, &screen, &mut app, &backend).await;
+    screen.leave();
     outcome
 }
 
-async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, backend: &Backend) -> Result<()> {
+async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, app: &mut App, backend: &Backend) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Incoming>();
     let mut keys = Keys::new();
     let mut ticks = tokio::time::interval(TICK);
@@ -149,7 +150,7 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, back
         for action in actions {
             match action {
                 Action::Compose { input, draft } => {
-                    for follow_up in compose_inline(terminal, &mut keys, app, input, &draft) {
+                    for follow_up in compose_inline(terminal, screen, &mut keys, app, input, &draft) {
                         spawn(follow_up, backend, tx.clone());
                     }
                 }
@@ -157,22 +158,25 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, back
             }
         }
         if let Some(view) = app.take_view() {
-            view_inline(terminal, &mut keys, app, view);
+            view_inline(terminal, screen, &mut keys, app, view);
         }
     }
     Ok(())
 }
 
 /// The reader's program owns the terminal until it exits; the app, untouched, draws again after.
-fn view_inline(terminal: &mut ratatui::DefaultTerminal, keys: &mut Keys, app: &mut App, view: crate::open::View) {
-    keys.pause();
-    ratatui::restore();
-    let outcome = crate::open::run(&view.argv);
-    *terminal = ratatui::init();
-    keys.resume();
-    let _ = terminal.clear();
+fn view_inline(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, keys: &mut Keys, app: &mut App, view: crate::open::View) {
+    let outcome = lend(terminal, screen, keys, || crate::open::run(&view.argv));
     wake(app);
     app.apply(Incoming::Viewed { view, outcome });
+}
+
+/// Another program owns the terminal and its keys while `run` lasts.
+fn lend<T>(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, keys: &mut Keys, run: impl FnOnce() -> T) -> T {
+    keys.pause();
+    let outcome = screen.lend(terminal, run);
+    keys.resume();
+    outcome
 }
 
 /// The clock stood still while a program had the terminal: what comes next is timed from now.
@@ -182,13 +186,15 @@ fn wake(app: &mut App) {
 }
 
 /// The editor owns the terminal for a while; the answer goes through `apply` like any other.
-fn compose_inline(terminal: &mut ratatui::DefaultTerminal, keys: &mut Keys, app: &mut App, input: Input, draft: &str) -> Vec<Action> {
-    keys.pause();
-    ratatui::restore();
-    let edited = compose::edit(draft);
-    *terminal = ratatui::init();
-    keys.resume();
-    let _ = terminal.clear();
+fn compose_inline(
+    terminal: &mut ratatui::DefaultTerminal,
+    screen: &screen::Screen,
+    keys: &mut Keys,
+    app: &mut App,
+    input: Input,
+    draft: &str,
+) -> Vec<Action> {
+    let edited = lend(terminal, screen, keys, || compose::edit(draft));
     wake(app);
     match edited {
         Ok(text) => app.apply(Incoming::Composed { input, text }),

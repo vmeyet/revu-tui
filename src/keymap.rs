@@ -82,7 +82,12 @@ impl Key {
         Self { code: Code::Char(c), ctrl: false, alt: false }
     }
 
+    /// `None` for keys bindings cannot name, which pass through as they came: ⌘ and friends
+    /// among them, or ⌘K would reach the app as a plain `k`.
     fn of(event: KeyEvent) -> Option<Self> {
+        if event.modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::HYPER | KeyModifiers::META) {
+            return None;
+        }
         let code = match event.code {
             KeyCode::Char(c) => Code::Char(c),
             KeyCode::Tab => Code::Tab,
@@ -360,6 +365,13 @@ mod tests {
             Feed::Keys(events) => events.iter().map(|e| Key::of(*e).unwrap().label()).collect(),
             Feed::Hold(_) => "…".into(),
         }
+    }
+
+    #[test]
+    fn a_command_key_passes_through_with_its_modifier() {
+        let keymap = Keymap::new(&keys(Layout::Azerty, &[])).unwrap();
+        let cmd_k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER);
+        assert_eq!(keymap.feed(None, cmd_k), Feed::Keys(vec![cmd_k]));
     }
 
     #[test]

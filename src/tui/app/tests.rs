@@ -2052,3 +2052,40 @@ fn a_ready_picture_is_painted_in_the_pane_and_hidden_under_a_modal() {
     press(&mut app, "?");
     assert_eq!(painted(&render(&mut app, 150, 30)), 0, "a modal covers no picture");
 }
+
+fn two_hosts() -> crate::forge::Hosts {
+    crate::forge::Hosts { others: vec![("github.com".into(), Kind::GitHub)], ..crate::forge::Hosts::one("gitlab.com", Kind::GitLab) }
+}
+
+#[test]
+fn inside_a_checkout_rows_carry_no_host_tag_even_with_two_hosts_logged_in() {
+    let mut app = App::new(Settings { project: Some("acme/widgets".into()), hosts: two_hosts(), ..settings() });
+    app.today = today();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    let mr = app.sections.as_ref().unwrap().open[0].clone();
+    assert_eq!(app.host_tag(&mr), None);
+    let screen = render(&mut app, 120, 20);
+    assert!(!screen.contains("gitlab "), "{screen}");
+}
+
+#[test]
+fn the_merged_queue_tags_each_row_with_its_host() {
+    let mut app = App::new(Settings { hosts: two_hosts(), ..settings() });
+    app.today = today();
+    let mut merged = sections();
+    let mut there = merged.to_review[0].clone();
+    there.host = Some("github.com".into());
+    there.number = 7;
+    merged.mine.push(there.clone());
+    app.apply(queue_answer(None, merged, false));
+    assert_eq!(app.host_tag(&there).as_deref(), Some("github"));
+    let here = app.sections.as_ref().unwrap().to_review[0].clone();
+    assert_eq!(app.host_tag(&here).as_deref(), Some("gitlab"));
+}
+
+#[test]
+fn command_k_opens_the_jump_like_ctrl_k() {
+    let mut app = with_queue();
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER));
+    assert!(app.jump.is_some());
+}

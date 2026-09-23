@@ -211,7 +211,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `*` | queue: this checkout's project, or every project | M3 |
 | `i` | the MR description, in a modal | M3 |
 | `:` | command line | M3 |
-| `ctrl-k` | jump to an MR or a file | M3 |
+| `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
 | `zz` | reading mode (`z` is the fold prefix) | M3 |
 | `?` | help | M1 |
 | `q` | quit (`ctrl-c` always) | M1 |
