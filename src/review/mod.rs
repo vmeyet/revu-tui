@@ -188,6 +188,8 @@ pub struct Review {
     pub inline: InlineRule,
     /// Every changed line on its own row, `D` in the TUI.
     pub split: bool,
+    /// Lines that changed only in whitespace read as one quiet row, `W` in the TUI.
+    pub quiet_whitespace: bool,
 }
 
 impl Review {
@@ -196,7 +198,17 @@ impl Review {
         let threads = threads_of(discussions, &files);
         let metas: Vec<FileMeta> = files.iter().map(File::meta).collect();
         let fold = FoldState::initial(&metas, fold_globs);
-        Self { mr, files, threads, drafts: vec![], viewed: BTreeSet::new(), fold, inline: InlineRule::default(), split: false }
+        Self {
+            mr,
+            files,
+            threads,
+            drafts: vec![],
+            viewed: BTreeSet::new(),
+            fold,
+            inline: InlineRule::default(),
+            split: false,
+            quiet_whitespace: false,
+        }
     }
 
     pub fn with_inline(&self, inline: InlineRule) -> Self {
@@ -205,6 +217,10 @@ impl Review {
 
     pub fn with_split(&self, split: bool) -> Self {
         Self { split, ..self.clone() }
+    }
+
+    pub fn with_quiet_whitespace(&self, quiet_whitespace: bool) -> Self {
+        Self { quiet_whitespace, ..self.clone() }
     }
 
     pub fn with_fold(&self, fold: FoldState) -> Self {
@@ -295,7 +311,11 @@ impl Review {
             if !open {
                 continue;
             }
-            let pairs = if self.split { vec![] } else { words::inline_pairs(hunk, self.inline) };
+            let mut pairs = if self.split { vec![] } else { words::inline_pairs(hunk, self.inline) };
+            if self.quiet_whitespace {
+                let quiet: Vec<(usize, usize)> = words::whitespace_pairs(hunk).into_iter().filter(|pair| !pairs.contains(pair)).collect();
+                pairs.extend(quiet);
+            }
             for (line_index, line) in hunk.lines.iter().enumerate() {
                 if pairs.iter().any(|&(_, added)| added == line_index) {
                     continue;
@@ -544,5 +564,20 @@ pub(super) mod tests {
         assert_eq!(review.still_viewed(&saved), BTreeSet::from([path.clone()]));
         let moved = std::collections::BTreeMap::from([(path, "an older change".to_owned())]);
         assert!(review.still_viewed(&moved).is_empty(), "a file pushed to since is to read again");
+    }
+
+    #[test]
+    fn quiet_whitespace_pairs_a_reindented_line_even_when_split() {
+        let diff = crate::forge::DiffFile {
+            diff: "@@ -1 +1 @@\n-\tone();\n+    one();\n".into(),
+            new_path: "a.rs".into(),
+            old_path: "a.rs".into(),
+            ..Default::default()
+        };
+        let review = Review::new(review().mr, &[diff], vec![], &[]).with_split(true);
+        let lines = review.rows().iter().filter(|r| matches!(r, Row::Line { .. })).count();
+        assert_eq!(lines, 2, "split shows both lines");
+        let quiet = review.with_quiet_whitespace(true);
+        assert!(quiet.rows().iter().any(|r| matches!(r, Row::Pair { .. })), "W reads them as one row");
     }
 }

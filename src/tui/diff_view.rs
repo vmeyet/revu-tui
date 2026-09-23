@@ -2,7 +2,7 @@
 use super::app::{App, Focus, Open};
 use super::theme::Theme;
 use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
-use crate::diff::words::{Segment, segments};
+use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::Kind;
 use crate::review::{File, FileKind, Review, Row, Thread};
@@ -45,22 +45,75 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let today = app.today;
     let me = app.me.clone();
     let folded = app.header_folded;
+    let wrap = app.wrap;
     let Some(open) = app.open.as_mut() else { return };
     let header = if folded { vec![folded_header(open, theme)] } else { header_lines(open, theme, today, inner.width as usize) };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
     let height = body.height as usize;
-    open.scroll = settle_scroll(open.scroll, open.selected, height);
     let width = body.width as usize;
-    let lines: Vec<Line> = open
-        .rows
-        .iter()
-        .enumerate()
-        .skip(open.scroll)
-        .take(height)
-        .map(|(i, row)| row_line(&open.review, row, i == open.selected, open.is_selected(i), width, theme, today, &me))
-        .collect();
+    let render = |open: &Open, i: usize| -> Vec<Line<'static>> {
+        let row = &open.rows[i];
+        let (selected, in_range) = (i == open.selected, open.is_selected(i));
+        if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. }) {
+            wrap_row(row_line(&open.review, row, selected, in_range, UNCUT, theme, today, &me), width, WRAP_INDENT)
+        } else {
+            vec![row_line(&open.review, row, selected, in_range, width, theme, today, &me)]
+        }
+    };
+    open.scroll = settle_scroll(open.scroll, open.selected, height);
+    while wrap && open.scroll < open.selected && (open.scroll..=open.selected).map(|i| render(open, i).len()).sum::<usize>() > height {
+        open.scroll += 1;
+    }
+    let lines: Vec<Line> = (open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height).collect();
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
+}
+
+/// The width a line is drawn at before `w` cuts it into screen rows; wide enough for any real line.
+const UNCUT: usize = 4_096;
+/// Continuation rows start under the text: past the cursor bar, both gutters and the sign.
+const WRAP_INDENT: usize = 1 + GUTTER_W * 2 + 3;
+
+/// One long line as several screen rows of `width`: continuation rows indented under the text,
+/// every row padded with the line's fill so a changed line stays one coloured block.
+fn wrap_row(line: Line<'static>, width: usize, indent: usize) -> Vec<Line<'static>> {
+    let mut spans = line.spans;
+    let fill = trailing_fill(&mut spans);
+    let mut rows: Vec<Vec<Span<'static>>> = vec![];
+    let mut row: Vec<Span<'static>> = vec![];
+    let mut used = 0;
+    for span in spans {
+        let mut piece = String::new();
+        for c in span.content.chars() {
+            let w = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+            if used + w > width && used > indent {
+                row.push(Span::styled(std::mem::take(&mut piece), span.style));
+                rows.push(std::mem::replace(&mut row, vec![Span::styled(" ".repeat(indent), fill.unwrap_or_default())]));
+                used = indent;
+            }
+            piece.push(c);
+            used += w;
+        }
+        row.push(Span::styled(piece, span.style));
+    }
+    rows.push(row);
+    rows.into_iter().map(|row| padded(row, width, fill)).collect()
+}
+
+/// Drops the blank padding a changed line ends with, and gives back its style to pad each row again.
+fn trailing_fill(spans: &mut Vec<Span<'static>>) -> Option<Style> {
+    let last = spans.last().filter(|s| !s.content.is_empty() && s.content.chars().all(|c| c == ' '))?;
+    let style = last.style;
+    spans.pop();
+    Some(style)
+}
+
+fn padded(mut row: Vec<Span<'static>>, width: usize, fill: Option<Style>) -> Line<'static> {
+    let used: usize = row.iter().map(Span::width).sum();
+    if let (Some(style), true) = (fill, used < width) {
+        row.push(Span::styled(" ".repeat(width - used), style));
+    }
+    Line::from(row)
 }
 
 /// The `group/project!42` at the start of the pane title, one cell past the border and its space.
@@ -191,7 +244,12 @@ fn row_line<'a>(
         Row::Pair { file, hunk, removed, added } => {
             let lines = &review.files[*file].hunks[*hunk].lines;
             let code = review.files[*file].spans(*hunk, *added);
-            spans.extend(pair_spans(&lines[*removed], &lines[*added], code, selected || in_range, body, theme));
+            let (old, new) = (&lines[*removed], &lines[*added]);
+            if review.quiet_whitespace && same_but_whitespace(&old.text, &new.text) {
+                spans.extend(quiet_spans(old, new, code, selected || in_range, body, theme));
+            } else {
+                spans.extend(pair_spans(old, new, code, selected || in_range, body, theme));
+            }
         }
         Row::Thread { id } => {
             if let Some(thread) = review.thread(id) {
@@ -412,6 +470,23 @@ fn coloured<'t>(text: &'t str, at: usize, code: &[(Range<usize>, Token)], theme:
     edges.windows(2).map(|w| (&text[w[0]..w[1]], with_syntax(Style::default(), code, at + w[0], theme))).collect()
 }
 
+/// A line that changed only in whitespace, under `W`: read as context, both numbers, a `≈` for a sign.
+fn quiet_spans<'a>(
+    old: &DiffLine,
+    new: &DiffLine,
+    code: &[(Range<usize>, Token)],
+    selected: bool,
+    width: usize,
+    theme: Theme,
+) -> Vec<Span<'a>> {
+    let context = DiffLine { kind: LineKind::Context, old: old.old, words: vec![], ..new.clone() };
+    let mut spans = line_spans(&context, code, selected, width, theme);
+    if let Some(sign) = spans.get_mut(1) {
+        *sign = Span::styled("≈", Style::default().fg(theme.faded));
+    }
+    spans
+}
+
 /// Styled pieces laid end to end, tabs made visible, cut to `room` columns.
 fn fit<'a>(parts: Vec<(&str, Style)>, room: usize) -> Vec<Span<'a>> {
     let mut spans = vec![];
@@ -578,5 +653,16 @@ mod tests {
         assert_eq!(open, "   ▾ @@ -12,4 +12,5 @@ pub async fn charge");
         let closed = spans_text(&hunk_spans(&file, 0, false, 80, Theme::default()));
         assert!(closed.ends_with("(1 lines)"), "{closed}");
+    }
+
+    #[test]
+    fn wrapping_indents_continuations_and_keeps_the_fill_on_every_row() {
+        let fill = Style::default().bg(Theme::named("dracula").unwrap().danger);
+        let line = Line::from(vec![Span::raw("  1    1 "), Span::styled("+abcdefghij", fill), Span::styled("     ", fill)]);
+        let rows = wrap_row(line, 14, 4);
+        let text: Vec<String> = rows.iter().map(|r| r.spans.iter().map(|s| s.content.to_string()).collect()).collect();
+        assert_eq!(text, ["  1    1 +abcd", "    efghij    "]);
+        assert!(rows.iter().all(|r| r.width() == 14), "every row reaches the edge");
+        assert_eq!(rows[1].spans.last().unwrap().style, fill, "the fill pads the last row");
     }
 }
