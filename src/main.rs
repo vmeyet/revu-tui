@@ -23,6 +23,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Login(args)) => return commands::login::run(args, cli.host.as_deref(), cli.json).await,
         Some(Command::Logout { host }) => return commands::login::logout(host.or(cli.host).as_deref()),
         Some(Command::Update(args)) => return commands::update::run(&args),
+        Some(Command::Docs(args)) => return commands::docs::run(&args),
         Some(Command::Ai(args)) if !args.needs_forge() => return commands::ai::run(args, cli.json).await,
         Some(Command::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "revu", &mut std::io::stdout());
@@ -41,7 +42,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Publish(args)) => commands::publish::run(&ctx, args).await,
         Some(Command::Ai(args)) => commands::ai::ask(&ctx, args).await,
         Some(Command::Tui) | None => revu::tui::run(ctx).await,
-        Some(Command::Login(_) | Command::Logout { .. } | Command::Completions { .. } | Command::Update(_)) => {
+        Some(Command::Login(_) | Command::Logout { .. } | Command::Completions { .. } | Command::Update(_) | Command::Docs(_)) => {
             unreachable!("handled above")
         }
     }

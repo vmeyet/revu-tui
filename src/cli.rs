@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "revu", version = version::label(), about = "Review GitLab merge requests and GitHub pull requests from your terminal.", propagate_version = true)]
 pub struct Cli {
-    /// GitLab host. Defaults to the config, then gitlab.com.
+    /// The forge host, GitLab or GitHub. Defaults to the checkout's, then the config, then gitlab.com.
     #[arg(long, global = true, env = "GITLAB_HOST")]
     pub host: Option<String>,
     /// Print machine-readable JSON instead of the pretty output.
@@ -23,7 +23,7 @@ pub struct Cli {
 /// Every subcommand `revu` knows.
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Store a personal access token (scope `api`) in the keychain.
+    /// Store a token in the keychain: GitLab scope `api`, GitHub scope `repo`.
     Login(LoginArgs),
     /// Forget a host: keychain entry, config and cache.
     Logout {
@@ -56,6 +56,20 @@ pub enum Command {
     },
     /// Rebuild and install the latest `revu` with cargo.
     Update(UpdateArgs),
+    /// Write the reference pages under `docs/reference/` from the code.
+    #[command(hide = true)]
+    Docs(DocsArgs),
+}
+
+/// Flags of `revu docs`.
+#[derive(Args, Debug)]
+pub struct DocsArgs {
+    /// Where the pages go.
+    #[arg(long, default_value = "docs/reference")]
+    pub dir: std::path::PathBuf,
+    /// Write nothing; fail when a page on disk differs from the code.
+    #[arg(long)]
+    pub check: bool,
 }
 
 /// Flags of `revu update`.

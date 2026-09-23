@@ -7,7 +7,7 @@ mod compose;
 mod diff_view;
 mod field;
 mod ground;
-mod help;
+pub(crate) mod help;
 mod images;
 mod palette;
 mod palette_view;
