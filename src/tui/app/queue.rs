@@ -31,7 +31,10 @@ impl App {
         let mut rows = Vec::new();
         for (name, mrs) in groups {
             let open = !self.closed_sections.contains(name);
-            let matching: Vec<&QueueMr> = mrs.iter().filter(|mr| self.matches_filter(mr)).collect();
+            let mut matching: Vec<&QueueMr> = mrs.iter().filter(|mr| self.matches_filter(mr)).collect();
+            if name == "TO REVIEW" && self.triaged() {
+                matching.sort_by(|a, b| self.urgency(b).total_cmp(&self.urgency(a)));
+            }
             let unscoped = name == "OPEN" && mrs.is_empty();
             if unscoped || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;

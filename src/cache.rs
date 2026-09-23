@@ -153,6 +153,16 @@ pub mod keys {
         format!("{}/state.json", dir(key))
     }
 
+    /// What Jev said about an MR as a queue row.
+    pub fn verdict(key: &MrKey) -> String {
+        format!("{}/ai/verdict.json", dir(key))
+    }
+
+    /// What Jev read in an MR at one head commit.
+    pub fn reading(key: &MrKey, head: &str) -> String {
+        format!("{}/ai/reading.{head}.json", dir(key))
+    }
+
     /// A file at one commit, named by a hash of its path so no path from the forge becomes a directory.
     pub fn file(key: &MrKey, sha: &str, path: &str) -> String {
         format!("{}/files/{sha}/{}.json", dir(key), sha1_smol::Sha1::from(path.as_bytes()).digest())

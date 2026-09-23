@@ -1,4 +1,4 @@
-use super::app::{App, Badge, Focus, QueueRow};
+use super::app::{App, Badge, Focus, Mark, QueueRow};
 use super::theme::Theme;
 use super::{brief_view, diff_view, publish_view, thread_view};
 use crate::forge::Kind;
@@ -236,17 +236,19 @@ fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -
         }
         QueueRow::Mr(mr) => {
             let badge = app.badge(mr).map(|b| badge_span(app, b));
+            let mark = app.triaged().then(|| mark_span(app, app.mark(mr)));
             let iid = format!("{}{} ", app.kind.sigil(), mr.number);
-            let room = width.saturating_sub(2 + iid.width() + 2);
+            let room = width.saturating_sub(2 + mark.as_ref().map_or(0, Span::width) + iid.width() + 2);
             let title = truncate(&mr.title, room);
             let pad = room.saturating_sub(title.width()) + 1;
             let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
-            let mut spans = vec![
-                Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent)),
+            let mut spans = vec![Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent))];
+            spans.extend(mark);
+            spans.extend([
                 Span::styled(iid, Style::default().fg(theme.muted)),
                 Span::styled(title, title_style),
                 Span::raw(" ".repeat(pad)),
-            ];
+            ]);
             spans.extend(badge);
             Line::from(spans)
         }
@@ -256,6 +258,17 @@ fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -
 /// The activity dot breathes: bright one second, faded the next.
 fn pulse_on(app: &App) -> bool {
     app.now.duration_since(app.started).as_secs().is_multiple_of(2)
+}
+
+/// Jev's mark, two cells wide so titles stay aligned whether a row has one or not.
+fn mark_span<'a>(app: &App, mark: Option<Mark>) -> Span<'a> {
+    let theme = app.theme;
+    match mark {
+        Some(Mark::WaitsOnMe) => Span::styled("◆ ", Style::default().fg(if pulse_on(app) { theme.warn } else { theme.faded })),
+        Some(Mark::Urgent) => Span::styled("! ", Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)),
+        Some(Mark::Sprawling) => Span::styled("~ ", Style::default().fg(theme.muted)),
+        None => Span::raw("  "),
+    }
 }
 
 fn badge_span<'a>(app: &App, badge: Badge) -> Span<'a> {

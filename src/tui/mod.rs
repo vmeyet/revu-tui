@@ -14,6 +14,9 @@ mod thread_view;
 mod tree_view;
 mod ui;
 
+use crate::ai;
+use crate::ai::triage::{self, Verdict};
+use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::{Cache, Entry, keys};
 use crate::ctx::Ctx;
 use crate::diff::fold::FoldState;
@@ -56,6 +59,8 @@ struct Backend {
     open: crate::config::Open,
     /// The checkout `revu` runs in, when its origin is on this forge: `v` opens its real files.
     checkout: Option<crate::open::Checkout>,
+    /// Jev, when `[ai.typesafe]` is on and a key was found.
+    jev: Option<TypeSafe>,
 }
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out.
@@ -75,6 +80,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         inline: ctx.config.review.inline(),
         open: ctx.config.open.clone(),
         checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
+        jev: jev(&ctx.config.ai),
     };
     let settings = Settings {
         theme,
@@ -83,6 +89,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
         project: ctx.project.clone(),
         ground,
+        triage: backend.jev.is_some(),
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -260,6 +267,17 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
+            Action::Triage(mr) => {
+                send(backend.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
+            }
+            Action::Read { key, head, waits, files } => {
+                send(
+                    backend
+                        .read(key, head, waits, files)
+                        .await
+                        .unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }),
+                );
+            }
             Action::Compose { .. } => unreachable!("the loop runs the editor itself"),
         }
     });
@@ -310,6 +328,16 @@ fn print_links(links: &[Hyperlink]) {
     let _ = out.flush();
 }
 
+/// Jev, only when the config switches it on and a key is found; the environment can still switch it off.
+fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
+    if !ai.typesafe.enabled {
+        return None;
+    }
+    let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
+    let (key, _) = ai::key(ai::Provider::Typesafe, &ai::KeyEnv::from_process(), &keychain).ok().flatten()?;
+    TypeSafe::connect(&key).ok()
+}
+
 /// `:set theme=`: the one setting the TUI writes, read back on the next start.
 fn save_theme(name: &str) -> Result<()> {
     let mut config = crate::config::Config::load()?;
@@ -322,6 +350,40 @@ fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
 }
 
 impl Backend {
+    /// Jev's verdict on a queue MR, from the cache while the MR has not moved.
+    async fn triage(&self, mr: &crate::forge::QueueMr) -> Result<Incoming, Unavailable> {
+        let key = mr.key();
+        let cached: Option<Verdict> = self.cache.read(&keys::verdict(&key));
+        let verdict = if let Some(verdict) = cached.filter(|v| v.fresh_for(mr)) {
+            verdict
+        } else {
+            let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
+            let verdict = triage::judge_mr(jev, mr, Utc::now()).await?;
+            let _ = self.cache.write(&keys::verdict(&key), &verdict);
+            verdict
+        };
+        Ok(Incoming::Triaged { key, verdict })
+    }
+
+    /// Jev's reading of an open MR at `head`, from the cache once read.
+    async fn read(
+        &self,
+        key: MrKey,
+        head: String,
+        waits: Option<serde_json::Value>,
+        files: Vec<(String, serde_json::Value)>,
+    ) -> Result<Incoming, Unavailable> {
+        let reading = if let Some(reading) = self.cache.read(&keys::reading(&key, &head)) {
+            reading
+        } else {
+            let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
+            let reading = triage::judge_open(jev, waits, files).await?;
+            let _ = self.cache.write(&keys::reading(&key, &head), &reading);
+            reading
+        };
+        Ok(Incoming::Read { key, head, reading })
+    }
+
     async fn load_queue(&self, scope: Option<String>) -> Result<Incoming> {
         let queue = self.forge.queue(scope.as_deref()).await?;
         let _ = self.cache.write_entry(&keys::queue(scope.as_deref()), &queue);
@@ -527,6 +589,7 @@ mod tests {
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
+            jev: None,
         };
         backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
         let state = backend.state(&key());
@@ -535,6 +598,32 @@ mod tests {
             (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true),
             "the split choice is remembered per MR"
         );
+    }
+
+    #[tokio::test]
+    async fn jev_is_asked_once_per_mr_state_and_answers_from_the_cache_after() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend {
+            forge: test_forge(),
+            cache: Cache::in_dir(dir.path()),
+            fold_globs: vec![],
+            watch_labels: vec![],
+            inline: InlineRule::default(),
+            open: crate::config::Open::default(),
+            checkout: None,
+            jev: None,
+        };
+        let mr = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
+        let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
+        backend.cache.write(&keys::verdict(&mr.key()), &verdict).unwrap();
+        let Ok(Incoming::Triaged { verdict: cached, .. }) = backend.triage(&mr).await else { panic!("the cache answers") };
+        assert_eq!(cached, verdict);
+        let moved = crate::forge::QueueMr { updated_at: mr.updated_at + chrono::TimeDelta::minutes(5), ..mr };
+        assert!(backend.triage(&moved).await.is_err(), "a moved MR needs Jev, which is off here");
+        let reading = triage::Reading { waits_on_me: true, risks: BTreeMap::new() };
+        backend.cache.write(&keys::reading(&key(), "abc"), &reading).unwrap();
+        let Ok(Incoming::Read { reading: read, .. }) = backend.read(key(), "abc".into(), None, vec![]).await else { panic!("cached") };
+        assert!(read.waits_on_me);
     }
 
     fn test_forge() -> Forge {
@@ -561,6 +650,7 @@ mod tests {
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
+            jev: None,
         }
     }
 

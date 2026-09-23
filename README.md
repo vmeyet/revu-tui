@@ -135,6 +135,10 @@ revu ai logout anthropic
 
 `ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY` override the keychain.
 
+With `[ai.typesafe]` on, Jev marks the queue: `◆` the last note asks you something, `!` someone is blocked on this review, `~` a sprawling MR; To review sorts by urgency.
+In the file tree, a file Jev finds risky reads red (security or auth) or amber (data or schema), a cosmetic one dimmed.
+Answers are cached per MR state, so an unchanged MR is never asked twice; if Jev fails, one notice and the plain views.
+
 ## Development
 
 ```sh

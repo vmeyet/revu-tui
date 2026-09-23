@@ -358,7 +358,7 @@ impl App {
                 self.warn(message);
             }
             Failure::Approve => self.warn(message),
-            Failure::Queue | Failure::Open | Failure::Poll | Failure::Local => self.warn(message),
+            Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage => self.warn(message),
         }
     }
 }
