@@ -1,6 +1,7 @@
 //! The GitHub backend: GraphQL for the queue, one PR, its threads and the pending review; REST for
 //! the files, public comments and lookups. Wire shapes stay here and turn into the neutral model at
 //! this edge.
+mod attachment;
 mod graphql;
 mod rest;
 mod wire;
@@ -31,6 +32,8 @@ pub struct Client {
     api_host: String,
     rest: Url,
     graphql: Url,
+    /// Where comment pictures come from; shared, so the client stays small to clone.
+    downloads: std::sync::Arc<attachment::Downloads>,
 }
 
 impl Client {
@@ -40,17 +43,18 @@ impl Client {
         } else {
             (format!("https://{}/api/v3/", credentials.host), format!("https://{}/api/graphql", credentials.host))
         };
-        Self::build(credentials, &rest, &graphql)
+        Self::build(credentials, &rest, &graphql, &format!("https://{}/", credentials.host))
     }
 
     /// For tests: REST at `base`, GraphQL at `base/graphql`. The host guard applies to that server.
     #[cfg(test)]
     pub fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
         let base = base.trim_end_matches('/');
-        Self::build(credentials, &format!("{base}/"), &format!("{base}/graphql"))
+        let client = Self::build(credentials, &format!("{base}/"), &format!("{base}/graphql"), &format!("{base}/"))?;
+        Ok(Self { downloads: std::sync::Arc::new(client.downloads.trusting()), ..client })
     }
 
-    fn build(credentials: &Credentials, rest: &str, graphql: &str) -> Result<Self> {
+    fn build(credentials: &Credentials, rest: &str, graphql: &str, web: &str) -> Result<Self> {
         let mut headers = HeaderMap::new();
         let mut token =
             HeaderValue::from_str(&format!("Bearer {}", credentials.token)).context("token has characters a header cannot carry")?;
@@ -66,7 +70,8 @@ impl Client {
         let rest = Url::parse(rest).context("host is not a hostname")?;
         let graphql = Url::parse(graphql).context("host is not a hostname")?;
         let api_host = rest.host_str().context("API url without a host")?.to_owned();
-        Ok(Self { http, host: credentials.host.clone(), api_host, rest, graphql, budget: super::budget::Budget::default() })
+        let downloads = std::sync::Arc::new(attachment::Downloads::new(web)?);
+        Ok(Self { http, host: credentials.host.clone(), api_host, rest, graphql, downloads, budget: super::budget::Budget::default() })
     }
 
     pub fn host(&self) -> &str {

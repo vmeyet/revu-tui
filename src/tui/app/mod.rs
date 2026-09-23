@@ -126,6 +126,11 @@ pub enum Action {
         branch: String,
         suggestion: Box<crate::forge::Suggestion>,
     },
+    /// A picture a comment of `key` points at, `url` as the note wrote it.
+    LoadImage {
+        key: MrKey,
+        url: String,
+    },
     /// `p`: the jobs of the CI run on the head commit `head`.
     LoadChecks {
         key: MrKey,
@@ -253,6 +258,11 @@ pub enum Incoming {
     Applied {
         key: MrKey,
         branch: String,
+    },
+    /// A picture decoded and ready, or `None` when it could not be fetched or read.
+    Image {
+        url: String,
+        image: Option<image::DynamicImage>,
     },
     /// The CI run of the open MR's head; `None` when nothing ran on it.
     Checks {

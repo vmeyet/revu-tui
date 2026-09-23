@@ -19,7 +19,7 @@ struct MrIid {
 }
 
 /// GitLab takes the URL-encoded path wherever it takes a numeric project id.
-fn project_path(project: &str) -> String {
+pub(super) fn project_path(project: &str) -> String {
     format!("projects/{}", url_encode(project))
 }
 

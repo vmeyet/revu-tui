@@ -2,6 +2,7 @@
 //! turn into the neutral model at this edge.
 mod graphql;
 mod rest;
+mod upload;
 mod wire;
 
 #[cfg(test)]

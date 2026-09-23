@@ -181,6 +181,9 @@ pub struct Tui {
     pub theme: Option<String>,
     #[serde(default)]
     pub ascii: bool,
+    /// Pictures in comments, drawn in the thread pane where the terminal can; `false` shows their `[image: …]` line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<bool>,
 }
 
 impl Tui {
@@ -352,7 +355,7 @@ mod tests {
             username: Some("nina".into()),
             queue: Queue { watch_labels: vec!["infra".into()], ..Queue::default() },
             review: Review { fold: vec!["*.lock".into()], ..Review::default() },
-            tui: Tui { theme: Some("nord".into()), ascii: false },
+            tui: Tui { theme: Some("nord".into()), ascii: false, images: None },
             ai: Ai::default(),
             open: Open { default: Some("hx".into()), files: BTreeMap::from([("*.md".into(), "glow -p".into())]) },
             hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })]),

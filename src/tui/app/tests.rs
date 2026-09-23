@@ -48,6 +48,7 @@ fn settings() -> Settings {
         triage: false,
         ask: None,
         keymap: crate::keymap::Keymap::default(),
+        pictures: None,
     }
 }
 
@@ -2009,4 +2010,45 @@ fn snapshot_help_with_the_azerty_preset_and_a_binding() {
     );
     press(&mut app, "?");
     insta::assert_snapshot!("help_azerty", render(&mut app, 100, 40));
+}
+
+/// The review with one more thread on added line 13 whose note carries `body`, its pane open.
+fn with_note(body: &str) -> App {
+    with_suggestion(body, json!([]))
+}
+
+#[test]
+fn the_pane_asks_for_each_of_its_pictures_once() {
+    let mut app = with_note("Look:\n![chart](/uploads/0123456789abcdef0123456789abcdef/chart.png)");
+    assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadImage { .. })), "a terminal without pictures asks for none");
+    app.thumbs = crate::tui::images::tests::test_thumbs();
+    let url = "/uploads/0123456789abcdef0123456789abcdef/chart.png".to_owned();
+    let asked: Vec<Action> = app.tick().into_iter().filter(|a| matches!(a, Action::LoadImage { .. })).collect();
+    assert_eq!(asked, vec![Action::LoadImage { key: mr_key(), url: url.clone() }]);
+    assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadImage { .. })), "asked once");
+    app.apply(Incoming::Image { url: url.clone(), image: Some(image::DynamicImage::new_rgb8(200, 100)) });
+    assert!(matches!(app.thumbs.get(&url), Some(crate::tui::images::Thumb::Ready(..))));
+}
+
+#[test]
+fn snapshot_thread_with_a_picture_the_terminal_cannot_draw() {
+    let mut app = with_note("Look:\n![the chart](/uploads/0123456789abcdef0123456789abcdef/chart.png)\nthanks");
+    let screen = render(&mut app, 150, 24);
+    assert!(screen.contains("[image: the chart]"), "{screen}");
+    let link = app.links.iter().find(|l| l.text == "[image: the chart]").expect("the line links to the picture");
+    assert_eq!(link.url, "https://gitlab.com/acme/widgets/uploads/0123456789abcdef0123456789abcdef/chart.png");
+    insta::assert_snapshot!("thread_picture_fallback", screen);
+}
+
+#[test]
+fn a_ready_picture_is_painted_in_the_pane_and_hidden_under_a_modal() {
+    let mut app = with_note("Look:\n![chart](/uploads/0123456789abcdef0123456789abcdef/chart.png)");
+    app.thumbs = crate::tui::images::tests::test_thumbs();
+    let url = "/uploads/0123456789abcdef0123456789abcdef/chart.png".to_owned();
+    let gradient = image::RgbImage::from_fn(200, 100, |_, y| image::Rgb([y as u8 * 2, y as u8 * 2, y as u8 * 2]));
+    app.apply(Incoming::Image { url, image: Some(image::DynamicImage::ImageRgb8(gradient)) });
+    let painted = |screen: &str| screen.lines().filter(|l| l.contains('▀') || l.contains('▄')).count();
+    assert_eq!(painted(&render(&mut app, 150, 30)), 5, "200x100 at 10x20 cells is 20x5");
+    press(&mut app, "?");
+    assert_eq!(painted(&render(&mut app, 150, 30)), 0, "a modal covers no picture");
 }

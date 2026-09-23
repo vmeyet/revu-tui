@@ -120,6 +120,7 @@ inline_min_same = 60          # …and both lines keep at least this percent of 
 
 [tui]
 theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
+images = true                 # pictures in comments, drawn in the thread pane on Kitty, Ghostty, WezTerm and iTerm2
 
 [notify]
 enabled = true                # a macOS notification when an MR lands in To review while revu runs
@@ -151,6 +152,7 @@ Inside a checkout on the MR's head commit it opens your real file; elsewhere a r
 
 Tokens live in the macOS login keychain (service `revu`), never on disk in clear.
 Each token goes to its own host only, and redirects are refused.
+Pictures in comments come from the forge only: GitLab uploads through its API, GitHub attachments through its web host, whose signed redirect is fetched without the token.
 `GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` override the keychain for scripts.
 
 AI is off until the config switches a provider on, and its key is a keychain secret too:

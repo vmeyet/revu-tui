@@ -1,5 +1,6 @@
 //! The value the TUI edits: one MR, its files as parsed hunks, its threads hung on lines, and what is folded.
 pub mod draft;
+pub mod image;
 pub mod place;
 pub mod position;
 pub mod suggestion;
