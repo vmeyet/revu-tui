@@ -148,20 +148,42 @@ fn j_and_k_skip_section_headers_and_stop_at_the_ends() {
     press(&mut app, "kkk");
     assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
     press(&mut app, "G");
+    assert!(app.selected_mr().is_none(), "the last row is the folded Done header");
+    press(&mut app, "k");
     assert_eq!(app.selected_mr().map(|m| m.number), Some(35));
     press(&mut app, "g");
     assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
 }
 
 #[test]
-fn zo_in_the_queue_shows_the_done_section() {
+fn zo_and_zc_fold_the_section_under_the_cursor() {
     let mut app = with_queue();
+    press(&mut app, "G");
+    assert!(app.selected_mr().is_none(), "the folded Done header takes the cursor");
     press(&mut app, "zo");
-    assert!(app.done_open);
+    assert!(!app.closed_sections.contains("DONE"));
     press(&mut app, "G");
     assert_eq!(app.selected_mr().map(|m| m.number), Some(40));
     press(&mut app, "zc");
-    assert_eq!(app.selected_mr().map(|m| m.number), Some(35), "the cursor settles on a visible row");
+    assert!(app.closed_sections.contains("DONE"));
+    assert!(matches!(app.queue_rows()[app.queue_selected], QueueRow::Section { name: "DONE", .. }), "the cursor stays on its header");
+    press(&mut app, "g");
+    press(&mut app, "zc");
+    assert!(app.closed_sections.contains("TO REVIEW"), "any section folds, not only Done");
+    assert!(matches!(app.queue_rows()[app.queue_selected], QueueRow::Section { name: "TO REVIEW", .. }));
+    app.handle_key(code(KeyCode::Enter));
+    assert!(!app.closed_sections.contains("TO REVIEW"), "enter on a folded header opens it");
+}
+
+#[test]
+fn zh_folds_the_review_header_to_one_row() {
+    let mut app = with_review();
+    press(&mut app, "zh");
+    assert!(app.header_folded);
+    let screen = render(&mut app, 120, 24);
+    assert!(screen.contains("▸ "), "{screen}");
+    press(&mut app, "zh");
+    assert!(!app.header_folded);
 }
 
 #[test]
@@ -388,9 +410,13 @@ fn queue_failures_toast_and_stop_the_spinner() {
 fn help_and_quit() {
     let mut app = app();
     press(&mut app, "?");
-    assert!(app.help);
-    press(&mut app, "j");
-    assert!(!app.help);
+    assert_eq!(app.help, Some(0));
+    press(&mut app, "jjk");
+    assert_eq!(app.help, Some(1), "moving keys scroll the list");
+    press(&mut app, "G");
+    assert_eq!(app.help, Some(ui::HELP.len() - 1));
+    press(&mut app, "x");
+    assert_eq!(app.help, None, "any other key closes it");
     app.handle_key(ctrl('c'));
     assert!(app.should_quit);
 }
@@ -433,6 +459,13 @@ fn snapshot_help() {
     let mut app = with_queue();
     press(&mut app, "?");
     insta::assert_snapshot!("help", render(&mut app, 100, 40));
+}
+
+#[test]
+fn snapshot_help_scrolls_on_a_small_terminal() {
+    let mut app = with_queue();
+    press(&mut app, "?jjj");
+    insta::assert_snapshot!("help_small", render(&mut app, 80, 24));
 }
 
 #[test]
@@ -631,7 +664,7 @@ fn the_publish_modal_walks_the_drafts_toggles_approve_and_publishes() {
 fn the_publish_modal_edits_deletes_and_survives_a_failure() {
     let mut app = with_saved_draft();
     press(&mut app, "P");
-    app.handle_key(code(KeyCode::Enter));
+    press(&mut app, "e");
     assert_eq!(app.input_label(), "edit draft");
     assert!(app.publish.is_some(), "the modal stays under the input row");
     type_text(&mut app, "!");
@@ -831,7 +864,7 @@ fn star_outside_a_checkout_says_why_it_does_nothing() {
 fn i_opens_the_description_from_the_queue_and_the_review_and_closes_on_esc() {
     let mut app = scoped_app();
     app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
-    press(&mut app, "Gk");
+    press(&mut app, "Gkk");
     press(&mut app, "i");
     let brief = app.brief.clone().unwrap();
     assert_eq!((brief.number, brief.description.as_str()), (50, "Adds the refund flow."));
@@ -1075,4 +1108,26 @@ fn sign_of_removed_line(app: &mut App) -> ratatui::buffer::Cell {
         .expect("the removed line is on screen");
     let sign = (0..x).rev().find(|&x| buffer[(x, y)].symbol() == "-").expect("a sign before the text");
     buffer[(sign, y)].clone()
+}
+
+#[test]
+fn a_draft_whose_line_left_the_diff_is_named_before_publishing_and_m_moves_it_to_the_mr() {
+    let mut app = with_saved_draft();
+    let open = app.open.clone().unwrap();
+    let path = open.review.drafts[0].anchor.as_ref().unwrap().path.clone();
+    let gone = crate::review::Draft {
+        id: Some(5),
+        anchor: Some(crate::review::Anchor { path, side: crate::review::Side::New, line: 9_999 }),
+        ..open.review.drafts[0].clone()
+    };
+    let drafts = vec![open.review.drafts[0].clone(), gone];
+    app.open = Some(open.with_review(open.review.with_drafts(drafts)));
+    press(&mut app, "P");
+    assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![], "nothing is sent while a draft hangs on a missing line");
+    assert_eq!(app.publish.as_ref().unwrap().selected, 1, "the cursor lands on the stranded draft");
+    assert!(app.live_toast().unwrap().text.contains("m moves it to the MR"));
+    let actions = press(&mut app, "m");
+    let [Action::DeleteDraft { id: 5, .. }, Action::SaveDraft { index: 1, draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((draft.anchor.clone(), draft.position.clone()), (None, None), "the note now sits on the MR");
+    assert!(app.open.as_ref().unwrap().review.stranded().is_empty());
 }

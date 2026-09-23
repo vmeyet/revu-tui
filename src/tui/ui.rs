@@ -17,7 +17,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 37] = [
+pub const HELP: [(&str, &str); 38] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -39,14 +39,15 @@ pub const HELP: [(&str, &str); 37] = [
     ("D", "changed words inline, or every line split"),
     ("zc zo", "close, open"),
     ("zM zR", "fold, unfold every file"),
-    ("zo", "in the queue: show the done section"),
+    ("zo zc", "in the queue: open, fold the section (enter too)"),
+    ("zh", "fold the MR header to one row"),
     ("c", "comment on the line, as a draft"),
     ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),
     ("E", "write the comment in $EDITOR"),
     ("s", "suggestion in the editor, prefilled with the lines"),
     ("enter d", "on a draft: edit, delete"),
-    ("P", "publish the drafts (a to also approve)"),
+    ("P", "publish: enter sends, e edits, m moves a lost draft to the MR"),
     ("A", "approve, unapprove"),
     ("r", "in a thread: reply, as a draft"),
     ("R", "in a thread: resolve, unresolve"),
@@ -86,7 +87,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_filter(f, app, input);
     }
     draw_status(f, app, status);
-    let modal = app.help || app.publish.is_some() || app.brief.is_some();
+    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some();
     if modal {
         app.links.clear();
     }
@@ -105,8 +106,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.brief.is_some() {
         brief_view::draw(f, app, main);
     }
-    if app.help {
-        draw_help(f, app, main);
+    if let Some(scroll) = app.help {
+        draw_help(f, app, main, scroll);
     }
 }
 
@@ -308,7 +309,8 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(right).alignment(Alignment::Right), r);
 }
 
-fn draw_help(f: &mut Frame, app: &App, area: Rect) {
+/// The key list, scrolled by `scroll` rows when it does not fit; the title says how to move.
+fn draw_help(f: &mut Frame, app: &App, area: Rect, scroll: usize) {
     let theme = app.theme;
     let lines: Vec<Line> = HELP
         .iter()
@@ -322,9 +324,14 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect) {
     let height = (lines.len() as u16 + 2).min(area.height);
     let width = 68.min(area.width);
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
-    let block = pane(theme, "keys", true);
+    let visible = usize::from(height.saturating_sub(2));
+    let overflow = lines.len() > visible;
+    let top = scroll.min(lines.len().saturating_sub(visible));
+    let title =
+        if overflow { format!("keys · {}–{} of {} · j k scroll", top + 1, top + visible, lines.len()) } else { "keys".to_owned() };
+    let block = pane(theme, &title, true);
     f.render_widget(Clear, popup);
-    f.render_widget(Paragraph::new(lines).block(block).style(Style::default().bg(theme.surface)), popup);
+    f.render_widget(Paragraph::new(lines).block(block).style(Style::default().bg(theme.surface)).scroll((top as u16, 0)), popup);
 }
 
 /// Everything in `area` takes one colour, so the eye finds the focused pane without a border change.

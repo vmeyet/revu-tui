@@ -32,7 +32,8 @@ pub fn draw(f: &mut Frame, app: &App, publish: &Publish, area: Rect) {
         )),
         Line::default(),
     ];
-    lines.extend(drafts.iter().enumerate().map(|(i, draft)| draft_line(draft, i == publish.selected, room, theme)));
+    let stranded = open.review.stranded();
+    lines.extend(drafts.iter().enumerate().map(|(i, draft)| draft_line(draft, i == publish.selected, stranded.contains(&i), room, theme)));
     lines.push(Line::default());
     let tick = if publish.approve { "[x]" } else { "[ ]" };
     lines.push(Line::from(vec![
@@ -50,7 +51,7 @@ pub fn draw(f: &mut Frame, app: &App, publish: &Publish, area: Rect) {
         Line::from(vec![
             Span::styled(if on_footer { "▎" } else { " " }, Style::default().fg(theme.accent)),
             Span::styled("enter publish", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-            Span::styled(" · d delete · esc back", Style::default().fg(theme.faded)),
+            Span::styled(" · e edit · d delete · esc back", Style::default().fg(theme.faded)),
         ])
     };
     lines.push(footer);
@@ -58,7 +59,8 @@ pub fn draw(f: &mut Frame, app: &App, publish: &Publish, area: Rect) {
     f.render_widget(Paragraph::new(lines).block(block).style(Style::default().bg(theme.surface)), popup);
 }
 
-fn draft_line<'a>(draft: &Draft, selected: bool, room: usize, theme: super::theme::Theme) -> Line<'a> {
+/// One draft: where it hangs and its first line; `✗` when its line left the diff.
+fn draft_line<'a>(draft: &Draft, selected: bool, stranded: bool, room: usize, theme: super::theme::Theme) -> Line<'a> {
     let place = match (&draft.anchor, &draft.reply_to) {
         (Some(anchor), _) => {
             let name = anchor.path.rsplit('/').next().unwrap_or(&anchor.path);
@@ -68,10 +70,11 @@ fn draft_line<'a>(draft: &Draft, selected: bool, room: usize, theme: super::them
         (None, Some(_)) => "reply".to_owned(),
         (None, None) => "MR".to_owned(),
     };
-    let place = format!("{place:<22}");
+    let place = format!("{place:<21}");
     let body = truncate(draft.body.lines().next().unwrap_or_default(), room.saturating_sub(place.width() + 2));
     Line::from(vec![
         Span::styled(if selected { "▎" } else { " " }, Style::default().fg(theme.accent)),
+        Span::styled(if stranded { "✗" } else { " " }, Style::default().fg(theme.danger)),
         Span::styled(place, Style::default().fg(theme.muted)),
         Span::styled(body, if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() }),
     ])

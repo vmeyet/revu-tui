@@ -21,15 +21,16 @@ impl App {
     /// Sections and their rows after the filter; a section with no match still shows its header.
     pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
-        let groups: [(&'static str, &Vec<QueueMr>, bool); 5] = [
-            ("TO REVIEW", &sections.to_review, true),
-            ("MINE", &sections.mine, true),
-            ("WATCHING", &sections.watching, true),
-            ("OPEN", &sections.open, true),
-            ("DONE", &sections.done, self.done_open),
+        let groups: [(&'static str, &Vec<QueueMr>); 5] = [
+            ("TO REVIEW", &sections.to_review),
+            ("MINE", &sections.mine),
+            ("WATCHING", &sections.watching),
+            ("OPEN", &sections.open),
+            ("DONE", &sections.done),
         ];
         let mut rows = Vec::new();
-        for (name, mrs, open) in groups {
+        for (name, mrs) in groups {
+            let open = !self.closed_sections.contains(name);
             let matching: Vec<&QueueMr> = mrs.iter().filter(|mr| self.matches_filter(mr)).collect();
             let unscoped = name == "OPEN" && mrs.is_empty();
             if unscoped || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
@@ -79,9 +80,9 @@ impl App {
         .find_map(|(on, badge)| on.then_some(badge))
     }
 
+    /// The cursor walks MR rows and the headers of folded sections, the only row such a section has.
     pub(super) fn queue_move(&mut self, delta: isize) {
-        let rows = self.queue_rows();
-        let selectable: Vec<usize> = rows.iter().enumerate().filter(|(_, r)| matches!(r, QueueRow::Mr(_))).map(|(i, _)| i).collect();
+        let selectable = self.queue_selectable();
         if selectable.is_empty() {
             self.queue_selected = 0;
             return;
@@ -89,6 +90,15 @@ impl App {
         let at = selectable.iter().position(|&i| i >= self.queue_selected).unwrap_or(selectable.len() - 1);
         let next = (at as isize + delta).clamp(0, selectable.len() as isize - 1) as usize;
         self.queue_selected = selectable[next];
+    }
+
+    fn queue_selectable(&self) -> Vec<usize> {
+        self.queue_rows()
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| matches!(r, QueueRow::Mr(_) | QueueRow::Section { open: false, .. }))
+            .map(|(i, _)| i)
+            .collect()
     }
 
     pub(super) fn queue_first(&mut self) {
@@ -101,14 +111,41 @@ impl App {
         self.queue_move(0);
     }
 
-    /// After the rows changed under the cursor: land on an MR row, or the first one.
+    /// After the rows changed under the cursor: land on the nearest row the cursor may take.
     pub(super) fn queue_settle(&mut self) {
         let len = self.queue_rows().len();
         self.queue_selected = self.queue_selected.min(len.saturating_sub(1));
         self.queue_move(0);
     }
 
+    /// The section the cursor sits in: its header, or the header above its MR.
+    fn section_here(&self) -> Option<&'static str> {
+        self.queue_rows().into_iter().take(self.queue_selected + 1).rev().find_map(|row| match row {
+            QueueRow::Section { name, .. } => Some(name),
+            QueueRow::Mr(_) => None,
+        })
+    }
+
+    /// `zo`, `zc`, `za` and `enter` on a header: open, close or flip the section under the cursor,
+    /// and keep the cursor on its header when the section closes over it.
+    pub(super) fn fold_section(&mut self, open: Option<bool>) {
+        let Some(name) = self.section_here() else { return };
+        let now_open = open.unwrap_or_else(|| self.closed_sections.contains(name));
+        if now_open {
+            self.closed_sections.remove(name);
+        } else {
+            self.closed_sections.insert(name);
+            if let Some(header) = self.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: n, .. } if *n == name)) {
+                self.queue_selected = header;
+            }
+        }
+    }
+
     pub(super) fn open_selected(&mut self) -> Vec<Action> {
+        if matches!(self.queue_rows().get(self.queue_selected), Some(QueueRow::Section { .. })) {
+            self.fold_section(None);
+            return vec![];
+        }
         let Some(mr) = self.selected_mr() else { return vec![] };
         let key = mr.key();
         if self.open.as_ref().is_some_and(|o| o.key == key) {

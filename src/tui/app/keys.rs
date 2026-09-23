@@ -10,8 +10,8 @@ impl App {
             self.should_quit = true;
             return vec![];
         }
-        if self.help {
-            self.help = false;
+        if let Some(scroll) = self.help {
+            self.help = help_scroll(scroll, key);
             return vec![];
         }
         if self.input.is_some() {
@@ -31,7 +31,7 @@ impl App {
         }
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Char('?') => self.help = true,
+            KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side => self.pending = key.code.as_char(),
@@ -172,12 +172,11 @@ impl App {
         let KeyCode::Char(c) = key.code else { return vec![] };
         if self.focus == Focus::Queue {
             match (prefix, c) {
-                ('z', 'o') => self.done_open = true,
-                ('z', 'c') => self.done_open = false,
-                ('z', 'a') => self.done_open = !self.done_open,
+                ('z', 'o') => self.fold_section(Some(true)),
+                ('z', 'c') => self.fold_section(Some(false)),
+                ('z', 'a') => self.fold_section(None),
                 _ => {}
             }
-            self.queue_settle();
             return vec![];
         }
         let forward = prefix == ']';
@@ -185,6 +184,7 @@ impl App {
             ('z', 'a') => return self.fold_at_cursor(None),
             ('z', 'o') => return self.fold_at_cursor(Some(true)),
             ('z', 'c') => return self.fold_at_cursor(Some(false)),
+            ('z', 'h') => self.header_folded = !self.header_folded,
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
             ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
@@ -229,5 +229,20 @@ fn note_url(web_url: &str, review: &crate::review::Review, id: &str) -> String {
     match review.thread(id) {
         Some(thread) => format!("{web_url}#note_{}", thread.first().id),
         None => web_url.to_owned(),
+    }
+}
+
+/// Moving keys scroll the key list; any other key closes it.
+fn help_scroll(scroll: usize, key: KeyEvent) -> Option<usize> {
+    let last = crate::tui::ui::HELP.len().saturating_sub(1);
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => Some((scroll + 1).min(last)),
+        KeyCode::Char('k') | KeyCode::Up => Some(scroll.saturating_sub(1)),
+        KeyCode::Char('d') if ctrl => Some((scroll + HALF_PAGE.unsigned_abs()).min(last)),
+        KeyCode::Char('u') if ctrl => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
+        KeyCode::Char('g') => Some(0),
+        KeyCode::Char('G') => Some(last),
+        _ => None,
     }
 }

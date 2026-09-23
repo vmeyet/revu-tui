@@ -2,7 +2,7 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys ────────────────────────────────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 38 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │
@@ -24,14 +24,15 @@ expression: "render(&mut app, 100, 40)"
 │               │          D  changed words inline, or every line split            │               │
 │               │      zc zo  close, open                                          │               │
 │               │      zM zR  fold, unfold every file                              │               │
-│               │         zo  in the queue: show the done section                  │               │
+│               │      zo zc  in the queue: open, fold the section (enter too)     │               │
+│               │         zh  fold the MR header to one row                        │               │
 │               │          c  comment on the line, as a draft                      │               │
 │               │          C  on a changed pair: comment on the old side           │               │
 │               │          V  select lines: c comments on them, y copies them      │               │
 │               │          E  write the comment in $EDITOR                         │               │
 │               │          s  suggestion in the editor, prefilled with the lines   │               │
 │               │    enter d  on a draft: edit, delete                             │               │
-│               │          P  publish the drafts (a to also approve)               │               │
+│               │          P  publish: enter sends, e edits, m moves a lost draft  │               │
 │               │          A  approve, unapprove                                   │               │
 │               │          r  in a thread: reply, as a draft                       │               │
 │               │          R  in a thread: resolve, unresolve                      │               │
@@ -39,6 +40,5 @@ expression: "render(&mut app, 100, 40)"
 │               │        esc  drop the selection, close the input                  │               │
 │               │          ?  this help                                            │               │
 │               │          q  quit                                                 │               │
-│               │         ^c  quit, always                                         │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help

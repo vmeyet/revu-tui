@@ -12,12 +12,12 @@ expression: "render(&mut app, 120, 24)"
 │   DONE ▸                  │                                                              │ey) -> Result<Receipt> {   │
 │                           │ 2 drafts on 1 file                                           │                           │
 │                           │                                                              │                           │
-│                           │  charge.rs:12          nit                                   │                           │
-│                           │ ▎charge.rs:-13         second one, a bit longer so the mod…  │t with an ellip… · unsaved │
+│                           │   charge.rs:12         nit                                   │                           │
+│                           │ ▎ charge.rs:-13        second one, a bit longer so the moda… │t with an ellip… · unsaved │
 │                           │                                                              │y_key(card));              │
 │                           │ [x] approve  a to toggle                                     │                           │
 │                           │                                                              │it?;                       │
-│                           │  enter publish · d delete · esc back                         │                           │
+│                           │  enter publish · e edit · d delete · esc back                │                           │
 │                           ╰──────────────────────────────────────────────────────────────╯                           │
 │                                ││    40   41  fn idempotency_key(card: &Card) -> Key {                               │
 │                                ││    41      -    Key::from(card.number())                                           │

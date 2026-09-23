@@ -70,7 +70,7 @@ A row is `▎` bar when selected, `!iid` in `muted`, the title, then one badge c
 | `D` muted | draft MR |
 
 Rows sort by `updated_at` desc inside a section; M4 adds the Jev urgency sort in `To review`.
-`Done` is the last section, folded, with a count; `zo` on its header opens it.
+Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done` starts folded. The cursor skips the headers of open sections and stops on folded ones, their only row.
 Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
 `i` opens the description modal: `!iid title`, author, branches, labels, then the description as light markdown; `j k ^d ^u g G` scroll, `o` opens the MR, `esc` `i` `q` close.
 The filter `/` narrows rows by title, author and iid, live.
@@ -89,7 +89,7 @@ Loading: the sections render with three skeleton rows of `▁▁▁▁▁` in `f
 
 ## The review pane
 
-### Header (2 rows, `▸` folds it to 1)
+### Header (2 rows, `zh` folds it to 1)
 
 Row 1: author, `source → target`, age, `+adds −dels`, file count, pipeline glyph and word.
 Row 2: approvals `n of m`, thread counts, drafts count. Anything at zero is omitted.
@@ -174,11 +174,13 @@ One of:
 │                                          │
 │  [x] approve                             │
 │                                          │
-│         enter publish · esc back         │
+│  enter publish · e edit · d delete · esc │
 └──────────────────────────────────────────┘
 ```
 
-`a` toggles approve; `j/k enter` opens a draft to edit; `d` deletes one.
+`a` toggles approve; `j/k` then `e` edits a draft; `d` deletes one.
+`enter` publishes from anywhere in the modal; `e` edits the selected draft.
+Before sending, every draft is checked against the current diff: a draft whose line left it is marked `✗`, the cursor lands on it, and `m` turns it into a note on the MR (the forge would refuse it otherwise).
 While publishing, the modal shows the spinner and disables keys; a failure keeps the drafts and toasts the reason.
 
 ## Keys
