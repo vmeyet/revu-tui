@@ -418,7 +418,11 @@ mod tests {
         let backend = Backend { forge: test_forge(), cache, fold_globs: vec![], watch_labels: vec![], inline: InlineRule::default() };
         backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
         let state = backend.state(&key());
-        assert_eq!((state.viewed_files, state.split), (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true), "the split choice is remembered per MR");
+        assert_eq!(
+            (state.viewed_files, state.split),
+            (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true),
+            "the split choice is remembered per MR"
+        );
     }
 
     fn test_forge() -> Forge {
