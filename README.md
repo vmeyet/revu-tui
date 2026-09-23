@@ -15,7 +15,7 @@ cargo install --git https://github.com/vmeyet/revu-tui
 ```
 
 That is all: `revu` is now on your path.
-You need macOS and Rust 1.88+ (`curl -sSf https://sh.rustup.rs | sh`).
+You need macOS and Rust 1.90+ (`curl -sSf https://sh.rustup.rs | sh`).
 
 Update with `revu update` (a no-op when you already run the latest commit, `-f` to rebuild anyway).
 `revu --version` prints the version and the commit it was built from.
