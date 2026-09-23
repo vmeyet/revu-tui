@@ -48,6 +48,53 @@ mod tests {
         LineRef { old, new }
     }
 
+    mod properties {
+        #![allow(clippy::unwrap_used, clippy::expect_used)]
+        use super::super::*;
+        use crate::diff::arbitrary;
+        use crate::review::tests::{lines_of, review_of};
+        use proptest::prelude::*;
+
+        fn expected(line: &Line) -> LineRef {
+            match line.kind {
+                LineKind::Context => LineRef { old: line.old, new: line.new },
+                LineKind::Added => LineRef { old: None, new: line.new },
+                LineKind::Removed => LineRef { old: line.old, new: None },
+            }
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn every_line_gets_the_numbers_of_the_sides_it_lives_on(generated in arbitrary::diff()) {
+                let review = review_of(&generated.text());
+                for (h, l) in lines_of(&review) {
+                    let line = &review.files[0].hunks[h].lines[l];
+                    let position = for_line(&review, 0, h, l).unwrap();
+                    prop_assert_eq!(position.line, expected(line));
+                    prop_assert!(position.line.number().is_some());
+                    prop_assert_eq!(position.start, None);
+                    prop_assert_eq!((position.old_path.as_str(), position.new_path.as_str()), ("src/old.rs", "src/new.rs"));
+                    prop_assert_eq!(&position.refs, &review.mr.refs);
+                }
+            }
+
+            #[test]
+            fn a_range_names_its_first_and_last_line_and_stays_in_one_file(generated in arbitrary::diff(), pick in any::<(prop::sample::Index, prop::sample::Index)>()) {
+                let review = review_of(&generated.text());
+                let lines = lines_of(&review);
+                let (a, b) = (pick.0.index(lines.len()), pick.1.index(lines.len()));
+                let (first, last) = (lines[a.min(b)], lines[a.max(b)]);
+                let position = for_range(&review, (0, first.0, first.1), (0, last.0, last.1)).unwrap();
+                let hunks = &review.files[0].hunks;
+                prop_assert_eq!(position.line, expected(&hunks[last.0].lines[last.1]));
+                prop_assert_eq!(position.start, Some(expected(&hunks[first.0].lines[first.1])));
+                prop_assert_eq!(for_range(&review, (0, first.0, first.1), (1, 0, 0)), None);
+            }
+        }
+    }
+
     #[test]
     fn one_line_positions_follow_the_line_kind() {
         let review = review();

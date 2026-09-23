@@ -428,6 +428,26 @@ pub(crate) mod tests {
         )
     }
 
+    /// A review of one generated file, renamed so tests can tell its two paths apart, plus a
+    /// second file so ranges can try to cross files.
+    pub(crate) fn review_of(diff: &str) -> Review {
+        let renamed = DiffFile {
+            diff: diff.to_owned(),
+            old_path: "src/old.rs".into(),
+            new_path: "src/new.rs".into(),
+            renamed_file: true,
+            ..DiffFile::default()
+        };
+        let other =
+            DiffFile { diff: "@@ -1 +1 @@\n-a\n+b\n".into(), old_path: "b.rs".into(), new_path: "b.rs".into(), ..DiffFile::default() };
+        Review::new(mr(), &[renamed, other], vec![], &[])
+    }
+
+    /// Every `(hunk, line)` of the review's first file, in diff order.
+    pub(crate) fn lines_of(review: &Review) -> Vec<(usize, usize)> {
+        review.files[0].hunks.iter().enumerate().flat_map(|(h, hunk)| (0..hunk.lines.len()).map(move |l| (h, l))).collect()
+    }
+
     fn charge() -> DiffFile {
         DiffFile {
             diff: include_str!("fixtures/charge.diff").to_owned(),
