@@ -37,8 +37,9 @@ enum Link {
     /// A `*.githubusercontent.com` link that needs no token: public, or signed in its query.
     Open(Url),
     /// A file of a repo on this host (`blob/<ref>/…?raw=true`, `raw/<ref>/…`, raw.githubusercontent):
-    /// read through the contents API, where the token belongs.
-    File { repo: String, git_ref: String, path: String },
+    /// read through the contents API, where the token belongs. A branch may hold slashes, so
+    /// `rest` is `<ref>/<path>` still joined and the split is found by asking.
+    File { repo: String, rest: Vec<String> },
 }
 
 impl Client {
@@ -48,12 +49,21 @@ impl Client {
         match link {
             Link::Attachment(path) => self.attachment(&path).await,
             Link::Open(url) => image::read(self.downloads.client.get(url).send().await.map_err(super::scrub)?).await,
-            Link::File { repo, git_ref, path } => {
-                let url = self.url(&format!("repos/{repo}/contents/{path}?ref={git_ref}"))?;
-                let response = self.http.get(url).header(ACCEPT, super::RAW).send().await.map_err(super::scrub)?;
-                image::read(response).await
+            Link::File { repo, rest } => self.repo_file(&repo, &rest).await,
+        }
+    }
+
+    /// The first split of `rest` into a ref and a path that the contents API knows, shortest ref first.
+    async fn repo_file(&self, repo: &str, rest: &[String]) -> Result<Vec<u8>> {
+        for at in 1..rest.len() {
+            let (git_ref, path) = (rest[..at].join("/"), rest[at..].join("/"));
+            let url = self.url(&format!("repos/{repo}/contents/{path}?ref={git_ref}"))?;
+            let response = self.http.get(url).header(ACCEPT, super::RAW).send().await.map_err(super::scrub)?;
+            if response.status() != reqwest::StatusCode::NOT_FOUND {
+                return image::read(response).await;
             }
         }
+        bail!("no such file in {repo}")
     }
 
     /// The token goes to the web host only; the signed link it redirects to is fetched without it,
@@ -82,8 +92,8 @@ impl Link {
             return Self::on_web(&parsed, &segments);
         }
         if host == "github.com" && url_host == "raw.githubusercontent.com" {
-            let [owner, repo, git_ref, path @ ..] = segments.as_slice() else { return None };
-            return file(owner, repo, git_ref, path);
+            let [owner, repo, rest @ ..] = segments.as_slice() else { return None };
+            return file(owner, repo, rest);
         }
         if parsed.scheme() == "https" && url_host.ends_with(".githubusercontent.com") {
             return Some(Link::Open(parsed));
@@ -95,21 +105,20 @@ impl Link {
         match segments {
             ["user-attachments", "assets", id] => Some(Link::Attachment(format!("user-attachments/assets/{id}"))),
             [owner, repo, "assets", n, id] => Some(Link::Attachment(format!("{owner}/{repo}/assets/{n}/{id}"))),
-            [owner, repo, "raw", git_ref, path @ ..] => file(owner, repo, git_ref, path),
-            [owner, repo, "blob", git_ref, path @ ..] if parsed.query_pairs().any(|(k, v)| k == "raw" && v == "true") => {
-                file(owner, repo, git_ref, path)
-            }
+            [owner, repo, "raw", rest @ ..] => file(owner, repo, rest),
+            [owner, repo, "blob", rest @ ..] if parsed.query_pairs().any(|(k, v)| k == "raw" && v == "true") => file(owner, repo, rest),
             _ => None,
         }
     }
 }
 
-fn file(owner: &str, repo: &str, git_ref: &str, path: &[&str]) -> Option<Link> {
+/// `rest` is `<ref>/<path>`: at least two segments, none of them a way out of the repo.
+fn file(owner: &str, repo: &str, rest: &[&str]) -> Option<Link> {
     let safe = |s: &str| !s.is_empty() && s != ".." && s != ".";
-    if path.is_empty() || ![owner, repo, git_ref].into_iter().chain(path.iter().copied()).all(safe) {
+    if rest.len() < 2 || ![owner, repo].into_iter().chain(rest.iter().copied()).all(safe) {
         return None;
     }
-    Some(Link::File { repo: format!("{owner}/{repo}"), git_ref: git_ref.to_owned(), path: path.join("/") })
+    Some(Link::File { repo: format!("{owner}/{repo}"), rest: rest.iter().map(|s| (*s).to_owned()).collect() })
 }
 
 #[cfg(test)]
@@ -126,8 +135,8 @@ mod tests {
         out.into_inner()
     }
 
-    fn file_link(repo: &str, git_ref: &str, path: &str) -> Link {
-        Link::File { repo: repo.into(), git_ref: git_ref.into(), path: path.into() }
+    fn file_link(repo: &str, rest: &str) -> Link {
+        Link::File { repo: repo.into(), rest: rest.split('/').map(str::to_owned).collect() }
     }
 
     #[test]
@@ -142,10 +151,10 @@ mod tests {
         assert_eq!(parse(signed), Some(Link::Open(Url::parse(signed).unwrap())));
         assert_eq!(
             parse("https://github.com/acme/widgets/blob/main/docs/a.png?raw=true"),
-            Some(file_link("acme/widgets", "main", "docs/a.png"))
+            Some(file_link("acme/widgets", "main/docs/a.png"))
         );
-        assert_eq!(parse("https://github.com/acme/widgets/raw/feat/a.png"), Some(file_link("acme/widgets", "feat", "a.png")));
-        assert_eq!(parse("https://raw.githubusercontent.com/acme/widgets/main/a.png"), Some(file_link("acme/widgets", "main", "a.png")));
+        assert_eq!(parse("https://github.com/acme/widgets/raw/feat/a.png"), Some(file_link("acme/widgets", "feat/a.png")));
+        assert_eq!(parse("https://raw.githubusercontent.com/acme/widgets/main/a.png"), Some(file_link("acme/widgets", "main/a.png")));
     }
 
     #[test]
@@ -193,6 +202,24 @@ mod tests {
         let client = Client { downloads: std::sync::Arc::new(downloads), ..client };
         let err = client.image("https://github.com/user-attachments/assets/1f2e").await.unwrap_err().to_string();
         assert!(err.contains("evil.example"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_repo_file_on_a_branch_with_a_slash_is_found_by_asking() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/sum/a.png"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/a.png"))
+            .and(wiremock::matchers::query_param("ref", "feat/sum"))
+            .respond_with(ResponseTemplate::new(200).insert_header("content-type", "application/vnd.github.raw").set_body_bytes(png()))
+            .mount(&server)
+            .await;
+        let client = Client::with_base(&Credentials { host: "github.com".into(), token: "ghp_xxxx".into() }, &server.uri()).unwrap();
+        assert_eq!(client.image("https://github.com/acme/widgets/blob/feat/sum/a.png?raw=true").await.unwrap(), png());
     }
 
     #[tokio::test]
