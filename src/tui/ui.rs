@@ -19,7 +19,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 45] = [
+pub const HELP: [(&str, &str); 46] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -48,6 +48,7 @@ pub const HELP: [(&str, &str); 45] = [
     ("zz", "reading mode: the diff alone, centered; h brings the queue back"),
     ("w", "wrap long lines under their text"),
     ("W", "hide changes that are only whitespace (shown as ≈)"),
+    ("+", "ten more unchanged lines above and below the hunk"),
     ("c", "comment on the line, as a draft"),
     ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),

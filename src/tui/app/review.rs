@@ -42,7 +42,12 @@ impl Open {
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
     /// The reader's inline or split choice outlives the refresh.
     pub fn with_review(&self, review: Review) -> Self {
-        let review = Review { split: self.review.split, quiet_whitespace: self.review.quiet_whitespace, ..review };
+        let review = Review {
+            split: self.review.split,
+            quiet_whitespace: self.review.quiet_whitespace,
+            context: self.review.context.clone(),
+            ..review
+        };
         let rows = review.rows();
         let selected = self
             .row()
@@ -65,7 +70,7 @@ impl Open {
     pub(super) fn file_of(&self, row: &Row) -> Option<usize> {
         match row {
             Row::File { index, .. } | Row::Outdated { file: index } => Some(*index),
-            Row::Hunk { file, .. } | Row::Line { file, .. } | Row::Pair { file, .. } => Some(*file),
+            Row::Hunk { file, .. } | Row::Line { file, .. } | Row::Pair { file, .. } | Row::Context { file, .. } => Some(*file),
             Row::Thread { id } => {
                 let path = self.review.thread(id)?.anchor.as_ref()?.path.clone();
                 self.review.files.iter().position(|f| f.new_path == path || f.old_path == path)
@@ -111,7 +116,7 @@ impl Open {
         let file = &self.review.files[self.file_of(row)?];
         let hunk = match row {
             Row::Hunk { index, .. } => Some(*index),
-            Row::Line { hunk, .. } | Row::Pair { hunk, .. } => Some(*hunk),
+            Row::Line { hunk, .. } | Row::Pair { hunk, .. } | Row::Context { hunk, .. } => Some(*hunk),
             _ => None,
         };
         Some((file.new_path.clone(), hunk))
@@ -130,7 +135,7 @@ impl Open {
     }
 
     /// The same review laid out again, the cursor kept on what it pointed at.
-    fn relaid(&self, review: Review) -> Self {
+    pub(super) fn relaid(&self, review: Review) -> Self {
         let rows = review.rows();
         let anchor = self.row().cloned();
         let selected =
@@ -172,6 +177,9 @@ fn same_place(before: &Row, after: &Row) -> bool {
         _ => before == after,
     }
 }
+
+/// How many lines `+` adds on each side of a hunk.
+const CONTEXT_STEP: u32 = 10;
 
 impl App {
     pub(super) fn review_move(&mut self, delta: isize) {
@@ -266,6 +274,42 @@ impl App {
         let next = open.with_split(!open.review.split);
         self.toast(if next.review.split { "split diff" } else { "inline diff" });
         self.keep(next)
+    }
+
+    /// `+`: ten more unchanged lines above and below the hunk under the cursor, read from the whole file.
+    pub(super) fn expand_context(&mut self) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let target = match open.row() {
+            Some(
+                Row::Hunk { file, index: hunk, .. }
+                | Row::Line { file, hunk, .. }
+                | Row::Pair { file, hunk, .. }
+                | Row::Context { file, hunk, .. },
+            ) => Some((*file, *hunk)),
+            _ => None,
+        };
+        let Some((file, hunk)) = target else {
+            self.toast("move into a hunk first");
+            return vec![];
+        };
+        let mut context = open.review.context.clone();
+        *context.around.entry((file, hunk)).or_insert(0) += CONTEXT_STEP;
+        let path = open.review.files[file].new_path.clone();
+        let load = (!context.texts.contains_key(&path)).then(|| Action::LoadFile {
+            key: open.key.clone(),
+            path,
+            sha: open.review.mr.refs.head.clone(),
+        });
+        self.open = Some(open.relaid(open.review.with_context(context)));
+        load.into_iter().collect()
+    }
+
+    /// A file read whole arrived: the hunks waiting on it show their extra lines.
+    pub(super) fn apply_file(&mut self, key: &MrKey, path: String, text: &str) {
+        let Some(open) = self.open.as_ref().filter(|o| &o.key == key) else { return };
+        let mut context = open.review.context.clone();
+        context.texts.insert(path, std::sync::Arc::new(text.lines().map(str::to_owned).collect()));
+        self.open = Some(open.relaid(open.review.with_context(context)));
     }
 
     /// `W`: lines that changed only in whitespace read as one quiet row, or show as they are.

@@ -114,6 +114,14 @@ impl Forge {
         }
     }
 
+    /// The whole file `path` at commit `sha`, for the context around a hunk.
+    pub async fn file(&self, key: &MrKey, path: &str, sha: &str) -> Result<String> {
+        match self {
+            Forge::GitLab(client) => client.file(&key.project, path, sha).await,
+            Forge::GitHub(client) => client.file(&key.project, path, sha).await,
+        }
+    }
+
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         match self {
             Forge::GitLab(client) => client.diffs(key).await,

@@ -1276,3 +1276,23 @@ fn snapshot_wrapped_lines() {
     press(&mut app, "w");
     insta::assert_snapshot!("wrapped", render(&mut app, 80, 24));
 }
+
+#[test]
+fn plus_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
+    let mut app = with_review();
+    press(&mut app, "]cj");
+    let actions = press(&mut app, "+");
+    let open = app.open.clone().unwrap();
+    let path = open.review.files[0].new_path.clone();
+    assert!(
+        matches!(actions.as_slice(), [Action::LoadFile { path: p, sha, .. }] if *p == path && *sha == open.review.mr.refs.head),
+        "{actions:?}"
+    );
+    let text: String = (1..=40).map(|n| format!("line {n}\n")).collect();
+    app.apply(Incoming::File { key: mr_key(), path: path.clone(), text });
+    let contexts = app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
+    assert_eq!(contexts, 20, "ten above, ten below");
+    assert_eq!(press(&mut app, "+"), vec![], "the file is read once");
+    let screen = render(&mut app, 120, 40);
+    assert!(screen.contains("line 2"), "{screen}");
+}

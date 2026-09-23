@@ -48,6 +48,11 @@ impl Client {
         Ok(wire::Mr { approvals, ..mr }.into_model(&key.project))
     }
 
+    /// The whole file at `sha`, to show the lines around a hunk.
+    pub async fn file(&self, project: &str, path: &str, sha: &str) -> Result<String> {
+        self.get_text(&format!("{}/repository/files/{}/raw?ref={sha}", project_path(project), url_encode(path))).await
+    }
+
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         self.get_all(&format!("{}/diffs", mr_path(key))).await
     }
@@ -315,5 +320,16 @@ mod tests {
         let expected = forge::Discussion::from(parse::<Discussion>(include_str!("fixtures/diff_note.json")));
         assert_eq!(discussions.len(), 2);
         assert_eq!(discussions[1], expected);
+    }
+    #[tokio::test]
+    async fn a_file_is_read_raw_at_a_commit() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/repository/files/src%2Fpay%2Fcharge.rs/raw"))
+            .and(query_param("ref", "abc123"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fn main() {}\n"))
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
     }
 }
