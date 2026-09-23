@@ -22,13 +22,27 @@ pub struct Open {
     pub tree: Option<super::Tree>,
     /// Claude's answer, when it holds the right pane.
     pub answer: Option<super::ask::Answer>,
+    /// The CI run, when it holds the right pane.
+    pub pipeline: Option<super::Pipeline>,
 }
 
 impl Open {
     pub fn new(key: MrKey, review: Review) -> Self {
         let rows = review.rows();
         let selected = first_selectable(&rows);
-        Self { key, review, rows, selected, scroll: 0, pane: None, cached: None, select_from: None, tree: None, answer: None }
+        Self {
+            key,
+            review,
+            rows,
+            selected,
+            scroll: 0,
+            pane: None,
+            cached: None,
+            select_from: None,
+            tree: None,
+            answer: None,
+            pipeline: None,
+        }
     }
 
     /// The rows the selection covers, the cursor included; just the cursor without `V`.

@@ -9,6 +9,7 @@ mod field;
 mod ground;
 mod jump;
 mod palette;
+mod pipeline_view;
 mod publish_view;
 mod theme;
 mod thread_view;
@@ -272,6 +273,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::LoadFile { key, path, sha } => {
                 let outcome = backend.forge.file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
+            }
+            Action::LoadChecks { key, head } => {
+                let outcome = backend.forge.checks(&key, &head).await;
+                send(outcome.map_or_else(|e| failed(Failure::Checks, &e), |checks| Incoming::Checks { key, checks }));
             }
             Action::Approve { key, approve } => {
                 let outcome = backend.forge.approve(&key, approve).await;

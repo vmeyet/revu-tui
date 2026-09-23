@@ -23,7 +23,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 52] = [
+pub const HELP: [(&str, &str); 53] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -48,6 +48,7 @@ pub const HELP: [(&str, &str); 52] = [
     ("zo zc", "in the queue: open, fold the section (enter too)"),
     ("zh", "fold the MR header to one row"),
     ("t", "file tree: enter jumps to a file or folds a folder, t closes"),
+    ("p", "pipeline: jobs by stage, failures first; o opens a job, r refreshes, p closes"),
     ("zv", "mark the file viewed: it folds, and comes back if it changes"),
     ("zz", "reading mode: the diff alone, centered; h brings the queue back"),
     ("w", "wrap long lines under their text"),
@@ -92,7 +93,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let input_rows = u16::from(app.filtering || app.palette.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
-    let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some());
+    let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some() || o.pipeline.is_some());
     let shown = columns(main.width, side_open, app.focus == Focus::Side, app.reading);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
@@ -107,6 +108,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if app.open.as_ref().is_some_and(|o| o.answer.is_some()) && side_open {
         super::answer_view::draw(f, app, side);
+    } else if app.open.as_ref().is_some_and(|o| o.pipeline.is_some()) && side_open {
+        super::pipeline_view::draw(f, app, side);
     } else if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
         super::tree_view::draw(f, app, side);
     } else if side_open {

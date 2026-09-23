@@ -77,7 +77,11 @@ impl App {
         }
         self.focus = match (self.focus, &self.open) {
             (Focus::Queue, _) => return self.open_selected(),
-            (Focus::Review, Some(open)) if open.pane.is_some() || open.tree.is_some() || open.answer.is_some() => Focus::Side,
+            (Focus::Review, Some(open))
+                if open.pane.is_some() || open.tree.is_some() || open.answer.is_some() || open.pipeline.is_some() =>
+            {
+                Focus::Side
+            }
             (Focus::Side, _) => Focus::Side,
             (focus, _) => focus,
         };
@@ -174,6 +178,7 @@ impl App {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('D') => return self.toggle_split(),
             KeyCode::Char('t') => self.toggle_tree(),
+            KeyCode::Char('p') => return self.toggle_pipeline(),
             KeyCode::Char('W') => self.toggle_whitespace(),
             KeyCode::Char('+') => return self.expand_context(),
             KeyCode::Char('w') => {
@@ -257,6 +262,9 @@ impl App {
     fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if self.answer_open() {
             return self.handle_answer_key(key);
+        }
+        if self.pipeline_open() {
+            return self.handle_pipeline_key(key);
         }
         if self.tree_open() {
             return self.handle_tree_key(key);

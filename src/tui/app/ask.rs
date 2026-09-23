@@ -141,7 +141,7 @@ impl App {
             target,
         };
         let key = open.key.clone();
-        self.open = Some(Open { answer: Some(answer), pane: None, tree: None, ..open.clone() });
+        self.open = Some(Open { answer: Some(answer), pane: None, tree: None, pipeline: None, ..open.clone() });
         self.focus = Focus::Side;
         vec![Action::Ask { key, id: self.next_answer, request: Box::new(request), fresh }]
     }
@@ -224,7 +224,7 @@ impl App {
                 scroll: 0,
                 target: Target::Nowhere,
             };
-            self.open = Some(Open { answer: Some(waiting), pane: None, tree: None, ..open.clone() });
+            self.open = Some(Open { answer: Some(waiting), pane: None, tree: None, pipeline: None, ..open.clone() });
         }
         self.buffer = crate::tui::field::Field::default();
         self.compose_from = Focus::Side;

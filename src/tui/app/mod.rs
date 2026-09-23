@@ -7,6 +7,7 @@ mod incoming;
 mod input;
 mod keys;
 mod pane;
+mod pipeline;
 mod queue;
 mod review;
 mod state;
@@ -21,6 +22,7 @@ pub use ask::{Answer, AnswerState, Part};
 pub use brief::Brief;
 pub use feedback::Toast;
 pub use pane::{Entry, EntryKind};
+pub use pipeline::{Pipeline, Run};
 pub use queue::{Badge, QueueRow};
 pub use review::Open;
 pub use state::{App, Settings};
@@ -110,6 +112,11 @@ pub enum Action {
         line: u32,
         note: Option<String>,
     },
+    /// `p`: the jobs of the CI run on the head commit `head`.
+    LoadChecks {
+        key: MrKey,
+        head: String,
+    },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
     /// Ask Claude; `id` names the answer the stream belongs to, `fresh` skips the cached answer.
@@ -175,6 +182,8 @@ pub enum Failure {
         resolved: bool,
     },
     Approve,
+    /// The CI run could not be read; the pipeline pane says why.
+    Checks,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -223,6 +232,11 @@ pub enum Incoming {
     Approved {
         key: MrKey,
         approve: bool,
+    },
+    /// The CI run of the open MR's head; `None` when nothing ran on it.
+    Checks {
+        key: MrKey,
+        checks: Option<crate::forge::checks::Checks>,
     },
     /// A file ready for the reader's program; the loop hands it the terminal.
     ViewReady {
