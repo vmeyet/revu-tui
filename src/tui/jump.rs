@@ -109,7 +109,7 @@ mod tests {
     use super::*;
 
     fn jump() -> Jump {
-        let key = |n| MrKey { project: "acme/widgets".into(), number: n };
+        let key = |n| MrKey::new("acme/widgets", n);
         Jump::new(vec![
             Candidate { label: "src/pay/charge.rs".into(), target: Target::File(0) },
             Candidate { label: "Cargo.lock".into(), target: Target::File(1) },

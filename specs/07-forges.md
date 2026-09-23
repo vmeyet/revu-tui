@@ -104,6 +104,14 @@ Without the CLI and without `--token -`, login stops with one line naming the mi
 Without `--host`, a command inside a checkout talks to the host of its `origin` remote when a token is there for it (env or keychain), else to the configured host.
 Every host remembers its own username (`[hosts."<host>"] username`), so the TUI names me right on each; with only a token variable, the queue answer names me.
 
+## Several hosts in one queue (M5)
+
+Every host the config remembers a login for (`host`, `[hosts.*]`) and holding a token joins the unscoped queue: outside a checkout, `--all`, or `*` in the TUI.
+Each host answers its own queue with its own username, rows carry their host (`MrKey.host`, `None` for the host `revu` started with), and `Sections::merge` sorts each section newest first.
+Opening a row, its drafts, its pipeline and its cache all go to that row's host; the `!` or `#` and the line links follow the row's forge (`Hosts::kind_of`).
+Rows carry a short host tag (`gitlab`, `github`) only when more than one host is in the queue.
+A checkout's queue keeps to the checkout's own host; a host that fails to answer is left out rather than failing the queue (`revu list` names it on stderr).
+
 ## What changed in phase 1 that a user can see
 
 Nothing on screen or in plain output: `revu list`, `list --all`, `show`, `diff` and the TUI frames are byte-identical on the same data.

@@ -8,6 +8,8 @@ const HALF_PAGE: usize = 10;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Brief {
+    /// `!` or `#`, as the MR's forge names it.
+    pub sigil: char,
     pub number: u64,
     pub title: String,
     pub author: String,
@@ -21,8 +23,9 @@ pub struct Brief {
 }
 
 impl Brief {
-    pub fn of_queue(mr: &QueueMr) -> Self {
+    pub fn of_queue(mr: &QueueMr, sigil: char) -> Self {
         Self {
+            sigil,
             number: mr.number,
             title: mr.title.clone(),
             author: mr.author.clone(),
@@ -35,9 +38,10 @@ impl Brief {
         }
     }
 
-    pub fn of_review(review: &Review) -> Self {
+    pub fn of_review(review: &Review, sigil: char) -> Self {
         let mr = &review.mr;
         Self {
+            sigil,
             number: mr.number,
             title: mr.title.clone(),
             author: mr.author.username.clone(),

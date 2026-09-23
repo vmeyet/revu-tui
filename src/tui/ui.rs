@@ -1,7 +1,6 @@
 use super::app::{App, Badge, Focus, Mark, QueueRow};
 use super::theme::Theme;
 use super::{brief_view, diff_view, publish_view, thread_view};
-use crate::forge::Kind;
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -210,20 +209,20 @@ fn draw_queue(f: &mut Frame, app: &mut App, area: Rect) {
         .take(height)
         .map(|(i, row)| queue_line(app, row, i == app.queue_selected, inner.width as usize))
         .collect();
-    let links = queue_links(&rows, app.kind, app.queue_scroll, inner);
+    let links = queue_links(&rows, &app.hosts, app.queue_scroll, inner);
     f.render_widget(Paragraph::new(lines), inner);
     app.links.extend(links);
 }
 
 /// Where each visible `!iid` lands: two cells in, after the cursor bar.
-pub fn queue_links(rows: &[QueueRow<'_>], kind: Kind, scroll: usize, inner: Rect) -> Vec<Link> {
+pub fn queue_links(rows: &[QueueRow<'_>], hosts: &crate::forge::Hosts, scroll: usize, inner: Rect) -> Vec<Link> {
     rows.iter()
         .enumerate()
         .skip(scroll)
         .take(inner.height as usize)
         .filter_map(|(i, row)| match row {
             QueueRow::Mr(mr) => {
-                let text = format!("{}{}", kind.sigil(), mr.number);
+                let text = format!("{}{}", hosts.kind_of(&mr.key()).sigil(), mr.number);
                 Some(Link { x: inner.x + 2, y: inner.y + (i - scroll) as u16, text, url: mr.web_url.clone() })
             }
             QueueRow::Section { .. } => None,
@@ -246,8 +245,10 @@ fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -
         QueueRow::Mr(mr) => {
             let badge = app.badge(mr).map(|b| badge_span(app, b));
             let mark = app.triaged().then(|| mark_span(app, app.mark(mr)));
-            let iid = format!("{}{} ", app.kind.sigil(), mr.number);
-            let room = width.saturating_sub(2 + mark.as_ref().map_or(0, Span::width) + iid.width() + 2);
+            let iid = format!("{}{} ", app.hosts.kind_of(&mr.key()).sigil(), mr.number);
+            let tag = app.hosts.tag(&mr.key()).map(|t| format!("{t} "));
+            let tag_w = tag.as_ref().map_or(0, |t| t.width());
+            let room = width.saturating_sub(2 + mark.as_ref().map_or(0, Span::width) + iid.width() + tag_w + 2);
             let title = truncate(&mr.title, room);
             let pad = room.saturating_sub(title.width()) + 1;
             let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
@@ -258,6 +259,7 @@ fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -
                 Span::styled(title, title_style),
                 Span::raw(" ".repeat(pad)),
             ]);
+            spans.extend(tag.map(|t| Span::styled(t, Style::default().fg(theme.faded))));
             spans.extend(badge);
             Line::from(spans)
         }
@@ -557,7 +559,7 @@ mod tests {
             QueueRow::Mr(&sections.mine[0]),
         ];
         let inner = Rect { x: 2, y: 1, width: 30, height: 3 };
-        let links = queue_links(&rows, Kind::GitLab, 1, inner);
+        let links = queue_links(&rows, &crate::forge::Hosts::one("gitlab.com", crate::forge::Kind::GitLab), 1, inner);
         assert_eq!(links.len(), 2, "sections carry no link and the window stops at the height");
         assert_eq!((links[0].x, links[0].y, links[0].text.as_str()), (4, 1, "!42"));
         assert_eq!(links[0].url, "https://gitlab.com/acme/widgets/-/merge_requests/42");

@@ -134,14 +134,14 @@ Work:
 
 Acceptance: `a s` on an open MR streams a summary in under two seconds to the first token; a second `a e` on the same file reports cache reads in the debug log.
 
-## M5 · Extras (pick by value)
+## M5 · Extras (done 2026-09-23)
 
-- More syntax languages: one grammar crate and one registry entry each (see `AGENTS.md`).
-- Pipeline pane: jobs, failed job names, `o` to open the job.
-- Suggestion apply from the thread pane (GitLab `PUT …/suggestions/:id/apply`, GitHub has no API: link to the web).
-- Notifications: a macOS notification when a To-review MR appears while the TUI runs.
-- Second host in the queue at once.
-- Linux keychain via Secret Service, if anyone asks.
+- Pipeline pane `p`: jobs by stage, failures first, `o` opens a job, refreshed every 15 s while it runs; GitLab's newest MR pipeline, GitHub's check runs grouped by workflow.
+- Apply a suggestion with `S` in the thread pane, after a `y`: GitLab applies it by id; GitHub has no API, so revu commits it through the contents API on the PR's own branch when I can push there, else `o` opens it on the web.
+- Notifications: one macOS notification per queue answer for MRs new to To review, each once; `[notify] enabled = false` turns them off.
+- Several hosts in one queue: every logged-in host joins the unscoped queue, rows tagged with their host (`07-forges.md`).
+- More syntax languages stay open: one grammar crate and one registry entry each (see `AGENTS.md`).
+- Linux keychain via Secret Service: **not planned**. macOS only is a stated non-goal (`00-vision.md`); the keychain trick through `/usr/bin/security`, `open` and `pbcopy` are macOS tools, and nobody asked for Linux.
 
 ## Definition of done for any slice
 
