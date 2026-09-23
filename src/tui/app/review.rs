@@ -267,8 +267,12 @@ impl App {
     /// Shows `next` and saves what the reader chose in it: folds, viewed files, split.
     fn keep(&mut self, next: Open) -> Vec<Action> {
         let review = &next.review;
-        let action =
-            Action::SaveState { key: next.key.clone(), fold: review.fold.clone(), viewed: review.viewed_fingerprints(), split: review.split };
+        let action = Action::SaveState {
+            key: next.key.clone(),
+            fold: review.fold.clone(),
+            viewed: review.viewed_fingerprints(),
+            split: review.split,
+        };
         self.open = Some(next);
         vec![action]
     }

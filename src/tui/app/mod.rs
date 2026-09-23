@@ -8,9 +8,9 @@ mod keys;
 mod queue;
 mod review;
 mod state;
-mod tree;
 #[cfg(test)]
 mod tests;
+mod tree;
 mod write;
 
 pub use brief::Brief;

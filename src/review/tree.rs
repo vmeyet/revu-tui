@@ -118,7 +118,10 @@ mod tests {
     #[test]
     fn folders_open_to_depth_two_and_come_before_files() {
         let files = files(&["src/pay/charge.rs", "Cargo.lock", "src/pay/deep/a.rs", "src/main.rs"]);
-        assert_eq!(names(&rows(&files, &TreeFolds::default())), ["▾src/", "  ▾pay/", "    ▸deep/", "    charge.rs", "  main.rs", "Cargo.lock"]);
+        assert_eq!(
+            names(&rows(&files, &TreeFolds::default())),
+            ["▾src/", "  ▾pay/", "    ▸deep/", "    charge.rs", "  main.rs", "Cargo.lock"]
+        );
     }
 
     #[test]
