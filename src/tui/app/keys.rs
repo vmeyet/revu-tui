@@ -163,6 +163,7 @@ impl App {
             KeyCode::Char('D') => return self.toggle_split(),
             KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Char('W') => self.toggle_whitespace(),
+            KeyCode::Char('+') => return self.expand_context(),
             KeyCode::Char('w') => {
                 self.wrap = !self.wrap;
                 self.toast(if self.wrap { "long lines wrap" } else { "long lines end in …" });

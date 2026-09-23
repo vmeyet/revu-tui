@@ -103,7 +103,7 @@ Renames show `old → new`; a pure mode change shows `mode 644 → 755`.
 ### Hunks
 
 A hunk row is `▾ @@ -a,b +c,d @@ context`, `muted`, with the function context in `fg`; folded it appends `(n lines)`.
-Between two hunks the elided lines show as `· · ·  38 lines` in `faded`; `+` on that row expands 10 more lines of context above and below (fetched from the file blob, M3).
+`+` on a hunk (its header or any line in it) shows 10 more unchanged lines above and below it, read once from the whole file at the head commit (`Forge::file`: GitLab `repository/files/:path/raw`, GitHub `contents/:path` as raw). Lines between two hunks are never shown twice; old-side numbers follow the offset at each end of the hunk. Comments go on diff lines, not on these extra lines.
 
 ### Lines
 

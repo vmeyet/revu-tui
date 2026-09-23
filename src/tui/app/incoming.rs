@@ -33,6 +33,7 @@ impl App {
                 }
             }
             Incoming::Done(text) => self.toast(text),
+            Incoming::File { key, path, text } => self.apply_file(&key, path, &text),
             Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(&key, index, id),
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),

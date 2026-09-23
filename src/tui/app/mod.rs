@@ -89,6 +89,12 @@ pub enum Action {
         key: MrKey,
         approve: bool,
     },
+    /// The whole file at the head commit, for the lines around a hunk (`+`).
+    LoadFile {
+        key: MrKey,
+        path: String,
+        sha: String,
+    },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
@@ -147,6 +153,12 @@ pub enum Incoming {
         discussions: Vec<Discussion>,
     },
     Done(String),
+    /// A file read whole, split into lines, for the context around its hunks.
+    File {
+        key: MrKey,
+        path: String,
+        text: String,
+    },
     DraftSaved {
         key: MrKey,
         index: usize,

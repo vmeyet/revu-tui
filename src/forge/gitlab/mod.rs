@@ -62,6 +62,11 @@ impl Client {
         response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
     }
 
+    async fn get_text(&self, path: &str) -> Result<String> {
+        let response = self.send(Method::GET, self.url(path)?, None).await?;
+        response.text().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
+    }
+
     /// `path` is relative to `/api/v4/` except `graphql`, which lives beside it.
     async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(Method::POST, self.url(path)?, Some(body)).await?;
