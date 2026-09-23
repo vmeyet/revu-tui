@@ -266,6 +266,12 @@ Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:vie
 
 `ctrl-k` (or `⌘k` where the terminal forwards it) opens one fuzzy list: the open MR's files first, then every MR of the queue.
 
+## Notifications (M5)
+
+While the TUI runs, an MR that lands in To review raises one macOS notification (`osascript`, text passed as arguments, never inside the script).
+The first queue answer of a scope only records what To review holds; later fresh answers announce the newcomers, each MR once, all of one answer in a single notification.
+Whether the terminal has focus cannot be told reliably, so there is no quiet mode beyond `[notify] enabled = false`.
+
 ## Toasts and errors
 
 A toast is one line in the status area, `accent` for success, `danger` for failure, 4 s, replaced by the next.

@@ -105,6 +105,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         ground,
         triage: backend.jev.is_some(),
         ask: backend.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned()),
+        notify: ctx.config.notify.enabled,
     };
     let mut app = App::new(settings);
     let mut terminal = ratatui::init();
@@ -238,6 +239,11 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::SaveState { key, fold, viewed, split } => {
                 if let Err(e) = backend.save_state(&key, fold, viewed, split) {
+                    send(failed(Failure::Local, &e));
+                }
+            }
+            Action::Notify { title, body } => {
+                if let Err(e) = notify(&title, &body) {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -600,6 +606,18 @@ fn merged_fold(initial: FoldState, saved: FoldState) -> FoldState {
 
 fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// The text goes in as arguments, never into the script, so an MR title cannot run AppleScript.
+fn notify(title: &str, body: &str) -> Result<()> {
+    let status = std::process::Command::new("osascript")
+        .args(["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run"])
+        .args([title, body])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .context("running osascript")?;
+    anyhow::ensure!(status.success(), "osascript failed");
+    Ok(())
 }
 
 fn open_url(url: &str) -> Result<()> {

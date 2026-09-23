@@ -7,6 +7,7 @@ mod feedback;
 mod incoming;
 mod input;
 mod keys;
+mod notify;
 mod pane;
 mod pipeline;
 mod queue;
@@ -113,6 +114,11 @@ pub enum Action {
         sha: String,
         line: u32,
         note: Option<String>,
+    },
+    /// A macOS notification: an MR landed in To review.
+    Notify {
+        title: String,
+        body: String,
     },
     /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
     Apply {
