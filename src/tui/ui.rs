@@ -19,13 +19,13 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 47] = [
+pub const HELP: [(&str, &str); 48] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
-    ("h l", "pane to the left; open the MR, pane to the right"),
-    ("enter", "open the MR, the thread, or toggle the fold"),
-    ("esc", "back: close the thread, then the queue"),
+    ("h l", "pane to the left; open the MR, or a marked line's threads"),
+    ("enter", "open the MR, a marked line's threads, or toggle the fold"),
+    ("esc x", "close the right pane; esc again goes back to the queue"),
     ("/", "filter the queue"),
     ("*", "in the queue: this repo only, or every project"),
     ("i", "the MR description"),
@@ -35,7 +35,7 @@ pub const HELP: [(&str, &str); 47] = [
     ("click !42", "open the MR, in terminals that follow links"),
     ("tab S-tab", "next, previous file"),
     ("]c [c", "next, previous hunk"),
-    ("]n [n", "next, previous thread"),
+    ("]n [n", "next, previous line with a conversation; the pane follows"),
     ("]f [f", "next, previous file with an open thread"),
     ("za", "toggle the fold under the cursor"),
     ("D", "changed words inline, or every line split"),
@@ -55,11 +55,12 @@ pub const HELP: [(&str, &str); 47] = [
     ("V", "select lines: c comments on them, y copies them"),
     ("E", "write the comment in $EDITOR"),
     ("s", "suggestion in the editor, prefilled with the lines"),
-    ("enter d", "on a draft: edit, delete"),
+    ("e d", "in the pane: edit, delete my draft"),
+    ("J K", "in the pane: next, previous thread on the line"),
     ("P", "publish: enter sends, e edits, m moves a lost draft to the MR"),
     ("A", "approve, unapprove"),
     ("r", "in a thread: reply, as a draft"),
-    ("R", "in a thread: resolve, unresolve"),
+    ("R", "resolve, unresolve: in the pane, or on a marked line"),
     ("u", "in a thread: open its first link"),
     ("esc", "drop the selection, close the input"),
     (":", "command line: :go !42 · :view old · :set theme=nord · tab completes"),
@@ -83,7 +84,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let input_rows = u16::from(app.filtering || app.input.is_some() || app.palette.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
-    let side_open = app.open.as_ref().is_some_and(|o| o.thread.is_some() || o.tree.is_some());
+    let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some());
     let side_w = if side_open { SIDE_W.max(main.width * SIDE_PCT / 100) } else { 0 };
     let queue_w = if app.reading { 0 } else { QUEUE_W };
     let [queue, review, side] =

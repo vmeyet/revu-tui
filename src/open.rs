@@ -28,9 +28,7 @@ pub fn line_for(review: &Review, row: &Row, side: Side) -> u32 {
             let hunk = &review.files[*file].hunks[*index];
             hunk.lines.iter().find_map(|l| number(l, side)).unwrap_or_else(|| start(hunk, side))
         }
-        Row::Thread { id } => review.thread(id).and_then(|t| t.anchor.as_ref()).map_or(1, |a| line_of_anchor(review, a, side)),
-        Row::Draft { index } => review.drafts.get(*index).and_then(|d| d.anchor.as_ref()).map_or(1, |a| line_of_anchor(review, a, side)),
-        Row::Header | Row::File { .. } | Row::Outdated { .. } | Row::Gap => 1,
+        Row::Header | Row::File { .. } | Row::Gap => 1,
     }
 }
 
@@ -300,7 +298,6 @@ mod tests {
         assert_eq!(head(&Row::Pair { file: 0, hunk: 0, removed: 1, added: 2 }), 11);
         assert_eq!(head(&Row::Context { file: 0, hunk: 0, old: 7, new: 8 }), 8);
         assert_eq!(head(&Row::File { index: 0, open: true }), 1);
-        assert_eq!(head(&Row::Outdated { file: 0 }), 1);
     }
 
     #[test]

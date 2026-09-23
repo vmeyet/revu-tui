@@ -5,9 +5,9 @@ expression: "render(&mut app, 120, 20)"
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: cha… ────────╮╭ Files · 1/2 viewed ────────────────────────╮
 │   TO REVIEW                  1 ││  omar · 2h · +5 −3 · 2 files · ✓ suc ││  ▾ src/                                    │
 │ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 un ││    ▾ pay/                                  │
-│   MINE                       1 ││                                      ││ ▎      charge.rs                +4 −2 ◆2 ✓ │
+│   MINE                       1 ││  ◆ 1 on the MR  enter opens          ││ ▎      charge.rs                +4 −2 ◆2 ✓ │
 │   !41 fix: flaky cache test  D ││                                      ││    Cargo.lock                        +1 −1 │
-│   WATCHING                   1 ││ ▎▸ src/pay/charg…  +4 −2  ◆2  viewed ││                                            │
+│   WATCHING                   1 ││ ▎▸ …  +4 −2  ◆1 · 1 outdated  viewed ││                                            │
 │   !35 infra: new runner      ⠋ ││                                      ││                                            │
 │   DONE ▸                     1 ││  ▸ Cargo.lock          +1 −1  folded ││                                            │
 │                                ││                                      ││                                            │

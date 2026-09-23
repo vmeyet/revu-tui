@@ -2,7 +2,7 @@
 use super::*;
 use crate::forge::gitlab::fixture;
 use crate::forge::{DiffFile, Discussion, Kind, Mr};
-use crate::review::Row;
+use crate::review::{Place, Row};
 use crate::tui::theme::Theme;
 use crate::tui::ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -276,9 +276,9 @@ fn tab_and_brackets_jump_between_files_hunks_and_threads() {
     press(&mut app, "]c");
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 1, .. })));
     press(&mut app, "]n");
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Outdated { .. })), "wraps to the outdated block");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "wraps to the thread on the MR");
     press(&mut app, "]n");
-    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Thread { id: "c0ffee00c0ffee00".into() }));
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "then the marked removed line");
     app.handle_key(code(KeyCode::Tab));
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 1, .. })));
     app.handle_key(code(KeyCode::BackTab));
@@ -313,20 +313,57 @@ fn folds_save_state_and_keep_the_cursor_on_the_same_place() {
 }
 
 #[test]
-fn enter_toggles_a_hunk_and_opens_a_thread() {
+fn enter_toggles_a_hunk_and_opens_the_pane_on_a_marked_line() {
     let mut app = with_review();
     press(&mut app, "]c");
     app.handle_key(code(KeyCode::Enter));
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { open: false, .. })));
+    app.handle_key(code(KeyCode::Enter));
     press(&mut app, "]n");
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
-    assert_eq!(app.open.as_ref().unwrap().thread.as_deref(), Some("9f2c0aa1d4e5b6c7"), "the outdated block opens its first thread");
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(open.pane.as_ref().map(|p| &p.place), Some(&Place::Line { file: 0, new: None, old: Some(13) }));
+    assert_eq!(open.focused_thread().as_deref(), Some("c0ffee00c0ffee00"));
     assert_eq!(press(&mut app, "u"), vec![], "no link in that thread");
     assert!(app.live_toast().is_some());
     app.handle_key(code(KeyCode::Esc));
     assert_eq!(app.focus, Focus::Review);
-    assert_eq!(app.open.as_ref().unwrap().thread, None);
+    assert_eq!(app.open.as_ref().unwrap().pane, None);
+}
+
+#[test]
+fn l_on_a_file_opens_its_outdated_threads_and_the_header_its_mr_threads() {
+    let mut app = with_review();
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
+    press(&mut app, "l");
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(open.pane.as_ref().map(|p| &p.place), Some(&Place::Outdated { file: 0 }));
+    assert_eq!(open.focused_thread().as_deref(), Some("9f2c0aa1d4e5b6c7"));
+    press(&mut app, "x");
+    assert_eq!(app.open.as_ref().unwrap().pane, None);
+    press(&mut app, "k");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "the header holds the thread on the MR");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place), Some(&Place::Mr));
+}
+
+#[test]
+fn the_pane_follows_the_cursor_onto_marked_lines_only() {
+    let mut app = with_review();
+    press(&mut app, "]n");
+    press(&mut app, "l");
+    press(&mut app, "h");
+    press(&mut app, "k");
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(
+        open.pane.as_ref().map(|p| &p.place),
+        Some(&Place::Line { file: 0, new: None, old: Some(13) }),
+        "an unmarked line keeps the thread"
+    );
+    assert!(render(&mut app, 140, 24).contains("↑ line -13"), "and says where it belongs");
+    press(&mut app, "x");
+    assert_eq!(app.open.as_ref().unwrap().pane, None);
 }
 
 #[test]
@@ -337,7 +374,9 @@ fn h_l_and_esc_move_the_focus() {
     press(&mut app, "l");
     assert_eq!(app.focus, Focus::Review);
     press(&mut app, "l");
-    assert_eq!(app.focus, Focus::Review, "no thread open");
+    assert_eq!(app.focus, Focus::Side, "the file row opens its outdated threads");
+    app.handle_key(code(KeyCode::Esc));
+    assert_eq!(app.focus, Focus::Review, "esc closes the pane first");
     app.handle_key(code(KeyCode::Esc));
     assert_eq!(app.focus, Focus::Queue);
 }
@@ -449,7 +488,7 @@ fn snapshot_review_open() {
 #[test]
 fn snapshot_thread_open() {
     let mut app = with_review();
-    press(&mut app, "]n]n");
+    press(&mut app, "]n");
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("thread_open", render(&mut app, 120, 24));
 }
@@ -487,8 +526,10 @@ fn type_text(app: &mut App, text: &str) -> Vec<Action> {
     app.handle_key(code(KeyCode::Enter))
 }
 
-fn draft_rows(app: &App) -> Vec<usize> {
-    app.open.as_ref().unwrap().rows.iter().filter_map(|r| if let Row::Draft { index } = r { Some(*index) } else { None }).collect()
+/// The anchor column of the row under the cursor.
+fn marker_here(app: &App) -> Option<crate::review::Marker> {
+    let open = app.open.as_ref().unwrap();
+    open.review.marker_of(&open.review.markers(), open.row()?)
 }
 
 fn with_saved_draft() -> App {
@@ -515,9 +556,8 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
     assert_eq!(draft.position.as_ref().and_then(|p| p.line.new), Some(12));
     assert_eq!(draft.id, None);
     assert!(app.input.is_none());
-    let open = app.open.as_ref().unwrap();
-    assert_eq!(draft_rows(&app), [0]);
-    assert!(matches!(open.rows[open.selected + 1], Row::Draft { index: 0 }), "the draft row follows the line");
+    let marker = marker_here(&app).expect("the line is marked");
+    assert_eq!((marker.mark, marker.unsaved), (crate::review::Mark::Draft, true), "an unsaved draft of mine, no row inserted");
     assert_eq!(app.unsaved_drafts(), 1);
     app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
@@ -552,9 +592,9 @@ fn v_selects_a_range_for_c_y_and_esc() {
     assert_eq!(text, " pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {\n-    let client = Client::new();");
     assert_eq!(app.open.as_ref().unwrap().select_from, None, "copying drops the selection");
     press(&mut app, "k");
-    press(&mut app, "Vjjj");
+    press(&mut app, "Vjj");
     let open = app.open.as_ref().unwrap();
-    assert_eq!(open.selection().count(), 4, "three lines and the thread row between them");
+    assert_eq!(open.selection().count(), 3, "three lines, nothing between them");
     assert!(open.is_selected(open.selected - 1));
     press(&mut app, "c");
     let actions = type_text(&mut app, "fold these");
@@ -580,9 +620,8 @@ fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
     let actions = type_text(&mut app, "agreed");
     let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"));
-    assert!(draft_rows(&app).is_empty());
     assert_eq!(app.focus, Focus::Side);
-    assert!(render(&mut app, 120, 24).contains("◇ you · unsaved"));
+    assert!(render(&mut app, 140, 24).contains("you · unsaved ◇"));
 }
 
 #[test]
@@ -604,11 +643,11 @@ fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
 }
 
 #[test]
-fn enter_edits_a_draft_and_d_deletes_it() {
+fn e_in_the_pane_edits_my_draft_and_d_deletes_it() {
     let mut app = with_saved_draft();
-    press(&mut app, "j");
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Draft { index: 0 })));
-    app.handle_key(code(KeyCode::Enter));
+    press(&mut app, "l");
+    assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
+    press(&mut app, "e");
     assert_eq!((app.input_label(), app.buffer.text()), ("edit draft".to_owned(), "nit"));
     let actions = type_text(&mut app, " (typo)");
     let [Action::UpdateDraft { key, id: 9, draft }] = actions.as_slice() else { panic!("{actions:?}") };
@@ -616,8 +655,8 @@ fn enter_edits_a_draft_and_d_deletes_it() {
     assert_eq!((draft.body.as_str(), draft.position.is_some()), ("nit (typo)", true), "the position travels with the edit");
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit (typo)");
     assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
-    assert!(draft_rows(&app).is_empty());
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })), "the cursor lands on the next row");
+    assert_eq!(app.draft_count(), 0);
+    assert_eq!(marker_here(&app), None, "the line is plain again");
 }
 
 #[test]
@@ -630,7 +669,7 @@ fn an_unsaved_draft_is_posted_again_by_r_and_deleted_without_a_request() {
     assert!(app.live_toast().unwrap().text.contains("r to retry"));
     let actions = press(&mut app, "r");
     assert!(matches!(actions.as_slice(), [Action::RefreshMr(key), Action::SaveDraft { index: 0, .. }] if *key == mr_key()), "{actions:?}");
-    press(&mut app, "j");
+    press(&mut app, "l");
     assert_eq!(press(&mut app, "d"), vec![], "GitLab never had it");
     assert_eq!(app.draft_count(), 0);
 }
@@ -726,8 +765,8 @@ fn big_e_and_s_open_the_editor_and_what_comes_back_is_a_draft() {
     let actions = app.take_actions();
     assert!(matches!(actions.as_slice(), [Action::SaveDraft { index: 0, .. }]), "{actions:?}");
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "from the editor");
-    press(&mut app, "k");
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Draft { index: 0 })));
+    press(&mut app, "kl");
+    assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
     let actions = press(&mut app, "E");
     assert!(matches!(actions.as_slice(), [Action::Compose { input: Input::EditDraft { index: 0 }, draft }] if draft == "from the editor"));
 }
@@ -993,7 +1032,8 @@ fn a_one_word_change_reads_as_one_row_with_its_thread_under_it() {
     let app = with_sum_review();
     let rows = &app.open.as_ref().unwrap().rows;
     let pair = rows.iter().position(|r| matches!(r, Row::Pair { removed: 2, added: 3, .. })).expect("the b line pairs up");
-    assert!(matches!(&rows[pair + 1], Row::Thread { id } if id == "d3"), "the thread on the added line sits under the pair");
+    let open = app.open.as_ref().unwrap();
+    assert!(open.review.marker_of(&open.review.markers(), &rows[pair]).is_some(), "the thread on the added line marks the pair");
     let lines: Vec<usize> = rows.iter().filter_map(|r| if let Row::Line { index, .. } = r { Some(*index) } else { None }).collect();
     assert_eq!(lines, vec![0, 1, 4, 5, 6, 7], "the rewritten d line stays split");
 }
@@ -1039,7 +1079,7 @@ fn c_on_a_pair_comments_the_new_side_and_big_c_the_old_side() {
 fn v_treats_a_pair_as_its_added_line() {
     let mut app = with_sum_review();
     walk_to(&mut app, |r| matches!(r, Row::Line { index: 1, .. }));
-    press(&mut app, "Vjjjc");
+    press(&mut app, "Vjjc");
     let Some(Input::Comment { position }) = &app.input else { panic!("no comment input") };
     let start = position.start.expect("a range");
     assert_eq!((start.new, position.line.new), (Some(2), Some(4)), "from line 2 through the pair to line 4");
@@ -1050,7 +1090,7 @@ fn moving_and_jumping_step_over_pair_rows_like_lines() {
     let mut app = with_sum_review();
     on_pair(&mut app);
     press(&mut app, "j");
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Thread { .. })));
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })), "no thread row after the pair");
     press(&mut app, "kk");
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { index: 1, .. })));
     press(&mut app, "[c");
@@ -1355,12 +1395,11 @@ fn type_palette(app: &mut App, line: &str) -> Vec<Action> {
 #[test]
 fn v_in_the_thread_pane_and_the_tree_uses_their_file() {
     let mut app = with_review();
-    app.review_jump_to(|row| matches!(row, Row::Thread { .. }));
+    press(&mut app, "]n");
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
-    let actions = press(&mut app, "v");
-    assert!(matches!(&actions[..], [Action::View { path, line, .. }] if path == "src/pay/charge.rs" && *line > 0), "{actions:?}");
-    app.close_thread();
+    assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "the old line 13 opens at head line 13");
+    app.close_pane();
     press(&mut app, "t");
     assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 1, None)], "the tree opens on the cursor's file");
 }

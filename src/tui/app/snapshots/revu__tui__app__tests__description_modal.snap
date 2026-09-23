@@ -7,22 +7,22 @@ expression: "render(&mut app, 100, 24)"
 │ ▎ !42 fe╭ !42 feat: charge cards at checkout ──────────────────────────────────────────╮         │
 │   MINE  │ omar · feat/checkout → main                                                  │         │
 │   !41 fi│                                                                              │         │
-│   WATCHI│ ## Why                                                                       │4 −2  ◆2 │
+│   WATCHI│ ## Why                                                                       │outdated │
 │   !35 in│                                                                              │         │
-│   DONE ▸│ Cards were charged twice.                                                    │oney) -… │
+│   DONE ▸│ Cards were charged twice.                                                    │ Money)… │
 │         │                                                                              │         │
-│         │ • retry with idempotency_key                                                 │         │
-│         │ • log the attempt                                                            │ncy_key… │
-│         │                                                                              │         │
-│         │                                                                              │wait?;   │
-│         │                                                                              │         │
+│         │ • retry with idempotency_key                                                 │tency_k… │
+│         │ • log the attempt                                                            │         │
+│         │                                                                              │.await?; │
 │         │                                                                              │         │
 │         │                                                                              │         │
 │         │                                                                              │         │
-│         │                                                                              │)))      │
+│         │                                                                              │         │
+│         │                                                                              │y()))    │
+│         │                                                                              │         │
 │         │                                                                              │         │
 │         ╰ j k scroll · o open in the browser · esc close ──────────────────────────────╯         │
-│                                ││     outdated · 1 thread                                        │
+│                                ││  ▸ Cargo.lock                                    +1 −1  folded │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

@@ -120,7 +120,7 @@ pub struct Note {
 }
 
 /// Which side of the diff a line number counts on.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Side {
     Old,
     New,

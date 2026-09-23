@@ -5,6 +5,7 @@ mod feedback;
 mod incoming;
 mod input;
 mod keys;
+mod pane;
 mod queue;
 mod review;
 mod state;
@@ -16,6 +17,7 @@ mod write;
 
 pub use brief::Brief;
 pub use feedback::Toast;
+pub use pane::{Entry, EntryKind};
 pub use queue::{Badge, QueueRow};
 pub use review::Open;
 pub use state::{App, Settings};
