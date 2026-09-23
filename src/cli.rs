@@ -123,9 +123,16 @@ pub struct ApproveArgs {
 /// `revu ai`: one subcommand.
 #[derive(Args, Debug)]
 pub struct AiArgs {
-    /// What to do with the AI keys.
+    /// What to do with the AI keys, or a question.
     #[command(subcommand)]
     pub command: AiCommand,
+}
+
+impl AiArgs {
+    /// `ask` reads an MR, so it needs the forge; the key commands do not.
+    pub fn needs_forge(&self) -> bool {
+        matches!(self.command, AiCommand::Ask(_))
+    }
 }
 
 /// The `revu ai` subcommands.
@@ -140,6 +147,24 @@ pub enum AiCommand {
     },
     /// Which provider is on and where its key comes from (never the key).
     Status,
+    /// Ask Claude about a merge request; the answer streams to stdout.
+    Ask(AiAskArgs),
+}
+
+/// Arguments of `revu ai ask`.
+#[derive(Args, Debug)]
+pub struct AiAskArgs {
+    /// `group/project!42`, `!42`, an MR URL, or `-` for the current branch.
+    pub mr: String,
+    /// Ask about one file instead of the whole MR.
+    #[arg(long, value_name = "PATH")]
+    pub file: Option<String>,
+    /// With `--file`: the new-side lines asked about, `13` or `13-20`.
+    #[arg(long, value_name = "LINES", requires = "file")]
+    pub lines: Option<String>,
+    /// The question; a summary of the MR (or an explanation of the file) without one.
+    #[arg(trailing_var_arg = true)]
+    pub question: Vec<String>,
 }
 
 /// Flags of `revu ai login`.
