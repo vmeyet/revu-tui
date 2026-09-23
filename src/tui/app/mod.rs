@@ -11,6 +11,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 mod tree;
+mod view;
 mod write;
 
 pub use brief::Brief;
@@ -95,6 +96,14 @@ pub enum Action {
         path: String,
         sha: String,
     },
+    /// `v`: the file `path` at commit `sha`, for the reader's program at `line`; `note` says whose file it is.
+    View {
+        key: MrKey,
+        path: String,
+        sha: String,
+        line: u32,
+        note: Option<String>,
+    },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
@@ -177,6 +186,16 @@ pub enum Incoming {
     Approved {
         key: MrKey,
         approve: bool,
+    },
+    /// A file ready for the reader's program; the loop hands it the terminal.
+    ViewReady {
+        key: MrKey,
+        view: crate::open::View,
+    },
+    /// Back from the program, with what went wrong if anything did.
+    Viewed {
+        view: crate::open::View,
+        outcome: Result<(), String>,
     },
     /// What came back from the editor; `None` when the user backed out.
     Composed {

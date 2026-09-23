@@ -53,6 +53,9 @@ struct Backend {
     fold_globs: Vec<String>,
     watch_labels: Vec<String>,
     inline: InlineRule,
+    open: crate::config::Open,
+    /// The checkout `revu` runs in, when its origin is on this forge: `v` opens its real files.
+    checkout: Option<crate::open::Checkout>,
 }
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out.
@@ -70,6 +73,8 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
         inline: ctx.config.review.inline(),
+        open: ctx.config.open.clone(),
+        checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
     };
     let settings = Settings {
         theme,
@@ -88,7 +93,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
 
 async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, backend: &Backend) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Incoming>();
-    let mut events = EventStream::new();
+    let mut keys = Keys::new();
     let mut ticks = tokio::time::interval(TICK);
     for action in app.start() {
         spawn(action, backend, tx.clone());
@@ -98,43 +103,93 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, back
         let links = hyperlinks(frame.buffer, &app.links);
         print_links(&links);
         let actions = tokio::select! {
-            Some(event) = events.next() => match event? {
+            Some(event) = keys.next() => match event? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => app.handle_key(key),
                 _ => vec![],
             },
             Some(incoming) = rx.recv() => { app.apply(incoming); app.take_actions() }
             _ = ticks.tick() => {
-                app.now = Instant::now();
+                wake(app);
                 app.rate = backend.forge.rate();
-                app.today = Utc::now();
                 app.tick()
             }
         };
         for action in actions {
             match action {
                 Action::Compose { input, draft } => {
-                    for follow_up in compose_inline(terminal, app, input, &draft) {
+                    for follow_up in compose_inline(terminal, &mut keys, app, input, &draft) {
                         spawn(follow_up, backend, tx.clone());
                     }
                 }
                 other => spawn(other, backend, tx.clone()),
             }
         }
+        if let Some(view) = app.take_view() {
+            view_inline(terminal, &mut keys, app, view);
+        }
     }
     Ok(())
 }
 
+/// The reader's program owns the terminal until it exits; the app, untouched, draws again after.
+fn view_inline(terminal: &mut ratatui::DefaultTerminal, keys: &mut Keys, app: &mut App, view: crate::open::View) {
+    keys.pause();
+    ratatui::restore();
+    let outcome = crate::open::run(&view.argv);
+    *terminal = ratatui::init();
+    keys.resume();
+    let _ = terminal.clear();
+    wake(app);
+    app.apply(Incoming::Viewed { view, outcome });
+}
+
+/// The clock stood still while a program had the terminal: what comes next is timed from now.
+fn wake(app: &mut App) {
+    app.now = Instant::now();
+    app.today = Utc::now();
+}
+
 /// The editor owns the terminal for a while; the answer goes through `apply` like any other.
-fn compose_inline(terminal: &mut ratatui::DefaultTerminal, app: &mut App, input: Input, draft: &str) -> Vec<Action> {
+fn compose_inline(terminal: &mut ratatui::DefaultTerminal, keys: &mut Keys, app: &mut App, input: Input, draft: &str) -> Vec<Action> {
+    keys.pause();
     ratatui::restore();
     let edited = compose::edit(draft);
     *terminal = ratatui::init();
+    keys.resume();
     let _ = terminal.clear();
+    wake(app);
     match edited {
         Ok(text) => app.apply(Incoming::Composed { input, text }),
         Err(e) => app.apply(failed(Failure::Local, &e)),
     }
     app.take_actions()
+}
+
+/// The terminal's keys. The event stream keeps a thread reading the terminal, which would steal
+/// the keys typed into a program that takes it over: `pause` drops the stream, which stops that
+/// thread, and `resume` starts a new one once the program is gone. A new stream cannot be made
+/// before the old one is dropped: both need the same reader lock.
+struct Keys(Option<EventStream>);
+
+impl Keys {
+    fn new() -> Self {
+        Self(Some(EventStream::new()))
+    }
+
+    async fn next(&mut self) -> Option<std::io::Result<Event>> {
+        match &mut self.0 {
+            Some(stream) => stream.next().await,
+            None => None,
+        }
+    }
+
+    fn pause(&mut self) {
+        self.0 = None;
+    }
+
+    fn resume(&mut self) {
+        self.0 = Some(EventStream::new());
+    }
 }
 
 /// Every action runs in its own task and answers through `Incoming`; the loop never awaits the network.
@@ -200,6 +255,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::Approve { key, approve } => {
                 let outcome = backend.forge.approve(&key, approve).await;
                 send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
+            }
+            Action::View { key, path, sha, line, note } => {
+                let outcome = backend.view(key, &path, &sha, line, note).await;
+                send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
             Action::Compose { .. } => unreachable!("the loop runs the editor itself"),
         }
@@ -342,6 +401,42 @@ impl Backend {
         Ok(Incoming::Discussions { key, discussions })
     }
 
+    /// The file ready for the reader's program: the checkout's own when it sits on `sha`,
+    /// else a private read-only copy of what the forge serves.
+    async fn view(&self, key: MrKey, path: &str, sha: &str, line: u32, note: Option<String>) -> Result<Incoming> {
+        crate::open::safe_path(path)?;
+        let checkout = self.checkout.as_ref().and_then(|c| c.head().map(|head| (c, head)));
+        let source = crate::open::Source::pick(&key.project, sha, checkout.as_ref().map(|(c, head)| (c.project.as_str(), head.as_str())));
+        let (file, dir, note) = if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
+            (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
+        } else {
+            let text = self.file_text(&key, path, sha).await?;
+            let (dir, file) = crate::open::write_private(path, text.as_bytes())?;
+            (file, Some(std::sync::Arc::new(dir)), note)
+        };
+        let command = crate::open::command_for(path, &self.open, env("VISUAL").as_deref(), env("EDITOR").as_deref());
+        let argv = crate::open::argv(&command, &file.display().to_string(), line, dir.is_some())?;
+        let shown = format!("{}:{line}", path.rsplit('/').next().unwrap_or(path));
+        Ok(Incoming::ViewReady { key, view: crate::open::View { argv, shown, note, _copy: dir } })
+    }
+
+    /// A file at a commit never changes, so the cache serves it forever.
+    async fn file_text(&self, key: &MrKey, path: &str, sha: &str) -> Result<String> {
+        let cache_key = keys::file(key, sha, path);
+        if let Some(text) = self.cache.read::<String>(&cache_key) {
+            return Ok(text);
+        }
+        let short = sha.get(..8).unwrap_or(sha);
+        let text = self.forge.file(key, path, sha).await.with_context(|| format!("{path} at {short} · v tries again"))?;
+        anyhow::ensure!(
+            text.len() <= crate::open::MAX_BYTES,
+            "too large to open here ({} MB) · o opens it in the browser",
+            text.len() / (1024 * 1024)
+        );
+        let _ = self.cache.write(&cache_key, &text);
+        Ok(text)
+    }
+
     fn build(&self, key: &MrKey, mr: Mr, diffs: &[DiffFile], discussions: Vec<Discussion>, drafts: &[HeldDraft]) -> Review {
         let state = self.state(key);
         let review = Review::new(mr, diffs, discussions, &self.fold_globs);
@@ -367,6 +462,10 @@ fn merged_fold(initial: FoldState, saved: FoldState) -> FoldState {
     let mut hunks = initial.hunks;
     hunks.extend(saved.hunks);
     FoldState { files, hunks }
+}
+
+fn env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
 
 fn open_url(url: &str) -> Result<()> {
@@ -420,7 +519,15 @@ mod tests {
         assert_eq!(state, MrState::default());
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
-        let backend = Backend { forge: test_forge(), cache, fold_globs: vec![], watch_labels: vec![], inline: InlineRule::default() };
+        let backend = Backend {
+            forge: test_forge(),
+            cache,
+            fold_globs: vec![],
+            watch_labels: vec![],
+            inline: InlineRule::default(),
+            open: crate::config::Open::default(),
+            checkout: None,
+        };
         backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
         let state = backend.state(&key());
         assert_eq!(
@@ -446,13 +553,49 @@ mod tests {
         let creds = crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
         let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap());
         let dir = tempfile::tempdir().unwrap();
-        Backend { forge, cache: Cache::in_dir(dir.path()), fold_globs: vec![], watch_labels: vec![], inline: InlineRule::default() }
+        Backend {
+            forge,
+            cache: Cache::in_dir(dir.path()),
+            fold_globs: vec![],
+            watch_labels: vec![],
+            inline: InlineRule::default(),
+            open: crate::config::Open::default(),
+            checkout: None,
+        }
     }
 
     fn draft_at(new_line: u32, body: &str) -> Draft {
         let refs = Refs { base: "a".into(), start: "a".into(), head: "b".into() };
         let line = LineRef { old: None, new: Some(new_line) };
         Draft::on(Position { refs, old_path: "src/a.rs".into(), new_path: "src/a.rs".into(), line, start: None }, body)
+    }
+
+    #[tokio::test]
+    async fn a_viewed_file_is_fetched_once_copied_read_only_and_handed_to_the_program() {
+        use std::os::unix::fs::PermissionsExt;
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/repository/files/src%2Fpay%2Fcharge.rs/raw"))
+            .and(query_param("ref", "bbbb"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fn charge() {}\n"))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let backend = Backend { open: crate::config::Open { default: Some("nvim".into()), files: BTreeMap::new() }, ..backend_on(&server) };
+        for _ in 0..2 {
+            let Incoming::ViewReady { view, .. } = backend.view(key(), "src/pay/charge.rs", "bbbb", 12, None).await.unwrap() else {
+                panic!("not ready")
+            };
+            let file = std::path::Path::new(&view.argv[3]);
+            assert_eq!(view.argv[..3], ["nvim", "-R", "+12"], "a copy opens read-only");
+            assert_eq!(std::fs::read_to_string(file).unwrap(), "fn charge() {}\n");
+            assert_eq!(std::fs::metadata(file).unwrap().permissions().mode() & 0o777, 0o400);
+            assert_eq!(view.shown, "charge.rs:12");
+        }
+        let refused = backend.view(key(), "../../etc/passwd", "bbbb", 1, None).await.unwrap_err();
+        assert!(refused.to_string().contains("does not trust"), "{refused}");
     }
 
     #[tokio::test]

@@ -429,7 +429,7 @@ pub(super) mod tests {
     use crate::forge::gitlab::fixture;
     use serde_json::json;
 
-    fn mr() -> Mr {
+    pub(crate) fn mr() -> Mr {
         fixture::mr(
             &json!({
                 "id": 1042, "iid": 42, "project_id": 7, "title": "feat: charge cards at checkout",
