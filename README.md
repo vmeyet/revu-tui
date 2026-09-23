@@ -102,6 +102,9 @@ inline_min_same = 60          # …and both lines keep at least this percent of 
 [tui]
 theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
 
+[notify]
+enabled = true                # a macOS notification when an MR lands in To review while revu runs
+
 [hosts."git.acme.dev"]
 forge = "github"              # a GitHub Enterprise host
 
