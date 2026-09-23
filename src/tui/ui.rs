@@ -19,7 +19,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 46] = [
+pub const HELP: [(&str, &str); 47] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -49,6 +49,7 @@ pub const HELP: [(&str, &str); 46] = [
     ("w", "wrap long lines under their text"),
     ("W", "hide changes that are only whitespace (shown as ≈)"),
     ("+", "ten more unchanged lines above and below the hunk"),
+    ("v", "the file after the change in your program, at this line ([open] in config)"),
     ("c", "comment on the line, as a draft"),
     ("C", "on a changed pair: comment on the old side"),
     ("V", "select lines: c comments on them, y copies them"),
@@ -61,7 +62,7 @@ pub const HELP: [(&str, &str); 46] = [
     ("R", "in a thread: resolve, unresolve"),
     ("u", "in a thread: open its first link"),
     ("esc", "drop the selection, close the input"),
-    (":", "command line: :go !42 · :set theme=nord · tab completes"),
+    (":", "command line: :go !42 · :view old · :set theme=nord · tab completes"),
     ("^k", "jump to a file of the MR, or to another MR"),
     ("?", "this help"),
     ("q", "quit"),

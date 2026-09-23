@@ -56,11 +56,12 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `zv` | Mark the file viewed: it folds, and unfolds again if the author changes it |
 | `zz`, `w`, `W` | Reading mode, wrap long lines, hide whitespace-only changes |
 | `+` | Ten more unchanged lines around the hunk |
+| `v` | The file as it is after the change, in your own program at this line (`:view old` for before) |
 | `c` | Comment on the line (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change) |
 | `r` / `R` | Reply / resolve, in a thread |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
 | `o` / `y` | Open in the browser / copy the link |
-| `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:set theme=nord`; tab completes |
+| `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:view old`, `:set theme=nord`; tab completes |
 | `ctrl-k` | Jump to a file of the open MR, or to another MR |
 | `?` | Every key |
 
@@ -98,7 +99,16 @@ theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine,
 
 [hosts."git.acme.dev"]
 forge = "github"              # a GitHub Enterprise host
+
+[open]
+default = "hx"                # what `v` runs; else $VISUAL, $EDITOR, then less
+
+[open.files]
+"*.md" = "glow -p"            # by glob, the longest match wins; {file} and {line} place the arguments yourself
 ```
+
+`v` knows how to jump to the line in hx, vim, nvim, nano, micro, emacs, kak, less, bat and glow.
+Inside a checkout on the MR's head commit it opens your real file; elsewhere a read-only copy that is deleted when you quit.
 
 ## Security
 

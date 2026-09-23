@@ -48,6 +48,8 @@ impl App {
                     self.composed = self.submit(input, text);
                 }
             }
+            Incoming::ViewReady { key, view } => self.apply_view_ready(&key, view),
+            Incoming::Viewed { view, outcome } => self.apply_viewed(&view, outcome),
             Incoming::Failed { what, message } => self.apply_failure(what, message),
         }
     }

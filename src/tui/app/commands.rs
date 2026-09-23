@@ -48,6 +48,10 @@ impl App {
             Slot::Mr => self.queue_mrs().iter().map(|mr| format!("{}{}", self.kind.sigil(), mr.number)).collect(),
             Slot::Setting => vec!["theme=".to_owned()],
             Slot::Theme => Theme::NAMES.iter().map(|name| format!("theme={name}")).collect(),
+            Slot::File => {
+                let files = self.open.iter().flat_map(|o| &o.review.files).map(|f| f.new_path.clone());
+                std::iter::once("old".to_owned()).chain(files).collect()
+            }
             Slot::Free => vec![],
         }
     }
@@ -63,6 +67,7 @@ impl App {
             }
             Command::All => self.toggle_scope(),
             Command::Set { key, value } => self.set(&key, &value),
+            Command::View(argument) => self.view_command(&argument),
             Command::Help => {
                 self.help = Some(0);
                 vec![]

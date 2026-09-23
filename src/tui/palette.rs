@@ -15,17 +15,20 @@ pub enum Command {
         key: String,
         value: String,
     },
+    /// The file in the reader's program: nothing for the cursor's file, `old` for its base version, or `path[:line]`.
+    View(String),
     Help,
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 8] = [
+pub const VERBS: [(&str, &str); 9] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
     ("publish", "publish every draft, in the publish modal"),
     ("all", "the queue: this repo only, or every project"),
     ("set", "change and save a setting: :set theme=nord"),
+    ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     ("help", "show the keys"),
     ("quit", "leave"),
 ];
@@ -45,6 +48,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
             let Some((key, value)) = rest.split_once('=') else { return Err(":set needs key=value, e.g. theme=nord".into()) };
             Ok(Command::Set { key: key.trim().to_owned(), value: value.trim().to_owned() })
         }
+        "view" | "v" => Ok(Command::View(rest.to_owned())),
         "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => {
@@ -65,6 +69,8 @@ pub enum Slot {
     Mr,
     Setting,
     Theme,
+    /// `old` or a file of the open MR.
+    File,
     Free,
 }
 
@@ -81,6 +87,7 @@ pub fn slot(line: &str) -> Slot {
         ("go" | "g", 0) => Slot::Mr,
         ("set", 0) if line.contains("theme=") => Slot::Theme,
         ("set", 0) => Slot::Setting,
+        ("view" | "v", 0) => Slot::File,
         _ => Slot::Free,
     }
 }
@@ -213,6 +220,9 @@ mod tests {
         assert_eq!(parse("set theme=nord"), Ok(Command::Set { key: "theme".into(), value: "nord".into() }));
         assert_eq!(parse("*"), Ok(Command::All));
         assert_eq!(parse("q"), Ok(Command::Quit));
+        assert_eq!(parse("view old"), Ok(Command::View("old".into())));
+        assert_eq!(parse("v src/a.rs:42"), Ok(Command::View("src/a.rs:42".into())));
+        assert_eq!(parse("view"), Ok(Command::View(String::new())));
     }
 
     #[test]

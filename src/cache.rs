@@ -152,6 +152,11 @@ pub mod keys {
     pub fn state(key: &MrKey) -> String {
         format!("{}/state.json", dir(key))
     }
+
+    /// A file at one commit, named by a hash of its path so no path from the forge becomes a directory.
+    pub fn file(key: &MrKey, sha: &str, path: &str) -> String {
+        format!("{}/files/{sha}/{}.json", dir(key), sha1_smol::Sha1::from(path.as_bytes()).digest())
+    }
 }
 
 #[cfg(test)]

@@ -175,6 +175,7 @@ impl App {
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
             KeyCode::Char('i') => self.brief = self.open.as_ref().map(|o| Brief::of_review(&o.review)),
+            KeyCode::Char('v') => return self.view_here(crate::review::Side::New),
             KeyCode::Char('o') => return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.kind))]).unwrap_or_default(),
             KeyCode::Char('y') => return self.open.as_ref().map(|o| vec![Action::Yank(o.line_url(self.kind))]).unwrap_or_default(),
             _ => {}
@@ -257,6 +258,7 @@ impl App {
                 let url = self.open.as_ref().and_then(|o| o.thread.as_ref().map(|id| note_url(&o.review.mr.web_url, &o.review, id)));
                 return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default();
             }
+            KeyCode::Char('v') => return self.view_thread(),
             KeyCode::Char('r') => self.reply_here(),
             KeyCode::Char('R') => return self.toggle_resolved(),
             KeyCode::Char('P') => self.open_publish(),
