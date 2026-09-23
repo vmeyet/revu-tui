@@ -1,6 +1,8 @@
 //! The two AI providers: which one is on, and where its key comes from.
 //! Keys live in the keychain (service `revu`, one account per provider) or an environment
 //! variable; they never touch the config, the cache or a log line.
+pub mod anthropic;
+pub mod context;
 pub mod triage;
 pub mod typesafe;
 

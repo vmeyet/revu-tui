@@ -131,6 +131,8 @@ revu ai login anthropic           # hidden prompt, checked against Anthropic bef
 revu ai login typesafe            # offers to reuse the key slack-tui already stores
 revu ai status                    # which provider is on and where its key comes from, never the key
 revu ai logout anthropic
+revu ai ask !42                                    # Claude summarises the MR, streamed to stdout
+revu ai ask !42 --file src/a.rs --lines 13-20 is this safe?
 ```
 
 `ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY` override the keychain.
