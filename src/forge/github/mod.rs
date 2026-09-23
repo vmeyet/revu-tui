@@ -27,6 +27,7 @@ const API_VERSION: &str = "2022-11-28";
 pub struct Client {
     http: reqwest::Client,
     host: String,
+    budget: super::budget::Budget,
     api_host: String,
     rest: Url,
     graphql: Url,
@@ -65,7 +66,7 @@ impl Client {
         let rest = Url::parse(rest).context("host is not a hostname")?;
         let graphql = Url::parse(graphql).context("host is not a hostname")?;
         let api_host = rest.host_str().context("API url without a host")?.to_owned();
-        Ok(Self { http, host: credentials.host.clone(), api_host, rest, graphql })
+        Ok(Self { http, host: credentials.host.clone(), api_host, rest, graphql, budget: super::budget::Budget::default() })
     }
 
     pub fn host(&self) -> &str {
@@ -99,6 +100,10 @@ impl Client {
         }
     }
 
+    pub fn rate(&self) -> super::budget::RateLimit {
+        self.budget.now()
+    }
+
     /// A file's bytes as text: the contents API answers raw when asked for `vnd.github.raw`.
     async fn get_raw(&self, path: &str) -> Result<String> {
         let url = self.url(path)?;
@@ -121,7 +126,10 @@ impl Client {
         if !rate_limited(&first) {
             return checked(first, &method, &url).await;
         }
-        tokio::time::sleep(wait_from(first.headers()).min(MAX_WAIT)).await;
+        let wait = wait_from(first.headers()).min(MAX_WAIT);
+        self.budget.waiting_for(wait);
+        tokio::time::sleep(wait).await;
+        self.budget.done_waiting();
         let second = self.send_once(method.clone(), url.clone(), body).await?;
         checked(second, &method, &url).await
     }
@@ -132,7 +140,9 @@ impl Client {
             Some(json) => request.json(json),
             None => request,
         };
-        request.send().await.map_err(scrub)
+        let response = request.send().await.map_err(scrub)?;
+        self.budget.note(super::budget::header_number(response.headers(), "x-ratelimit-remaining"));
+        Ok(response)
     }
 
     fn url(&self, path: &str) -> Result<Url> {

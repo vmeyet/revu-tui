@@ -26,6 +26,7 @@ const MAX_WAIT: Duration = Duration::from_secs(60);
 pub struct Client {
     http: reqwest::Client,
     host: String,
+    budget: super::budget::Budget,
     base: Url,
 }
 
@@ -41,7 +42,7 @@ impl Client {
             .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let base = Url::parse(&format!("https://{}/api/v4/", credentials.host)).context("host is not a hostname")?;
-        Ok(Self { http, host: credentials.host.clone(), base })
+        Ok(Self { http, host: credentials.host.clone(), base, budget: super::budget::Budget::default() })
     }
 
     /// For tests: point at a mock server. The host guard still applies to that server's host.
@@ -104,6 +105,10 @@ impl Client {
         }
     }
 
+    pub fn rate(&self) -> super::budget::RateLimit {
+        self.budget.now()
+    }
+
     pub async fn me(&self) -> Result<User> {
         self.get::<wire::User>("user").await.map(User::from)
     }
@@ -114,7 +119,10 @@ impl Client {
         if first.status() != StatusCode::TOO_MANY_REQUESTS {
             return checked(first, &method, &url).await;
         }
-        tokio::time::sleep(wait_from(first.headers()).min(MAX_WAIT)).await;
+        let wait = wait_from(first.headers()).min(MAX_WAIT);
+        self.budget.waiting_for(wait);
+        tokio::time::sleep(wait).await;
+        self.budget.done_waiting();
         let second = self.send_once(method.clone(), url.clone(), body).await?;
         checked(second, &method, &url).await
     }
@@ -126,6 +134,7 @@ impl Client {
             None => request,
         };
         let response = request.send().await.map_err(scrub)?;
+        self.budget.note(super::budget::header_number(response.headers(), "ratelimit-remaining"));
         Ok(response)
     }
 
