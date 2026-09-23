@@ -201,6 +201,10 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
                 spans.push(dot.clone());
                 spans.push(Span::styled(app.me.clone(), muted));
             }
+            if let Some(reason) = app.selected_reason().filter(|_| app.focus == Focus::Queue) {
+                spans.push(dot.clone());
+                spans.push(Span::styled(reason, Style::default().fg(theme.faded)));
+            }
             if let Some(open) = &app.open {
                 let unresolved = open.review.unresolved();
                 if unresolved > 0 {

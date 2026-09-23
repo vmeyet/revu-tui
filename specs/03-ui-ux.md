@@ -59,7 +59,20 @@ Focus moves with `h` `l` between the three panes, like slack-tui's channels, mes
 Inside a GitLab checkout the queue shows that project only, named in the pane title (`Queue · acme/widgets`); outside one, or after `*`, it shows every project (`Queue · all`).
 Each scope has its own cache file, so a switch paints the right list at once and never the other one.
 Scoped, an `OPEN` section lists the project's other open MRs, between `WATCHING` and `DONE`.
-Other people's draft MRs leave `WATCHING` and `OPEN` for a `DRAFTS` section, folded by default, between `OPEN` and `DONE`; my own drafts stay in `MINE` with `D`, and a review request on a draft stays in `TO REVIEW`.
+Other people's draft MRs leave `WATCHING` and `OPEN` for a `DRAFTS` section, folded by default, between `OPEN` and `DONE`; my own drafts stay in `MINE` with `D`. A review request on a draft stays in `TO REVIEW` only with the rules off; with them on it joins `DRAFTS` too.
+
+The "needs me" rules (`[queue.rules]`, on by default) then judge every MR of `TO REVIEW`, `WATCHING` and `OPEN` that is not mine, first reason wins:
+
+| Rule | When | Where it goes | Reason shown |
+|---|---|---|---|
+| not ready | draft; failing pipeline; a `not_ready` word in the title or the description's first paragraph | `DRAFTS` for a draft, else `OTHER` | `draft`, `pipeline failed`, `"wip" in title` |
+| stale | no activity for more than `stale_days` (14) | `OTHER` | `stale 21d` |
+| approved enough | at least one approval and none left to give | `OTHER` | `2 approvals, needs none` |
+| reviewed by others | `reviewed_comments` (3) or more comments, others commented, I did not | stays, sorted last | `reviewed by 3` |
+
+A review request to me by name pins an MR against stale and approved enough, not against not ready: nobody asks for a review by accident.
+`OTHER` sits last, folded. The selected MR's reason shows in the status line; `revu list` prints it in a last, dim column and `--json` carries it as `reason`.
+The rules read only what the queue queries already return, plus `approvalsLeft` and `commenters` on GitLab (the MRs asking me and the project's open ones; each query stays under GitLab's complexity limit of 250) and `participants` on GitHub.
 The host tag (`gitlab`, `github`) shows only when rows from several hosts share the queue, never inside a checkout.
 
 A section header is a faded rule, `── OPEN · 28 ────`, filling the pane, with one blank line above it (not above the first); a folded one reads `── ▸ DONE · 3 ──`.

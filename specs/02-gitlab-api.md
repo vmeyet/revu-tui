@@ -29,11 +29,14 @@ The client reads `Ratelimit-Remaining` and, under 100, slows polling to the rese
 REST lists answer with a `Link: <…>; rel="next"` header and `X-Total`, `X-Next-Page`.
 `Client::get_all` follows `rel="next"` until absent, with `per_page=100`.
 
-## The queue (GraphQL, one call)
+## The queue (GraphQL, two or three calls in parallel)
 
 Run inside a git checkout whose `origin` lives on the configured host, the queue is scoped to that project (`revu --all` or `*` in the TUI widens it to every project).
 Scoped, a second query runs in parallel, `project(fullPath: $project) { mergeRequests(state: opened, first: 100, sort: UPDATED_DESC) { ...list } }`, and the four sections below keep only that project's MRs.
 One query for both is refused: it scores 359 against GitLab's complexity limit of 250 (the project query alone scores 114, verified 2026-09-22).
+The MRs asking me (`reviewRequested`, `assigned`) and mine (`authored`) are two queries: the "needs me" rules read `approvalsLeft` and `commenters { nodes { username } }` on the first and on the project's, and with them one query for all three lists scores 251.
+Measured 2026-09-23 with `queryComplexity { score limit }`: asking me 185, authored 87, project 124.
+GitLab answers `approvalsLeft: 0` when a project requires no approval at all, so "approved enough" also needs at least one approval.
 The fragment also asks for `description`, so the description modal opens from the queue without a request.
 
 Verified: `currentUser.reviewRequestedMergeRequests`, `assignedMergeRequests`, `authoredMergeRequests` exist and accept `state: opened`.

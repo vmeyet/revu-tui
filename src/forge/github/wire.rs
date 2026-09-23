@@ -171,6 +171,9 @@ pub struct QueuePr {
     #[serde(default)]
     pub labels: Nodes<Label>,
     pub comments: Count,
+    /// Everyone who took part: the author, reviewers and commenters.
+    #[serde(default)]
+    pub participants: Nodes<Actor>,
 }
 
 #[derive(Deserialize)]
@@ -202,6 +205,15 @@ pub fn reviewers(requests: &Nodes<ReviewRequest>, reviews: &Nodes<Review>) -> Ve
         }
     }
     states
+}
+
+/// GitHub only says whether the required reviews are in, through the branch protection's decision:
+/// approved means none left; required or changes requested means at least one; no protection says nothing.
+fn approvals_left(decision: Option<&str>) -> Option<u32> {
+    match decision? {
+        "APPROVED" => Some(0),
+        _ => Some(1),
+    }
 }
 
 /// Check-run rollups in the spelling the queue badges read: `SUCCESS`, `FAILED`, `RUNNING`.
@@ -244,6 +256,7 @@ impl From<QueuePr> for QueueMr {
             author_name: author.name,
             approved: pr.review_decision.as_deref() == Some("APPROVED") || (pr.review_decision.is_none() && !approved_by.is_empty()),
             approved_by,
+            approvals_left: approvals_left(pr.review_decision.as_deref()),
             reviewers: reviewers(&pr.review_requests, &pr.latest_reviews),
             pipeline: pipeline(&pr.commits),
             additions: pr.additions,
@@ -251,7 +264,9 @@ impl From<QueuePr> for QueueMr {
             files: pr.changed_files,
             unresolved: pr.review_threads.nodes.iter().filter(|t| !t.is_resolved).count() as u32,
             labels: pr.labels.nodes.into_iter().map(|l| l.name).collect(),
-            notes: pr.comments.total,
+            notes: pr.comments.total + pr.review_threads.nodes.len() as u32,
+            commenters: pr.participants.nodes.into_iter().map(|a| a.login).collect(),
+            reason: None,
         }
     }
 }

@@ -106,6 +106,9 @@ pub struct Queue {
     /// Saved filters: `'` then a view's first letter, or `1`–`9` in name order, applies it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub views: BTreeMap<String, String>,
+    /// The "needs me" rules: what leaves To review, Watching and Open, and at which thresholds.
+    #[serde(default, skip_serializing_if = "crate::forge::rules::Rules::is_default")]
+    pub rules: crate::forge::rules::Rules,
 }
 
 impl Queue {
@@ -115,6 +118,7 @@ impl Queue {
 
     /// Every view is a query that parses, and no two start with the same letter, since `'` picks by it.
     fn check(&self) -> Result<()> {
+        self.rules.check()?;
         let mut firsts: BTreeMap<char, &str> = BTreeMap::new();
         for (name, query) in &self.views {
             crate::query::Query::parse(query).map_err(|e| anyhow::anyhow!("`queue.views.{name}`: {e}"))?;
@@ -444,6 +448,24 @@ mod tests {
         assert!(bad.contains("queue.views.front") && bad.contains("size: takes small or large") && bad.contains("config.toml"), "{bad}");
         let clash = load("[queue.views]\nfront = \"@me\"\nfixes = \"fix\"\n").unwrap_err();
         assert!(clash.contains("both start with `f`"), "{clash}");
+    }
+
+    #[test]
+    fn rules_load_with_defaults_and_bad_thresholds_fail_with_the_file() {
+        let load = |toml: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, toml).unwrap();
+            Config::load_from(&path).map_err(|e| format!("{e:#}"))
+        };
+        let partial = load("[queue.rules]\nstale_days = 30\n").unwrap();
+        assert_eq!((partial.queue.rules.stale_days, partial.queue.rules.reviewed_comments), (30, 3), "unset keys keep their default");
+        assert!(partial.queue.rules.enabled);
+        assert!(!load("[queue.rules]\nenabled = false\n").unwrap().queue.rules.enabled);
+        let zero = load("[queue.rules]\nstale_days = 0\n").unwrap_err();
+        assert!(zero.contains("stale_days") && zero.contains("config.toml"), "{zero}");
+        let typo = load("[queue.rules]\nstale = 3\n").unwrap_err();
+        assert!(typo.contains("stale"), "{typo}");
     }
 
     #[test]

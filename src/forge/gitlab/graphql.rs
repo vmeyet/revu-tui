@@ -1,6 +1,8 @@
-//! The queue in one call. Wire shapes stay private; callers get `Queue` and its `Sections`.
-//! Scoped to a project, a second call in parallel lists every open MR of that project: one query
-//! for both scores over GitLab's complexity limit of 250.
+//! The queue in two calls, three when scoped to a project, all in parallel. Wire shapes stay
+//! private; callers get `Queue` and its `Sections`.
+//! GitLab refuses a query scoring over 250. With the fields the "needs me" rules read, the MRs
+//! asking me score 185, mine 87 (the rules skip them, so they skip the fields) and a project's
+//! open MRs 124: each call stays under the limit, one query for all would not.
 use super::Client;
 use crate::forge::{Queue, QueueMr, ReviewState, ReviewerState};
 use anyhow::{Context, Result, bail};
@@ -8,23 +10,25 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::json;
 
-const MINE: &str = r"
+const ASKING: &str = r"
   currentUser {
     username
-    reviewRequested: reviewRequestedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { ...list }
-    authored: authoredMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { ...list }
-    assigned: assignedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { ...list }
+    reviewRequested: reviewRequestedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { FIELDS RULES } }
+    assigned: assignedMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { FIELDS RULES } }
+  }";
+
+const AUTHORED: &str = r"
+  currentUser {
+    username
+    authored: authoredMergeRequests(state: opened, first: 50, sort: UPDATED_DESC) { nodes { FIELDS } }
   }";
 
 const PROJECT: &str = r"
   project(fullPath: $project) {
-    mergeRequests(state: opened, first: 100, sort: UPDATED_DESC) { ...list }
+    mergeRequests(state: opened, first: 100, sort: UPDATED_DESC) { nodes { FIELDS RULES } }
   }";
 
-const FRAGMENT: &str = r"
-fragment list on MergeRequestConnection {
-  nodes {
-    id iid title description draft webUrl updatedAt createdAt
+const FIELDS: &str = "id iid title description draft webUrl updatedAt createdAt
     sourceBranch targetBranch conflicts
     project { id fullPath }
     author { username name avatarUrl }
@@ -34,33 +38,47 @@ fragment list on MergeRequestConnection {
     diffStatsSummary { additions deletions fileCount }
     resolvableDiscussionsCount resolvedDiscussionsCount
     labels { nodes { title } }
-    userNotesCount
-  }
-}";
+    userNotesCount";
 
-fn mine_query() -> String {
-    format!("query Queue {{{MINE}\n}}{FRAGMENT}")
+/// What only the "needs me" rules read: approvals still missing, and who commented.
+const RULES: &str = "approvalsLeft commenters { nodes { username } }";
+
+fn filled(body: &str) -> String {
+    body.replace("FIELDS", FIELDS).replace("RULES", RULES)
+}
+
+fn asking_query() -> String {
+    format!("query Asking {{{}\n}}", filled(ASKING))
+}
+
+fn authored_query() -> String {
+    format!("query Authored {{{}\n}}", filled(AUTHORED))
 }
 
 fn project_query() -> String {
-    format!("query Open($project: ID!) {{{PROJECT}\n}}{FRAGMENT}")
+    format!("query Open($project: ID!) {{{}\n}}", filled(PROJECT))
 }
 
 impl Client {
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
     pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
-        let mine_body = json!({"query": mine_query()});
-        let mine = self.post_json::<Answer>("graphql", &mine_body);
-        let Some(path) = project else { return queue_from(mine.await?, None) };
+        let (asking_body, authored_body) = (json!({"query": asking_query()}), json!({"query": authored_query()}));
+        let asking = self.post_json::<Answer>("graphql", &asking_body);
+        let authored = self.post_json::<Answer>("graphql", &authored_body);
+        let Some(path) = project else {
+            let (asking, authored) = tokio::try_join!(asking, authored)?;
+            return queue_from(asking, authored, None);
+        };
         let open_body = json!({"query": project_query(), "variables": {"project": path}});
-        let (mine, open) = tokio::try_join!(mine, self.post_json::<Answer>("graphql", &open_body))?;
-        queue_from(mine, Some((open, path)))
+        let (asking, authored, open) = tokio::try_join!(asking, authored, self.post_json::<Answer>("graphql", &open_body))?;
+        queue_from(asking, authored, Some((open, path)))
     }
 }
 
 /// `open` is the project answer and the path it was asked for, when the queue is scoped.
-fn queue_from(mine: Answer, open: Option<(Answer, &str)>) -> Result<Queue> {
-    let user = data_of(mine)?.current_user.context("GraphQL answered without currentUser")?;
+fn queue_from(asking: Answer, authored: Answer, open: Option<(Answer, &str)>) -> Result<Queue> {
+    let user = data_of(asking)?.current_user.context("GraphQL answered without currentUser")?;
+    let mine = data_of(authored)?.current_user.context("GraphQL answered without currentUser")?;
     let (project, open) = match open {
         Some((answer, path)) => {
             let found = data_of(answer)?.project.with_context(|| format!("project {path} not found, or not visible with this token"))?;
@@ -72,20 +90,20 @@ fn queue_from(mine: Answer, open: Option<(Answer, &str)>) -> Result<Queue> {
         me: user.username,
         project,
         review_requested: convert(user.review_requested)?,
-        authored: convert(user.authored)?,
+        authored: convert(mine.authored)?,
         assigned: convert(user.assigned)?,
         open,
     })
 }
 
-/// A queue straight from a GraphQL answer body; scoped, the one body carries both answers.
+/// A queue straight from a GraphQL answer body; the one body stands for every call's answer.
 #[cfg(test)]
 pub(super) fn queue_from_json(body: &str, project: Option<&str>) -> Result<Queue> {
     let open = match project {
         Some(path) => Some((serde_json::from_str(body)?, path)),
         None => None,
     };
-    queue_from(serde_json::from_str(body)?, open)
+    queue_from(serde_json::from_str(body)?, serde_json::from_str(body)?, open)
 }
 
 fn data_of(answer: Answer) -> Result<Data> {
@@ -121,6 +139,7 @@ impl TryFrom<WireMr> for QueueMr {
             author_name: w.author.name,
             approved: w.approved,
             approved_by: w.approved_by.nodes.into_iter().map(|u| u.username).collect(),
+            approvals_left: w.approvals_left,
             reviewers: w
                 .reviewers
                 .nodes
@@ -134,6 +153,8 @@ impl TryFrom<WireMr> for QueueMr {
             unresolved: w.resolvable_discussions_count.saturating_sub(w.resolved_discussions_count),
             labels: w.labels.nodes.into_iter().map(|l| l.title).collect(),
             notes: w.user_notes_count,
+            commenters: w.commenters.map(|c| c.nodes.into_iter().map(|u| u.username).collect()).unwrap_or_default(),
+            reason: None,
         })
     }
 }
@@ -165,15 +186,24 @@ struct WireProjectMrs {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WireUser {
-    username: String,
+    #[serde(default)]
     review_requested: Connection<WireMr>,
+    #[serde(default)]
     authored: Connection<WireMr>,
+    #[serde(default)]
     assigned: Connection<WireMr>,
+    username: String,
 }
 
 #[derive(Deserialize)]
 struct Connection<T> {
     nodes: Vec<T>,
+}
+
+impl<T> Default for Connection<T> {
+    fn default() -> Self {
+        Self { nodes: vec![] }
+    }
 }
 
 #[derive(Deserialize)]
@@ -200,6 +230,10 @@ struct WireMr {
     resolved_discussions_count: u32,
     labels: Connection<WireLabel>,
     user_notes_count: u32,
+    #[serde(default)]
+    approvals_left: Option<u32>,
+    #[serde(default)]
+    commenters: Option<Connection<WireUsername>>,
 }
 
 #[derive(Deserialize)]
@@ -273,7 +307,13 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/api/graphql"))
-            .and(body_partial_json(json!({"query": mine_query()})))
+            .and(body_partial_json(json!({"query": asking_query()})))
+            .respond_with(ResponseTemplate::new(200).set_body_string(FIXTURE))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .and(body_partial_json(json!({"query": authored_query()})))
             .respond_with(ResponseTemplate::new(200).set_body_string(FIXTURE))
             .mount(&server)
             .await;
@@ -336,13 +376,15 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        Mock::given(method("POST"))
-            .and(path("/api/graphql"))
-            .and(body_partial_json(json!({"query": mine_query()})))
-            .respond_with(ResponseTemplate::new(200).set_body_string(FIXTURE))
-            .expect(1)
-            .mount(&server)
-            .await;
+        for query in [asking_query(), authored_query()] {
+            Mock::given(method("POST"))
+                .and(path("/api/graphql"))
+                .and(body_partial_json(json!({"query": query})))
+                .respond_with(ResponseTemplate::new(200).set_body_string(FIXTURE))
+                .expect(1)
+                .mount(&server)
+                .await;
+        }
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
         let queue = client.queue(Some("acme/widgets")).await.unwrap();

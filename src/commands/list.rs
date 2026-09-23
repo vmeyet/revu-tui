@@ -13,10 +13,10 @@ const TITLE_W: usize = 64;
 /// fails to answer is named on stderr and left out, never the whole list.
 pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     let queue = if args.cached { cached(ctx)? } else { fetched(ctx).await? };
-    let labels = &ctx.config.queue.watch_labels;
+    let (labels, rules, now) = (&ctx.config.queue.watch_labels, &ctx.config.queue.rules, Utc::now());
     let others = if ctx.project.is_none() { ctx.others() } else { vec![] };
-    let mut parts = vec![queue.sections(labels)];
-    parts.extend(other_queues(&others, args.cached).await.iter().map(|q| q.sections(labels)));
+    let mut parts = vec![queue.sections_with(labels, rules, now)];
+    parts.extend(other_queues(&others, args.cached).await.iter().map(|q| q.sections_with(labels, rules, now)));
     let sections = Sections::merge(parts);
     if ctx.json {
         return crate::ctx::emit(&sections);
@@ -54,6 +54,7 @@ pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, th
         ("OPEN", &sections.open),
         ("DRAFTS", &sections.drafts),
         ("DONE", &sections.done),
+        ("OTHER", &sections.other),
     ];
     let mixed = sections.mixes_hosts();
     let filled: Vec<_> = groups.iter().filter(|(_, mrs)| !mrs.is_empty()).collect();
@@ -86,6 +87,7 @@ fn row(hosts: &Hosts, mr: &QueueMr, mixed: bool, now: DateTime<Utc>) -> Vec<Cell
         right(format!("−{}", mr.deletions), Style::Bad),
         cell(badges(mr), Style::Warn),
         cell(project, Style::Dim),
+        cell(mr.reason.as_ref().map(ToString::to_string).unwrap_or_default(), Style::Dim),
     ]
 }
 

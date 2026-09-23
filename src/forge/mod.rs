@@ -7,6 +7,7 @@ pub mod gitlab;
 pub mod image;
 mod model;
 mod queue;
+pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{

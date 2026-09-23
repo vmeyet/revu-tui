@@ -21,6 +21,7 @@ fragment pr on PullRequest {
   reviewThreads(first: 100) { nodes { isResolved } }
   labels(first: 20) { nodes { name } }
   comments { totalCount }
+  participants(first: 30) { nodes { login } }
 }";
 
 const QUEUE: &str = r"

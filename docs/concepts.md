@@ -33,6 +33,7 @@ A group of MRs in the queue.
 | WATCHING | MRs assigned to you, or with a label from `[queue] watch_labels` |
 | OPEN | Every other open MR of the project |
 | DRAFTS | Other people's draft MRs, folded |
+| OTHER | MRs the "needs me" rules moved out, folded |
 | DONE | MRs you already approved or reviewed, folded |
 
 MRs by one author that build on each other fold into one stack row.
@@ -59,12 +60,30 @@ You can approve in the same step.
 ```mermaid
 flowchart LR
     F["Forge: your MRs, review requests, the project's MRs"] --> S["Sections"]
-    S --> Q["Query from / or a saved view"]
+    S --> N["Needs me rules"]
+    N --> Q["Query from / or a saved view"]
     Q --> P["Queue pane"]
 ```
 
 revu asks the forge at start, then again every minute.
 It paints from its cache first, so the screen is never empty.
+
+## What "needs me" means
+
+Plain rules keep TO REVIEW, WATCHING and OPEN to what needs you.
+An MR that fails a rule moves to OTHER, which is folded.
+
+| Rule | An MR moves when |
+|---|---|
+| Stale | No activity for 14 days |
+| Approved enough | It has an approval and needs no more |
+| Not ready | It is a draft, its pipeline fails, or its title says `WIP` |
+| Reviewed | Others left 3 comments and you left none: it stays, sorted last |
+
+An MR that asks you by name escapes the stale and approved rules.
+Your own MRs are never moved.
+The status line says why the selected MR sits where it does, for example `stale 21d`.
+`[queue.rules]` changes the numbers, and `enabled = false` turns the rules off.
 
 ## How a review goes
 

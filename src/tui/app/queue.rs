@@ -44,19 +44,20 @@ impl App {
     /// still shows its header, except the ones that only exist when they hold something.
     pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
-        let groups: [(&'static str, &Vec<QueueMr>); 6] = [
+        let groups: [(&'static str, &Vec<QueueMr>); 7] = [
             ("TO REVIEW", &sections.to_review),
             ("MINE", &sections.mine),
             ("WATCHING", &sections.watching),
             ("OPEN", &sections.open),
             ("DRAFTS", &sections.drafts),
             ("DONE", &sections.done),
+            ("OTHER", &sections.other),
         ];
         let mut rows = Vec::new();
         for (name, mrs) in groups {
             let open = !self.closed_sections.contains(name);
             let matching = self.in_order(name, mrs.iter().filter(|mr| self.matches_filter(mr)).collect());
-            let only_when_filled = matches!(name, "OPEN" | "DRAFTS") && mrs.is_empty();
+            let only_when_filled = matches!(name, "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
             if only_when_filled || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;
             }
@@ -93,13 +94,22 @@ impl App {
         rows
     }
 
-    /// A section's rows in the chosen order. With the default order Jev still ranks To review.
+    /// A section's rows in the chosen order, what others already review last. With the default
+    /// order Jev still ranks To review.
     fn in_order<'m>(&self, section: &str, rows: Vec<&'m QueueMr>) -> Vec<&'m QueueMr> {
         let order = match self.queue_view.order {
             Order::Updated if section == "TO REVIEW" && self.triaged() => Order::Urgency,
             order => order,
         };
-        order::sorted(rows, order, |mr| self.urgency(mr))
+        let (fresh, reviewed): (Vec<_>, Vec<_>) = order::sorted(rows, order, |mr| self.urgency(mr))
+            .into_iter()
+            .partition(|mr| mr.reason.as_ref().is_none_or(crate::forge::rules::Reason::moves_out));
+        fresh.into_iter().chain(reviewed).collect()
+    }
+
+    /// Why the selected MR sits where it does, when a "needs me" rule placed it: the status line says it.
+    pub fn selected_reason(&self) -> Option<String> {
+        self.selected_mr()?.reason.as_ref().map(ToString::to_string)
     }
 
     /// `s`: the next order; `S`: grouping by author on or off. Both are remembered for this scope.
