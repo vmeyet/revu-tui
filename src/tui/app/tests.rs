@@ -548,7 +548,7 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
     assert!(app.input.is_none() && app.live_toast().is_some());
     on_line(&mut app);
     press(&mut app, "c");
-    assert_eq!(app.input_label(), "comment charge.rs:12");
+    assert_eq!(app.input_label(), "new thread · charge.rs:12");
     let actions = type_text(&mut app, "nit: rename");
     let [Action::SaveDraft { key, index: 0, draft }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(*key, mr_key());
@@ -565,21 +565,34 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
 }
 
 #[test]
-fn the_input_row_edits_in_place_and_esc_cancels() {
+fn the_compose_box_edits_in_place_keeps_its_text_on_esc_and_takes_newlines() {
     let mut app = with_review();
     on_line(&mut app);
     press(&mut app, "cab");
+    assert_eq!(app.focus, Focus::Side, "the box lives in the pane");
+    assert_eq!(app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place), Some(&Place::Line { file: 0, new: Some(12), old: Some(12) }));
     app.handle_key(code(KeyCode::Left));
     press(&mut app, "x");
     assert_eq!(app.buffer.text(), "axb");
     app.handle_key(ctrl('a'));
     app.handle_key(code(KeyCode::Delete));
     assert_eq!(app.buffer.text(), "xb");
+    app.handle_key(ctrl('e'));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+    press(&mut app, "y");
+    assert_eq!(app.buffer.text(), "xb\ny", "alt-enter is a newline, not a send");
     app.handle_key(code(KeyCode::Esc));
-    assert!(app.input.is_none() && app.buffer.text().is_empty());
-    press(&mut app, "c");
-    assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![], "an empty comment is dropped");
     assert!(app.input.is_none());
+    assert_eq!(app.focus, Focus::Review, "back where the box was opened from");
+    press(&mut app, "j");
+    press(&mut app, "c");
+    assert_eq!(app.buffer.text(), "", "another line starts empty");
+    assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![], "an empty comment is dropped");
+    press(&mut app, "k");
+    press(&mut app, "c");
+    assert_eq!(app.buffer.text(), "xb\ny", "the text left on line 12 comes back");
+    let actions = app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(actions.as_slice(), [Action::SaveDraft { draft, .. }] if draft.body == "xb\ny"), "{actions:?}");
 }
 
 #[test]
@@ -616,7 +629,7 @@ fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
     press(&mut app, "]n");
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
-    assert_eq!(app.input_label(), "reply");
+    assert_eq!(app.input_label(), "reply to nina");
     let actions = type_text(&mut app, "agreed");
     let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"));
@@ -705,9 +718,10 @@ fn the_publish_modal_edits_deletes_and_survives_a_failure() {
     press(&mut app, "P");
     press(&mut app, "e");
     assert_eq!(app.input_label(), "edit draft");
-    assert!(app.publish.is_some(), "the modal stays under the input row");
+    assert!(app.publish.is_none(), "the modal steps aside for the compose box in the pane");
+    assert!(app.open.as_ref().unwrap().pane.is_some());
     type_text(&mut app, "!");
-    press(&mut app, "p");
+    press(&mut app, "Pp");
     app.apply(Incoming::Failed { what: Failure::Publish, message: "HTTP 500".into() });
     assert!(!app.publish.as_ref().unwrap().busy);
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit!");
@@ -751,12 +765,15 @@ fn big_e_and_s_open_the_editor_and_what_comes_back_is_a_draft() {
     let actions = press(&mut app, "E");
     let [Action::Compose { input: Input::Comment { position }, draft }] = actions.as_slice() else { panic!("{actions:?}") };
     assert!(draft.is_empty() && position.line.new == Some(12));
-    let actions = press(&mut app, "Vjs");
+    assert_eq!(press(&mut app, "Vjs"), vec![], "s opens the compose box, prefilled");
+    assert_eq!(app.input_label(), "new thread · charge.rs:12–-13");
+    let actions = app.handle_key(ctrl('o'));
     let [Action::Compose { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(
         draft,
         "```suggestion:-0+1\npub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {\n    let client = Client::new();\n```\n"
     );
+    assert!(app.input.is_none(), "the editor takes the text over");
     let input = Input::Comment { position: position.clone() };
     app.apply(Incoming::Composed { input: input.clone(), text: None });
     assert_eq!(app.take_actions(), vec![]);
@@ -1065,10 +1082,10 @@ fn c_on_a_pair_comments_the_new_side_and_big_c_the_old_side() {
     let mut app = with_sum_review();
     on_pair(&mut app);
     press(&mut app, "c");
-    assert_eq!(app.input_label(), "comment sum.rs:3");
+    assert_eq!(app.input_label(), "new thread · sum.rs:3");
     app.handle_key(code(KeyCode::Esc));
     press(&mut app, "C");
-    assert_eq!(app.input_label(), "comment sum.rs:-3");
+    assert_eq!(app.input_label(), "new thread · sum.rs:-3");
     app.handle_key(code(KeyCode::Esc));
     press(&mut app, "k");
     press(&mut app, "C");

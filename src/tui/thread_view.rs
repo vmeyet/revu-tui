@@ -1,5 +1,6 @@
 //! The right pane: every conversation of one place, notes in order, bodies as light markdown.
 use super::app::{App, Entry, EntryKind, Focus, Open};
+use super::field::Field;
 use super::theme::Theme;
 use super::ui::{pane, short_age};
 use crate::forge::Note;
@@ -7,16 +8,21 @@ use crate::review::{Conversation, Place, Review, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
+
+/// The compose box grows with its text up to this many rows, then scrolls.
+const COMPOSE_ROWS: usize = 8;
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let today = app.today;
     let me = app.me.clone();
     let focused = app.focus == Focus::Side;
+    let compose = app.input.is_some().then(|| (app.input_label(), app.buffer.clone()));
     let Some(open) = app.open.as_mut() else { return };
     let Some((conversations, entries, current)) = open.pane_view() else { return };
     let Some(pane) = open.pane.clone() else { return };
@@ -24,6 +30,14 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let block = pane_block(theme, &title(&open.review, &pane.place, conversations.len(), here), focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
+    let inner = match &compose {
+        Some((label, field)) => {
+            let [list, box_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(box_height(field, inner))]).areas(inner);
+            draw_compose(f, theme, label, field, box_area);
+            list
+        }
+        None => inner,
+    };
     let width = inner.width.saturating_sub(1) as usize;
     let mut lines: Vec<(Option<Entry>, Line<'static>)> = vec![];
     for (index, conversation) in conversations.iter().enumerate() {
@@ -61,6 +75,49 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(Paragraph::new(drawn), inner);
 }
 
+/// Text rows the box shows: its own lines, at least one, at most 8 or 40 % of the pane, plus its border.
+fn box_height(field: &Field, pane: Rect) -> u16 {
+    let width = pane.width.saturating_sub(4).max(1) as usize;
+    let rows: usize = field.text().split('\n').map(|line| line.width().max(1).div_ceil(width)).sum();
+    let most = (usize::from(pane.height) * 40 / 100).clamp(1, COMPOSE_ROWS);
+    (rows.clamp(1, most) + 2) as u16
+}
+
+/// The compose box: its target in the top border, the keys in the bottom one, the caret reversed.
+fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Field, area: Rect) {
+    let block = ratatui::widgets::Block::bordered()
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(theme.accent))
+        .title(Span::styled(format!(" {label} "), Style::default().fg(theme.accent)))
+        .title_bottom(Span::styled(" enter save · ⌥enter newline ", Style::default().fg(theme.faded)));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let width = inner.width.max(1) as usize;
+    let (before, under, after) = field.split();
+    let caret = if under.is_empty() || under == "\n" { " " } else { under };
+    let tail = if under == "\n" { format!("\n{after}") } else { after.to_owned() };
+    let mut rows: Vec<Line<'static>> = vec![];
+    let mut current: Vec<Span<'static>> = vec![];
+    let push_text = |text: &str, style: Style, rows: &mut Vec<Line<'static>>, current: &mut Vec<Span<'static>>| {
+        let mut parts = text.split('\n');
+        if let Some(first) = parts.next() {
+            current.push(Span::styled(first.to_owned(), style));
+        }
+        for part in parts {
+            rows.extend(wrap(Line::from(std::mem::take(current)), width));
+            current.push(Span::styled(part.to_owned(), style));
+        }
+    };
+    push_text(before, Style::default(), &mut rows, &mut current);
+    let caret_row = rows.len() + wrap(Line::from(current.clone()), width).len().saturating_sub(1);
+    current.push(Span::styled(caret.to_owned(), Style::default().add_modifier(Modifier::REVERSED)));
+    push_text(&tail, Style::default(), &mut rows, &mut current);
+    rows.extend(wrap(Line::from(current), width));
+    let height = inner.height as usize;
+    let scroll = (caret_row + 1).saturating_sub(height);
+    f.render_widget(Paragraph::new(rows.into_iter().skip(scroll).take(height).collect::<Vec<_>>()), inner);
+}
+
 /// The pane's frame; its title fades when the reader looks at another line.
 fn pane_block(theme: Theme, title: &str, focused: bool) -> ratatui::widgets::Block<'static> {
     pane(theme, title, focused)
@@ -95,9 +152,10 @@ fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
         Place::Mr => ("on the MR".to_owned(), None),
         Place::Outdated { file } => (format!("{} · outdated", name(*file)), None),
     };
+    let head = if count == 0 { head } else { format!("{head} · {threads}") };
     match (here, line) {
-        (false, Some(line)) => format!("{head} · {threads} · ↑ line {line}"),
-        _ => format!("{head} · {threads}"),
+        (false, Some(line)) => format!("{head} · ↑ line {line}"),
+        _ => head,
     }
 }
 

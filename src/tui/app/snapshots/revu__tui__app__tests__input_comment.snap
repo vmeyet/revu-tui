@@ -2,27 +2,27 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 120, 24)"
 ---
-╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
-│   TO REVIEW                  1 ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success                    │
-│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 unresolved                                       │
-│   MINE                       1 ││  ◆ 1 on the MR  enter opens                                                        │
-│   !41 fix: flaky cache test  D ││                                                                                    │
-│   WATCHING                   1 ││  ▾ src/pay/charge.rs                                     +4 −2  ◆1 ◇1 · 1 outdated │
-│   !35 infra: new runner      ⠋ ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                                        │
-│   DONE ▸                     1 ││  ◇   12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> { │
-│                                ││  ✓   13      -    let client = Client::new();                                      │
-│                                ││ ▎         13 +    let client = Client::with_key(idempotency_key(card));            │
-│                                ││ ▎         14 +    let attempt = Attempt::first();                                  │
-│                                ││      14   15      let response = client.charge(amount).await?;                     │
-│                                ││      15   16      audit::record(&response);                                        │
-│                                ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                                         │
-│                                ││      40   41  fn idempotency_key(card: &Card) -> Key {                             │
-│                                ││      41      -    Key::from(card.number())                                         │
-│                                ││           42 +    Key::from((card.number(), card.expiry()))                        │
-│                                ││           43 +    // hunk two, line 43 is new                                      │
-│                                ││      42   44  }                                                                    │
-│                                ││                                                                                    │
-│                                ││  ▸ Cargo.lock                                                        +1 −1  folded │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
- comment charge.rs:14 fold the   enter save · esc cancel
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: cha… ────────╮╭ charge.rs:14 ──────────────────────────────╮
+│   TO REVIEW                  1 ││  omar · 2h · +5 −3 · 2 files · ✓ suc ││                                            │
+│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 un ││  1 more thread in this file · ]n           │
+│   MINE                       1 ││  ◆ 1 on the MR  enter opens          ││                                            │
+│   !41 fix: flaky cache test  D ││                                      ││                                            │
+│   WATCHING                   1 ││  ▾ src/p…  +4 −2  ◆1 ◇1 · 1 outdated ││                                            │
+│   !35 infra: new runner      ⠋ ││     ▾ @@ -12,4 +12,5 @@ pub async…   ││                                            │
+│   DONE ▸                     1 ││  ◇   12   12  pub async fn charge(c… ││                                            │
+│                                ││  ✓   13      -    let client = Clie… ││                                            │
+│                                ││ ▎         13 +    let client = Clie… ││                                            │
+│                                ││ ▎         14 +    let attempt = Att… ││                                            │
+│                                ││      14   15      let response = cl… ││                                            │
+│                                ││      15   16      audit::record(&re… ││                                            │
+│                                ││     ▾ @@ -40,3 +41,4 @@ fn idempo…   ││                                            │
+│                                ││      40   41  fn idempotency_key(ca… ││                                            │
+│                                ││      41      -    Key::from(card.nu… ││                                            │
+│                                ││           42 +    Key::from((card.n… ││                                            │
+│                                ││           43 +    // hunk two, line… ││                                            │
+│                                ││      42   44  }                      ││                                            │
+│                                ││                                      ││ ╭ new thread · charge.rs:13–14 ──────────╮ │
+│                                ││  ▸ Cargo.lock          +1 −1  folded ││ │fold the                                │ │
+│                                ││                                      ││ ╰ enter save · ⌥enter newline ───────────╯ │
+╰────────────────────────────────╯╰──────────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved · 1 draft · P to publish                                                       ? help

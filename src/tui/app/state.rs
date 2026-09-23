@@ -73,6 +73,10 @@ pub struct App {
     /// The input row is open for this; `buffer` holds what is typed.
     pub input: Option<Input>,
     pub buffer: Field,
+    /// Text typed for a target and left with `esc`, by target: it comes back when the box opens there again.
+    pub unsent: HashMap<String, String>,
+    /// Where the compose box was opened from: the keys go back there once it closes.
+    pub compose_from: Focus,
     pub publish: Option<Publish>,
     /// The MR description modal.
     pub brief: Option<Brief>,
@@ -129,6 +133,8 @@ impl App {
             pending: None,
             input: None,
             buffer: Field::default(),
+            unsent: HashMap::new(),
+            compose_from: Focus::default(),
             publish: None,
             brief: None,
             links: vec![],

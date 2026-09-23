@@ -164,19 +164,21 @@ impl App {
         }
     }
 
-    /// `E` writes the note in the editor; `s` starts it as a suggestion block for the selected lines.
+    /// `E` writes a new thread in the editor; `s` opens the box with a suggestion block for the selected lines.
     fn compose_here(&mut self, suggestion: bool) -> Vec<Action> {
         let Some(position) = self.position_here() else {
             self.toast("move onto a line first");
             return vec![];
         };
-        let draft = if suggestion {
-            let lines = self.selected_lines();
-            suggestion::prefill(&lines.iter().map(String::as_str).collect::<Vec<_>>())
-        } else {
-            String::new()
-        };
-        vec![Action::Compose { input: Input::Comment { position: Box::new(position) }, draft }]
+        let input = Input::Comment { position: Box::new(position) };
+        if !suggestion {
+            return vec![Action::Compose { input, draft: String::new() }];
+        }
+        let lines = self.selected_lines();
+        let draft = suggestion::prefill(&lines.iter().map(String::as_str).collect::<Vec<_>>());
+        self.drop_select();
+        self.open_input(input, &draft);
+        vec![]
     }
 
     pub(super) fn toggle_approval(&mut self) -> Vec<Action> {
@@ -215,6 +217,7 @@ impl App {
             KeyCode::Char('d') if publish.selected < last => return self.delete_draft(publish.selected),
             KeyCode::Char('m') if publish.selected < last => return self.move_to_the_mr(publish.selected),
             KeyCode::Char('e') if publish.selected < last => {
+                self.publish = None;
                 self.edit_draft(publish.selected);
             }
             KeyCode::Char('p') | KeyCode::Enter => return self.publish_now(),

@@ -57,7 +57,7 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `zz`, `w`, `W` | Reading mode, wrap long lines, hide whitespace-only changes |
 | `+` | Ten more unchanged lines around the hunk |
 | `v` | The file as it is after the change, in your own program at this line (`:view old` for before) |
-| `c` | Comment on the line (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change) |
+| `c` | New thread on the line, written in a box at the bottom of the pane (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change); `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` keeps it for later |
 | `r` / `R` | Reply / resolve, in the right pane (`R` also on a marked line) |
 | `J` `K`, `e`, `d`, `x` | In the pane: next, previous thread; edit, delete my draft; close |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
