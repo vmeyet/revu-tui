@@ -207,7 +207,8 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.publish = Some(Publish { selected: publish.selected.saturating_sub(1), ..publish }),
             KeyCode::Char('a') => self.publish = Some(Publish { approve: !publish.approve, ..publish }),
             KeyCode::Char('d') if publish.selected < last => return self.delete_draft(publish.selected),
-            KeyCode::Enter if publish.selected < last => {
+            KeyCode::Char('m') if publish.selected < last => return self.move_to_the_mr(publish.selected),
+            KeyCode::Char('e') if publish.selected < last => {
                 self.edit_draft(publish.selected);
             }
             KeyCode::Char('p') | KeyCode::Enter => return self.publish_now(),
@@ -216,10 +217,33 @@ impl App {
         vec![]
     }
 
+    /// A draft whose line is gone becomes a note on the MR: the forge draft is replaced by a fresh one.
+    fn move_to_the_mr(&mut self, index: usize) -> Vec<Action> {
+        let Some(open) = self.open.clone() else { return vec![] };
+        let Some(draft) = open.review.drafts.get(index).cloned() else { return vec![] };
+        if draft.anchor.is_none() {
+            return vec![];
+        }
+        let moved = draft.clone().on_the_mr();
+        let mut drafts = open.review.drafts.clone();
+        drafts[index] = moved.clone();
+        self.open = Some(open.with_review(open.review.with_drafts(drafts)));
+        let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id });
+        let save = Action::SaveDraft { key: open.key.clone(), index, draft: Box::new(moved) };
+        delete.into_iter().chain([save]).collect()
+    }
+
     fn publish_now(&mut self) -> Vec<Action> {
         let (Some(open), Some(publish)) = (&self.open, &self.publish) else { return vec![] };
         if self.unsaved_drafts() > 0 {
             self.warn("some drafts are not saved yet · r to retry");
+            return vec![];
+        }
+        if let Some(&index) = open.review.stranded().first() {
+            let place =
+                open.review.drafts[index].anchor.as_ref().map(|a| format!("{}:{}", a.path.rsplit('/').next().unwrap_or(&a.path), a.line));
+            self.publish = Some(Publish { selected: index, ..publish.clone() });
+            self.warn(format!("the line of the draft on {} left the diff · m moves it to the MR", place.unwrap_or_default()));
             return vec![];
         }
         let action = Action::Publish { key: open.key.clone(), approve: publish.approve, count: open.review.drafts.len() };

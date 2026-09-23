@@ -236,6 +236,16 @@ impl Review {
         self.drafts.iter().enumerate().filter(|(_, d)| d.is_at(path, side, line)).collect()
     }
 
+    /// Drafts hung on a line the current diff no longer has: the forge refuses to publish them.
+    pub fn stranded(&self) -> Vec<usize> {
+        self.drafts
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.anchor.as_ref().is_some_and(|a| !self.files.iter().any(|f| f.has_line(a))))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
     pub fn outdated(&self, path: &str) -> Vec<&Thread> {
         self.threads.iter().filter(|t| t.outdated && t.anchor.as_ref().is_some_and(|a| a.path == path)).collect()
     }

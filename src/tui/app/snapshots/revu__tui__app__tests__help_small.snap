@@ -1,0 +1,28 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 80, 24)"
+---
+╭ Queu╭ keys · 4–24 of 38 · j k scroll ──────────────────────────────────╮─────╮
+│   TO│        h l  pane to the left; open the MR, pane to the right     │     │
+│ ▎ !4│      enter  open the MR, the thread, or toggle the fold          │     │
+│   MI│        esc  back: close the thread, then the queue               │     │
+│   !4│          /  filter the queue                                     │     │
+│   WA│          *  in the queue: this repo only, or every project       │     │
+│   !3│          i  the MR description                                   │     │
+│   DO│          r  refresh                                              │     │
+│     │          o  open in the browser (the line, in a diff)            │     │
+│     │          y  copy the URL                                         │     │
+│     │  click !42  open the MR, in terminals that follow links          │     │
+│     │  tab S-tab  next, previous file                                  │     │
+│     │      ]c [c  next, previous hunk                                  │     │
+│     │      ]n [n  next, previous thread                                │     │
+│     │      ]f [f  next, previous file with an open thread              │     │
+│     │         za  toggle the fold under the cursor                     │     │
+│     │          D  changed words inline, or every line split            │     │
+│     │      zc zo  close, open                                          │     │
+│     │      zM zR  fold, unfold every file                              │     │
+│     │      zo zc  in the queue: open, fold the section (enter too)     │     │
+│     │         zh  fold the MR header to one row                        │     │
+│     │          c  comment on the line, as a draft                      │     │
+╰─────╰──────────────────────────────────────────────────────────────────╯─────╯
+ gitlab.com · nina                                                       ? help

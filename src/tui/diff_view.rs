@@ -44,8 +44,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let today = app.today;
     let me = app.me.clone();
+    let folded = app.header_folded;
     let Some(open) = app.open.as_mut() else { return };
-    let header = header_lines(open, theme, today, inner.width as usize);
+    let header = if folded { vec![folded_header(open, theme)] } else { header_lines(open, theme, today, inner.width as usize) };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
     let height = body.height as usize;
     open.scroll = settle_scroll(open.scroll, open.selected, height);
@@ -128,6 +129,31 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
         return vec![first];
     }
     vec![first, Line::from(second)]
+}
+
+/// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
+fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
+    let mr = &open.review.mr;
+    let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
+    let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
+    let pipeline = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
+    let (glyph, colour) = pipeline_glyph(&pipeline, theme);
+    let mut spans = vec![
+        Span::styled("▸ ", Style::default().fg(theme.faded)),
+        Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))),
+        dot(),
+        Span::styled(format!("+{adds}"), Style::default().fg(theme.success)),
+        Span::raw(" "),
+        Span::styled(format!("−{dels}"), Style::default().fg(theme.danger)),
+    ];
+    if !glyph.is_empty() {
+        spans.extend([dot(), Span::styled(glyph, Style::default().fg(colour))]);
+    }
+    let unresolved = open.review.unresolved();
+    if unresolved > 0 {
+        spans.extend([dot(), Span::styled(format!("{unresolved} unresolved"), Style::default().fg(theme.warn))]);
+    }
+    Line::from(spans)
 }
 
 fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::Color) {

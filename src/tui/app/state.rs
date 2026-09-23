@@ -49,7 +49,10 @@ pub struct App {
     pub filter: String,
     /// The filter row is taking keys.
     pub filtering: bool,
-    pub done_open: bool,
+    /// Queue sections folded to their header; Done starts folded.
+    /// The review header on one row instead of two.
+    pub header_folded: bool,
+    pub closed_sections: std::collections::BTreeSet<&'static str>,
     pub queue_loading: bool,
     pub open: Option<Open>,
     /// The MR being fetched for the first time; the review pane shows a spinner until it lands.
@@ -66,7 +69,8 @@ pub struct App {
     pub links: Vec<crate::tui::ui::Link>,
     /// What the editor's text turned into; the loop drains it after `apply`.
     pub composed: Vec<Action>,
-    pub help: bool,
+    /// The key list, open, with how far it is scrolled.
+    pub help: Option<usize>,
     pub toast: Option<Toast>,
     /// Since when refreshes fail while a cached view is shown.
     pub offline: Option<Instant>,
@@ -96,7 +100,8 @@ impl App {
             queue_scroll: 0,
             filter: String::new(),
             filtering: false,
-            done_open: false,
+            header_folded: false,
+            closed_sections: std::collections::BTreeSet::from(["DONE"]),
             queue_loading: true,
             open: None,
             opening: None,
@@ -107,7 +112,7 @@ impl App {
             brief: None,
             links: vec![],
             composed: vec![],
-            help: false,
+            help: None,
             toast: None,
             offline: None,
             poll: Poll::default(),

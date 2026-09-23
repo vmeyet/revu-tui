@@ -49,6 +49,11 @@ impl Draft {
         forge::NewDraft { body: self.body.clone(), position: self.position.clone(), reply_to: self.reply_to.clone(), resolve: self.resolve }
     }
 
+    /// The same text as a note on the MR itself, not yet held by the forge.
+    pub fn on_the_mr(self) -> Self {
+        Self { id: None, anchor: None, position: None, ..self }
+    }
+
     pub fn with_body(self, body: impl Into<String>) -> Self {
         Self { body: body.into(), ..self }
     }
