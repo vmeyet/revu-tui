@@ -5,7 +5,7 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Clear, Padding, Paragraph};
+use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
@@ -20,66 +20,6 @@ const MEDIUM: u16 = 120;
 const SIDE_PCT: u16 = 40;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
-pub const HELP: [(&str, &str); 57] = [
-    ("j k", "move"),
-    ("g G", "first, last"),
-    ("^d ^u", "half page"),
-    ("h l", "pane to the left; open the MR, or a marked line's threads"),
-    ("enter", "open the MR, a marked line's threads, or toggle the fold"),
-    ("esc x", "close the right pane; esc again goes back to the queue"),
-    ("/", "filter the queue: words @author !42 ~label draft:no size:small is:failing is:mine"),
-    ("' 1-9", "in the queue: a saved view by its first letter, or its rank ([queue.views])"),
-    ("*", "in the queue: this repo only, or every project"),
-    ("s", "in the queue: next order (updated, oldest, author, size, urgency)"),
-    ("S", "in the queue: group Open and Drafts by author"),
-    ("i", "the MR description"),
-    ("r", "refresh"),
-    ("o", "open in the browser (the line, in a diff)"),
-    ("y", "copy the URL"),
-    ("click !42", "open the MR, in terminals that follow links"),
-    ("tab S-tab", "next, previous file"),
-    ("]c [c", "next, previous hunk"),
-    ("]n [n", "next, previous line with a conversation; the pane follows"),
-    ("]f [f", "next, previous file with an open thread"),
-    ("za", "toggle the fold under the cursor"),
-    ("D", "changed words inline, or every line split"),
-    ("zc zo", "close, open"),
-    ("zM zR", "fold, unfold every file"),
-    ("zo zc", "in the queue: open, fold the section (enter too)"),
-    ("zh", "fold the MR header to one row"),
-    ("t", "file tree: enter jumps to a file or folds a folder, t closes"),
-    ("p", "pipeline: jobs by stage, failures first; o opens a job, r refreshes, p closes"),
-    ("zv", "mark the file viewed: it folds, and comes back if it changes"),
-    ("zz", "reading mode: the diff alone, centered; h brings the queue back"),
-    ("w", "wrap long lines under their text"),
-    ("W", "hide changes that are only whitespace (shown as ≈)"),
-    ("+", "ten more unchanged lines above and below the hunk"),
-    ("v", "the file after the change in your program, at this line ([open] in config)"),
-    ("c", "new thread on the line: a compose box opens in the pane"),
-    ("C", "on a changed pair: comment on the old side"),
-    ("V", "select lines: c comments on them, y copies them"),
-    ("E", "write the comment in $EDITOR"),
-    ("s", "new thread prefilled with a suggestion of the lines"),
-    ("⌥enter ^o", "in the box: newline, move the text to $EDITOR"),
-    ("e d", "in the pane: edit, delete my draft"),
-    ("J K", "in the pane: next, previous thread on the line"),
-    ("P", "publish: enter sends, e edits, m moves a lost draft to the MR"),
-    ("a e r s", "ask Claude: explain the hunk, risks of the file, summary of the MR"),
-    ("a t c a", "ask Claude: this thread, a comment about the lines, anything"),
-    ("c ⏎ R y", "in an answer: make it a draft, follow up, ask again, copy"),
-    ("A", "approve, unapprove"),
-    ("r", "in a thread: reply, as a draft"),
-    ("R", "resolve, unresolve: in the pane, or on a marked line"),
-    ("S", "in the pane: commit the note's suggestion on the MR branch, after a y"),
-    ("u", "in a thread: open its first link"),
-    ("esc", "drop the selection; in the box, leave it, the text stays"),
-    ("^k", "search MRs (@author !42 ~label), / files of the open MR, > commands; ⌘k where the terminal forwards it"),
-    (":", "the search on commands: :go !42 · :view old · :set theme=nord · tab completes"),
-    ("?", "this help"),
-    ("q", "quit"),
-    ("^c", "quit, always"),
-];
-
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Link {
@@ -147,7 +87,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         super::palette_view::draw(f, app, palette, main);
     }
     if let Some(scroll) = app.help {
-        draw_help(f, app, main, scroll);
+        super::help::draw(f, app, main, scroll);
     }
 }
 
@@ -296,34 +236,6 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let [l, r] = Layout::horizontal([Constraint::Min(10), Constraint::Length(right.width() as u16)]).areas(area);
     f.render_widget(Paragraph::new(left), l);
     f.render_widget(Paragraph::new(right).alignment(Alignment::Right), r);
-}
-
-/// The key list, scrolled by `scroll` rows when it does not fit; the title says how to move.
-fn draw_help(f: &mut Frame, app: &App, area: Rect, scroll: usize) {
-    let theme = app.theme;
-    let keys: Vec<String> = HELP.iter().map(|(key, _)| app.keymap.label(key)).collect();
-    let key_w = keys.iter().map(|k| k.width()).max().unwrap_or(0).max(10);
-    let lines: Vec<Line> = keys
-        .iter()
-        .zip(HELP)
-        .map(|(key, (_, what))| {
-            Line::from(vec![
-                Span::styled(format!("{key:>key_w$}  "), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-                Span::raw(what),
-            ])
-        })
-        .collect();
-    let height = (lines.len() as u16 + 2).min(area.height);
-    let width = (key_w as u16 + 58).min(area.width);
-    let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
-    let visible = usize::from(height.saturating_sub(2));
-    let overflow = lines.len() > visible;
-    let top = scroll.min(lines.len().saturating_sub(visible));
-    let title =
-        if overflow { format!("keys · {}–{} of {} · j k scroll", top + 1, top + visible, lines.len()) } else { "keys".to_owned() };
-    let block = pane(theme, &title, true);
-    f.render_widget(Clear, popup);
-    f.render_widget(Paragraph::new(lines).block(block).style(Style::default().bg(theme.surface)).scroll((top as u16, 0)), popup);
 }
 
 /// Everything in `area` takes one colour, so the eye finds the focused pane without a border change.

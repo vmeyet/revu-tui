@@ -305,6 +305,16 @@ While the TUI runs, an MR that lands in To review raises one macOS notification 
 The first queue answer of a scope only records what To review holds; later fresh answers announce the newcomers, each MR once, all of one answer in a single notification.
 Whether the terminal has focus cannot be told reliably, so there is no quiet mode beyond `[notify] enabled = false`.
 
+## Help overlay (`?`)
+
+Every key, grouped by task in the order a review goes: MOVE, QUEUE, VIEW, COMMENT & PUBLISH, THREAD PANE, ASK CLAUDE, SEARCH & APP.
+Group titles are faded uppercase; keys are right-aligned in the accent, bold; what they do is plain text, a few words each.
+Two columns when the overlay is at least 100 columns wide, split between groups so both columns end level; one column below.
+The frame pads two columns on the sides and one row above and below; a blank row separates groups and six columns separate the two columns.
+It takes at most 90 % of the screen each way, centred, and scrolls with `j k`, `^d ^u`, `g G` when taller; the bottom border says where you are.
+Keys show as they are in effect: user bindings first, `(`/`)` for `[`/`]` with the AZERTY preset.
+The groups live in `src/tui/help.rs`; a test fails when a bindable action has no line there.
+
 ## Toasts and errors
 
 A toast is one line in the status area, `accent` for success, `danger` for failure, 4 s, replaced by the next.

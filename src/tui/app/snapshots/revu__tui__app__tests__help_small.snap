@@ -2,27 +2,27 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
-╭ Queu╭ keys · 4–24 of 57 · j k scroll ──────────────────────────────────╮─────╮
-│   TO│        h l  pane to the left; open the MR, or a marked line's th │     │
-│ ▎ fe│      enter  open the MR, a marked line's threads, or toggle the  │     │
-│ ▎ !4│      esc x  close the right pane; esc again goes back to the que │     │
-│   MI│          /  filter the queue: words @author !42 ~label draft:no  │     │
-│   fi│      ' 1-9  in the queue: a saved view by its first letter, or i │     │
-│   !4│          *  in the queue: this repo only, or every project       │     │
-│   WA│          s  in the queue: next order (updated, oldest, author, s │     │
-│   in│          S  in the queue: group Open and Drafts by author        │     │
-│   !3│          i  the MR description                                   │     │
-│   DO│          r  refresh                                              │     │
-│     │          o  open in the browser (the line, in a diff)            │     │
-│     │          y  copy the URL                                         │     │
-│     │  click !42  open the MR, in terminals that follow links          │     │
-│     │  tab S-tab  next, previous file                                  │     │
-│     │      ]c [c  next, previous hunk                                  │     │
-│     │      ]n [n  next, previous line with a conversation; the pane fo │     │
-│     │      ]f [f  next, previous file with an open thread              │     │
-│     │         za  toggle the fold under the cursor                     │     │
-│     │          D  changed words inline, or every line split            │     │
-│     │      zc zo  close, open                                          │     │
-│     │      zM zR  fold, unfold every file                              │     │
-╰─────╰──────────────────────────────────────────────────────────────────╯─────╯
+╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────╮
+│   TO REVIEW╭ keys ──────────────────────────────────────────────╮            │
+│ ▎ feat char│                                                    │            │
+│ ▎ !42 · oma│      ^d ^u  half a page                            │            │
+│   MINE     │        h l  pane to the left, to the right         │            │
+│   fix flaky│      enter  open, or toggle the fold               │            │
+│   !41 · nin│      esc x  close the pane, back to the queue      │            │
+│   WATCHING │  tab S-tab  next, previous file                    │            │
+│   infra: ne│      ]c [c  next, previous hunk                    │            │
+│   !35 · oma│      ]n [n  next, previous conversation            │            │
+│   DONE ▸   │      ]f [f  next, previous file with a thread      │            │
+│            │                                                    │e           │
+│            │  QUEUE                                             │            │
+│            │          /  filter: words @author !42 ~label       │            │
+│            │      ' 1-9  a saved view, by letter or rank        │            │
+│            │          *  this repo, or every project            │            │
+│            │          s  next sort order                        │            │
+│            │          S  group by author                        │            │
+│            │      zo zc  open, fold the section                 │            │
+│            │                                                    │            │
+│            ╰─────────────── 4–19 of 66 · j k scroll · esc close ╯            │
+│                                ││                                            │
+╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina                                                       ? help

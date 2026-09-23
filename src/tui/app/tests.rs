@@ -467,7 +467,7 @@ fn help_and_quit() {
     press(&mut app, "jjk");
     assert_eq!(app.help, Some(1), "moving keys scroll the list");
     press(&mut app, "G");
-    assert_eq!(app.help, Some(ui::HELP.len() - 1));
+    assert_eq!(app.help, Some(crate::tui::help::last_row()));
     press(&mut app, "x");
     assert_eq!(app.help, None, "any other key closes it");
     app.handle_key(ctrl('c'));
@@ -511,7 +511,14 @@ fn snapshot_thread_open() {
 fn snapshot_help() {
     let mut app = with_queue();
     press(&mut app, "?");
-    insta::assert_snapshot!("help", render(&mut app, 100, 40));
+    insta::assert_snapshot!("help", render(&mut app, 160, 45));
+}
+
+#[test]
+fn snapshot_help_medium() {
+    let mut app = with_review();
+    press(&mut app, "?");
+    insta::assert_snapshot!("help_medium", render(&mut app, 100, 30));
 }
 
 #[test]
@@ -2090,7 +2097,7 @@ fn snapshot_help_with_the_azerty_preset_and_a_binding() {
         "#,
     );
     press(&mut app, "?");
-    insta::assert_snapshot!("help_azerty", render(&mut app, 100, 40));
+    insta::assert_snapshot!("help_azerty", render(&mut app, 160, 45));
 }
 
 /// The review with one more thread on added line 13 whose note carries `body`, its pane open.
