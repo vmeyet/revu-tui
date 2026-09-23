@@ -1,10 +1,12 @@
 //! The seam between the app and the forge that hosts the code: one neutral model, one enum that
 //! sends each call to the backend of the host.
+mod budget;
 pub mod github;
 pub mod gitlab;
 mod model;
 mod queue;
 
+pub use budget::RateLimit;
 pub use model::{Approvals, DiffFile, Discussion, Draft, LineRef, Mr, MrKey, NewDraft, Note, Pipeline, Position, Refs, Side, User};
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -111,6 +113,14 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.mr(key).await,
             Forge::GitHub(client) => client.mr(key).await,
+        }
+    }
+
+    /// Requests left and any rate-limit wait, as the last answers said.
+    pub fn rate(&self) -> RateLimit {
+        match self {
+            Forge::GitLab(client) => client.rate(),
+            Forge::GitHub(client) => client.rate(),
         }
     }
 

@@ -212,7 +212,8 @@ Opening an MR paints from cache, then three requests refresh it in parallel; a d
 
 - Queue: every 60 s while the TUI runs, one GraphQL call.
 - Open MR: discussions every 30 s, MR every 60 s (pipeline, approvals, head sha).
-- A change in the open MR shows `●` in the status line and in the file or thread it touched; it never moves the cursor.
+- A change in the open MR shows in the status line (`● 2 new notes`, `● new commits`) until the next key; it never moves the cursor. Queue rows with activity since they were last opened carry a `●` that pulses once a second.
+- Both forge clients keep the rate-limit count their answers report (`forge::budget`); under 100 requests left, every poll interval is five times longer, and a request waiting out a 429 shows `⏳ 42s` in the status line.
 - Backoff to 5 min after a `429` or a network error, reset after one success.
 
 No websocket: GitLab has none for this. Polling at these rates stays far under the 2000 requests/min limit observed.

@@ -10,6 +10,7 @@ const QUEUE_EVERY: Duration = Duration::from_secs(60);
 const MR_EVERY: Duration = Duration::from_secs(60);
 const DISCUSSIONS_EVERY: Duration = Duration::from_secs(30);
 const BACKOFF: Duration = Duration::from_secs(300);
+const SLOW_DOWN: u32 = 5;
 
 /// What the app is started with; everything else it learns from `Incoming`.
 #[derive(Clone, Debug)]
@@ -58,6 +59,10 @@ pub struct App {
     pub wrap: bool,
     /// Reading mode, `zz`: the queue hides and the diff sits centered.
     pub reading: bool,
+    /// What the forge's rate limit says, copied in by the loop each tick.
+    pub rate: crate::forge::RateLimit,
+    /// What changed in the open MR since the reader last pressed a key: `● 2 new notes`.
+    pub news: Option<String>,
     pub closed_sections: std::collections::BTreeSet<&'static str>,
     pub queue_loading: bool,
     pub open: Option<Open>,
@@ -113,6 +118,8 @@ impl App {
             header_folded: false,
             wrap: false,
             reading: false,
+            rate: crate::forge::RateLimit::default(),
+            news: None,
             closed_sections: std::collections::BTreeSet::from(["DONE"]),
             queue_loading: true,
             open: None,
@@ -169,16 +176,21 @@ impl App {
     }
 
     pub(super) fn schedule_queue(&mut self) {
-        self.poll.queue_due = Some(self.now + QUEUE_EVERY);
+        self.poll.queue_due = Some(self.now + self.paced(QUEUE_EVERY));
     }
 
     pub(super) fn schedule_review(&mut self) {
-        self.poll.mr_due = Some(self.now + MR_EVERY);
-        self.poll.discussions_due = Some(self.now + DISCUSSIONS_EVERY);
+        self.poll.mr_due = Some(self.now + self.paced(MR_EVERY));
+        self.poll.discussions_due = Some(self.now + self.paced(DISCUSSIONS_EVERY));
     }
 
     pub(super) fn schedule_discussions(&mut self) {
-        self.poll.discussions_due = Some(self.now + DISCUSSIONS_EVERY);
+        self.poll.discussions_due = Some(self.now + self.paced(DISCUSSIONS_EVERY));
+    }
+
+    /// Polls five times slower while the forge says few requests are left, so the window lasts.
+    fn paced(&self, every: Duration) -> Duration {
+        if self.rate.is_low() { every * SLOW_DOWN } else { every }
     }
 
     pub(super) fn back_off(&mut self) {
