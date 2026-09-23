@@ -7,6 +7,7 @@ mod compose;
 mod diff_view;
 mod field;
 mod ground;
+mod help;
 mod images;
 mod palette;
 mod palette_view;

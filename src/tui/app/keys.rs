@@ -311,7 +311,7 @@ impl App {
 
 /// Moving keys scroll the key list; any other key closes it.
 fn help_scroll(scroll: usize, key: KeyEvent) -> Option<usize> {
-    let last = crate::tui::ui::HELP.len().saturating_sub(1);
+    let last = crate::tui::help::last_row();
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => Some((scroll + 1).min(last)),
