@@ -43,6 +43,8 @@ Three panes, like a chat client: the queue of MRs, the diff, the thread.
 The diff is coloured by syntax for TypeScript, JavaScript, Python and JSON.
 Inside a checkout the queue shows that repo only: what waits on you, yours, what you watch, and every other open MR.
 `*` widens it to every project.
+Other people's draft MRs wait apart in DRAFTS, folded; `zo` opens it.
+`s` changes the order (oldest, author, size, urgency with Jev) and `S` groups Open and Drafts by author; revu remembers both per repo.
 
 | Key | Action |
 |---|---|
@@ -51,6 +53,7 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `tab`, `]c`, `]n` | Next file, hunk, line with a conversation |
 | `za`, `zM` `zR` | Fold one, fold all, unfold all |
 | `zo` `zc` (queue), `zh` | Open or fold the section under the cursor, fold the MR header |
+| `s` / `S` (queue) | Next order (updated, oldest, author, size, urgency) / group Open and Drafts by author |
 | `D` | One-word changes inline (`2;` struck, `20;` after it), or every line split |
 | `i` | The MR description |
 | `t` | File tree in the right pane; `enter` jumps to a file |
@@ -61,7 +64,7 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `v` | The file as it is after the change, in your own program at this line (`:view old` for before) |
 | `c` | New thread on the line, written in a box at the bottom of the pane (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change); `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` keeps it for later |
 | `r` / `R` | Reply / resolve, in the right pane (`R` also on a marked line) |
-| `S` | Commit the suggestion of the note under the cursor on the MR branch, after a `y` |
+| `S` (thread) | Commit the suggestion of the note under the cursor on the MR branch, after a `y` |
 | `J` `K`, `e`, `d`, `x` | In the pane: next, previous thread; edit, delete my draft; close |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
 | `a` then `e` `r` `s` `t` `c` `a` | Ask Claude: explain the hunk, the file's risks, a summary of the MR, this thread, a comment about the lines, or anything (`:ask …` too) |
@@ -121,6 +124,7 @@ inline_min_same = 60          # …and both lines keep at least this percent of 
 [tui]
 theme = "tokyonight"          # dracula, catppuccin, catppuccin-latte, rosepine, rosepine-dawn, nord, tokyonight, monokai
 images = true                 # pictures in comments, drawn in the thread pane on Kitty, Ghostty, WezTerm and iTerm2
+queue = "comfortable"         # two lines per MR; "compact" for one
 
 [notify]
 enabled = true                # a macOS notification when an MR lands in To review while revu runs

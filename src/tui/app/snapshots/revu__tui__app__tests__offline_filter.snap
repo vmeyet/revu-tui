@@ -3,10 +3,10 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 12)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   TO REVIEW                  0 ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
-│   MINE                       0 ││   1 of 2 approvals · 3 threads, 1 unresolved                   │
-│   WATCHING                   0 ││  ◆ 1 on the MR  enter opens                                    │
-│   DONE ▸                     0 ││                                                                │
+│   TO REVIEW                0   ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
+│   MINE                     0   ││   1 of 2 approvals · 3 threads, 1 unresolved                   │
+│   WATCHING                 0   ││  ◆ 1 on the MR  enter opens                                    │
+│   DONE ▸                   0   ││                                                                │
 │                                ││ ▎▾ src/pay/charge.rs                    +4 −2  ◆1 · 1 outdated │
 │                                ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                    │
 │                                ││      12   12  pub async fn charge(card: &Card, amount: Money)… │

@@ -1,4 +1,4 @@
-use super::app::{App, Badge, Focus, Mark, QueueRow};
+use super::app::{App, Focus};
 use super::theme::Theme;
 use super::{brief_view, diff_view, publish_view, thread_view};
 use ratatui::Frame;
@@ -20,9 +20,7 @@ const MEDIUM: u16 = 120;
 const SIDE_PCT: u16 = 40;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
-const SKELETON_ROWS: usize = 3;
-
-pub const HELP: [(&str, &str); 54] = [
+pub const HELP: [(&str, &str); 56] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -31,6 +29,8 @@ pub const HELP: [(&str, &str); 54] = [
     ("esc x", "close the right pane; esc again goes back to the queue"),
     ("/", "filter the queue"),
     ("*", "in the queue: this repo only, or every project"),
+    ("s", "in the queue: next order (updated, oldest, author, size, urgency)"),
+    ("S", "in the queue: group Open and Drafts by author"),
     ("i", "the MR description"),
     ("r", "refresh"),
     ("o", "open in the browser (the line, in a diff)"),
@@ -101,7 +101,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let review = if app.reading && shown.side == 0 { centered(review, READING_W) } else { review };
     let side_open = side_open && shown.side > 0;
     if shown.queue > 0 {
-        draw_queue(f, app, queue);
+        super::queue_view::draw(f, app, queue);
     }
     if shown.diff {
         diff_view::draw(f, app, review);
@@ -201,125 +201,6 @@ pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
         .border_style(Style::default().fg(if focused { theme.accent } else { theme.border }))
         .title(Span::styled(format!(" {title} "), title_style))
         .padding(Padding::horizontal(1))
-}
-
-fn draw_queue(f: &mut Frame, app: &mut App, area: Rect) {
-    let theme = app.theme;
-    let scope = app.scope().unwrap_or_else(|| "all".to_owned());
-    let title = truncate(&format!("Queue · {scope}"), area.width.saturating_sub(4) as usize);
-    let block = pane(theme, &title, app.focus == Focus::Queue);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-    if app.sections.is_none() {
-        return draw_skeleton(f, theme, inner);
-    }
-    if app.queue_is_empty() {
-        return draw_empty(f, theme, inner, &["✓", "", "nothing waits on you", "r to refresh · / to filter"]);
-    }
-    let height = inner.height as usize;
-    app.queue_scroll = settle_scroll(app.queue_scroll, app.queue_selected, height);
-    let rows = app.queue_rows();
-    let lines: Vec<Line> = rows
-        .iter()
-        .enumerate()
-        .skip(app.queue_scroll)
-        .take(height)
-        .map(|(i, row)| queue_line(app, row, i == app.queue_selected, inner.width as usize))
-        .collect();
-    let links = queue_links(&rows, &app.hosts, app.queue_scroll, inner);
-    f.render_widget(Paragraph::new(lines), inner);
-    app.links.extend(links);
-}
-
-/// Where each visible `!iid` lands: two cells in, after the cursor bar.
-pub fn queue_links(rows: &[QueueRow<'_>], hosts: &crate::forge::Hosts, scroll: usize, inner: Rect) -> Vec<Link> {
-    rows.iter()
-        .enumerate()
-        .skip(scroll)
-        .take(inner.height as usize)
-        .filter_map(|(i, row)| match row {
-            QueueRow::Mr(mr) => {
-                let text = format!("{}{}", hosts.kind_of(&mr.key()).sigil(), mr.number);
-                Some(Link { x: inner.x + 2, y: inner.y + (i - scroll) as u16, text, url: mr.web_url.clone() })
-            }
-            QueueRow::Section { .. } => None,
-        })
-        .collect()
-}
-
-fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -> Line<'a> {
-    let theme = app.theme;
-    match row {
-        QueueRow::Section { name, count, open } => {
-            let count = count.to_string();
-            let mark = if *open { "" } else { " ▸" };
-            let pad = width.saturating_sub(name.width() + mark.width() + count.width() + 2);
-            Line::from(vec![
-                Span::styled(format!("  {name}{mark}"), Style::default().fg(theme.faded)),
-                Span::styled(format!("{}{count}", " ".repeat(pad)), Style::default().fg(theme.faded)),
-            ])
-        }
-        QueueRow::Mr(mr) => {
-            let badge = app.badge(mr).map(|b| badge_span(app, b));
-            let mark = app.triaged().then(|| mark_span(app, app.mark(mr)));
-            let iid = format!("{}{} ", app.hosts.kind_of(&mr.key()).sigil(), mr.number);
-            let tag = app.host_tag(mr).map(|t| format!("{t} "));
-            let tag_w = tag.as_ref().map_or(0, |t| t.width());
-            let room = width.saturating_sub(2 + mark.as_ref().map_or(0, Span::width) + iid.width() + tag_w + 2);
-            let title = truncate(&mr.title, room);
-            let pad = room.saturating_sub(title.width()) + 1;
-            let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
-            let mut spans = vec![Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent))];
-            spans.extend(mark);
-            spans.extend([
-                Span::styled(iid, Style::default().fg(theme.muted)),
-                Span::styled(title, title_style),
-                Span::raw(" ".repeat(pad)),
-            ]);
-            spans.extend(tag.map(|t| Span::styled(t, Style::default().fg(theme.faded))));
-            spans.extend(badge);
-            Line::from(spans)
-        }
-    }
-}
-
-/// The activity dot breathes: bright one second, faded the next.
-fn pulse_on(app: &App) -> bool {
-    app.now.duration_since(app.started).as_secs().is_multiple_of(2)
-}
-
-/// Jev's mark, two cells wide so titles stay aligned whether a row has one or not.
-fn mark_span<'a>(app: &App, mark: Option<Mark>) -> Span<'a> {
-    let theme = app.theme;
-    match mark {
-        Some(Mark::WaitsOnMe) => Span::styled("◆ ", Style::default().fg(if pulse_on(app) { theme.warn } else { theme.faded })),
-        Some(Mark::Urgent) => Span::styled("! ", Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)),
-        Some(Mark::Sprawling) => Span::styled("~ ", Style::default().fg(theme.muted)),
-        None => Span::raw("  "),
-    }
-}
-
-fn badge_span<'a>(app: &App, badge: Badge) -> Span<'a> {
-    let theme = app.theme;
-    match badge {
-        Badge::Failed => Span::styled("✗", Style::default().fg(theme.danger)),
-        Badge::Running => Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.muted)),
-        Badge::Activity => Span::styled("●", Style::default().fg(if pulse_on(app) { theme.accent } else { theme.faded })),
-        Badge::Approved => Span::styled("✓", Style::default().fg(theme.success)),
-        Badge::Draft => Span::styled("D", Style::default().fg(theme.muted)),
-    }
-}
-
-fn draw_skeleton(f: &mut Frame, theme: Theme, area: Rect) {
-    let faded = Style::default().fg(theme.faded);
-    let mut lines = vec![];
-    for name in ["TO REVIEW", "MINE", "WATCHING", "OPEN"] {
-        lines.push(Line::from(Span::styled(format!("  {name}"), faded)));
-        for _ in 0..SKELETON_ROWS {
-            lines.push(Line::from(Span::styled("   ▁▁▁ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁", faded)));
-        }
-    }
-    f.render_widget(Paragraph::new(lines), area);
 }
 
 pub fn draw_empty(f: &mut Frame, theme: Theme, area: Rect, lines: &[&str]) {
@@ -567,22 +448,5 @@ mod tests {
         assert_eq!(short_age(Duration::from_secs(600)), "10m");
         assert_eq!(short_age(Duration::from_secs(7200)), "2h");
         assert_eq!(short_age(Duration::from_secs(200_000)), "2d");
-    }
-
-    #[test]
-    fn queue_links_point_at_each_visible_iid() {
-        let sections = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json")).sections(&[]);
-        let rows = vec![
-            QueueRow::Section { name: "TO REVIEW", count: 1, open: true },
-            QueueRow::Mr(&sections.to_review[0]),
-            QueueRow::Section { name: "MINE", count: 1, open: true },
-            QueueRow::Mr(&sections.mine[0]),
-        ];
-        let inner = Rect { x: 2, y: 1, width: 30, height: 3 };
-        let links = queue_links(&rows, &crate::forge::Hosts::one("gitlab.com", crate::forge::Kind::GitLab), 1, inner);
-        assert_eq!(links.len(), 2, "sections carry no link and the window stops at the height");
-        assert_eq!((links[0].x, links[0].y, links[0].text.as_str()), (4, 1, "!42"));
-        assert_eq!(links[0].url, "https://gitlab.com/acme/widgets/-/merge_requests/42");
-        assert_eq!((links[1].y, links[1].text.as_str()), (3, "!41"));
     }
 }

@@ -49,6 +49,7 @@ fn settings() -> Settings {
         ask: None,
         keymap: crate::keymap::Keymap::default(),
         pictures: None,
+        queue_layout: crate::config::QueueLayout::default(),
     }
 }
 
@@ -902,7 +903,8 @@ fn in_a_checkout_the_queue_starts_on_its_project_and_star_widens_it() {
     let scope = Some("acme/widgets".to_owned());
     assert_eq!(app.start(), vec![Action::LoadQueue { scope: scope.clone(), from_cache: true }]);
     app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
-    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", count: 2, .. })));
+    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", count: 1, .. })));
+    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "DRAFTS", count: 1, open: false })));
     assert_eq!(press(&mut app, "*"), vec![Action::LoadQueue { scope: None, from_cache: true }]);
     assert_eq!(app.sections, None, "the project's list is gone before the wider one paints");
     assert_eq!(press(&mut app, "*"), vec![Action::LoadQueue { scope, from_cache: true }]);
@@ -932,7 +934,8 @@ fn star_outside_a_checkout_says_why_it_does_nothing() {
 fn i_opens_the_description_from_the_queue_and_the_review_and_closes_on_esc() {
     let mut app = scoped_app();
     app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
-    press(&mut app, "Gkk");
+    press(&mut app, "Gk");
+    press(&mut app, "zo");
     press(&mut app, "i");
     let brief = app.brief.clone().unwrap();
     assert_eq!((brief.number, brief.description.as_str()), (50, "Adds the refund flow."));
@@ -1551,11 +1554,15 @@ fn verdicts_mark_rows_and_lead_the_review_section_by_urgency() {
     assert_eq!(app.mark(&last), Some(super::Mark::Urgent));
     let first_row = app.queue_rows().into_iter().find_map(|r| match r {
         QueueRow::Mr(mr) => Some(mr.key()),
-        QueueRow::Section { .. } => None,
+        QueueRow::Section { .. } | QueueRow::Author { .. } => None,
     });
     assert_eq!(first_row, Some(last.key()), "the urgent MR leads To review");
     let moved = crate::forge::QueueMr { updated_at: last.updated_at + chrono::TimeDelta::hours(1), ..last.clone() };
     assert_eq!(app.mark(&moved), None, "a verdict on an older state marks nothing");
+    let screen = render(&mut app, 100, 16);
+    let meta = screen.lines().position(|l| l.contains(&format!("!{} ·", last.number))).unwrap();
+    assert!(screen.lines().nth(meta - 1).unwrap().contains("▎ ! "), "the mark leads the row's first line:\n{screen}");
+    app.queue_layout = crate::config::QueueLayout::Compact;
     let screen = render(&mut app, 100, 16);
     assert!(screen.contains(&format!("! !{}", last.number)), "{screen}");
 }
@@ -1942,8 +1949,10 @@ fn a_queue_across_hosts_tags_each_row_and_opens_it_on_its_host() {
     let there = queue.on_host("github.com").sections(&[]);
     let merged = crate::forge::Sections::merge(vec![here, there]);
     app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: merged, opened: HashMap::new(), cached: false });
+    let screen = render(&mut app, 120, 40);
+    assert!(screen.contains("#42") && screen.contains("!42"), "the sigil tells the forges apart:\n{screen}");
+    app.queue_layout = crate::config::QueueLayout::Compact;
     let screen = render(&mut app, 120, 20);
-    assert!(screen.contains("#42") && screen.contains("!42"), "{screen}");
     assert!(screen.contains("github") && screen.contains("gitlab"), "{screen}");
     let github_row = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.host.is_some())).unwrap();
     app.queue_selected = github_row;
@@ -2088,4 +2097,80 @@ fn command_k_opens_the_jump_like_ctrl_k() {
     let mut app = with_queue();
     app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER));
     assert!(app.jump.is_some());
+}
+
+#[test]
+fn snapshot_queue_compact() {
+    let mut app = with_queue();
+    app.queue_layout = crate::config::QueueLayout::Compact;
+    app.now = app.started;
+    insta::assert_snapshot!("queue_compact", render(&mut app, 100, 16));
+}
+
+#[test]
+fn snapshot_queue_drafts_open_and_grouped_by_author() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    press(&mut app, "Gkzo");
+    press(&mut app, "S");
+    insta::assert_snapshot!("queue_drafts_grouped", render(&mut app, 120, 24));
+}
+
+#[test]
+fn s_cycles_the_order_saves_it_for_the_scope_and_titles_the_pane() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    let actions = press(&mut app, "s");
+    let view = QueueView { order: super::order::Order::Oldest, by_author: false };
+    assert_eq!(actions, vec![Action::SaveQueueView { scope: Some("acme/widgets".into()), view }]);
+    press(&mut app, "ss");
+    assert_eq!(app.queue_view.order, super::order::Order::Size);
+    assert_eq!(app.queue_view_label().as_deref(), Some("smallest first"));
+    press(&mut app, "s");
+    assert_eq!(app.queue_view.order, super::order::Order::Updated, "no urgency without Jev: back to the start");
+    assert_eq!(app.queue_view_label(), None);
+    let screen = render(&mut app, 120, 20);
+    assert!(screen.contains("Queue · acme/widgets "), "{screen}");
+}
+
+#[test]
+fn capital_s_groups_open_and_drafts_by_author_only() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    press(&mut app, "Gkzo");
+    press(&mut app, "S");
+    let authors: Vec<&str> =
+        app.queue_rows().iter().filter_map(|r| if let QueueRow::Author { name, .. } = r { Some(*name) } else { None }).collect();
+    assert_eq!(authors, ["lea", "omar"], "one header per author in Open, then in Drafts");
+    let before_mine = app
+        .queue_rows()
+        .iter()
+        .take_while(|r| !matches!(r, QueueRow::Section { name: "MINE", .. }))
+        .any(|r| matches!(r, QueueRow::Author { .. }));
+    assert!(!before_mine, "To review is never grouped");
+    assert!(app.selected_mr().is_some(), "author headers are never where the cursor rests");
+    press(&mut app, "S");
+    assert!(!app.queue_rows().iter().any(|r| matches!(r, QueueRow::Author { .. })));
+}
+
+#[test]
+fn a_saved_view_for_this_scope_applies_and_one_for_another_is_dropped() {
+    let mut app = scoped_app();
+    let grouped = QueueView { order: super::order::Order::Author, by_author: true };
+    app.apply(Incoming::QueueView { scope: None, view: grouped });
+    assert_eq!(app.queue_view, QueueView::default());
+    app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view: grouped });
+    assert_eq!(app.queue_view, grouped);
+}
+
+#[test]
+fn others_drafts_wait_folded_in_their_own_section_and_mine_stay_mine() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+    let rows = app.queue_rows();
+    let drafts = rows.iter().position(|r| matches!(r, QueueRow::Section { name: "DRAFTS", open: false, count: 1 })).unwrap();
+    let done = rows.iter().position(|r| matches!(r, QueueRow::Section { name: "DONE", .. })).unwrap();
+    let open = rows.iter().position(|r| matches!(r, QueueRow::Section { name: "OPEN", .. })).unwrap();
+    assert!(open < drafts && drafts < done);
+    assert!(rows.iter().any(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 41 && mr.draft)), "my own draft is in Mine");
 }

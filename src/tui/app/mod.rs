@@ -8,6 +8,7 @@ mod incoming;
 mod input;
 mod keys;
 mod notify;
+mod order;
 mod pane;
 mod pipeline;
 mod queue;
@@ -24,6 +25,7 @@ pub use apply::Confirm;
 pub use ask::{Answer, AnswerState, Part};
 pub use brief::Brief;
 pub use feedback::Toast;
+pub use order::QueueView;
 pub use pane::{Entry, EntryKind};
 pub use pipeline::{Pipeline, Run};
 pub use queue::{Badge, QueueRow};
@@ -56,6 +58,11 @@ pub enum Action {
     LoadQueue {
         scope: Option<String>,
         from_cache: bool,
+    },
+    /// Remember how the queue of `scope` is sorted and grouped.
+    SaveQueueView {
+        scope: Option<String>,
+        view: QueueView,
     },
     /// Paint from the cache at once, then fetch the MR, its diffs and its discussions.
     Open(MrKey),
@@ -217,6 +224,11 @@ pub enum Incoming {
         sections: Sections,
         opened: HashMap<MrKey, DateTime<Utc>>,
         cached: bool,
+    },
+    /// How the queue of `scope` was last sorted and grouped.
+    QueueView {
+        scope: Option<String>,
+        view: QueueView,
     },
     /// `cached` is how old the cache entry was; `None` means it just came from GitLab.
     Review {

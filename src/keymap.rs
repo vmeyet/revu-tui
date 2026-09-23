@@ -43,6 +43,8 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("open_browser", "o"),
     ("copy_link", "y"),
     ("scope", "*"),
+    ("sort_queue", "s"),
+    ("group_by_author", "S"),
     ("filter", "/"),
     ("palette", ":"),
     ("jump", "ctrl-k"),

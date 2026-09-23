@@ -4,7 +4,11 @@ use crate::review::Review;
 impl App {
     pub fn apply(&mut self, incoming: Incoming) {
         match incoming {
-            Incoming::Queue { scope, .. } if scope != self.scope() => {}
+            Incoming::Queue { scope, .. } | Incoming::QueueView { scope, .. } if scope != self.scope() => {}
+            Incoming::QueueView { view, .. } => {
+                self.queue_view = view;
+                self.queue_settle();
+            }
             Incoming::Queue { ref me, .. } if self.me.is_empty() && !me.is_empty() => {
                 self.me.clone_from(me);
                 self.apply(incoming);

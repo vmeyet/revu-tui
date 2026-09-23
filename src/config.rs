@@ -184,6 +184,24 @@ pub struct Tui {
     /// Pictures in comments, drawn in the thread pane where the terminal can; `false` shows their `[image: …]` line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub images: Option<bool>,
+    #[serde(default, skip_serializing_if = "QueueLayout::is_default")]
+    pub queue: QueueLayout,
+}
+
+/// How a queue row reads: two lines (the title, then number, author, age and size), or one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QueueLayout {
+    #[default]
+    Comfortable,
+    Compact,
+}
+
+impl QueueLayout {
+    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl Tui {
@@ -355,7 +373,7 @@ mod tests {
             username: Some("nina".into()),
             queue: Queue { watch_labels: vec!["infra".into()], ..Queue::default() },
             review: Review { fold: vec!["*.lock".into()], ..Review::default() },
-            tui: Tui { theme: Some("nord".into()), ascii: false, images: None },
+            tui: Tui { theme: Some("nord".into()), ..Tui::default() },
             ai: Ai::default(),
             open: Open { default: Some("hx".into()), files: BTreeMap::from([("*.md".into(), "glow -p".into())]) },
             hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })]),

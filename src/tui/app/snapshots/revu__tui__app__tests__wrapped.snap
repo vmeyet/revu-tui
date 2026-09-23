@@ -3,16 +3,16 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge ca… ────────╮
-│   TO REVIEW                  1 ││  omar · 2h · +5 −3 · 2 files · ✓ success   │
-│ ▎ !42 feat: charge cards at…   ││   1 of 2 approvals · 3 threads, 1 unresolv │
-│   MINE                       1 ││  ◆ 1 on the MR  enter opens                │
-│   !41 fix: flaky cache test  D ││                                            │
-│   WATCHING                   1 ││ ▎▾ src/pay/charge…  +4 −2  ◆1 · 1 outdated │
-│   !35 infra: new runner      ⠋ ││     ▾ @@ -12,4 +12,5 @@ pub async fn ch…   │
-│   DONE ▸                     1 ││      12   12  pub async fn charge(card: &C │
-│                                ││               ard, amount: Money) -> Resul │
-│                                ││               t<Receipt> {                 │
-│                                ││  ✓   13      -    let client = Client::new │
+│   TO REVIEW                1   ││  omar · 2h · +5 −3 · 2 files · ✓ success   │
+│ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolv │
+│ ▎ !42 · omar · 2h · +412 −38   ││  ◆ 1 on the MR  enter opens                │
+│   MINE                     1   ││                                            │
+│   fix flaky cache test       D ││ ▎▾ src/pay/charge…  +4 −2  ◆1 · 1 outdated │
+│   !41 · nina · 4h · +3 −1      ││     ▾ @@ -12,4 +12,5 @@ pub async fn ch…   │
+│   WATCHING                 1   ││      12   12  pub async fn charge(card: &C │
+│   infra: new runner          ⠋ ││               ard, amount: Money) -> Resul │
+│   !35 · omar · 2d · +0 −0      ││               t<Receipt> {                 │
+│   DONE ▸                   1   ││  ✓   13      -    let client = Client::new │
 │                                ││               ();                          │
 │                                ││           13 +    let client = Client::wit │
 │                                ││               h_key(idempotency_key(card)) │

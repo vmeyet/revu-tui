@@ -34,6 +34,8 @@ pub struct Settings {
     pub keymap: crate::keymap::Keymap,
     /// How the terminal draws pictures, asked once at start; `None` when it cannot or `[tui] images = false`.
     pub pictures: Option<ratatui_image::picker::Picker>,
+    /// `[tui] queue`: two-line rows, or one.
+    pub queue_layout: crate::config::QueueLayout,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -79,6 +81,9 @@ pub struct App {
     /// What To review held at the last fresh answer, so only newcomers are announced.
     pub seen: Option<super::notify::Seen>,
     pub closed_sections: std::collections::BTreeSet<&'static str>,
+    /// How rows sit inside the sections: `s` sorts, `S` groups by author.
+    pub queue_view: super::QueueView,
+    pub queue_layout: crate::config::QueueLayout,
     pub queue_loading: bool,
     pub open: Option<Open>,
     /// The MR being fetched for the first time; the review pane shows a spinner until it lands.
@@ -163,7 +168,9 @@ impl App {
             notify: settings.notify,
             hosts: settings.hosts,
             seen: None,
-            closed_sections: std::collections::BTreeSet::from(["DONE"]),
+            closed_sections: std::collections::BTreeSet::from(["DONE", "DRAFTS"]),
+            queue_view: super::QueueView::default(),
+            queue_layout: settings.queue_layout,
             queue_loading: true,
             open: None,
             opening: None,
