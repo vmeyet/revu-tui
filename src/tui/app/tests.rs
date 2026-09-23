@@ -950,7 +950,7 @@ fn the_description_scrolls_and_the_view_stops_it_at_the_last_page() {
     let long: String = (1..=80).map(|n| format!("line {n}\n")).collect();
     app.open = app.open.clone().map(|o| {
         let mut review = o.review.clone();
-        review.mr.description = long.clone();
+        std::sync::Arc::make_mut(&mut review.mr).description = long.clone();
         o.with_review(review)
     });
     press(&mut app, "ijjj");
@@ -970,7 +970,8 @@ fn snapshot_description_modal() {
     let mut app = with_review();
     app.open = app.open.clone().map(|o| {
         let mut review = o.review.clone();
-        review.mr.description = "## Why\n\nCards were charged twice.\n\n- retry with `idempotency_key`\n- log the attempt".into();
+        std::sync::Arc::make_mut(&mut review.mr).description =
+            "## Why\n\nCards were charged twice.\n\n- retry with `idempotency_key`\n- log the attempt".into();
         o.with_review(review)
     });
     press(&mut app, "i");

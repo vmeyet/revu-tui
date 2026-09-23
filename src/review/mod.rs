@@ -189,9 +189,10 @@ impl Row {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Review {
-    pub mr: Mr,
-    pub files: Vec<File>,
-    pub threads: Vec<Thread>,
+    /// What a fetch brought: never changed afterwards, so copies of the review share it.
+    pub mr: Arc<Mr>,
+    pub files: Arc<[File]>,
+    pub threads: Arc<[Thread]>,
     pub drafts: Vec<Draft>,
     pub viewed: BTreeSet<String>,
     pub fold: FoldState,
@@ -221,9 +222,9 @@ impl Review {
         let metas: Vec<FileMeta> = files.iter().map(File::meta).collect();
         let fold = FoldState::initial(&metas, fold_globs);
         Self {
-            mr,
-            files,
-            threads,
+            mr: Arc::new(mr),
+            files: files.into(),
+            threads: threads.into(),
             drafts: vec![],
             viewed: BTreeSet::new(),
             fold,
@@ -274,7 +275,7 @@ impl Review {
 
     /// The same diff with fresh threads, for the cheap discussions poll.
     pub fn with_discussions(&self, discussions: Vec<Discussion>) -> Self {
-        Self { threads: threads_of(discussions, &self.files), ..self.clone() }
+        Self { threads: threads_of(discussions, &self.files).into(), ..self.clone() }
     }
 
     /// Every note in every thread, to notice new ones between two polls.
@@ -286,6 +287,12 @@ impl Review {
     pub fn with_resolved(&self, id: &str, resolved: bool) -> Self {
         let threads = self.threads.iter().map(|t| if t.id == id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
         Self { threads, ..self.clone() }
+    }
+
+    /// The MR marked approved by me or not, ahead of the forge's answer.
+    pub fn with_approved(&self, approved: bool) -> Self {
+        let approvals = crate::forge::Approvals { user_has_approved: approved, ..self.mr.approvals.clone() };
+        Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self.clone() }
     }
 
     pub fn unresolved(&self) -> usize {
@@ -471,6 +478,41 @@ pub(crate) mod tests {
         ]
     }
 
+    /// A review of `files` files of 100 changed lines each, as big as the spec's performance budget.
+    fn big_review(files: usize) -> Review {
+        let body: String = (0..50).map(|i| format!("-    let value_{i} = old({i});\n+    let value_{i} = new({i});\n")).collect();
+        let diffs: Vec<DiffFile> = (0..files)
+            .map(|n| DiffFile {
+                diff: format!("@@ -1,50 +1,50 @@\n{body}"),
+                old_path: format!("src/f{n}.rs"),
+                new_path: format!("src/f{n}.rs"),
+                ..charge()
+            })
+            .collect();
+        Review::new(mr(), &diffs, discussions(), &[])
+    }
+
+    /// Prints what one fold change costs on a 5 000-line review; run with `--ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn measure_a_fold_on_a_big_review() {
+        let review = big_review(50);
+        let rounds = 1_000;
+        let started = std::time::Instant::now();
+        let mut last = review.clone();
+        for _ in 0..rounds {
+            last = last.with_fold(last.fold.clone());
+        }
+        println!("with_fold on {} lines: {:?} each", 50 * 100, started.elapsed() / rounds);
+        let started = std::time::Instant::now();
+        for _ in 0..rounds {
+            last = last.with_fold(last.fold.clone());
+            assert!(!last.rows().is_empty());
+        }
+        println!("with_fold then rows, what za does: {:?} each", started.elapsed() / rounds);
+        assert_eq!(last.files.len(), 50);
+    }
+
     pub(crate) fn review() -> Review {
         Review::new(mr(), &[charge(), lock()], discussions(), &["*.lock".into()])
     }
@@ -587,7 +629,7 @@ pub(crate) mod tests {
             old_path: "a.rs".into(),
             ..Default::default()
         };
-        let review = Review::new(review().mr, &[diff], vec![], &[]).with_split(true);
+        let review = Review::new((*review().mr).clone(), &[diff], vec![], &[]).with_split(true);
         let lines = review.rows().iter().filter(|r| matches!(r, Row::Line { .. })).count();
         assert_eq!(lines, 2, "split shows both lines");
         let quiet = review.with_quiet_whitespace(true);

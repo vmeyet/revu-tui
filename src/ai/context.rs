@@ -73,7 +73,7 @@ fn mr_block(review: &Review) -> String {
         let _ = writeln!(text, "Pipeline: {}", pipeline.status);
     }
     let _ = writeln!(text, "\n## Description\n\n{}\n\n## Files", cut(&mr.description, DESCRIPTION_CHARS));
-    for file in &review.files {
+    for file in review.files.iter() {
         let _ = writeln!(text, "- {} (+{} −{})", file.new_path, file.additions, file.deletions);
     }
     text

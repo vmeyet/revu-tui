@@ -133,7 +133,7 @@ fn news(old: &Review, fresh: &Review) -> Option<String> {
 /// Fresh data keeps the folds of every file that did not change, so a poll never unfolds what was read.
 fn carry_folds(old: &Review, fresh: &Review) -> Review {
     let mut fold = fresh.fold.clone();
-    for file in &old.files {
+    for file in old.files.iter() {
         let unchanged = fresh.files.iter().any(|f| f.new_path == file.new_path && f.hunks == file.hunks);
         if !unchanged {
             continue;
