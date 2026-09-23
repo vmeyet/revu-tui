@@ -7,6 +7,7 @@ pub mod commands;
 mod config;
 pub mod ctx;
 mod diff;
+mod docs;
 mod forge;
 mod fuzzy;
 mod keymap;

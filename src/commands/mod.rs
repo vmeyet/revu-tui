@@ -7,6 +7,8 @@ pub mod approve;
 pub mod comment;
 /// `revu diff`.
 pub mod diff;
+/// `revu docs`: the reference pages, written from the code.
+pub mod docs;
 /// `revu list`.
 pub mod list;
 /// `revu login` and `revu logout`.

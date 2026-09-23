@@ -13,6 +13,7 @@ The design lives in `specs/`; read `specs/06-roadmap.md` first, it says what to 
 
 ## Code
 
+- `docs/` is for users, `specs/` for contributors; `revu docs` writes `docs/reference/` from the code, and a test fails when it is stale.
 - Rust 2024, `rustfmt.toml` as committed (140 columns, `use_small_heuristics = "Max"`).
 - Lints are pedantic (`[lints]` in Cargo.toml): `cargo clippy --all-targets -- -D warnings` must be clean, and `unwrap`/`expect` only live in tests.
 - No comments that say what the code does; a comment must say why, and only when no name can.
