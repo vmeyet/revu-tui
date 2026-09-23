@@ -61,6 +61,8 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `r` / `R` | Reply / resolve, in the right pane (`R` also on a marked line) |
 | `J` `K`, `e`, `d`, `x` | In the pane: next, previous thread; edit, delete my draft; close |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
+| `a` then `e` `r` `s` `t` `c` `a` | Ask Claude: explain the hunk, the file's risks, a summary of the MR, this thread, a comment about the lines, or anything (`:ask …` too) |
+| `c` `enter` `R` `y` (answer) | Turn the answer into a draft, ask a follow-up, ask again past the cache, copy it |
 | `o` / `y` | Open in the browser / copy the link |
 | `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:view old`, `:set theme=nord`; tab completes |
 | `ctrl-k` | Jump to a file of the open MR, or to another MR |
@@ -131,7 +133,7 @@ revu ai login anthropic           # hidden prompt, checked against Anthropic bef
 revu ai login typesafe            # offers to reuse the key slack-tui already stores
 revu ai status                    # which provider is on and where its key comes from, never the key
 revu ai logout anthropic
-revu ai ask !42                                    # Claude summarises the MR, streamed to stdout
+revu ai ask !42                                    # Claude summarises the MR, streamed to stdout (in the TUI: a s)
 revu ai ask !42 --file src/a.rs --lines 13-20 is this safe?
 ```
 
@@ -140,6 +142,10 @@ revu ai ask !42 --file src/a.rs --lines 13-20 is this safe?
 With `[ai.typesafe]` on, Jev marks the queue: `◆` the last note asks you something, `!` someone is blocked on this review, `~` a sprawling MR; To review sorts by urgency.
 In the file tree, a file Jev finds risky reads red (security or auth) or amber (data or schema), a cosmetic one dimmed.
 Answers are cached per MR state, so an unchanged MR is never asked twice; if Jev fails, one notice and the plain views.
+
+With `[ai.anthropic]` on, `a` asks Claude about what is under the cursor and the answer streams into the right pane.
+The same question on the same diff comes back from the cache at once (`R` asks again); the footer names the model and the tokens the prompt cache saved.
+`:ai off` stops every AI call until revu starts again.
 
 ## Development
 

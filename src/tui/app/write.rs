@@ -81,7 +81,7 @@ impl App {
     }
 
     /// The position for a note here: the cursor's line, or the `V` range around it.
-    fn position_here(&self) -> Option<Position> {
+    pub(super) fn position_here(&self) -> Option<Position> {
         let open = self.open.as_ref()?;
         let lines: Vec<(usize, usize, usize)> = open
             .selection()

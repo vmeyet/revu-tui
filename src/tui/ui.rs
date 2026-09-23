@@ -23,7 +23,7 @@ const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 const SKELETON_ROWS: usize = 3;
 
-pub const HELP: [(&str, &str); 49] = [
+pub const HELP: [(&str, &str); 52] = [
     ("j k", "move"),
     ("g G", "first, last"),
     ("^d ^u", "half page"),
@@ -63,6 +63,9 @@ pub const HELP: [(&str, &str); 49] = [
     ("e d", "in the pane: edit, delete my draft"),
     ("J K", "in the pane: next, previous thread on the line"),
     ("P", "publish: enter sends, e edits, m moves a lost draft to the MR"),
+    ("a e r s", "ask Claude: explain the hunk, risks of the file, summary of the MR"),
+    ("a t c a", "ask Claude: this thread, a comment about the lines, anything"),
+    ("c ⏎ R y", "in an answer: make it a draft, follow up, ask again, copy"),
     ("A", "approve, unapprove"),
     ("r", "in a thread: reply, as a draft"),
     ("R", "resolve, unresolve: in the pane, or on a marked line"),
@@ -89,7 +92,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let input_rows = u16::from(app.filtering || app.palette.is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
-    let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some());
+    let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some());
     let shown = columns(main.width, side_open, app.focus == Focus::Side, app.reading);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
@@ -102,7 +105,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if shown.diff {
         diff_view::draw(f, app, review);
     }
-    if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
+    if app.open.as_ref().is_some_and(|o| o.answer.is_some()) && side_open {
+        super::answer_view::draw(f, app, side);
+    } else if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
         super::tree_view::draw(f, app, side);
     } else if side_open {
         thread_view::draw(f, app, side);

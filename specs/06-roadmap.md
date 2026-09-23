@@ -114,7 +114,7 @@ Decisions taken while building them:
 - After saving or leaving the box, the keys go back where it was opened from: the diff for `c`, the pane for `r`.
 - `e` in the publish modal closes the modal and edits in the pane.
 
-## M4 · AI
+## M4 · AI (done 2026-09-23)
 
 Spec: `05`.
 

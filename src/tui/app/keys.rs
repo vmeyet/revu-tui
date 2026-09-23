@@ -47,6 +47,7 @@ impl App {
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
+            KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() => self.pending = Some('a'),
             _ => {
                 return match self.focus {
                     Focus::Queue => self.handle_queue_key(key),
@@ -76,7 +77,7 @@ impl App {
         }
         self.focus = match (self.focus, &self.open) {
             (Focus::Queue, _) => return self.open_selected(),
-            (Focus::Review, Some(open)) if open.pane.is_some() || open.tree.is_some() => Focus::Side,
+            (Focus::Review, Some(open)) if open.pane.is_some() || open.tree.is_some() || open.answer.is_some() => Focus::Side,
             (Focus::Side, _) => Focus::Side,
             (focus, _) => focus,
         };
@@ -182,6 +183,7 @@ impl App {
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),
+            KeyCode::Esc | KeyCode::Char('x') if self.answer_open() => self.close_answer(),
             KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => self.close_pane(),
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
@@ -213,6 +215,9 @@ impl App {
                 _ => {}
             }
             return vec![];
+        }
+        if prefix == 'a' {
+            return self.ask_key(c);
         }
         let forward = prefix == ']';
         match (prefix, c) {
@@ -250,10 +255,20 @@ impl App {
     }
 
     fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        if self.answer_open() {
+            return self.handle_answer_key(key);
+        }
         if self.tree_open() {
             return self.handle_tree_key(key);
         }
         self.handle_pane_key(key)
+    }
+}
+
+impl App {
+    /// Claude's answer holds the right pane.
+    pub(super) fn answer_open(&self) -> bool {
+        self.open.as_ref().is_some_and(|o| o.answer.is_some())
     }
 }
 

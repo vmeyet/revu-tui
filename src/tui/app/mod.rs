@@ -1,4 +1,5 @@
 //! The pure state machine: keys in, actions out, incoming answers applied. No clock, no network.
+mod ask;
 mod brief;
 mod commands;
 mod feedback;
@@ -16,6 +17,7 @@ mod triage;
 mod view;
 mod write;
 
+pub use ask::{Answer, AnswerState, Part};
 pub use brief::Brief;
 pub use feedback::Toast;
 pub use pane::{Entry, EntryKind};
@@ -110,6 +112,13 @@ pub enum Action {
     },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
+    /// Ask Claude; `id` names the answer the stream belongs to, `fresh` skips the cached answer.
+    Ask {
+        key: MrKey,
+        id: u64,
+        request: Box<crate::ai::anthropic::Ask>,
+        fresh: bool,
+    },
     /// Ask Jev how urgent and how big a queue MR is.
     Triage(Box<QueueMr>),
     /// Ask Jev whether the open MR waits on me and how risky each file is, at commit `head`.
@@ -139,6 +148,14 @@ pub enum Input {
     EditDraft {
         index: usize,
     },
+    /// A question to Claude about `scope`; `concern` makes it the subject of a drafted comment.
+    Ask {
+        scope: Box<crate::ai::context::Scope>,
+        concern: bool,
+        target: Box<ask::Target>,
+    },
+    /// The next question on the conversation of the open answer.
+    FollowUp,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -221,6 +238,12 @@ pub enum Incoming {
     Composed {
         input: Input,
         text: Option<String>,
+    },
+    /// A piece of Claude's answer `id` for the MR `key`.
+    Answer {
+        key: MrKey,
+        id: u64,
+        part: Part,
     },
     Triaged {
         key: MrKey,

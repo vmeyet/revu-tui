@@ -20,6 +20,10 @@ Say when the diff alone cannot answer.";
 pub enum Scope {
     Mr,
     File(String),
+    /// The hunk at this index of the file.
+    Hunk(String, usize),
+    /// A thread by id: its hunk and every note.
+    Thread(String),
     /// New-side line numbers in one file.
     Lines(String, RangeInclusive<u32>),
 }
@@ -28,7 +32,11 @@ pub enum Scope {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Prompt {
     Explain,
+    Risks,
     Summary,
+    Thread,
+    /// A review comment about the concern given.
+    Comment(String),
     Free(String),
 }
 
@@ -36,7 +44,10 @@ impl Prompt {
     pub fn question(&self) -> String {
         match self {
             Prompt::Explain => "Explain what this change does and why it might be here.".into(),
+            Prompt::Risks => "List the risks and the things a careful reviewer should check. Be concrete.".into(),
             Prompt::Summary => "Summarise this MR in five lines and suggest the reading order of the files.".into(),
+            Prompt::Thread => "Summarise this thread and say what is still open and who it waits on.".into(),
+            Prompt::Comment(concern) => format!("Draft a review comment for these lines about: {concern}"),
             Prompt::Free(text) => text.clone(),
         }
     }
@@ -72,6 +83,8 @@ fn scope_block(review: &Review, scope: &Scope, budget: usize) -> String {
     match scope {
         Scope::Mr => String::new(),
         Scope::File(path) => files_within(review.files.iter().filter(|f| f.new_path == *path), budget),
+        Scope::Hunk(path, index) => file_of(review, path).map(|f| around(f, *index)).unwrap_or_default(),
+        Scope::Thread(id) => thread_block(review, id),
         Scope::Lines(path, lines) => file_of(review, path)
             .and_then(|f| f.hunks.iter().position(|h| covers(h, lines)).map(|i| (f, i)))
             .map(|(f, i)| format!("{}\nThe reviewer asks about {path} lines {}-{}.\n", around(f, i), lines.start(), lines.end()))
@@ -111,6 +124,24 @@ fn around(file: &File, index: usize) -> String {
     }
     if let Some(after) = file.hunks.get(index + 1) {
         text.push_str(&render(after, 0..after.lines.len().min(AROUND)));
+    }
+    text
+}
+
+fn thread_block(review: &Review, id: &str) -> String {
+    let Some(thread) = review.thread(id) else { return String::new() };
+    let mut text = String::new();
+    if let Some(anchor) = &thread.anchor {
+        let lines = anchor.line..=anchor.line;
+        let hunk = file_of(review, &anchor.path).and_then(|f| f.hunks.iter().position(|h| covers(h, &lines)).map(|i| (f, i)));
+        if let Some((file, index)) = hunk {
+            text.push_str(&around(file, index));
+        }
+        let _ = writeln!(text, "\nThe thread sits on {}:{}.", anchor.path, anchor.line);
+    }
+    text.push_str("\n## Thread\n\n");
+    for note in thread.notes.iter().filter(|n| !n.system) {
+        let _ = writeln!(text, "{}: {}\n", note.author.username, note.body);
     }
     text
 }
@@ -189,7 +220,19 @@ mod tests {
     }
 
     #[test]
+    fn hunks_and_threads_bring_their_code() {
+        let review = review();
+        let file = &review.files[0];
+        let text = scope_text(&Scope::Hunk(file.new_path.clone(), 0), BUDGET);
+        assert!(text.contains(&file.hunks[0].header), "{text}");
+        let thread = review.threads.iter().find(|t| t.anchor.is_some()).unwrap();
+        let text = scope_text(&Scope::Thread(thread.id.clone()), BUDGET);
+        assert!(text.contains("## Thread") && text.contains(&thread.notes[0].author.username), "{text}");
+    }
+
+    #[test]
     fn prompts_read_as_the_spec_words_them() {
+        assert!(Prompt::Comment("naming".into()).question().ends_with("about: naming"));
         assert!(Prompt::Summary.question().starts_with("Summarise this MR"));
         assert_eq!(Prompt::Free("why?".into()).question(), "why?");
     }
