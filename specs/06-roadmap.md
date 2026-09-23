@@ -29,7 +29,7 @@ TDD order:
 1. `diff::parse` fixtures → parser.
 2. `diff::words` pairs → word ranges.
 3. `api::graphql` queue query with wiremock → `Queue` type and sections.
-4. `api::rest` `revu`, `diffs` (two pages), `discussions` with wiremock.
+4. `api::rest` `mr`, `diffs` (two pages), `discussions` with wiremock.
 5. `review::Review::from(mr, files, threads)`: anchors threads to lines, marks outdated.
 6. `tui::app` tests: `j/k` in the queue, `enter` opens (returns `Action::Open`), `apply(Incoming::Review)`, `Tab`, `[c ]c`, `za zM zR`, `t`, `z`, `?`.
 7. `tui::ui` snapshots: queue empty, queue loaded, MR open with one folded and one open file, thread pane open.
@@ -67,37 +67,69 @@ Acceptance:
 - Resolve and unresolve a thread; reply in a thread; the web UI agrees within one poll.
 - Nothing is posted publicly without `P` or an explicit `:reply`.
 
+## Shipped beyond M2 (2026-09-22 → 09-23)
+
+Done outside the original milestones, recorded so nobody plans them again:
+
+- **Forges:** GitLab and GitHub behind one seam (`07-forges.md`); `--from-gh`, `--from-glab`.
+- **Queue:** scoped to the checkout's repo with an `OPEN` section, `*` or `--all` for every project; clickable `!iid` (OSC 8); description modal `i`.
+- **Diff:** inline one-word changes (`D` toggles split), tint from the terminal's own background (OSC 11, sign-only fallback), tree-sitter syntax highlighting for TS/TSX/JS/Python/JSON (replaces the `syntect` plan in M5).
+- **Themes:** the nine palettes, each with its diff and syntax colours.
+- **Tooling:** `revu update` (cargo install from the public repo), pedantic lints, CI (fmt, clippy, test), rename `gitlabmr`/`mr` → `revu` with a one-time move of config, cache and keychain.
+
 ## M3 · Polish
 
 Spec: `03` in full.
 
-- Themes (copy the nine), `:set theme=`, `highlight`.
-- `:` palette with completion and history, `ctrl-k` jump across the queue and the file tree.
+Carried gaps, first:
+
+- `?` help fits a 24-row terminal (scrolls).
+- Publish modal: `enter` on the footer publishes; the footer reads `enter publish · e edit`.
+- A publish the forge refuses names the draft whose line vanished and offers to turn it into an MR-level note.
+- The header folds to one row.
+- `zo` / `zc` in the queue act on the section under the cursor.
+
+Then:
+
+- `:` palette with completion and history, `ctrl-k` jump across the queue and the open MR's files.
 - File tree pane `t`, viewed files `zv`, saved fold state.
-- Live polling with `●` markers, rate-limit backoff in the status line.
 - Reading mode `z`, wrap `w`, whitespace toggle `W`, expand context `+`.
-- Empty states and the loading skeleton.
-- `revu update`.
+- Live `●` markers, rate-limit backoff in the status line, empty states and the loading skeleton, `:set theme=`.
 
 Acceptance: the designer test in `03-ui-ux.md` ("the screenshot test") passes on Ghostty and iTerm2 in a dark and a light theme.
+
+## M3b · Reading and discussing
+
+Two specs, built after M3 and before M4:
+
+- `08-open-file.md`: open the file under the cursor, after the change, in the terminal editor or viewer of choice, per file type.
+- `09-thread-pane.md`: threads and their comments live in a right pane, like slack-tui's thread, and replies are written there, not inside the diff.
 
 ## M4 · AI
 
 Spec: `05`.
 
+Decision (2026-09-23): AI is configuration and its keys are secrets.
+
+- `[ai]` in the config enables each provider on its own (`typesafe`, `anthropic`); both are off by default.
+- Keys live in the macOS keychain under service `revu`, accounts `typesafe` and `anthropic`, set with `revu ai login <provider>` (hidden prompt or `--token -`).
+- `TYPESAFE_API_KEY` and `ANTHROPIC_API_KEY` override the keychain; a key is never written to the config.
+
+Work:
+
 - Copy `typesafe.rs`, wire the four triage questions, badges in the queue and file tree.
 - `anthropic.rs` streaming client, prompt caching, refusal handling.
 - Context builder with its budget rules.
 - `a` menu, answer pane, `c` to draft from an answer, cache.
-- `revu ai login anthropic`, `[ai]` config, `:ai off`.
+- `revu ai login <provider>`, `[ai]` config, `:ai off`.
 
 Acceptance: `a s` on an open MR streams a summary in under two seconds to the first token; a second `a e` on the same file reports cache reads in the debug log.
 
 ## M5 · Extras (pick by value)
 
-- Syntax highlighting with `syntect` and a small syntax set (measure startup first; lazy load).
+- More syntax languages: one grammar crate and one registry entry each (see `AGENTS.md`).
 - Pipeline pane: jobs, failed job names, `o` to open the job.
-- Suggestion apply (`POST …/notes/:id/suggestions/apply`? check availability) from the thread pane.
+- Suggestion apply from the thread pane (GitLab `PUT …/suggestions/:id/apply`, GitHub has no API: link to the web).
 - Notifications: a macOS notification when a To-review MR appears while the TUI runs.
 - Second host in the queue at once.
 - Linux keychain via Secret Service, if anyone asks.
