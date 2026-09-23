@@ -112,6 +112,7 @@ mod tests {
             author_name: author.into(),
             approved: false,
             approved_by: vec![],
+            approvals_left: None,
             reviewers: vec![],
             pipeline: None,
             additions: 0,
@@ -120,6 +121,8 @@ mod tests {
             unresolved: 0,
             labels: vec![],
             notes: 0,
+            commenters: vec![],
+            reason: None,
         }
     }
 

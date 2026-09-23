@@ -2410,3 +2410,63 @@ fn snapshot_queue_with_a_stack_at_120_and_170_columns() {
     insta::assert_snapshot!("queue_stack_compact_120", render(&mut app, 120, 20));
     insta::assert_snapshot!("queue_stack_compact_170", render(&mut app, 170, 20));
 }
+
+/// The scoped fixture judged by the rules on 23 September: 51 went stale, 42 already has two reviewers.
+fn ruled_sections() -> Sections {
+    use crate::forge::QueueMr;
+    use chrono::TimeZone;
+    let queue = fixture::queue_in(include_str!("../../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets");
+    let old = Utc.with_ymd_and_hms(2026, 9, 1, 12, 0, 0).unwrap();
+    let open: Vec<QueueMr> = queue
+        .open
+        .iter()
+        .cloned()
+        .map(|mr| match mr.number {
+            51 => QueueMr { updated_at: old, ..mr },
+            _ => mr,
+        })
+        .chain([QueueMr { number: 52, notes: 4, commenters: vec!["omar".into(), "sam".into(), "kim".into()], ..queue.open[0].clone() }])
+        .chain([QueueMr { number: 53, author: "kim".into(), ..queue.open[0].clone() }])
+        .collect();
+    let now = Utc.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap();
+    crate::forge::Queue { open, ..queue }.sections_with(&[], &crate::forge::rules::Rules::default(), now)
+}
+
+#[test]
+fn what_the_rules_move_out_waits_folded_in_other_and_reviewed_mrs_sort_last() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), ruled_sections(), false));
+    let rows = app.queue_rows();
+    assert!(rows.iter().any(|r| matches!(r, QueueRow::Section { name: "OTHER", count: 1, open: false })));
+    let open: Vec<u64> = rows
+        .iter()
+        .skip_while(|r| !matches!(r, QueueRow::Section { name: "OPEN", .. }))
+        .skip(1)
+        .take_while(|r| matches!(r, QueueRow::Mr(_)))
+        .map(|r| match r {
+            QueueRow::Mr(mr) => mr.number,
+            _ => 0,
+        })
+        .collect();
+    assert_eq!(open.last(), Some(&52), "reviewed by others sorts last: {open:?}");
+    assert!(open.contains(&53));
+}
+
+#[test]
+fn the_status_line_says_why_the_selected_mr_sits_there() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), ruled_sections(), false));
+    let at = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 52)).unwrap();
+    app.queue_selected = at;
+    assert_eq!(app.selected_reason().as_deref(), Some("reviewed by 2"));
+    assert!(render(&mut app, 120, 30).lines().last().unwrap().contains("reviewed by 2"));
+    app.queue_selected = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 53)).unwrap();
+    assert_eq!(app.selected_reason(), None);
+}
+
+#[test]
+fn snapshot_queue_with_other() {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), ruled_sections(), false));
+    insta::assert_snapshot!("queue_with_other", render(&mut app, 120, 30));
+}

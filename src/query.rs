@@ -171,6 +171,7 @@ mod tests {
             author_name: author.to_uppercase(),
             approved: false,
             approved_by: vec![],
+            approvals_left: None,
             reviewers: vec![],
             pipeline: None,
             additions: 10,
@@ -179,6 +180,8 @@ mod tests {
             unresolved: 0,
             labels: vec!["infra".into(), "needs review".into()],
             notes: 0,
+            commenters: vec![],
+            reason: None,
         }
     }
 

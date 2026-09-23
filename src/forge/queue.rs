@@ -1,5 +1,6 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
 use super::MrKey;
+use super::rules::{self, Reason, Rules};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -40,6 +41,9 @@ pub struct QueueMr {
     pub author_name: String,
     pub approved: bool,
     pub approved_by: Vec<String>,
+    /// Approvals still missing before the forge lets it merge; `None` when the forge does not say.
+    #[serde(default)]
+    pub approvals_left: Option<u32>,
     pub reviewers: Vec<ReviewerState>,
     /// Upper case, as GitLab's GraphQL spells it: `SUCCESS`, `FAILED`, `RUNNING`, `PENDING`, `CANCELED`…
     pub pipeline: Option<String>,
@@ -49,6 +53,12 @@ pub struct QueueMr {
     pub unresolved: u32,
     pub labels: Vec<String>,
     pub notes: u32,
+    /// Everyone who commented, the author included.
+    #[serde(default)]
+    pub commenters: Vec<String>,
+    /// Why the "needs me" rules moved it, or sorted it last; set when the sections are built.
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<Reason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +89,8 @@ pub struct Sections {
     /// Other people's draft MRs from Watching and Open: not ready, so out of the way.
     pub drafts: Vec<QueueMr>,
     pub done: Vec<QueueMr>,
+    /// What the "needs me" rules moved out of To review, Watching and Open, each with its reason.
+    pub other: Vec<QueueMr>,
 }
 
 impl Sections {
@@ -92,10 +104,17 @@ impl Sections {
             merged.open.extend(part.open);
             merged.drafts.extend(part.drafts);
             merged.done.extend(part.done);
+            merged.other.extend(part.other);
         }
-        for section in
-            [&mut merged.to_review, &mut merged.mine, &mut merged.watching, &mut merged.open, &mut merged.drafts, &mut merged.done]
-        {
+        for section in [
+            &mut merged.to_review,
+            &mut merged.mine,
+            &mut merged.watching,
+            &mut merged.open,
+            &mut merged.drafts,
+            &mut merged.done,
+            &mut merged.other,
+        ] {
             section.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
         }
         merged
@@ -105,7 +124,7 @@ impl Sections {
 impl Sections {
     /// Every row, section after section.
     pub fn all(&self) -> impl Iterator<Item = &QueueMr> {
-        [&self.to_review, &self.mine, &self.watching, &self.open, &self.drafts, &self.done].into_iter().flatten()
+        [&self.to_review, &self.mine, &self.watching, &self.open, &self.drafts, &self.done, &self.other].into_iter().flatten()
     }
 
     /// Rows from more than one host share the queue: only then does a row need its host's tag.
@@ -143,7 +162,40 @@ impl Queue {
         }
     }
 
+    /// The sections as the forge sorted them, before any "needs me" rule.
+    #[cfg(test)]
     pub fn sections(&self, watch_labels: &[String]) -> Sections {
+        self.sections_with(watch_labels, &Rules::off(), Utc::now())
+    }
+
+    /// The sections, then the "needs me" rules: what does not need me leaves To review, Watching
+    /// and Open for Other (a draft for Drafts), and what others already review sorts last.
+    pub fn sections_with(&self, watch_labels: &[String], rules: &Rules, now: DateTime<Utc>) -> Sections {
+        let sorted = self.forge_sections(watch_labels);
+        if !rules.enabled {
+            return sorted;
+        }
+        let judged = |rows: Vec<QueueMr>| -> Vec<QueueMr> {
+            rows.into_iter().map(|mr| QueueMr { reason: rules::judge(&mr, &self.me, now, rules), ..mr }).collect()
+        };
+        let mut other = Vec::new();
+        let mut drafts = judged(sorted.drafts);
+        let mut keep = |rows: Vec<QueueMr>| -> Vec<QueueMr> {
+            let (moved, kept): (Vec<_>, Vec<_>) =
+                judged(rows).into_iter().partition(|mr| mr.reason.as_ref().is_some_and(Reason::moves_out));
+            for mr in moved {
+                if mr.reason == Some(Reason::Draft) { drafts.push(mr) } else { other.push(mr) }
+            }
+            kept
+        };
+        let to_review = keep(sorted.to_review);
+        let watching = keep(sorted.watching);
+        let open = keep(sorted.open);
+        other.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
+        Sections { to_review, watching, open, drafts, other, ..sorted }
+    }
+
+    fn forge_sections(&self, watch_labels: &[String]) -> Sections {
         let me = self.me.as_str();
         let in_scope = |mr: &&QueueMr| self.project.as_ref().is_none_or(|p| &mr.project == p);
         let (done, to_review): (Vec<_>, Vec<_>) = self.review_requested.iter().filter(in_scope).cloned().partition(|mr| mr.reviewed_by(me));
@@ -156,7 +208,7 @@ impl Queue {
         let (watching_drafts, watching): (Vec<_>, Vec<_>) = watching.into_iter().partition(|mr| mr.draft);
         let (open_drafts, open): (Vec<_>, Vec<_>) = open.into_iter().partition(|mr| mr.draft);
         let drafts = watching_drafts.into_iter().chain(open_drafts).collect();
-        Sections { to_review, mine, watching, open, drafts, done }
+        Sections { to_review, mine, watching, open, drafts, done, other: vec![] }
     }
 }
 
@@ -168,6 +220,81 @@ mod tests {
 
     fn queue() -> Queue {
         fixture::queue(include_str!("gitlab/fixtures/queue.json"))
+    }
+
+    fn scoped() -> Queue {
+        fixture::queue_in(include_str!("gitlab/fixtures/queue_scoped.json"), "acme/widgets")
+    }
+
+    fn day(d: u32) -> DateTime<Utc> {
+        use chrono::TimeZone;
+        Utc.with_ymd_and_hms(2026, 9, d, 12, 0, 0).unwrap()
+    }
+
+    fn numbers(rows: &[QueueMr]) -> Vec<u64> {
+        rows.iter().map(|mr| mr.number).collect()
+    }
+
+    fn reasons(rows: &[QueueMr]) -> Vec<String> {
+        rows.iter().map(|mr| mr.reason.as_ref().map_or_else(|| "-".to_owned(), ToString::to_string)).collect()
+    }
+
+    /// The scoped fixture with the Open MRs changed by `change`, judged on 23 September.
+    fn judged(change: impl Fn(QueueMr) -> QueueMr) -> Sections {
+        let queue = scoped();
+        let open = queue.open.into_iter().map(&change).collect();
+        Queue { open, ..scoped() }.sections_with(&[], &Rules::default(), day(23))
+    }
+
+    #[test]
+    fn with_nothing_to_say_the_rules_change_nothing() {
+        let plain = scoped().sections(&[]);
+        let ruled = scoped().sections_with(&[], &Rules::default(), day(23));
+        assert_eq!(numbers(&ruled.open), numbers(&plain.open));
+        assert_eq!(numbers(&ruled.to_review), numbers(&plain.to_review));
+        assert!(ruled.other.is_empty());
+        assert_eq!(reasons(&ruled.drafts), ["draft"], "a draft says why it waits apart");
+    }
+
+    #[test]
+    fn stale_failed_and_approved_mrs_leave_open_for_other_with_their_reason() {
+        let stale = judged(|mr| if mr.number == 51 { QueueMr { updated_at: day(1), ..mr } } else { mr });
+        assert_eq!(numbers(&stale.open), [] as [u64; 0]);
+        assert_eq!((numbers(&stale.other), reasons(&stale.other)), (vec![51], vec!["stale 22d".to_owned()]));
+        let failed = judged(|mr| if mr.number == 51 { QueueMr { pipeline: Some("FAILED".into()), ..mr } } else { mr });
+        assert_eq!(reasons(&failed.other), ["pipeline failed"]);
+        let approved =
+            judged(|mr| if mr.number == 51 { QueueMr { approved_by: vec!["omar".into()], approvals_left: Some(0), ..mr } } else { mr });
+        assert_eq!(reasons(&approved.other), ["1 approval, needs none"]);
+    }
+
+    #[test]
+    fn what_others_review_stays_in_its_section_with_a_reason() {
+        let reviewed = judged(|mr| QueueMr { notes: 5, commenters: vec![mr.author.clone(), "sam".into(), "kim".into()], ..mr });
+        assert_eq!(numbers(&reviewed.open), [51]);
+        assert_eq!(reasons(&reviewed.open), ["reviewed by 2"]);
+        assert!(reviewed.other.is_empty());
+    }
+
+    #[test]
+    fn a_draft_asking_me_joins_drafts_and_mine_never_moves() {
+        let queue = scoped();
+        let review_requested =
+            queue.review_requested.into_iter().map(|mr| if mr.number == 42 { QueueMr { draft: true, ..mr } } else { mr }).collect();
+        let authored = queue.authored.into_iter().map(|mr| QueueMr { updated_at: day(1), pipeline: Some("FAILED".into()), ..mr }).collect();
+        let sections = Queue { review_requested, authored, ..scoped() }.sections_with(&[], &Rules::default(), day(23));
+        assert!(numbers(&sections.drafts).contains(&42));
+        assert!(!numbers(&sections.to_review).contains(&42));
+        assert_eq!(numbers(&sections.mine), [41], "my own MR stays mine, stale and failed alike");
+    }
+
+    #[test]
+    fn switched_off_the_forge_sections_come_back() {
+        let off = Rules { enabled: false, ..Rules::default() };
+        let queue = Queue { open: scoped().open.into_iter().map(|mr| QueueMr { updated_at: day(1), ..mr }).collect(), ..scoped() };
+        let sections = queue.sections_with(&[], &off, day(23));
+        assert_eq!(numbers(&sections.open), [51]);
+        assert!(sections.other.is_empty() && sections.all().all(|mr| mr.reason.is_none()));
     }
 
     #[test]

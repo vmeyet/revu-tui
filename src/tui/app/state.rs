@@ -176,7 +176,7 @@ impl App {
             notify: settings.notify,
             hosts: settings.hosts,
             seen: None,
-            closed_sections: std::collections::BTreeSet::from(["DONE", "DRAFTS"]),
+            closed_sections: std::collections::BTreeSet::from(["DONE", "DRAFTS", "OTHER"]),
             queue_view: super::QueueView::default(),
             queue_layout: settings.queue_layout,
             queue_loading: true,

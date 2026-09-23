@@ -48,6 +48,38 @@ pub const SETTINGS: &[Setting] = &[
     Setting { table: "queue", key: "groups", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting { table: "queue", key: "projects", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting {
+        table: "queue.rules",
+        key: "enabled",
+        kind: "true or false",
+        default: "`true`",
+        meaning: "Keep To review, Watching and Open to what needs you; the rest moves to OTHER, folded.",
+        example: "true",
+    },
+    Setting {
+        table: "queue.rules",
+        key: "stale_days",
+        kind: "number",
+        default: "`14`",
+        meaning: "An MR with no activity for longer moves to OTHER.",
+        example: "14",
+    },
+    Setting {
+        table: "queue.rules",
+        key: "reviewed_comments",
+        kind: "number",
+        default: "`3`",
+        meaning: "An MR with this many comments from others and none from you sorts last.",
+        example: "3",
+    },
+    Setting {
+        table: "queue.rules",
+        key: "not_ready",
+        kind: "list of text",
+        default: "`[\"wip\", \"do not review\", \"don't review\", \"not ready\"]`",
+        meaning: "Words in the title or the description's first paragraph that mark an MR as not ready.",
+        example: "[\"wip\", \"not ready\"]",
+    },
+    Setting {
         table: "queue.views",
         key: "<name>",
         kind: "search query",
@@ -406,11 +438,25 @@ mod tests {
                 if field.starts_with("struct") || (table.is_empty() && nested.contains(&field)) {
                     continue;
                 }
-                let documented = SETTINGS
-                    .iter()
-                    .any(|s| (s.table == table && s.key == field) || (s.table == format!("{table}.{field}") && s.key.starts_with('<')));
+                let nested_table = format!("{table}.{field}");
+                let documented = SETTINGS.iter().any(|s| (s.table == table && s.key == field) || s.table == nested_table);
                 assert!(documented, "`{name}.{field}` has no row in docs::SETTINGS");
             }
+        }
+    }
+
+    #[test]
+    fn every_queue_rule_is_documented() {
+        let source = include_str!("forge/rules.rs");
+        let start = source.find("pub struct Rules {").expect("struct Rules");
+        let body = &source[start..start + source[start..].find("\n}").unwrap()];
+        let fields = body.lines().filter_map(|l| l.trim().strip_prefix("pub ")).filter(|l| !l.starts_with("struct"));
+        for field in fields.filter_map(|l| l.split(':').next()) {
+            assert!(
+                SETTINGS.iter().any(|s| s.table == "queue.rules" && s.key == field.trim()),
+                "`queue.rules.{}` has no row in docs::SETTINGS",
+                field.trim()
+            );
         }
     }
 

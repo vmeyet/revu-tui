@@ -64,6 +64,7 @@ struct Backend {
     others: Vec<crate::ctx::Home>,
     fold_globs: Vec<String>,
     watch_labels: Vec<String>,
+    rules: crate::forge::rules::Rules,
     inline: InlineRule,
     open: crate::config::Open,
     /// The checkout `revu` runs in, when its origin is on this forge: `v` opens its real files.
@@ -100,6 +101,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         others,
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
+        rules: ctx.config.queue.rules.clone(),
         inline: ctx.config.review.inline(),
         open: ctx.config.open.clone(),
         checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
@@ -546,7 +548,8 @@ impl Backend {
     }
 
     fn queue_answer(&self, scope: Option<String>, queue: &Queue, others: &[Queue], cached: bool) -> Incoming {
-        let parts = std::iter::once(queue).chain(others).map(|q| q.sections(&self.watch_labels)).collect();
+        let now = Utc::now();
+        let parts = std::iter::once(queue).chain(others).map(|q| q.sections_with(&self.watch_labels, &self.rules, now)).collect();
         let sections = Sections::merge(parts);
         let opened = self.opened_at(&sections);
         Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
@@ -815,6 +818,7 @@ mod tests {
             cache,
             fold_globs: vec![],
             watch_labels: vec![],
+            rules: crate::forge::rules::Rules::off(),
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -839,6 +843,7 @@ mod tests {
             cache: Cache::in_dir(dir.path()),
             fold_globs: vec![],
             watch_labels: vec![],
+            rules: crate::forge::rules::Rules::off(),
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -882,6 +887,7 @@ mod tests {
             cache: Cache::in_dir(dir.path()),
             fold_globs: vec![],
             watch_labels: vec![],
+            rules: crate::forge::rules::Rules::off(),
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -927,6 +933,7 @@ mod tests {
             cache: Cache::in_dir(dir.path()),
             fold_globs: vec![],
             watch_labels: vec![],
+            rules: crate::forge::rules::Rules::off(),
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -966,6 +973,7 @@ mod tests {
             cache: Cache::in_dir(std::path::Path::new("/nonexistent")),
             fold_globs: vec![],
             watch_labels: vec![],
+            rules: crate::forge::rules::Rules::off(),
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,

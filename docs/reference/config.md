@@ -21,6 +21,15 @@ Tokens never go here: they live in the macOS keychain.
 | `groups` | list of text | `[]` | Not used yet. |
 | `projects` | list of text | `[]` | Not used yet. |
 
+## `[queue.rules]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `enabled` | true or false | `true` | Keep To review, Watching and Open to what needs you; the rest moves to OTHER, folded. |
+| `stale_days` | number | `14` | An MR with no activity for longer moves to OTHER. |
+| `reviewed_comments` | number | `3` | An MR with this many comments from others and none from you sorts last. |
+| `not_ready` | list of text | `["wip", "do not review", "don't review", "not ready"]` | Words in the title or the description's first paragraph that mark an MR as not ready. |
+
 ## `[queue.views]`
 
 | Key | Type | Default | Does |
@@ -102,6 +111,12 @@ username = "nina"
 
 [queue]
 watch_labels = ["infra"]
+
+[queue.rules]
+enabled = true
+stale_days = 14
+reviewed_comments = 3
+not_ready = ["wip", "not ready"]
 
 [queue.views]
 mine = "@me ~frontend"
