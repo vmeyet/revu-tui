@@ -117,16 +117,13 @@ impl Palette {
 
     /// Replaces the token being typed with the next candidate for its slot.
     pub fn complete(&mut self, candidates: &[String], backwards: bool) {
-        let cycling = match self.cycle.take() {
-            Some(mut cycling) => {
-                cycling.cycle.advance(backwards);
-                cycling
-            }
-            None => {
-                let (prefix, token) = split_last_token(&self.input);
-                let Some(cycle) = Cycle::new(token, candidates) else { return };
-                Cycling { prefix: prefix.to_owned(), cycle }
-            }
+        let cycling = if let Some(mut cycling) = self.cycle.take() {
+            cycling.cycle.advance(backwards);
+            cycling
+        } else {
+            let (prefix, token) = split_last_token(&self.input);
+            let Some(cycle) = Cycle::new(token, candidates) else { return };
+            Cycling { prefix: prefix.to_owned(), cycle }
         };
         let chosen = cycling.cycle.current();
         let trailing = if chosen.ends_with('=') { "" } else { " " };

@@ -89,7 +89,7 @@ impl App {
             return Some(MrKey { project: project.to_owned(), number: number.parse().ok()? });
         }
         let number: u64 = reference.trim_start_matches(['!', '#']).parse().ok()?;
-        self.queue_mrs().into_iter().find(|mr| mr.number == number).map(|mr| mr.key())
+        self.queue_mrs().into_iter().find(|mr| mr.number == number).map(crate::forge::QueueMr::key)
     }
 
     fn open_in_browser(&self) -> Vec<Action> {
