@@ -66,6 +66,11 @@ impl App {
         }
     }
 
+    /// The row's host, named only when rows from several hosts share the queue.
+    pub fn host_tag(&self, mr: &QueueMr) -> Option<String> {
+        self.sections.as_ref().filter(|s| s.mixes_hosts()).and_then(|_| self.hosts.tag(&mr.key()))
+    }
+
     pub fn badge(&self, mr: &QueueMr) -> Option<Badge> {
         let pipeline = mr.pipeline.as_deref().map(str::to_ascii_lowercase);
         let failed = mr.conflicts || pipeline.as_deref() == Some("failed");

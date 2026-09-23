@@ -263,7 +263,7 @@ fn queue_line<'a>(app: &App, row: &QueueRow<'_>, selected: bool, width: usize) -
             let badge = app.badge(mr).map(|b| badge_span(app, b));
             let mark = app.triaged().then(|| mark_span(app, app.mark(mr)));
             let iid = format!("{}{} ", app.hosts.kind_of(&mr.key()).sigil(), mr.number);
-            let tag = app.hosts.tag(&mr.key()).map(|t| format!("{t} "));
+            let tag = app.host_tag(mr).map(|t| format!("{t} "));
             let tag_w = tag.as_ref().map_or(0, |t| t.width());
             let room = width.saturating_sub(2 + mark.as_ref().map_or(0, Span::width) + iid.width() + tag_w + 2);
             let title = truncate(&mr.title, room);

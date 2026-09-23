@@ -68,7 +68,7 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `c` `enter` `R` `y` (answer) | Turn the answer into a draft, ask a follow-up, ask again past the cache, copy it |
 | `o` / `y` | Open in the browser / copy the link |
 | `:` | Command line: `:go !42`, `:approve`, `:publish`, `:all`, `:view old`, `:set theme=nord`; tab completes |
-| `ctrl-k` | Jump to a file of the open MR, or to another MR |
+| `ctrl-k` / `⌘k` | Jump to a file of the open MR, or to another MR (`⌘k` in terminals that forward it: Ghostty, Kitty, WezTerm, iTerm2) |
 | `?` | Every key |
 
 Comments stay drafts until `P`: GitLab draft notes, or your pending review on GitHub.
