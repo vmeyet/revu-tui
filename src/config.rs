@@ -238,6 +238,17 @@ impl Open {
     }
 }
 
+/// `$XDG_CONFIG_HOME/revu`, else `~/.config/revu`: where terminal tools keep their config on
+/// every system, macOS included, so it sits next to gh, helix and a dotfiles repo.
+pub fn dir() -> PathBuf {
+    dir_from(std::env::var_os("XDG_CONFIG_HOME"), dirs::home_dir())
+}
+
+fn dir_from(xdg: Option<std::ffi::OsString>, home: Option<PathBuf>) -> PathBuf {
+    let xdg = xdg.map(PathBuf::from).filter(|p| p.is_absolute());
+    xdg.or_else(|| home.map(|h| h.join(".config"))).unwrap_or_else(|| PathBuf::from(".")).join("revu")
+}
+
 impl Config {
     /// Who I am on `host`: its own entry, else the top-level name when it is the configured host.
     pub fn username_for(&self, host: &str) -> Option<String> {
@@ -246,7 +257,7 @@ impl Config {
     }
 
     pub fn path() -> PathBuf {
-        dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("revu").join("config.toml")
+        dir().join("config.toml")
     }
 
     pub fn load() -> Result<Self> {
@@ -335,5 +346,18 @@ mod tests {
         assert!(toml::from_str::<Config>("").unwrap().notify.enabled);
         assert!(!toml::from_str::<Config>("[notify]\nenabled = false").unwrap().notify.enabled);
         assert!(!toml::to_string_pretty(&Config::default()).unwrap().contains("[notify]"), "the default is not written");
+    }
+
+    #[test]
+    fn the_config_lives_under_xdg_config_home_else_dot_config() {
+        let home = Some(PathBuf::from("/Users/nina"));
+        assert_eq!(dir_from(None, home.clone()), PathBuf::from("/Users/nina/.config/revu"));
+        assert_eq!(dir_from(Some("/tmp/xdg".into()), home.clone()), PathBuf::from("/tmp/xdg/revu"));
+        assert_eq!(
+            dir_from(Some("relative".into()), home.clone()),
+            PathBuf::from("/Users/nina/.config/revu"),
+            "a relative XDG path is ignored"
+        );
+        assert_eq!(dir_from(Some("".into()), home), PathBuf::from("/Users/nina/.config/revu"));
     }
 }
