@@ -5,7 +5,7 @@ use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::Kind;
-use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row};
+use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
 use crate::syntax::Token;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -48,7 +48,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let folded = app.header_folded;
     let wrap = app.wrap;
     let Some(open) = app.open.as_mut() else { return };
-    let markers = open.review.markers();
+    let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
     let header = if folded { vec![folded_header(open, theme)] } else { header_lines(open, theme, today, inner.width as usize) };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
     let height = body.height as usize;
@@ -57,9 +57,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         let row = &open.rows[i];
         let (selected, in_range) = (i == open.selected, open.is_selected(i));
         if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-            wrap_row(row_line(&open.review, &markers, row, selected, in_range, UNCUT, theme), width, WRAP_INDENT)
+            wrap_row(row_line(&open.review, &anchors, row, selected, in_range, UNCUT, theme), width, WRAP_INDENT)
         } else {
-            vec![row_line(&open.review, &markers, row, selected, in_range, width, theme)]
+            vec![row_line(&open.review, &anchors, row, selected, in_range, width, theme)]
         }
     };
     open.scroll = settle_scroll(open.scroll, open.selected, height);
@@ -221,12 +221,14 @@ fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::
     }
 }
 
-fn row_line<'a>(review: &Review, markers: &Markers, row: &Row, selected: bool, in_range: bool, width: usize, theme: Theme) -> Line<'a> {
+fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, selected: bool, in_range: bool, width: usize, theme: Theme) -> Line<'a> {
     let bar = Span::styled(if selected || in_range { "▎" } else { " " }, Style::default().fg(theme.accent));
     let mut spans = vec![bar];
     let body = width.saturating_sub(1);
     if matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-        spans.extend(anchor_spans(review.marker_of(markers, row), theme));
+        let marker = review.marker_of(&anchors.markers, row);
+        let spans_range = marker.is_none() && anchors.stretch.is_some_and(|stretch| stretch.covers(review, row));
+        spans.extend(if spans_range { range_spans(theme) } else { anchor_spans(marker, theme) });
     }
     let body = if spans.len() > 1 { body.saturating_sub(ANCHOR_W) } else { body };
     match row {
@@ -256,6 +258,46 @@ fn row_line<'a>(review: &Review, markers: &Markers, row: &Row, selected: bool, i
         }
     }
     Line::from(spans)
+}
+
+/// What the anchor column draws from: the marks of every line, and the range comment the pane is on.
+struct Anchors {
+    markers: Markers,
+    stretch: Option<Stretch>,
+}
+
+/// The lines of a range comment before its last, which carries the mark.
+#[derive(Clone, Copy)]
+struct Stretch {
+    file: usize,
+    side: Side,
+    first: u32,
+    last: u32,
+}
+
+impl Stretch {
+    fn covers(self, review: &Review, row: &Row) -> bool {
+        let Some(Place::Line { file, new, old }) = review.place_of(row) else { return false };
+        let number = if self.side == Side::New { new } else { old };
+        file == self.file && number.is_some_and(|n| (self.first..self.last).contains(&n))
+    }
+}
+
+/// The range of the thread or draft under the pane's cursor, when it spans several lines.
+fn focused_range(open: &Open) -> Option<Stretch> {
+    let position = match open.focused_thread() {
+        Some(id) => open.review.thread(&id)?.first().position.clone()?,
+        None => open.review.drafts.get(open.focused_draft()?)?.position.clone()?,
+    };
+    let side = position.line.side();
+    let number = |line: crate::forge::LineRef| if side == Side::New { line.new } else { line.old };
+    let (first, last) = (number(position.start?)?, number(position.line)?);
+    let file = open.review.files.iter().position(|f| f.new_path == position.new_path || f.old_path == position.old_path)?;
+    Some(Stretch { file, side, first, last })
+}
+
+fn range_spans<'a>(theme: Theme) -> Vec<Span<'a>> {
+    vec![Span::styled("│", Style::default().fg(theme.accent)), Span::raw(" ")]
 }
 
 /// The anchor column: the most pressing mark of the line, then how many conversations it holds when more than one.

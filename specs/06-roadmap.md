@@ -98,12 +98,21 @@ Then:
 
 Acceptance: the designer test in `03-ui-ux.md` ("the screenshot test") passes on Ghostty and iTerm2 in a dark and a light theme.
 
-## M3b · Reading and discussing
+## M3b · Reading and discussing (done 2026-09-23)
 
 Two specs, built after M3 and before M4:
 
 - `08-open-file.md`: open the file under the cursor, after the change, in the terminal editor or viewer of choice, per file type.
 - `09-thread-pane.md`: threads and their comments live in a right pane, like slack-tui's thread, and replies are written there, not inside the diff.
+
+Decisions taken while building them:
+
+- `v` pauses revu's key reader while the program owns the terminal (its reader thread used to swallow keys typed into `$EDITOR` too).
+- `enter` on a file row keeps folding it; `l` opens its outdated threads.
+- `]n` also stops on the header row when the MR itself has threads.
+- `E` in the compose box would type an E, so the box hands its text to `$EDITOR` with `ctrl-o`.
+- After saving or leaving the box, the keys go back where it was opened from: the diff for `c`, the pane for `r`.
+- `e` in the publish modal closes the modal and edits in the pane.
 
 ## M4 · AI
 

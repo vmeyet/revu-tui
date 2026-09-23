@@ -122,6 +122,30 @@ impl Review {
             .count()
     }
 
+    /// The text of the lines a note covers, first to last, on the side it hangs on:
+    /// what a suggestion in that note replaces.
+    pub fn text_at(&self, position: &crate::forge::Position) -> Vec<String> {
+        let Some(file) = self.files.iter().find(|f| f.new_path == position.new_path || f.old_path == position.old_path) else {
+            return vec![];
+        };
+        let side = position.line.side();
+        let number = |line: crate::forge::LineRef| match side {
+            Side::New => line.new,
+            Side::Old => line.old,
+        };
+        let Some(last) = number(position.line) else { return vec![] };
+        let first = position.start.and_then(number).unwrap_or(last);
+        file.hunks
+            .iter()
+            .flat_map(|h| &h.lines)
+            .filter(|l| match side {
+                Side::New => l.new.is_some_and(|n| (first..=last).contains(&n)),
+                Side::Old => l.old.is_some_and(|n| (first..=last).contains(&n)),
+            })
+            .map(|l| l.text.clone())
+            .collect()
+    }
+
     fn threads_in(&self, place: &Place) -> Vec<&Thread> {
         match place {
             Place::Line { file, new, old } => {
@@ -227,5 +251,23 @@ mod tests {
         assert_eq!(review.marker_of(&review.markers(), &pair).unwrap().mark, Mark::Resolved, "the fixture's thread is resolved");
         assert_eq!(review.place_of(&Row::Header), Some(Place::Mr));
         assert_eq!(review.place_of(&Row::File { index: 0, open: true }), None);
+    }
+
+    #[test]
+    fn a_note_covers_the_text_of_its_lines_on_its_side() {
+        let review = review();
+        let refs = review.mr.refs.clone();
+        let at = |line: crate::forge::LineRef, start: Option<crate::forge::LineRef>| crate::forge::Position {
+            refs: refs.clone(),
+            old_path: "src/pay/charge.rs".into(),
+            new_path: "src/pay/charge.rs".into(),
+            line,
+            start,
+        };
+        let new = |n| crate::forge::LineRef { old: None, new: Some(n) };
+        assert_eq!(review.text_at(&at(new(13), None)), ["    let client = Client::with_key(idempotency_key(card));"]);
+        assert_eq!(review.text_at(&at(new(14), Some(new(13)))).len(), 2);
+        let old = crate::forge::LineRef { old: Some(13), new: None };
+        assert_eq!(review.text_at(&at(old, None)), ["    let client = Client::new();"]);
     }
 }
