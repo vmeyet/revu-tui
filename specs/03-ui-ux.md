@@ -62,11 +62,12 @@ Scoped, an `OPEN` section lists the project's other open MRs, between `WATCHING`
 Other people's draft MRs leave `WATCHING` and `OPEN` for a `DRAFTS` section, folded by default, between `OPEN` and `DONE`; my own drafts stay in `MINE` with `D`, and a review request on a draft stays in `TO REVIEW`.
 The host tag (`gitlab`, `github`) shows only when rows from several hosts share the queue, never inside a checkout.
 
-Sections are uppercase `faded` headers with a right aligned count.
+A section header is a faded rule, `── OPEN · 28 ────`, filling the pane, with one blank line above it (not above the first); a folded one reads `── ▸ DONE · 3 ──`.
+It reads as a break between groups, never as one more row.
 A row takes two lines (`[tui] queue = "comfortable"`, the default).
-Line one: the `▎` bar when selected, Jev's mark, the conventional-commit kind as a coloured chip (`feat` success, `fix` danger, `docs` link, `refactor`/`tech` mention, `test` code, `perf` warn, the rest muted; the scope is dropped), the rest of the title, the badge.
-Line two, dim: `!iid · author · age · +adds −dels`, then the host when mixed; when the pane is narrow the host goes first, then the size, then the author shortens.
-`[tui] queue = "compact"` keeps one line: `!iid` in `muted`, the title, then one badge column at the right edge:
+Line one: the `▎` bar when selected, the conventional-commit kind as a coloured chip (`feat` success, `fix` danger, `docs` link, `refactor`/`tech` mention, `test` code, `perf` warn, the rest muted; the scope is dropped), the rest of the title, then Jev's mark and the badge flush right.
+Line two, all `faded` so the eye goes from title to title: the author's short name (`romain.courtois` is `romain`: the handle up to its first `.`, `_` or `-`), `!iid`, the host when mixed and `+adds −dels` when they fit, and the age flush right.
+`[tui] queue = "compact"` keeps one line: `!iid` in `muted`, the title, then Jev's mark and one badge column at the right edge:
 
 | Badge | Means |
 |---|---|
@@ -79,6 +80,11 @@ Line two, dim: `!iid · author · age · +adds −dels`, then the host when mixe
 
 Rows sort by `updated_at` desc inside a section, and Jev ranks `To review` by urgency when it is on.
 `s` cycles the order inside every section: updated (default), oldest first (created), by author, smallest first (additions + deletions), most urgent first (only when Jev is on). `S` groups `OPEN` and `DRAFTS` by author with a faded sub-header per author. The pane title says both (`Queue · acme/widgets · by author, grouped by author`), and both are remembered per scope in the cache (`queue_view.<scope>.json`).
+One author's MRs that build on each other (each targets the branch of the one below it, in one project) are a stack, folded into one row: `▸ feat read shared PDFs` over `romain · 3 MRs · stack` and the newest age.
+Its title is the words the MRs' titles share when they share two or more, else the base MR's title; its badge is the most pressing of its MRs'.
+`enter`, `zo` or `za` on it unfolds it (`▾`): its MRs follow, base first, joined by a faded `│`; `zc` on the stack or on one of its MRs folds it back and puts the cursor on its row.
+Stacks start folded; the unfolded ones are remembered per scope with the order and grouping. Only real chains stack: several MRs by one author that do not target each other stay apart.
+On a terminal at least 160 columns wide the queue is 44 columns instead of 34, which shows about twice the title.
 Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done` and `Drafts` start folded. The cursor skips the headers of open sections and author headers, stops on folded ones, their only row, and opening a section puts it on its first MR.
 Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
 `i` opens the description modal: `!iid title`, author, branches, labels, then the description as light markdown; `j k ^d ^u g G` scroll, `o` opens the MR, `esc` `i` `q` close.

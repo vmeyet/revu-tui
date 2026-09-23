@@ -3,19 +3,19 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 18)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   TO REVIEW                1   ││  omar · feat/checkout → main · 2h · +2 −2 · 1 files · ✓ succes │
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +2 −2 · 1 files · ✓ succes │
 │ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 1 threads, 1 unresolved                   │
-│ ▎ !42 · omar · 2h · +412 −38   ││                                                                │
-│   MINE                     1   ││                                                                │
-│   fix flaky cache test       D ││  ▾ src/sum.rs                                        +2 −2  ◆1 │
-│   !41 · nina · 4h · +3 −1      ││     ▾ @@ -1,6 +1,6 @@ fn main                                  │
-│   WATCHING                 1   ││       1    1  fn main() {                                      │
-│   infra: new runner          ⠋ ││       2    2      let a = 1;                                   │
-│   !35 · omar · 2d · +0 −0      ││ ▎◆    3    3 ~    let b = 2;20;                                │
-│   DONE ▸                   1   ││       4    4      println!("{}", a + b);                       │
-│                                ││       5      -    let d = 4;                                   │
+│ ▎ omar · !42 · +412 −38     2h ││                                                                │
+│                                ││                                                                │
+│   ── MINE · 1 ──────────────── ││  ▾ src/sum.rs                                        +2 −2  ◆1 │
+│   fix flaky cache test       D ││     ▾ @@ -1,6 +1,6 @@ fn main                                  │
+│   nina · !41 · +3 −1        4h ││       1    1  fn main() {                                      │
+│                                ││       2    2      let a = 1;                                   │
+│   ── WATCHING · 1 ──────────── ││ ▎◆    3    3 ~    let b = 2;20;                                │
+│   infra: new runner          ⠋ ││       4    4      println!("{}", a + b);                       │
+│   omar · !35 · +0 −0        2d ││       5      -    let d = 4;                                   │
 │                                ││            5 +    println!("{}", c);                           │
-│                                ││       6    6  }                                                │
+│   ── ▸ DONE · 1 ────────────── ││       6    6  }                                                │
 │                                ││                                                                │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯

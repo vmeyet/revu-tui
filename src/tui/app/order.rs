@@ -40,14 +40,17 @@ impl Order {
     }
 }
 
-/// What `s` and `S` chose for one scope.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What `s` and `S` chose for one scope, and which stacks are unfolded.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueView {
     #[serde(default)]
     pub order: Order,
     /// Open and Drafts get one sub-header per author.
     #[serde(default)]
     pub by_author: bool,
+    /// Stacks shown MR by MR, by their base MR's key; every other stack is one folded row.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub open_stacks: std::collections::BTreeSet<String>,
 }
 
 /// `rows` in `order`; `urgency` scores an MR when Jev ranked it. Sorts are stable, so rows that

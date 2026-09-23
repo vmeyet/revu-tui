@@ -10,6 +10,10 @@ use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
 const QUEUE_W: u16 = 34;
+/// The queue on a wide terminal: ten more columns show about twice the title.
+const WIDE_QUEUE_W: u16 = 44;
+/// From this terminal width the queue takes `WIDE_QUEUE_W`.
+const WIDE_QUEUE_FROM: u16 = 160;
 /// How wide the diff reads in reading mode: a comfortable line of code with both gutters.
 const READING_W: u16 = 120;
 const SIDE_W: u16 = 36;
@@ -116,7 +120,11 @@ struct Columns {
 /// and below that, or in reading mode, the pane is a page of its own while it has the keys.
 fn columns(width: u16, side_open: bool, side_focused: bool, reading: bool) -> Columns {
     let side = SIDE_W.max(width * SIDE_PCT / 100);
-    let queue = if reading { 0 } else { QUEUE_W };
+    let queue = match (reading, width) {
+        (true, _) => 0,
+        (false, WIDE_QUEUE_FROM..) => WIDE_QUEUE_W,
+        (false, _) => QUEUE_W,
+    };
     match (side_open, width) {
         (false, _) => Columns { queue, side: 0, diff: true },
         (true, WIDE..) if !reading => Columns { queue, side, diff: true },
@@ -300,12 +308,20 @@ mod columns_tests {
 
     #[test]
     fn the_pane_takes_what_the_width_allows() {
-        assert_eq!(columns(160, true, false, false), Columns { queue: QUEUE_W, side: 64, diff: true }, "three columns from 150");
+        assert_eq!(columns(160, true, false, false), Columns { queue: WIDE_QUEUE_W, side: 64, diff: true }, "three columns from 150");
+        assert_eq!(columns(155, true, false, false), Columns { queue: QUEUE_W, side: 62, diff: true });
         assert_eq!(columns(130, true, true, false), Columns { queue: 0, side: 52, diff: true }, "the queue steps aside from 120");
         assert_eq!(columns(100, true, true, false), Columns { queue: 0, side: 100, diff: false }, "a page of its own below 120");
         assert_eq!(columns(100, true, false, false), Columns { queue: 0, side: 0, diff: true }, "h goes back to the diff at the same line");
         assert_eq!(columns(90, true, true, false).side, 90);
         assert_eq!(columns(80, false, false, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+    }
+
+    #[test]
+    fn the_queue_widens_from_160_columns() {
+        assert_eq!(columns(WIDE_QUEUE_FROM - 1, false, false, false).queue, QUEUE_W);
+        assert_eq!(columns(WIDE_QUEUE_FROM, false, false, false).queue, WIDE_QUEUE_W);
+        assert_eq!(columns(240, false, false, false).queue, WIDE_QUEUE_W);
     }
 
     #[test]

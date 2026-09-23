@@ -1610,18 +1610,20 @@ fn verdicts_mark_rows_and_lead_the_review_section_by_urgency() {
     app.apply(Incoming::Triaged { key: last.key(), verdict: verdict_for(&last, 2.9, crate::ai::triage::Size::Focused) });
     assert_eq!(app.mark(&last), Some(super::Mark::Urgent));
     let first_row = app.queue_rows().into_iter().find_map(|r| match r {
-        QueueRow::Mr(mr) => Some(mr.key()),
-        QueueRow::Section { .. } | QueueRow::Author { .. } => None,
+        QueueRow::Mr(mr) | QueueRow::Stacked(mr) => Some(mr.key()),
+        QueueRow::Section { .. } | QueueRow::Author { .. } | QueueRow::Stack { .. } => None,
     });
     assert_eq!(first_row, Some(last.key()), "the urgent MR leads To review");
     let moved = crate::forge::QueueMr { updated_at: last.updated_at + chrono::TimeDelta::hours(1), ..last.clone() };
     assert_eq!(app.mark(&moved), None, "a verdict on an older state marks nothing");
     let screen = render(&mut app, 100, 16);
     let meta = screen.lines().position(|l| l.contains(&format!("!{} ·", last.number))).unwrap();
-    assert!(screen.lines().nth(meta - 1).unwrap().contains("▎ ! "), "the mark leads the row's first line:\n{screen}");
+    let ends_with_mark = |line: &str| line.split("││").next().unwrap_or("").trim_end_matches([' ', '│']).ends_with('!');
+    assert!(ends_with_mark(screen.lines().nth(meta - 1).unwrap()), "the mark sits at the end of the title line:\n{screen}");
     app.queue_layout = crate::config::QueueLayout::Compact;
     let screen = render(&mut app, 100, 16);
-    assert!(screen.contains(&format!("! !{}", last.number)), "{screen}");
+    let row = screen.lines().find(|l| l.contains(&format!("!{} ", last.number))).unwrap();
+    assert!(ends_with_mark(row), "{screen}");
 }
 
 #[test]
@@ -2207,7 +2209,7 @@ fn s_cycles_the_order_saves_it_for_the_scope_and_titles_the_pane() {
     let mut app = scoped_app();
     app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
     let actions = press(&mut app, "s");
-    let view = QueueView { order: super::order::Order::Oldest, by_author: false };
+    let view = QueueView { order: super::order::Order::Oldest, ..QueueView::default() };
     assert_eq!(actions, vec![Action::SaveQueueView { scope: Some("acme/widgets".into()), view }]);
     press(&mut app, "ss");
     assert_eq!(app.queue_view.order, super::order::Order::Size);
@@ -2242,10 +2244,10 @@ fn capital_s_groups_open_and_drafts_by_author_only() {
 #[test]
 fn a_saved_view_for_this_scope_applies_and_one_for_another_is_dropped() {
     let mut app = scoped_app();
-    let grouped = QueueView { order: super::order::Order::Author, by_author: true };
-    app.apply(Incoming::QueueView { scope: None, view: grouped });
+    let grouped = QueueView { order: super::order::Order::Author, by_author: true, ..QueueView::default() };
+    app.apply(Incoming::QueueView { scope: None, view: grouped.clone() });
     assert_eq!(app.queue_view, QueueView::default());
-    app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view: grouped });
+    app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view: grouped.clone() });
     assert_eq!(app.queue_view, grouped);
 }
 
@@ -2314,4 +2316,97 @@ fn the_status_line_lists_views_while_quote_waits() {
     press(&mut app, "'");
     let screen = render(&mut app, 100, 12);
     assert!(screen.lines().last().unwrap().contains("' views: b backlog · o omar"), "{screen}");
+}
+
+/// The scoped queue with a three-MR PDF chain by `romain.courtois` added to Open.
+fn stacked_sections() -> Sections {
+    let mut sections = scoped_sections();
+    let seed = sections.open[0].clone();
+    let link = |number: u64, title: &str, source: &str, target: &str, pipeline: Option<&str>| crate::forge::QueueMr {
+        number,
+        title: title.into(),
+        author: "romain.courtois".into(),
+        author_name: "Romain".into(),
+        source_branch: source.into(),
+        target_branch: target.into(),
+        pipeline: pipeline.map(str::to_owned),
+        draft: false,
+        created_at: seed.created_at + chrono::TimeDelta::hours(number.try_into().unwrap()),
+        web_url: format!("https://gitlab.com/acme/widgets/-/merge_requests/{number}"),
+        ..seed.clone()
+    };
+    sections.open.extend([
+        link(61, "feat: read shared PDFs from the drive", "pdf-read", "main", Some("SUCCESS")),
+        link(62, "feat: read shared PDFs page by page", "pdf-pages", "pdf-read", Some("FAILED")),
+        link(63, "feat: read shared PDFs with OCR", "pdf-ocr", "pdf-pages", None),
+    ]);
+    sections
+}
+
+fn stacked_app() -> App {
+    let mut app = scoped_app();
+    app.apply(queue_answer(Some("acme/widgets"), stacked_sections(), false));
+    app
+}
+
+fn stack_row(app: &App) -> usize {
+    app.queue_rows().iter().position(|r| matches!(r, QueueRow::Stack { .. })).unwrap()
+}
+
+#[test]
+fn a_chain_of_one_authors_mrs_is_one_folded_row() {
+    let app = stacked_app();
+    let rows = app.queue_rows();
+    let QueueRow::Stack { id, mrs, open } = &rows[stack_row(&app)] else { panic!() };
+    assert_eq!((id.as_str(), mrs.iter().map(|m| m.number).collect::<Vec<_>>(), *open), ("acme/widgets!61", vec![61, 62, 63], false));
+    assert!(!rows.iter().any(|r| matches!(r, QueueRow::Stacked(_))), "folded by default");
+    assert!(!rows.iter().any(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 62)), "its MRs are not rows of their own");
+    assert_eq!(app.stack_badge(mrs), Some(super::Badge::Failed), "the worst badge of the stack");
+}
+
+#[test]
+fn enter_and_zo_unfold_a_stack_base_first_and_zc_folds_it_back_onto_its_row() {
+    let mut app = stacked_app();
+    app.queue_selected = stack_row(&app);
+    let actions = app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(actions.as_slice(), [Action::SaveQueueView { view, .. }] if view.open_stacks.contains("acme/widgets!61")));
+    let members: Vec<u64> =
+        app.queue_rows().iter().filter_map(|r| if let QueueRow::Stacked(mr) = r { Some(mr.number) } else { None }).collect();
+    assert_eq!(members, vec![61, 62, 63]);
+    press(&mut app, "jj");
+    assert_eq!(app.selected_mr().map(|mr| mr.number), Some(62), "an unfolded MR is a row the cursor takes and opens");
+    press(&mut app, "zc");
+    assert_eq!(app.queue_selected, stack_row(&app), "the cursor lands on the stack's row");
+    assert!(!app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stacked(_))));
+    press(&mut app, "zo");
+    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stacked(_))));
+}
+
+#[test]
+fn an_unfolded_stack_is_remembered_with_the_queue_view() {
+    let mut app = stacked_app();
+    let view = QueueView { open_stacks: std::collections::BTreeSet::from(["acme/widgets!61".to_owned()]), ..QueueView::default() };
+    app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view });
+    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stack { open: true, .. })));
+}
+
+#[test]
+fn zo_on_a_section_header_still_folds_the_section() {
+    let mut app = stacked_app();
+    app.queue_selected = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: "OPEN", .. })).unwrap();
+    press(&mut app, "zc");
+    assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", open: false, .. })));
+}
+
+#[test]
+fn snapshot_queue_with_a_stack_at_120_and_170_columns() {
+    let mut app = stacked_app();
+    insta::assert_snapshot!("queue_stack_120", render(&mut app, 120, 26));
+    insta::assert_snapshot!("queue_stack_170", render(&mut app, 170, 26));
+    app.queue_selected = stack_row(&app);
+    app.handle_key(code(KeyCode::Enter));
+    insta::assert_snapshot!("queue_stack_open_170", render(&mut app, 170, 30));
+    app.queue_layout = crate::config::QueueLayout::Compact;
+    insta::assert_snapshot!("queue_stack_compact_120", render(&mut app, 120, 20));
+    insta::assert_snapshot!("queue_stack_compact_170", render(&mut app, 170, 20));
 }

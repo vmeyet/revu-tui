@@ -4,21 +4,21 @@ expression: "render(&mut app, 120, 20)"
 ---
 ╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ─────────── ││                                                                                    │
-│ ▎ feat charge cards at chec…   ││                                                                                    │
-│ ▎ omar · !42 · +412 −38     2h ││                                                                                    │
+│   !42 feat: charge cards at…   ││                                                                                    │
 │                                ││                                                                                    │
 │   ── MINE · 1 ──────────────── ││                                                                                    │
-│   fix flaky cache test       D ││                                                                                    │
-│   nina · !41 · +3 −1        4h ││                                                                                    │
-│                                ││                                open a merge request                                │
-│   ── WATCHING · 0 ──────────── ││                                to read its diff here                               │
+│   !41 fix: flaky cache test  D ││                                                                                    │
 │                                ││                                                                                    │
-│   ── OPEN · 1 ──────────────── ││                                                                                    │
-│   chore bump deps              ││                                                                                    │
-│   lea · !51 · +412 −38      2h ││                                                                                    │
+│   ── WATCHING · 0 ──────────── ││                                                                                    │
+│                                ││                                open a merge request                                │
+│   ── OPEN · 4 ──────────────── ││                                to read its diff here                               │
+│   !51 chore: bump deps         ││                                                                                    │
+│ ▎ ▾ romain · 3 MRs · read s… ✗ ││                                                                                    │
+│   │ !61 feat: read shared P…   ││                                                                                    │
+│   │ !62 feat: read shared P… ✗ ││                                                                                    │
+│   │ !63 feat: read shared P…   ││                                                                                    │
 │                                ││                                                                                    │
 │   ── ▸ DRAFTS · 1 ──────────── ││                                                                                    │
 │                                ││                                                                                    │
-│   ── ▸ DONE · 1 ────────────── ││                                                                                    │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina                                                                                               ? help

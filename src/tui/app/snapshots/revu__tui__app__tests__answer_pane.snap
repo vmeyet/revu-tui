@@ -3,19 +3,19 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 150, 20)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at che… ────────╮╭ Claude · explain · charge.rs hunk 1 · cached ────────────╮
-│   TO REVIEW                1   ││  omar · feat/checko… · 2h · +5 −3 · 2 files · ✓ succ ││  It swaps the client for one keyed by the card, so a     │
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checko… · 2h · +5 −3 · 2 files · ✓ succ ││  It swaps the client for one keyed by the card, so a     │
 │ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved         ││  retry **reuses** the idempotency key.                   │
-│ ▎ !42 · omar · 2h · +412 −38   ││  ◆ 1 on the MR  enter opens                          ││                                                          │
-│   MINE                     1   ││                                                      ││  • charge now takes the key                              │
-│   fix flaky cache test       D ││  ▾ src/pay/charge.rs          +4 −2  ◆1 · 1 outdated ││  • nothing else moves                                    │
-│   !41 · nina · 4h · +3 −1      ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge          ││                                                          │
-│   WATCHING                 1   ││ ▎    12   12  pub async fn charge(card: &Card, amou… ││                                                          │
-│   infra: new runner          ⠋ ││  ✓   13      -    let client = Client::new();        ││                                                          │
-│   !35 · omar · 2d · +0 −0      ││           13 +    let client = Client::with_key(ide… ││                                                          │
-│   DONE ▸                   1   ││           14 +    let attempt = Attempt::first();    ││                                                          │
-│                                ││      14   15      let response = client.charge(amou… ││                                                          │
+│ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                          ││                                                          │
+│                                ││                                                      ││  • charge now takes the key                              │
+│   ── MINE · 1 ──────────────── ││  ▾ src/pay/charge.rs          +4 −2  ◆1 · 1 outdated ││  • nothing else moves                                    │
+│   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge          ││                                                          │
+│   nina · !41 · +3 −1        4h ││ ▎    12   12  pub async fn charge(card: &Card, amou… ││                                                          │
+│                                ││  ✓   13      -    let client = Client::new();        ││                                                          │
+│   ── WATCHING · 1 ──────────── ││           13 +    let client = Client::with_key(ide… ││                                                          │
+│   infra: new runner          ⠋ ││           14 +    let attempt = Attempt::first();    ││                                                          │
+│   omar · !35 · +0 −0        2d ││      14   15      let response = client.charge(amou… ││                                                          │
 │                                ││      15   16      audit::record(&response);          ││                                                          │
-│                                ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key           ││                                                          │
+│   ── ▸ DONE · 1 ────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key           ││                                                          │
 │                                ││      40   41  fn idempotency_key(card: &Card) -> Ke… ││                                                          │
 │                                ││      41      -    Key::from(card.number())           ││                                                          │
 │                                ││           42 +    Key::from((card.number(), card.ex… ││                                                          │

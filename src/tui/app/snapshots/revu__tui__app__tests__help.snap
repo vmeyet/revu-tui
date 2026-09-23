@@ -2,20 +2,20 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 160, 45)"
 ---
-╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   TO REVIEW                1   ││                                                                                                                            │
-│ ▎ feat charge cards at chec…   ││                                                                                                                            │
-│ ▎ !42 · omar · 2h · +412 −╭ keys ────────────────────────────────────────────────────────────────────────────────────────────────╮                           │
-│   MINE                    │                                                                                                      │                           │
-│   fix flaky cache test    │  MOVE                                              COMMENT & PUBLISH                                 │                           │
-│   !41 · nina · 4h · +3 −1 │        j k  move                                           c  comment on the line                    │                           │
-│   WATCHING                │        g G  first, last                                    C  comment on the old side                │                           │
-│   infra: new runner       │      ^d ^u  half a page                                    V  select lines                           │                           │
-│   !35 · omar · 2d · +0 −0 │        h l  pane to the left, to the right                 s  suggest a change                       │                           │
-│   DONE ▸                  │      enter  open, or toggle the fold                       E  write in $EDITOR                       │                           │
-│                           │      esc x  close the pane, back to the queue      ⌥enter ^o  in the box: new line, $EDITOR          │                           │
+╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                  │
+│ ▎ feat charge cards at checkout          ││                                                                                                                  │
+│ ▎ omar · !42 · +412 −38   ╭ keys ────────────────────────────────────────────────────────────────────────────────────────────────╮                           │
+│                           │                                                                                                      │                           │
+│   ── MINE · 1 ────────────│  MOVE                                              COMMENT & PUBLISH                                 │                           │
+│   fix flaky cache test    │        j k  move                                           c  comment on the line                    │                           │
+│   nina · !41 · +3 −1      │        g G  first, last                                    C  comment on the old side                │                           │
+│                           │      ^d ^u  half a page                                    V  select lines                           │                           │
+│   ── WATCHING · 1 ────────│        h l  pane to the left, to the right                 s  suggest a change                       │                           │
+│   infra: new runner       │      enter  open, or toggle the fold                       E  write in $EDITOR                       │                           │
+│   omar · !35 · +0 −0      │      esc x  close the pane, back to the queue      ⌥enter ^o  in the box: new line, $EDITOR          │                           │
 │                           │  tab S-tab  next, previous file                          esc  drop the selection, leave the box      │                           │
-│                           │      ]c [c  next, previous hunk                            P  publish every draft                    │                           │
+│   ── ▸ DONE · 1 ──────────│      ]c [c  next, previous hunk                            P  publish every draft                    │                           │
 │                           │      ]n [n  next, previous conversation                    A  approve, unapprove                     │                           │
 │                           │      ]f [f  next, previous file with a thread                                                        │                           │
 │                           │                                                    THREAD PANE                                       │                           │
@@ -25,7 +25,7 @@ expression: "render(&mut app, 160, 45)"
 │                           │          *  this repo, or every project                  e d  edit, delete my draft                  │                           │
 │                           │          s  next sort order                                S  apply the suggestion, after a y        │                           │
 │                           │          S  group by author                                u  open the first link                    │                           │
-│                           │      zo zc  open, fold the section                                                                   │                           │
+│                           │      zo zc  open, fold the section or stack                                                          │                           │
 │                           │                                                    ASK CLAUDE                                        │                           │
 │                           │  VIEW                                                a e r s  explain, risks, summary                │                           │
 │                           │          i  the MR description                       a t c a  thread, comment, anything              │                           │
@@ -43,7 +43,7 @@ expression: "render(&mut app, 160, 45)"
 │                           │         zv  file viewed: it folds away                                                               │                           │
 │                           │                                                                                                      │                           │
 │                           ╰─────────────────────────────────────────────────────────────────────────────────────────── esc close ╯                           │
-│                                ││                                                                                                                            │
-│                                ││                                                                                                                            │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina                                                                                                                                       ? help

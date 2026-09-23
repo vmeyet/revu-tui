@@ -13,6 +13,7 @@ mod pane;
 mod pipeline;
 mod queue;
 mod review;
+mod stack;
 mod state;
 #[cfg(test)]
 mod tests;
