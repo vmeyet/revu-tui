@@ -18,13 +18,15 @@ pub struct Open {
     pub cached: Option<(Instant, Duration)>,
     /// Where `V` started; the selection runs from there to the cursor.
     pub select_from: Option<usize>,
+    /// The file tree, when it holds the right pane.
+    pub tree: Option<super::Tree>,
 }
 
 impl Open {
     pub fn new(key: MrKey, review: Review) -> Self {
         let rows = review.rows();
         let selected = first_selectable(&rows);
-        Self { key, review, rows, selected, scroll: 0, thread: None, thread_scroll: 0, cached: None, select_from: None }
+        Self { key, review, rows, selected, scroll: 0, thread: None, thread_scroll: 0, cached: None, select_from: None, tree: None }
     }
 
     /// The rows the selection covers, the cursor included; just the cursor without `V`.
@@ -60,7 +62,7 @@ impl Open {
         self.cached.map(|(at, age)| age + now.saturating_duration_since(at))
     }
 
-    fn file_of(&self, row: &Row) -> Option<usize> {
+    pub(super) fn file_of(&self, row: &Row) -> Option<usize> {
         match row {
             Row::File { index, .. } | Row::Outdated { file: index } => Some(*index),
             Row::Hunk { file, .. } | Row::Line { file, .. } | Row::Pair { file, .. } => Some(*file),
@@ -239,6 +241,16 @@ impl App {
         self.apply_fold(next)
     }
 
+    /// One file open or folded, whatever it was, and saved.
+    pub(super) fn set_file_fold(&mut self, path: &str, fold: crate::diff::fold::Fold) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let current = &open.review.fold;
+        let is_open = current.file_is_open(path);
+        let wanted_open = fold == crate::diff::fold::Fold::Open;
+        let next = if is_open == wanted_open { current.clone() } else { current.toggle_file(path) };
+        self.apply_fold(next)
+    }
+
     fn apply_fold(&mut self, fold: FoldState) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         self.keep(open.with_fold(fold))
@@ -256,7 +268,7 @@ impl App {
     fn keep(&mut self, next: Open) -> Vec<Action> {
         let review = &next.review;
         let action =
-            Action::SaveState { key: next.key.clone(), fold: review.fold.clone(), viewed: review.viewed.clone(), split: review.split };
+            Action::SaveState { key: next.key.clone(), fold: review.fold.clone(), viewed: review.viewed_fingerprints(), split: review.split };
         self.open = Some(next);
         vec![action]
     }
@@ -265,7 +277,7 @@ impl App {
         let Some(open) = &self.open else { return vec![] };
         match open.row().cloned() {
             Some(Row::Thread { id }) => {
-                self.open = Some(Open { thread: Some(id), thread_scroll: 0, ..open.clone() });
+                self.open = Some(Open { thread: Some(id), thread_scroll: 0, tree: None, ..open.clone() });
                 self.focus = Focus::Side;
                 vec![]
             }

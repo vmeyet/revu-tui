@@ -8,6 +8,7 @@ mod keys;
 mod queue;
 mod review;
 mod state;
+mod tree;
 #[cfg(test)]
 mod tests;
 mod write;
@@ -17,6 +18,7 @@ pub use feedback::Toast;
 pub use queue::{Badge, QueueRow};
 pub use review::Open;
 pub use state::{App, Settings};
+pub use tree::Tree;
 pub use write::Publish;
 
 use crate::diff::fold::FoldState;
@@ -24,7 +26,7 @@ pub use crate::forge::MrKey;
 use crate::forge::{Discussion, Position, Sections};
 use crate::review::{Draft, Review};
 use chrono::{DateTime, Utc};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -50,7 +52,8 @@ pub enum Action {
     SaveState {
         key: MrKey,
         fold: FoldState,
-        viewed: BTreeSet<String>,
+        /// Viewed files with the fingerprint of the change seen.
+        viewed: BTreeMap<String, String>,
         split: bool,
     },
     OpenUrl(String),

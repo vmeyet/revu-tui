@@ -477,6 +477,8 @@ mod tests {
             ("app/state.rs", include_str!("app/state.rs")),
             ("app/keys.rs", include_str!("app/keys.rs")),
             ("app/commands.rs", include_str!("app/commands.rs")),
+            ("app/tree.rs", include_str!("app/tree.rs")),
+            ("tree_view.rs", include_str!("tree_view.rs")),
             ("jump.rs", include_str!("jump.rs")),
             ("palette.rs", include_str!("palette.rs")),
             ("app/incoming.rs", include_str!("app/incoming.rs")),

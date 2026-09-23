@@ -158,7 +158,9 @@ One of:
 
 - **Thread**: path:line title, then notes as `author · age` in `muted` and the body as markdown (bold, code, lists, quotes; links show their label with `u` to open). The reply input is the input row. `R` toggles resolved. Drafts in the thread show `◇`.
 - **Overview** (`o` on the header, or on open when there is no thread): description as markdown, labels, reviewers with their state, approvals, pipeline link, then the activity list (system notes) in `muted`.
-- **Files** (`t`): a tree with directories folded by default beyond depth 2, same badges as file rows, `enter` jumps, `zv` marks viewed.
+- **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
+
+`zv` (in the diff or the tree) marks the file viewed and folds it. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
 - **AI answer** (M4): title `ask · file` and the streaming markdown; a `cached` tag when served from cache.
 
 ## Publish modal (`P`)

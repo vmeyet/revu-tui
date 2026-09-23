@@ -52,6 +52,8 @@ Inside a checkout the queue shows that repo only: what waits on you, yours, what
 | `zo` `zc` (queue), `zh` | Open or fold the section under the cursor, fold the MR header |
 | `D` | One-word changes inline (`2;` struck, `20;` after it), or every line split |
 | `i` | The MR description |
+| `t` | File tree in the right pane; `enter` jumps to a file |
+| `zv` | Mark the file viewed: it folds, and unfolds again if the author changes it |
 | `c` | Comment on the line (`V` first for a range, `s` for a suggestion, `C` for the old side of an inline change) |
 | `r` / `R` | Reply / resolve, in a thread |
 | `P` | Publish every draft as one review: `enter` sends, `e` edits, `a` also approves |
