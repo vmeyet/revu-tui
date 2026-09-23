@@ -152,6 +152,17 @@ pub struct Note {
     pub resolved: Option<bool>,
     #[serde(default)]
     pub position: Option<Position>,
+    #[serde(default)]
+    pub suggestions: Vec<SuggestionWire>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestionWire {
+    pub id: u64,
+    #[serde(default)]
+    pub applied: bool,
+    #[serde(default)]
+    pub appliable: bool,
 }
 
 impl From<Note> for forge::Note {
@@ -166,6 +177,11 @@ impl From<Note> for forge::Note {
             resolvable: n.resolvable,
             resolved: n.resolved.unwrap_or(false),
             position: n.position.and_then(Position::into_model),
+            suggestions: n
+                .suggestions
+                .into_iter()
+                .map(|s| forge::Applicable { id: s.id, applied: s.applied, appliable: s.appliable })
+                .collect(),
         }
     }
 }

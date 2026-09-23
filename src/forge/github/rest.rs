@@ -5,6 +5,7 @@ use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::{self, DiffFile, Discussion, MrKey, Note, Position};
 use anyhow::{Context, Result, anyhow, bail};
+use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::json;
@@ -73,9 +74,16 @@ impl PostedComment {
             resolvable,
             resolved: false,
             position,
+            suggestions: vec![],
         };
         Discussion { id: self.node_id, notes: vec![note] }
     }
+}
+
+fn decode(content: &str) -> Result<String> {
+    let packed: String = content.split_whitespace().collect();
+    let bytes = base64::engine::general_purpose::STANDARD.decode(packed).context("the file came back unreadable")?;
+    String::from_utf8(bytes).context("the file is not text")
 }
 
 fn repo_path(project: &str) -> String {
@@ -147,7 +155,62 @@ impl CheckRun {
     }
 }
 
+#[derive(Deserialize)]
+struct RepoAccess {
+    #[serde(default)]
+    permissions: Option<Permissions>,
+}
+
+#[derive(Deserialize)]
+struct Permissions {
+    #[serde(default)]
+    push: bool,
+}
+
+#[derive(Deserialize)]
+struct PullHead {
+    head: HeadRef,
+}
+
+#[derive(Deserialize)]
+struct HeadRef {
+    #[serde(default)]
+    repo: Option<Repo>,
+}
+
+/// A file as the contents API gives it: base64 with line breaks, and the blob it is.
+#[derive(Deserialize)]
+struct Contents {
+    content: String,
+    sha: String,
+}
+
 impl Client {
+    /// GitHub has no API to apply a suggestion: the commit is built here, on the PR's own branch,
+    /// and only when I can push to it; a fork's branch or a read-only repo is left to the web.
+    pub async fn apply(&self, key: &MrKey, branch: &str, suggestion: &forge::Suggestion) -> Result<()> {
+        let repo = repo_path(&key.project);
+        let pull_path = format!("{repo}/pulls/{}", key.number);
+        let (access, pull) = tokio::try_join!(self.get::<RepoAccess>(&repo), self.get::<PullHead>(&pull_path))?;
+        let own_branch = pull.head.repo.is_some_and(|r| r.full_name == key.project);
+        if !own_branch || !access.permissions.is_some_and(|p| p.push) {
+            bail!("GitHub has no API to apply this suggestion here: o opens it on the web");
+        }
+        let path = format!("{repo}/contents/{}", suggestion.path);
+        let file: Contents = self.get(&format!("{path}?ref={branch}")).await?;
+        let text = decode(&file.content)?;
+        let proposal =
+            crate::review::suggestion::Proposal { above: suggestion.above, below: suggestion.below, text: suggestion.text.clone() };
+        let changed = crate::review::suggestion::apply_to(&text, suggestion.line, &proposal)?;
+        let body = json!({
+            "message": format!("Apply suggestion to {}", suggestion.path),
+            "content": base64::engine::general_purpose::STANDARD.encode(changed),
+            "sha": file.sha,
+            "branch": branch,
+        });
+        self.put_json::<serde_json::Value>(&path, &body).await.map(|_| ())
+    }
+
     /// The check runs on `head`, grouped by workflow; `None` when nothing ran on it.
     pub async fn checks(&self, key: &MrKey, head: &str) -> Result<Option<Checks>> {
         let repo = repo_path(&key.project);
@@ -382,5 +445,50 @@ mod tests {
         );
         assert_eq!(checks.web_url.as_deref(), Some("https://github.com/acme/widgets/pull/42/checks"));
         assert_eq!(checks.stages[0].jobs[0].seconds, Some(4));
+    }
+
+    fn suggestion() -> forge::Suggestion {
+        forge::Suggestion { id: None, path: "src/a.rs".into(), line: 2, above: 0, below: 0, text: "B".into() }
+    }
+
+    async fn repo_and_pull(server: &MockServer, push: bool, head_repo: &str) {
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"full_name": "acme/widgets", "permissions": {"push": push}})))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/pulls/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"head": {"repo": {"full_name": head_repo}}})))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn a_suggestion_becomes_a_commit_on_my_own_branch() {
+        let server = MockServer::start().await;
+        repo_and_pull(&server, true, "acme/widgets").await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/src/a.rs"))
+            .and(query_param("ref", "feat/sum"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"content": "YQpi\nCmMK\n", "sha": "blob1"})))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/repos/acme/widgets/contents/src/a.rs"))
+            .and(body_partial_json(json!({"content": "YQpCCmMK", "sha": "blob1", "branch": "feat/sum"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"commit": {"sha": "c0ffee"}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        client(&server).apply(&key(), "feat/sum", &suggestion()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_fork_or_a_read_only_repo_is_left_to_the_web() {
+        let server = MockServer::start().await;
+        repo_and_pull(&server, true, "someone/widgets").await;
+        let err = client(&server).apply(&key(), "feat/sum", &suggestion()).await.unwrap_err().to_string();
+        assert!(err.contains("o opens it on the web"), "{err}");
     }
 }

@@ -83,6 +83,11 @@ impl Client {
         response.json().await.map_err(scrub).with_context(|| format!("POST {path}: unreadable answer"))
     }
 
+    async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+        let response = self.send(Method::PUT, self.url(path)?, Some(body)).await?;
+        response.json().await.map_err(scrub).with_context(|| format!("PUT {path}: unreadable answer"))
+    }
+
     /// Every page of a list, following `Link: rel="next"` until it stops.
     async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
         let mut url = self.url(path)?;

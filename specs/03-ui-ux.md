@@ -251,6 +251,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `enter` | unfold, fold a resolved thread |
 | `r` | reply, in the compose box |
 | `R` | resolve, unresolve (also on a marked line in the diff) |
+| `S` | commit the note's suggestion on the MR branch, after a `y` (M5): GitLab applies it by its id; on GitHub, which has no API for it, revu commits the change itself through the contents API, only on the PR's own branch and with push access, else `o` opens it on the web |
 | `e` `d` `E` | edit, delete my draft; edit it in `$EDITOR` |
 | `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
 | `x` `esc` | close |

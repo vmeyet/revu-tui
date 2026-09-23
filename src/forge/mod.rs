@@ -8,7 +8,10 @@ mod model;
 mod queue;
 
 pub use budget::RateLimit;
-pub use model::{Approvals, DiffFile, Discussion, Draft, LineRef, Mr, MrKey, NewDraft, Note, Pipeline, Position, Refs, Side, User};
+pub use model::{
+    Applicable, Approvals, DiffFile, Discussion, Draft, LineRef, Mr, MrKey, NewDraft, Note, Pipeline, Position, Refs, Side, Suggestion,
+    User,
+};
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
 use crate::auth::Credentials;
@@ -130,6 +133,14 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.file(&key.project, path, sha).await,
             Forge::GitHub(client) => client.file(&key.project, path, sha).await,
+        }
+    }
+
+    /// Commits `suggestion` on the MR's source branch `branch`.
+    pub async fn apply(&self, key: &MrKey, branch: &str, suggestion: &Suggestion) -> Result<()> {
+        match self {
+            Forge::GitLab(client) => client.apply(suggestion).await,
+            Forge::GitHub(client) => client.apply(key, branch, suggestion).await,
         }
     }
 

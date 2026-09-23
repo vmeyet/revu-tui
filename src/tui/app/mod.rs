@@ -1,4 +1,5 @@
 //! The pure state machine: keys in, actions out, incoming answers applied. No clock, no network.
+mod apply;
 mod ask;
 mod brief;
 mod commands;
@@ -18,6 +19,7 @@ mod triage;
 mod view;
 mod write;
 
+pub use apply::Confirm;
 pub use ask::{Answer, AnswerState, Part};
 pub use brief::Brief;
 pub use feedback::Toast;
@@ -112,6 +114,12 @@ pub enum Action {
         line: u32,
         note: Option<String>,
     },
+    /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
+    Apply {
+        key: MrKey,
+        branch: String,
+        suggestion: Box<crate::forge::Suggestion>,
+    },
     /// `p`: the jobs of the CI run on the head commit `head`.
     LoadChecks {
         key: MrKey,
@@ -184,6 +192,8 @@ pub enum Failure {
     Approve,
     /// The CI run could not be read; the pipeline pane says why.
     Checks,
+    /// The suggestion was not committed.
+    Apply,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -232,6 +242,11 @@ pub enum Incoming {
     Approved {
         key: MrKey,
         approve: bool,
+    },
+    /// The suggestion is a commit on `branch` now.
+    Applied {
+        key: MrKey,
+        branch: String,
     },
     /// The CI run of the open MR's head; `None` when nothing ran on it.
     Checks {

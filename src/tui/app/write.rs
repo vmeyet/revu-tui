@@ -359,6 +359,7 @@ impl App {
             }
             Failure::Approve => self.warn(message),
             Failure::Checks => self.checks_failed(message),
+            Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage => self.warn(message),
         }
     }
