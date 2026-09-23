@@ -78,6 +78,8 @@ pub struct App {
     pub brief: Option<Brief>,
     /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
     pub links: Vec<crate::tui::ui::Link>,
+    /// A file ready for the reader's program; the loop takes it and hands over the terminal.
+    pub viewing: Option<crate::open::View>,
     /// What the editor's text turned into; the loop drains it after `apply`.
     pub composed: Vec<Action>,
     /// The key list, open, with how far it is scrolled.
@@ -130,6 +132,7 @@ impl App {
             publish: None,
             brief: None,
             links: vec![],
+            viewing: None,
             composed: vec![],
             help: None,
             palette: None,

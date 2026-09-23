@@ -10,6 +10,7 @@ mod forge;
 mod fuzzy;
 mod legacy;
 mod mrref;
+mod open;
 mod render;
 mod review;
 mod syntax;

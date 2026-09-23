@@ -229,6 +229,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `+` | more context around the hunk | M3 |
 | `c` | comment on the line (draft) | M2 |
 | `V` | select lines | M2 |
+| `v` | the file after the change in the reader's program, at the cursor's line (`08-open-file.md`) | M3b |
 | `E` | comment in `$EDITOR` | M2 |
 | `s` | suggestion: editor prefilled with the lines | M2 |
 | `d` | delete the draft under the cursor | M2 |
@@ -247,7 +248,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 
 ### Command line (`:`)
 
-Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:all`, `:set theme=nord` (saved to the config), `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:help`, `:quit`.
 Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `↑` `↓` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:ai off`, `:ask <text>`, `:cache clear`.
 
