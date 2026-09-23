@@ -30,6 +30,7 @@ A group of MRs in the queue.
 |---|---|
 | TO REVIEW | MRs where you are a reviewer and have not approved yet |
 | MINE | MRs you wrote |
+| READY | MRs a [ready source](guides/ready-source.md) names, when they need you |
 | WATCHING | MRs assigned to you, or with a label from `[queue] watch_labels` |
 | OPEN | Every other open MR of the project |
 | DRAFTS | Other people's draft MRs, folded |
@@ -60,6 +61,7 @@ You can approve in the same step.
 ```mermaid
 flowchart LR
     F["Forge: your MRs, review requests, the project's MRs"] --> S["Sections"]
+    R["Ready source"] --> S
     S --> N["Needs me rules"]
     N --> Q["Query from / or a saved view"]
     Q --> P["Queue pane"]

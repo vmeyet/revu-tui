@@ -2470,3 +2470,29 @@ fn snapshot_queue_with_other() {
     app.apply(queue_answer(Some("acme/widgets"), ruled_sections(), false));
     insta::assert_snapshot!("queue_with_other", render(&mut app, 120, 30));
 }
+
+#[test]
+fn ready_sits_right_after_mine_and_a_failing_command_only_warns() {
+    let mut app = scoped_app();
+    let sections = scoped_sections();
+    let picked = sections.open.iter().find(|mr| !mr.draft).cloned().unwrap();
+    let sections = Sections {
+        ready: vec![picked.clone()],
+        open: sections.open.iter().filter(|mr| mr.number != picked.number).cloned().collect(),
+        ..sections
+    };
+    app.apply(queue_answer(Some("acme/widgets"), sections, false));
+    let names: Vec<&str> = app
+        .queue_rows()
+        .iter()
+        .filter_map(|r| match r {
+            QueueRow::Section { name, .. } => Some(*name),
+            _ => None,
+        })
+        .collect();
+    let at = |name| names.iter().position(|n| *n == name).unwrap();
+    assert_eq!(at("READY"), at("MINE") + 1);
+    app.apply(Incoming::Failed { what: Failure::Ready, message: "ready command `slack` failed: not logged in".into() });
+    assert!(app.live_toast().unwrap().text.contains("not logged in"));
+    assert!(app.sections.as_ref().is_some_and(|s| s.ready.len() == 1), "Ready keeps its last answer");
+}

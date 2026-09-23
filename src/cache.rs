@@ -145,6 +145,14 @@ pub mod keys {
         }
     }
 
+    /// The ready command's last output for a scope, and the MRs it named outside my lists.
+    pub fn ready(project: Option<&str>) -> String {
+        match project {
+            Some(path) => format!("ready.{}.json", slug(path)),
+            None => "ready.json".into(),
+        }
+    }
+
     /// How the queue of one scope is sorted and grouped, next to its list.
     pub fn queue_view(project: Option<&str>) -> String {
         match project {

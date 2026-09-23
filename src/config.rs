@@ -109,6 +109,24 @@ pub struct Queue {
     /// The "needs me" rules: what leaves To review, Watching and Open, and at which thresholds.
     #[serde(default, skip_serializing_if = "crate::forge::rules::Rules::is_default")]
     pub rules: crate::forge::rules::Rules,
+    /// Where "ready for review" comes from: a command printing MR links.
+    #[serde(default, skip_serializing_if = "Ready::is_default")]
+    pub ready: Ready,
+}
+
+/// `[queue.ready]`: a command whose output names the MRs ready for review.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ready {
+    /// Run as words, never through a shell; every MR link it prints counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+}
+
+impl Ready {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl Queue {
@@ -119,6 +137,9 @@ impl Queue {
     /// Every view is a query that parses, and no two start with the same letter, since `'` picks by it.
     fn check(&self) -> Result<()> {
         self.rules.check()?;
+        if let Some(command) = &self.ready.command {
+            crate::ready::check(command)?;
+        }
         let mut firsts: BTreeMap<char, &str> = BTreeMap::new();
         for (name, query) in &self.views {
             crate::query::Query::parse(query).map_err(|e| anyhow::anyhow!("`queue.views.{name}`: {e}"))?;
@@ -466,6 +487,20 @@ mod tests {
         assert!(zero.contains("stale_days") && zero.contains("config.toml"), "{zero}");
         let typo = load("[queue.rules]\nstale = 3\n").unwrap_err();
         assert!(typo.contains("stale"), "{typo}");
+    }
+
+    #[test]
+    fn the_ready_command_must_split_into_words() {
+        let load = |toml: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, toml).unwrap();
+            Config::load_from(&path).map_err(|e| format!("{e:#}"))
+        };
+        let ok = load("[queue.ready]\ncommand = \"slack messages '#review' --json\"\n").unwrap();
+        assert_eq!(ok.queue.ready.command.as_deref(), Some("slack messages '#review' --json"));
+        let bad = load("[queue.ready]\ncommand = \"slack 'open\"\n").unwrap_err();
+        assert!(bad.contains("queue.ready.command") && bad.contains("config.toml"), "{bad}");
     }
 
     #[test]

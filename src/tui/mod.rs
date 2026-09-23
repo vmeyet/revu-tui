@@ -29,6 +29,7 @@ use crate::ctx::Ctx;
 use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
+use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
 use app::{Action, App, Failure, Incoming, Input, Part, QueueView, Settings};
@@ -65,6 +66,8 @@ struct Backend {
     fold_globs: Vec<String>,
     watch_labels: Vec<String>,
     rules: crate::forge::rules::Rules,
+    /// `[queue.ready] command`: what prints the MRs ready for review.
+    ready_command: Option<String>,
     inline: InlineRule,
     open: crate::config::Open,
     /// The checkout `revu` runs in, when its origin is on this forge: `v` opens its real files.
@@ -102,6 +105,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
         rules: ctx.config.queue.rules.clone(),
+        ready_command: ctx.config.queue.ready.command.clone(),
         inline: ctx.config.review.inline(),
         open: ctx.config.open.clone(),
         checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
@@ -257,7 +261,15 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 if let Some(cached) = backend.off(move |b| b.cached_queue(wanted)).await.ok().flatten().filter(|_| from_cache) {
                     send(cached);
                 }
-                send(backend.load_queue(scope).await.unwrap_or_else(|e| failed(Failure::Queue, &e)));
+                match backend.load_queue(scope).await {
+                    Ok((answer, ready_failure)) => {
+                        send(answer);
+                        if let Some(message) = ready_failure {
+                            send(Incoming::Failed { what: Failure::Ready, message });
+                        }
+                    }
+                    Err(e) => send(failed(Failure::Queue, &e)),
+                }
             }
             Action::SaveQueueView { scope, view } => {
                 let saved = backend.off(move |b| b.cache.write(&keys::queue_view(scope.as_deref()), &view)).await;
@@ -524,33 +536,64 @@ impl Backend {
     }
 
     /// Every project's queue also asks the other hosts I am logged in to; one that fails to
-    /// answer is left out rather than failing the whole queue.
-    async fn load_queue(&self, scope: Option<String>) -> Result<Incoming> {
-        let queue = self.forge.queue(scope.as_deref()).await?;
-        let (wanted, saved) = (scope.clone(), queue.clone());
-        let _ = self.off(move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
-        let others = if scope.is_none() {
+    /// answer is left out rather than failing the whole queue. The ready command runs alongside;
+    /// when it fails the queue still paints, with its last answer, and the reason comes back apart.
+    async fn load_queue(&self, scope: Option<String>) -> Result<(Incoming, Option<String>)> {
+        let others = async {
+            if scope.is_some() {
+                return vec![];
+            }
             futures_util::future::join_all(self.others.iter().map(crate::ctx::Home::queue))
                 .await
                 .into_iter()
                 .filter_map(Result::ok)
                 .collect()
-        } else {
-            vec![]
         };
-        Ok(self.queue_answer(scope, &queue, &others, false))
+        let (queue, others, said) = tokio::join!(self.forge.queue(scope.as_deref()), others, self.ask_ready());
+        let queue = queue?;
+        let (wanted, saved) = (scope.clone(), queue.clone());
+        let _ = self.off(move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
+        let (ready, failure) = match said {
+            Ok(Some(output)) => (Some(self.fresh_ready(scope.as_deref(), output, &queue, &others).await), None),
+            Ok(None) => (None, None),
+            Err(e) => (self.cached_ready(scope.as_deref()), Some(format!("{e:#}"))),
+        };
+        Ok((self.queue_answer(scope, &queue, &others, ready.as_ref(), false), failure))
     }
 
     fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
         let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_deref()))?.value;
         let others: Vec<Queue> = if scope.is_none() { self.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
-        Some(self.queue_answer(scope, &queue, &others, true))
+        let ready = self.cached_ready(scope.as_deref());
+        Some(self.queue_answer(scope, &queue, &others, ready.as_ref(), true))
     }
 
-    fn queue_answer(&self, scope: Option<String>, queue: &Queue, others: &[Queue], cached: bool) -> Incoming {
+    async fn ask_ready(&self) -> Result<Option<String>> {
+        let Some(command) = &self.ready_command else { return Ok(None) };
+        crate::ready::output(command).await.map(Some)
+    }
+
+    fn cached_ready(&self, scope: Option<&str>) -> Option<ReadySource> {
+        self.ready_command.as_ref()?;
+        self.cache.read(&keys::ready(scope))
+    }
+
+    async fn fresh_ready(&self, scope: Option<&str>, output: String, queue: &Queue, others: &[Queue]) -> ReadySource {
+        let queues: Vec<&Queue> = std::iter::once(queue).chain(others).collect();
+        let source = crate::ready::resolve(output, &self.forge, &self.others, scope, &queues).await;
+        let (wanted, saved) = (scope.map(str::to_owned), source.clone());
+        let _ = self.off(move |b| b.cache.write(&keys::ready(wanted.as_deref()), &saved)).await;
+        source
+    }
+
+    fn queue_answer(&self, scope: Option<String>, queue: &Queue, others: &[Queue], ready: Option<&ReadySource>, cached: bool) -> Incoming {
         let now = Utc::now();
         let parts = std::iter::once(queue).chain(others).map(|q| q.sections_with(&self.watch_labels, &self.rules, now)).collect();
         let sections = Sections::merge(parts);
+        let sections = match ready {
+            Some(source) => source.apply(sections, self.forge.host(), &self.others, scope.as_deref(), &queue.me, &self.rules),
+            None => sections,
+        };
         let opened = self.opened_at(&sections);
         Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
     }
@@ -819,6 +862,7 @@ mod tests {
             fold_globs: vec![],
             watch_labels: vec![],
             rules: crate::forge::rules::Rules::off(),
+            ready_command: None,
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -844,6 +888,7 @@ mod tests {
             fold_globs: vec![],
             watch_labels: vec![],
             rules: crate::forge::rules::Rules::off(),
+            ready_command: None,
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -888,6 +933,7 @@ mod tests {
             fold_globs: vec![],
             watch_labels: vec![],
             rules: crate::forge::rules::Rules::off(),
+            ready_command: None,
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -934,6 +980,7 @@ mod tests {
             fold_globs: vec![],
             watch_labels: vec![],
             rules: crate::forge::rules::Rules::off(),
+            ready_command: None,
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,
@@ -966,6 +1013,27 @@ mod tests {
         assert!(backend.cached_queue(Some("acme/widgets".into())).is_none(), "a scoped queue keeps to its own host");
     }
 
+    #[test]
+    fn the_last_ready_answer_paints_ready_from_the_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend {
+            cache: Cache::in_dir(dir.path()),
+            ready_command: Some("never-run".into()),
+            rules: crate::forge::rules::Rules::default(),
+            ..backend_on_nothing()
+        };
+        let queue = crate::forge::gitlab::fixture::queue_in(include_str!("../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets");
+        backend.cache.write_entry(&keys::queue(Some("acme/widgets")), &queue).unwrap();
+        let output = format!("ready: https://{}/acme/widgets/-/merge_requests/51", backend.forge.host());
+        backend.cache.write(&keys::ready(Some("acme/widgets")), &ReadySource { output, outside: vec![] }).unwrap();
+        let Some(Incoming::Queue { sections, .. }) = backend.cached_queue(Some("acme/widgets".into())) else { panic!("the cache answers") };
+        assert_eq!(sections.ready.iter().map(|mr| mr.number).collect::<Vec<_>>(), [51]);
+        assert!(sections.open.iter().all(|mr| mr.number != 51));
+        let without = Backend { ready_command: None, ..backend };
+        let Some(Incoming::Queue { sections, .. }) = without.cached_queue(Some("acme/widgets".into())) else { panic!("the cache answers") };
+        assert!(sections.ready.is_empty(), "no command, no Ready, whatever the cache kept");
+    }
+
     fn backend_on_nothing() -> Backend {
         Backend {
             others: vec![],
@@ -974,6 +1042,7 @@ mod tests {
             fold_globs: vec![],
             watch_labels: vec![],
             rules: crate::forge::rules::Rules::off(),
+            ready_command: None,
             inline: InlineRule::default(),
             open: crate::config::Open::default(),
             checkout: None,

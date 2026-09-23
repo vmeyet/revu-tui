@@ -37,7 +37,7 @@ revu
 |---|---|
 | [Start here](docs/start.md) | Your first review, step by step |
 | [Concepts](docs/concepts.md) | The words revu uses, and how it works |
-| [Guides](docs/guides/) | One task per page: search, AI, your editor, keys, hosts, update |
+| [Guides](docs/guides/) | One task per page: search, ready source, AI, your editor, keys, hosts, update |
 | [Keys](docs/reference/keys.md), [config](docs/reference/config.md), [commands](docs/reference/commands.md) | Every key, setting and command |
 | [Troubleshooting](docs/troubleshooting.md) | When something does not work |
 

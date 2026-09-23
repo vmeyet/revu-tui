@@ -83,6 +83,8 @@ pub enum ReviewState {
 pub struct Sections {
     pub to_review: Vec<QueueMr>,
     pub mine: Vec<QueueMr>,
+    /// Others' MRs the ready command named, still needing me: taken out of the sections below.
+    pub ready: Vec<QueueMr>,
     pub watching: Vec<QueueMr>,
     /// The rest of the project's open MRs, only when the queue is scoped to one.
     pub open: Vec<QueueMr>,
@@ -100,6 +102,7 @@ impl Sections {
         for part in parts {
             merged.to_review.extend(part.to_review);
             merged.mine.extend(part.mine);
+            merged.ready.extend(part.ready);
             merged.watching.extend(part.watching);
             merged.open.extend(part.open);
             merged.drafts.extend(part.drafts);
@@ -109,6 +112,7 @@ impl Sections {
         for section in [
             &mut merged.to_review,
             &mut merged.mine,
+            &mut merged.ready,
             &mut merged.watching,
             &mut merged.open,
             &mut merged.drafts,
@@ -124,7 +128,40 @@ impl Sections {
 impl Sections {
     /// Every row, section after section.
     pub fn all(&self) -> impl Iterator<Item = &QueueMr> {
-        [&self.to_review, &self.mine, &self.watching, &self.open, &self.drafts, &self.done, &self.other].into_iter().flatten()
+        [&self.to_review, &self.mine, &self.ready, &self.watching, &self.open, &self.drafts, &self.done, &self.other].into_iter().flatten()
+    }
+
+    /// The MRs the ready command named move to Ready, when they still need me: someone else's,
+    /// open, not already reviewed by me, and not moved out by a rule. `extra` are named MRs the
+    /// queue did not list (outside my lists, fetched one by one), judged by the same rules.
+    pub fn with_ready(self, named: &[MrKey], extra: Vec<QueueMr>, me: &str, rules: &Rules, now: DateTime<Utc>) -> Sections {
+        let wanted = |mr: &QueueMr| named.contains(&mr.key());
+        let mut ready = Vec::new();
+        let mut take = |rows: Vec<QueueMr>| -> Vec<QueueMr> {
+            let (picked, kept): (Vec<_>, Vec<_>) = rows.into_iter().partition(|mr| wanted(mr));
+            ready.extend(picked);
+            kept
+        };
+        let to_review = take(self.to_review);
+        let watching = take(self.watching);
+        let open = take(self.open);
+        let listed: std::collections::HashSet<MrKey> = self
+            .mine
+            .iter()
+            .chain(&ready)
+            .chain(&to_review)
+            .chain(&watching)
+            .chain(&open)
+            .chain(&self.drafts)
+            .chain(&self.done)
+            .chain(&self.other)
+            .map(QueueMr::key)
+            .collect();
+        let fresh = extra.into_iter().filter(|mr| wanted(mr) && !listed.contains(&mr.key()) && mr.author != me && !mr.reviewed_by(me));
+        let judged = fresh.map(|mr| QueueMr { reason: rules::judge(&mr, me, now, rules), ..mr });
+        ready.extend(judged.filter(|mr| mr.reason.as_ref().is_none_or(|r| !r.moves_out())));
+        ready.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
+        Sections { to_review, ready, watching, open, ..self }
     }
 
     /// Rows from more than one host share the queue: only then does a row need its host's tag.
@@ -136,6 +173,43 @@ impl Sections {
 }
 
 impl QueueMr {
+    /// A queue row for an MR fetched on its own, as the ready command names MRs outside my lists.
+    /// What only a list answers (comments, sizes, threads) is left empty; `None` once it is closed.
+    pub fn from_mr(mr: &super::Mr, host: Option<String>) -> Option<Self> {
+        if mr.state != "opened" {
+            return None;
+        }
+        Some(Self {
+            host,
+            number: mr.number,
+            project: mr.project.clone(),
+            title: mr.title.clone(),
+            description: mr.description.clone(),
+            draft: mr.draft,
+            web_url: mr.web_url.clone(),
+            updated_at: mr.updated_at,
+            created_at: mr.updated_at,
+            source_branch: mr.source_branch.clone(),
+            target_branch: mr.target_branch.clone(),
+            conflicts: mr.conflicts,
+            author: mr.author.username.clone(),
+            author_name: mr.author.name.clone(),
+            approved: mr.approvals.approved,
+            approved_by: mr.approvals.approved_by.iter().map(|u| u.username.clone()).collect(),
+            approvals_left: Some(mr.approvals.approvals_left),
+            reviewers: vec![],
+            pipeline: mr.pipeline.as_ref().map(|p| p.status.to_uppercase()),
+            additions: 0,
+            deletions: 0,
+            files: 0,
+            unresolved: 0,
+            labels: mr.labels.clone(),
+            notes: 0,
+            commenters: vec![],
+            reason: None,
+        })
+    }
+
     pub fn my_state(&self, me: &str) -> Option<ReviewState> {
         self.reviewers.iter().find(|r| r.username == me).map(|r| r.state)
     }
@@ -208,7 +282,7 @@ impl Queue {
         let (watching_drafts, watching): (Vec<_>, Vec<_>) = watching.into_iter().partition(|mr| mr.draft);
         let (open_drafts, open): (Vec<_>, Vec<_>) = open.into_iter().partition(|mr| mr.draft);
         let drafts = watching_drafts.into_iter().chain(open_drafts).collect();
-        Sections { to_review, mine, watching, open, drafts, done, other: vec![] }
+        Sections { to_review, mine, ready: vec![], watching, open, drafts, done, other: vec![] }
     }
 }
 
@@ -295,6 +369,38 @@ mod tests {
         let sections = queue.sections_with(&[], &off, day(23));
         assert_eq!(numbers(&sections.open), [51]);
         assert!(sections.other.is_empty() && sections.all().all(|mr| mr.reason.is_none()));
+    }
+
+    #[test]
+    fn named_mrs_move_to_ready_when_they_still_need_me() {
+        let sections = scoped().sections_with(&[], &Rules::default(), day(23));
+        let named = [MrKey::new("acme/widgets", 51), MrKey::new("acme/widgets", 41), MrKey::new("acme/widgets", 40)];
+        let ready = sections.clone().with_ready(&named, vec![], "nina", &Rules::default(), day(23));
+        assert_eq!(numbers(&ready.ready), [51], "open and someone else's: ready");
+        assert!(!numbers(&ready.open).contains(&51), "never listed twice");
+        assert_eq!(numbers(&ready.mine), [41], "mine stays mine");
+        assert_eq!(numbers(&ready.done), [40], "already reviewed by me stays done");
+    }
+
+    #[test]
+    fn a_named_mr_the_rules_moved_out_stays_out_of_ready() {
+        let queue =
+            Queue { open: scoped().open.into_iter().map(|mr| QueueMr { pipeline: Some("FAILED".into()), ..mr }).collect(), ..scoped() };
+        let sections = queue.sections_with(&[], &Rules::default(), day(23));
+        let ready = sections.with_ready(&[MrKey::new("acme/widgets", 51)], vec![], "nina", &Rules::default(), day(23));
+        assert!(ready.ready.is_empty());
+        assert_eq!(reasons(&ready.other), ["pipeline failed"]);
+    }
+
+    #[test]
+    fn named_mrs_outside_my_lists_join_ready_once_judged() {
+        let sections = scoped().sections_with(&[], &Rules::default(), day(23));
+        let outside = QueueMr { project: "acme/billing".into(), number: 9, author: "sam".into(), ..scoped().open[2].clone() };
+        let failing = QueueMr { number: 10, pipeline: Some("FAILED".into()), ..outside.clone() };
+        let unnamed = QueueMr { number: 11, ..outside.clone() };
+        let named = [MrKey::new("acme/billing", 9), MrKey::new("acme/billing", 10)];
+        let ready = sections.with_ready(&named, vec![outside, failing, unnamed], "nina", &Rules::default(), day(23));
+        assert_eq!(numbers(&ready.ready), [9], "a failing one waits, an unnamed one never shows");
     }
 
     #[test]
