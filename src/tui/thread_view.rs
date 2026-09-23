@@ -1,78 +1,201 @@
-//! The right pane: one thread, its notes in order, the body as light markdown.
-use super::app::{App, Focus};
+//! The right pane: every conversation of one place, notes in order, bodies as light markdown.
+use super::app::{App, Entry, EntryKind, Focus, Open};
 use super::theme::Theme;
 use super::ui::{pane, short_age};
 use crate::forge::Note;
-use crate::review::{Side, Thread};
+use crate::review::{Conversation, Place, Review, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::widgets::Paragraph;
+use unicode_width::UnicodeWidthStr;
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let today = app.today;
     let me = app.me.clone();
     let focused = app.focus == Focus::Side;
-    let Some(open) = app.open.as_ref() else { return };
-    let Some(thread) = open.thread.as_ref().and_then(|id| open.review.thread(id)) else { return };
-    let block = pane(theme, &pane_title(thread), focused);
+    let Some(open) = app.open.as_mut() else { return };
+    let Some((conversations, entries, current)) = open.pane_view() else { return };
+    let Some(pane) = open.pane.clone() else { return };
+    let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
+    let block = pane_block(theme, &title(&open.review, &pane.place, conversations.len(), here), focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
-    let mut lines = thread_lines(thread, theme, today, &me);
-    for draft in open.review.drafts.iter().filter(|d| d.reply_to.as_deref() == Some(thread.id.as_str())) {
-        lines.extend(draft_lines(draft, theme));
-    }
-    let scroll = open.thread_scroll.min(lines.len().saturating_sub(1)) as u16;
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((scroll, 0)), inner);
-}
-
-fn pane_title(thread: &Thread) -> String {
-    match &thread.anchor {
-        Some(anchor) => {
-            let side = if anchor.side == Side::Old { "-" } else { "" };
-            format!("{}:{side}{}", anchor.path.rsplit('/').next().unwrap_or(&anchor.path), anchor.line)
+    let width = inner.width.saturating_sub(1) as usize;
+    let mut lines: Vec<(Option<Entry>, Line<'static>)> = vec![];
+    for (index, conversation) in conversations.iter().enumerate() {
+        if index > 0 {
+            lines.push((None, Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border)))));
         }
-        None => "Thread".to_owned(),
+        lines.extend(conversation_lines(open, conversation, index, &entries, theme, today, &me));
+    }
+    let more = open.review.others_in_file(&pane.place);
+    if more > 0 {
+        lines.push((None, Line::default()));
+        let footer = format!("{more} more thread{} in this file · ]n", if more == 1 { "" } else { "s" });
+        lines.push((None, Line::from(Span::styled(footer, Style::default().fg(theme.faded)))));
+    }
+    let rows: Vec<(bool, Line<'static>)> = lines
+        .into_iter()
+        .flat_map(|(entry, line)| wrap(line, width).into_iter().map(move |l| (entry.is_some() && entry == current, l)))
+        .collect();
+    let height = inner.height as usize;
+    let first = rows.iter().position(|(on, _)| *on).unwrap_or(0);
+    let last = rows.iter().rposition(|(on, _)| *on).unwrap_or(0);
+    let scroll = settle(pane.scroll, first, last, height);
+    if let Some(pane) = open.pane.as_mut() {
+        pane.scroll = scroll;
+    }
+    let drawn: Vec<Line> = rows
+        .into_iter()
+        .skip(scroll)
+        .take(height)
+        .map(|(on, line)| {
+            let bar = Span::styled(if on { "▎" } else { " " }, Style::default().fg(theme.accent));
+            Line::from(std::iter::once(bar).chain(line.spans).collect::<Vec<_>>())
+        })
+        .collect();
+    f.render_widget(Paragraph::new(drawn), inner);
+}
+
+/// The pane's frame; its title fades when the reader looks at another line.
+fn pane_block(theme: Theme, title: &str, focused: bool) -> ratatui::widgets::Block<'static> {
+    pane(theme, title, focused)
+}
+
+/// Keeps the cursor's lines in view: the top of the entry first, then as much of it as fits.
+fn settle(scroll: usize, first: usize, last: usize, height: usize) -> usize {
+    if height == 0 {
+        return 0;
+    }
+    if first < scroll {
+        return first;
+    }
+    if last >= scroll + height {
+        return (last + 1).saturating_sub(height).min(first);
+    }
+    scroll
+}
+
+/// `charge.rs:57 · 2 threads`, `charge.rs:-13` for the old side, `on the MR`, `charge.rs · outdated`;
+/// `↑ line 57` when the cursor moved to a line without conversations.
+fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
+    let name = |file: usize| {
+        let path = &review.files[file].new_path;
+        path.rsplit('/').next().unwrap_or(path).to_owned()
+    };
+    let threads = format!("{count} thread{}", if count == 1 { "" } else { "s" });
+    let (head, line) = match place {
+        Place::Line { file, new: Some(n), .. } => (format!("{}:{n}", name(*file)), Some(n.to_string())),
+        Place::Line { file, old: Some(o), .. } => (format!("{}:-{o}", name(*file)), Some(format!("-{o}"))),
+        Place::Line { file, .. } => (name(*file), None),
+        Place::Mr => ("on the MR".to_owned(), None),
+        Place::Outdated { file } => (format!("{} · outdated", name(*file)), None),
+    };
+    match (here, line) {
+        (false, Some(line)) => format!("{head} · {threads} · ↑ line {line}"),
+        _ => format!("{head} · {threads}"),
     }
 }
 
-fn thread_lines<'a>(thread: &Thread, theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Line<'a>> {
+/// A thread, or my new draft, as the pane shows it: status, notes, my replies; each line tagged
+/// with the cursor stop it belongs to.
+fn conversation_lines(
+    open: &Open,
+    conversation: &Conversation,
+    index: usize,
+    entries: &[Entry],
+    theme: Theme,
+    today: DateTime<Utc>,
+    me: &str,
+) -> Vec<(Option<Entry>, Line<'static>)> {
+    let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
     let mut lines = vec![];
-    if let Some(anchor) = &thread.anchor {
-        let state = if thread.outdated {
-            "outdated"
-        } else if thread.resolved {
-            "resolved ✓"
-        } else if thread.resolvable {
-            "unresolved"
-        } else {
-            ""
-        };
-        let colour = if thread.resolved || thread.outdated { theme.faded } else { theme.warn };
-        lines.push(Line::from(vec![
-            Span::styled(anchor.path.clone(), Style::default().fg(theme.muted)),
-            Span::styled(format!("  {state}"), Style::default().fg(colour)),
-        ]));
-        lines.push(Line::default());
+    if let Some(thread) = conversation.thread.as_deref().and_then(|id| open.review.thread(id)) {
+        let shown = entries.iter().filter(|e| e.conversation == index && matches!(e.kind, EntryKind::Note(_))).count();
+        lines.push((stop(EntryKind::Note(0)), status(thread, shown, theme)));
+        for (n, note) in thread.notes.iter().take(shown).enumerate() {
+            let entry = stop(EntryKind::Note(n));
+            lines.extend(note_lines(note, theme, today, me).into_iter().map(|line| (entry, line)));
+        }
     }
-    for note in &thread.notes {
-        lines.extend(note_lines(note, theme, today, me));
-        lines.push(Line::default());
+    for &draft in &conversation.drafts {
+        let entry = stop(EntryKind::Draft(draft));
+        let draft = &open.review.drafts[draft];
+        if conversation.thread.is_none() {
+            lines.push((entry, Line::from(Span::styled("◇ draft", Style::default().fg(theme.accent)))));
+        }
+        lines.extend(draft_lines(draft, theme).into_iter().map(|line| (entry, line)));
     }
     lines
 }
 
+fn status(thread: &Thread, shown: usize, theme: Theme) -> Line<'static> {
+    let (text, colour) = if thread.outdated {
+        ("◆ outdated".to_owned(), theme.faded)
+    } else if thread.resolved && shown < thread.notes.len() {
+        let hidden = thread.notes.len() - shown;
+        (format!("✓ resolved · {hidden} more note{} · enter unfolds", if hidden == 1 { "" } else { "s" }), theme.faded)
+    } else if thread.resolved {
+        ("✓ resolved".to_owned(), theme.faded)
+    } else if thread.resolvable {
+        ("◆ unresolved".to_owned(), theme.warn)
+    } else {
+        ("· comment".to_owned(), theme.muted)
+    };
+    Line::from(Span::styled(text, Style::default().fg(colour)))
+}
+
+/// A line cut at word boundaries to `width`, styles kept; a word longer than the width is cut.
+fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
+    if width == 0 || line.width() <= width {
+        return vec![line];
+    }
+    let mut rows: Vec<Vec<Span<'static>>> = vec![vec![]];
+    let mut used = 0;
+    for span in line.spans {
+        for word in span.content.split_inclusive(' ') {
+            let w = word.width();
+            if used + w > width && used > 0 {
+                rows.push(vec![]);
+                used = 0;
+            }
+            let mut rest = word;
+            while rest.width() > width {
+                let cut = rest.char_indices().scan(0, |acc, (i, c)| {
+                    *acc += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+                    Some((i, *acc))
+                });
+                let at = cut
+                    .take_while(|&(_, acc)| acc <= width)
+                    .last()
+                    .map_or(rest.len(), |(i, _)| i + rest[i..].chars().next().map_or(0, char::len_utf8));
+                if let Some(row) = rows.last_mut() {
+                    row.push(Span::styled(rest[..at].to_owned(), span.style));
+                }
+                rows.push(vec![]);
+                rest = &rest[at..];
+            }
+            if let Some(row) = rows.last_mut() {
+                row.push(Span::styled(rest.to_owned(), span.style));
+            }
+            used += rest.width();
+        }
+    }
+    rows.into_iter().map(Line::from).collect()
+}
+
+/// My draft: `you · draft ◇`, `unsaved` in danger until the forge holds it.
 fn draft_lines<'a>(draft: &crate::review::Draft, theme: Theme) -> Vec<Line<'a>> {
-    let state = if draft.id.is_none() { "unsaved" } else { "draft" };
+    let (state, colour) = if draft.id.is_none() { ("unsaved", theme.danger) } else { ("draft", theme.muted) };
     let mut lines = vec![Line::from(vec![
-        Span::styled("◇ you", Style::default().fg(theme.warn).add_modifier(Modifier::BOLD)),
-        Span::styled(format!(" · {state}"), Style::default().fg(theme.muted)),
+        Span::styled("you", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" · {state} ◇"), Style::default().fg(colour)),
     ])];
     lines.extend(body_lines(&draft.body, theme));
-    lines.push(Line::default());
     lines
 }
 
@@ -142,9 +265,25 @@ mod tests {
 
     #[test]
     fn the_title_names_the_line_and_marks_the_old_side() {
-        let thread =
-            Thread::from_discussion(crate::forge::gitlab::fixture::discussion(include_str!("../review/fixtures/old_side_note.json")))
-                .unwrap();
-        assert_eq!(pane_title(&thread), "charge.rs:-13");
+        let review = crate::review::tests::review();
+        let old = Place::Line { file: 0, new: None, old: Some(13) };
+        assert_eq!(title(&review, &old, 1, true), "charge.rs:-13 · 1 thread");
+        assert_eq!(title(&review, &old, 2, false), "charge.rs:-13 · 2 threads · ↑ line -13");
+        assert_eq!(title(&review, &Place::Mr, 1, true), "on the MR · 1 thread");
+    }
+
+    #[test]
+    fn long_lines_wrap_at_words_and_long_words_are_cut() {
+        let rows = wrap(Line::from("one two three"), 8);
+        assert_eq!(text(&rows), ["one two ", "three"]);
+        assert_eq!(text(&wrap(Line::from("abcdefghij"), 4)), ["abcd", "efgh", "ij"]);
+    }
+
+    #[test]
+    fn the_cursor_entry_stays_in_view() {
+        assert_eq!(settle(0, 2, 3, 10), 0);
+        assert_eq!(settle(0, 12, 14, 10), 5);
+        assert_eq!(settle(8, 3, 4, 10), 3);
+        assert_eq!(settle(0, 2, 30, 10), 2, "a long entry shows from its top");
     }
 }

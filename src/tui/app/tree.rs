@@ -31,12 +31,12 @@ impl App {
             self.focus = Focus::Review;
             return;
         }
-        let here = open.row().and_then(|row| open.file_of(row));
+        let here = open.row().and_then(Row::file);
         let path = here.map(|i| open.review.files[i].new_path.clone()).unwrap_or_default();
         let folds = TreeFolds::default().revealing(&path);
         let rows = tree::rows(&open.review.files, &folds);
         let selected = rows.iter().position(|r| matches!(r, TreeRow::File { index, .. } if Some(*index) == here)).unwrap_or(0);
-        self.open = Some(Open { thread: None, ..open.with_tree(Some(Tree { folds, selected })) });
+        self.open = Some(Open { pane: None, ..open.with_tree(Some(Tree { folds, selected })) });
         self.focus = Focus::Side;
     }
 
@@ -91,7 +91,7 @@ impl App {
                 Some(TreeRow::File { index, .. }) => Some(*index),
                 _ => None,
             },
-            _ => open.row().and_then(|row| open.file_of(row)),
+            _ => open.row().and_then(Row::file),
         };
         let Some(index) = index else { return vec![] };
         let path = open.review.files[index].new_path.clone();

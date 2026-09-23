@@ -5,7 +5,7 @@ use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::Kind;
-use crate::review::{File, FileKind, Review, Row, Thread};
+use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row};
 use crate::syntax::Token;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -17,6 +17,8 @@ use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
 const GUTTER_W: usize = 4;
+/// The glyph and count column before the line numbers.
+const ANCHOR_W: usize = 2;
 const TAB: &str = "→   ";
 const INDENT: &str = "   ";
 const MIN_BRANCH_W: usize = 12;
@@ -43,10 +45,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         return draw_empty(f, theme, inner, lines);
     }
     let today = app.today;
-    let me = app.me.clone();
     let folded = app.header_folded;
     let wrap = app.wrap;
     let Some(open) = app.open.as_mut() else { return };
+    let markers = open.review.markers();
     let header = if folded { vec![folded_header(open, theme)] } else { header_lines(open, theme, today, inner.width as usize) };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
     let height = body.height as usize;
@@ -55,9 +57,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         let row = &open.rows[i];
         let (selected, in_range) = (i == open.selected, open.is_selected(i));
         if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-            wrap_row(row_line(&open.review, row, selected, in_range, UNCUT, theme, today, &me), width, WRAP_INDENT)
+            wrap_row(row_line(&open.review, &markers, row, selected, in_range, UNCUT, theme), width, WRAP_INDENT)
         } else {
-            vec![row_line(&open.review, row, selected, in_range, width, theme, today, &me)]
+            vec![row_line(&open.review, &markers, row, selected, in_range, width, theme)]
         }
     };
     open.scroll = settle_scroll(open.scroll, open.selected, height);
@@ -72,7 +74,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 /// The width a line is drawn at before `w` cuts it into screen rows; wide enough for any real line.
 const UNCUT: usize = 4_096;
 /// Continuation rows start under the text: past the cursor bar, both gutters and the sign.
-const WRAP_INDENT: usize = 1 + GUTTER_W * 2 + 3;
+const WRAP_INDENT: usize = 1 + ANCHOR_W + GUTTER_W * 2 + 3;
 
 /// One long line as several screen rows of `width`: continuation rows indented under the text,
 /// every row padded with the line's fill so a changed line stays one coloured block.
@@ -219,22 +221,17 @@ fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn row_line<'a>(
-    review: &Review,
-    row: &Row,
-    selected: bool,
-    in_range: bool,
-    width: usize,
-    theme: Theme,
-    today: DateTime<Utc>,
-    me: &str,
-) -> Line<'a> {
+fn row_line<'a>(review: &Review, markers: &Markers, row: &Row, selected: bool, in_range: bool, width: usize, theme: Theme) -> Line<'a> {
     let bar = Span::styled(if selected || in_range { "▎" } else { " " }, Style::default().fg(theme.accent));
     let mut spans = vec![bar];
     let body = width.saturating_sub(1);
+    if matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
+        spans.extend(anchor_spans(review.marker_of(markers, row), theme));
+    }
+    let body = if spans.len() > 1 { body.saturating_sub(ANCHOR_W) } else { body };
     match row {
-        Row::Header | Row::Gap => {}
+        Row::Gap => {}
+        Row::Header => spans.extend(on_the_mr_spans(review, theme)),
         Row::File { index, open } => spans.extend(file_spans(review, &review.files[*index], *open, body, theme)),
         Row::Hunk { file, index, open } => spans.extend(hunk_spans(&review.files[*file], *index, *open, body, theme)),
         Row::Line { file, hunk, index } => {
@@ -257,18 +254,39 @@ fn row_line<'a>(
             let line = DiffLine { kind: LineKind::Context, old: Some(*old), new: Some(*new), text, words: vec![], no_newline: false };
             spans.extend(line_spans(&line, &[], selected || in_range, body, theme));
         }
-        Row::Thread { id } => {
-            if let Some(thread) = review.thread(id) {
-                spans.extend(thread_spans(thread, body, theme, today, me));
-            }
-        }
-        Row::Draft { index } => spans.extend(draft_spans(&review.drafts[*index], body, theme)),
-        Row::Outdated { file } => {
-            let count = review.outdated(&review.files[*file].new_path).len();
-            spans.push(Span::styled(format!("{INDENT}outdated · {count} thread{}", plural(count)), Style::default().fg(theme.faded)));
-        }
     }
     Line::from(spans)
+}
+
+/// The anchor column: the most pressing mark of the line, then how many conversations it holds when more than one.
+fn anchor_spans<'a>(marker: Option<Marker>, theme: Theme) -> Vec<Span<'a>> {
+    let Some(marker) = marker else { return vec![Span::raw(" ".repeat(ANCHOR_W))] };
+    let (glyph, colour) = match marker.mark {
+        Mark::Unresolved => ("◆", theme.warn),
+        Mark::Draft if marker.unsaved => ("◇", theme.danger),
+        Mark::Draft => ("◇", theme.accent),
+        Mark::Resolved => ("✓", theme.faded),
+    };
+    let count = match marker.count {
+        0 | 1 => " ".to_owned(),
+        n @ 2..=9 => n.to_string(),
+        _ => "+".to_owned(),
+    };
+    vec![Span::styled(glyph, Style::default().fg(colour)), Span::styled(count, Style::default().fg(colour))]
+}
+
+/// The row under the header: the conversations on the MR itself, `enter` opens them.
+fn on_the_mr_spans<'a>(review: &Review, theme: Theme) -> Vec<Span<'a>> {
+    let listed = review.conversations(&Place::Mr);
+    if listed.is_empty() {
+        return vec![];
+    }
+    let unresolved = listed.iter().filter_map(|c| c.thread.as_deref().and_then(|id| review.thread(id))).any(|t| !t.resolved);
+    let (glyph, colour) = if unresolved { ("◆", theme.warn) } else { ("◇", theme.accent) };
+    vec![
+        Span::styled(format!("{glyph} {} on the MR", listed.len()), Style::default().fg(colour)),
+        Span::styled("  enter opens", Style::default().fg(theme.faded)),
+    ]
 }
 
 fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
@@ -278,9 +296,18 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme:
         None => (String::new(), file.new_path.clone()),
     };
     let counts = format!("+{} −{}", file.additions, file.deletions);
-    let threads =
-        review.threads.iter().filter(|t| t.anchor.as_ref().is_some_and(|a| a.path == file.new_path || a.path == file.old_path)).count();
-    let anchors = if threads > 0 { format!("  ◆{threads}") } else { String::new() };
+    let in_file = |a: &crate::review::Anchor| a.path == file.new_path || a.path == file.old_path;
+    let threads = review.threads.iter().filter(|t| !t.outdated && t.anchor.as_ref().is_some_and(in_file)).count();
+    let drafts = review.drafts.iter().filter(|d| d.reply_to.is_none() && d.anchor.as_ref().is_some_and(in_file)).count();
+    let outdated = review.outdated(&file.new_path).len();
+    let anchors = [
+        (threads > 0).then(|| format!("  ◆{threads}")),
+        (drafts > 0).then(|| format!(" ◇{drafts}")),
+        (outdated > 0).then(|| format!(" · {outdated} outdated")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<String>();
     let state = file_state(file, review, open);
     let tail_w = counts.width() + anchors.width() + state.as_ref().map_or(0, |s| s.width() + 2);
     let name_room = width.saturating_sub(mark.width() + tail_w + 2);
@@ -506,44 +533,6 @@ fn fit<'a>(parts: Vec<(&str, Style)>, room: usize) -> Vec<Span<'a>> {
         spans.push(Span::styled(cut, style));
     }
     spans
-}
-
-fn thread_spans<'a>(thread: &Thread, width: usize, theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Span<'a>> {
-    let first = thread.first();
-    let author = if first.author.username == me { "you".to_owned() } else { first.author.username.clone() };
-    let replies = thread.notes.len() - 1;
-    let age = short_age((today - first.created_at).to_std().unwrap_or_default());
-    let (glyph, colour) = if thread.resolved { ("✓", theme.faded) } else { ("◆", theme.warn) };
-    let tail = match replies {
-        0 => format!(" · {age}"),
-        n => format!(" · {n} repl{} · {age}", if n == 1 { "y" } else { "ies" }),
-    };
-    let head = format!("{INDENT}{glyph} {author} · ");
-    let room = width.saturating_sub(head.width() + tail.width());
-    let body = truncate(first.body.lines().next().unwrap_or(""), room);
-    let text = if thread.resolved { Style::default().fg(theme.faded) } else { Style::default() };
-    vec![
-        Span::styled(format!("{INDENT}{glyph} "), Style::default().fg(colour)),
-        Span::styled(format!("{author} · "), Style::default().fg(if thread.resolved { theme.faded } else { theme.user(&author) })),
-        Span::styled(body, text),
-        Span::styled(tail, Style::default().fg(theme.faded)),
-    ]
-}
-
-fn draft_spans<'a>(draft: &crate::review::Draft, width: usize, theme: Theme) -> Vec<Span<'a>> {
-    let head = format!("{INDENT}◇ you · ");
-    let tail = if draft.id.is_none() { " · unsaved" } else { " · draft" };
-    let room = width.saturating_sub(head.width() + tail.width());
-    let first = truncate(draft.body.lines().next().unwrap_or_default(), room);
-    vec![
-        Span::styled(head, Style::default().fg(theme.warn)),
-        Span::raw(first),
-        Span::styled(tail, Style::default().fg(if draft.id.is_none() { theme.danger } else { theme.faded })),
-    ]
-}
-
-fn plural(n: usize) -> &'static str {
-    if n == 1 { "" } else { "s" }
 }
 
 #[cfg(test)]

@@ -7,18 +7,18 @@ expression: "render(&mut app, 100, 20)"
 │ ▎ !42 feat: charge│ › ch▌                                                    │                   │
 │   MINE            │ ▎· src/pay/charge.rs                                     │                   │
 │   !41 fix: flaky c│  ◆ !42 feat: charge cards at checkout                    │                   │
-│   WATCHING        │  ◆ !41 fix: flaky cache test                             │         +4 −2  ◆2 │
+│   WATCHING        │  ◆ !41 fix: flaky cache test                             │2  ◆1 · 1 outdated │
 │   !35 infra: new r│                                                          │                   │
-│   DONE ▸          │                                                          │ amount: Money) -… │
+│   DONE ▸          │                                                          │d, amount: Money)… │
+│                   │                                                          │;                  │
+│                   │                                                          │key(idempotency_k… │
+│                   │                                                          │st();              │
+│                   │                                                          │ge(amount).await?; │
 │                   │                                                          │                   │
 │                   │                                                          │                   │
-│                   │                                                          │y(idempotency_key… │
-│                   │                                                          │();                │
-│                   │                                                          │(amount).await?;   │
-│                   │                                                          │                   │
-│                   │                                                          │                   │
-│                   ╰──────────────────────────────────────────────────────────╯-> Key {           │
-│                                ││    41      -    Key::from(card.number())                       │
-│                                ││         42 +    Key::from((card.number(), card.expiry()))      │
+│                   │                                                          │) -> Key {         │
+│                   ╰──────────────────────────────────────────────────────────╯                   │
+│                                ││           42 +    Key::from((card.number(), card.expiry()))    │
+│                                ││           43 +    // hunk two, line 43 is new                  │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

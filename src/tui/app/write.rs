@@ -22,8 +22,8 @@ impl App {
                 self.start_select();
                 vec![]
             }
-            KeyCode::Char('d') => self.delete_draft_here(),
             KeyCode::Char('E') => self.compose_here(false),
+            KeyCode::Char('R') => self.toggle_resolved(),
             KeyCode::Char('s') => self.compose_here(true),
             KeyCode::Char('A') => self.toggle_approval(),
             KeyCode::Char('P') => {
@@ -117,14 +117,12 @@ impl App {
             .collect()
     }
 
+    /// My draft under the pane's cursor.
     fn draft_here(&self) -> Option<usize> {
-        match self.open.as_ref()?.row() {
-            Some(Row::Draft { index }) => Some(*index),
-            _ => None,
-        }
+        self.open.as_ref()?.focused_draft()
     }
 
-    fn delete_draft_here(&mut self) -> Vec<Action> {
+    pub(super) fn delete_draft_here(&mut self) -> Vec<Action> {
         let Some(index) = self.draft_here() else { return vec![] };
         self.delete_draft(index)
     }
@@ -154,12 +152,20 @@ impl App {
         true
     }
 
+    /// `E` in the pane: my draft under the cursor in the editor, else a reply to the thread.
+    pub(super) fn compose_draft_here(&mut self) -> Vec<Action> {
+        let Some(open) = self.open.as_ref() else { return vec![] };
+        if let Some(index) = open.focused_draft() {
+            return vec![Action::Compose { input: Input::EditDraft { index }, draft: open.review.drafts[index].body.clone() }];
+        }
+        match open.focused_thread() {
+            Some(thread) => vec![Action::Compose { input: Input::Reply { thread }, draft: String::new() }],
+            None => vec![],
+        }
+    }
+
     /// `E` writes the note in the editor; `s` starts it as a suggestion block for the selected lines.
     fn compose_here(&mut self, suggestion: bool) -> Vec<Action> {
-        if let (Some(index), false, Some(open)) = (self.draft_here(), suggestion, self.open.as_ref()) {
-            let body = open.review.drafts[index].body.clone();
-            return vec![Action::Compose { input: Input::EditDraft { index }, draft: body }];
-        }
         let Some(position) = self.position_here() else {
             self.toast("move onto a line first");
             return vec![];
@@ -264,14 +270,31 @@ impl App {
     }
 
     pub(super) fn reply_here(&mut self) {
-        let Some(thread) = self.open.as_ref().and_then(|o| o.thread.clone()) else { return };
+        let Some(thread) = self.open.as_ref().and_then(Open::focused_thread) else {
+            self.toast("r replies to a thread; c starts a new one");
+            return;
+        };
         self.open_input(Input::Reply { thread }, "");
+    }
+
+    /// The thread `R` acts on: the pane's, else the first open one on the cursor's line.
+    fn thread_to_resolve(&self) -> Option<String> {
+        let open = self.open.as_ref()?;
+        if self.focus == super::Focus::Side {
+            return open.focused_thread();
+        }
+        let place = open.review.place_of(open.row()?)?;
+        let listed = open.review.conversations(&place);
+        listed.into_iter().find_map(|c| c.thread)
     }
 
     /// Flipped on screen at once; GitLab's refusal flips it back.
     pub(super) fn toggle_resolved(&mut self) -> Vec<Action> {
         let Some(open) = self.open.clone() else { return vec![] };
-        let Some(thread) = open.thread.clone().and_then(|id| open.review.thread(&id).cloned()) else { return vec![] };
+        let Some(thread) = self.thread_to_resolve().and_then(|id| open.review.thread(&id).cloned()) else {
+            self.toast("no thread here");
+            return vec![];
+        };
         if !thread.resolvable {
             self.toast("this thread cannot be resolved");
             return vec![];
@@ -294,7 +317,7 @@ impl App {
     pub(super) fn apply_published(&mut self, key: &MrKey, approved: bool, count: usize) {
         let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
         let review = open.review.with_drafts(vec![]);
-        self.open = Some(Open { thread: open.thread.clone(), ..open.with_review(review) });
+        self.open = Some(open.with_review(review));
         self.publish = None;
         self.poll.discussions_due = Some(self.now);
         let tail = if approved { " and approved" } else { "" };

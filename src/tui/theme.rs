@@ -487,6 +487,8 @@ mod tests {
             ("app/feedback.rs", include_str!("app/feedback.rs")),
             ("app/input.rs", include_str!("app/input.rs")),
             ("app/write.rs", include_str!("app/write.rs")),
+            ("app/pane.rs", include_str!("app/pane.rs")),
+            ("app/view.rs", include_str!("app/view.rs")),
         ];
         let raw = ["Color::", ".cyan()", ".yellow()", ".green()", ".magenta()", ".blue()", ".red()", ".black()", ".on_yellow()", ".dim()"];
         let leaks: Vec<String> = sources

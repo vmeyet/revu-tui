@@ -2,13 +2,13 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 40)"
 ---
-╭ Queue · all ──╭ keys · 1–37 of 47 · j k scroll ──────────────────────────────────╮───────────────╮
+╭ Queue · all ──╭ keys · 1–37 of 48 · j k scroll ──────────────────────────────────╮───────────────╮
 │   TO REVIEW   │        j k  move                                                 │               │
 │ ▎ !42 feat: ch│        g G  first, last                                          │               │
 │   MINE        │      ^d ^u  half page                                            │               │
-│   !41 fix: fla│        h l  pane to the left; open the MR, pane to the right     │               │
-│   WATCHING    │      enter  open the MR, the thread, or toggle the fold          │               │
-│   !35 infra: n│        esc  back: close the thread, then the queue               │               │
+│   !41 fix: fla│        h l  pane to the left; open the MR, or a marked line's th │               │
+│   WATCHING    │      enter  open the MR, a marked line's threads, or toggle the  │               │
+│   !35 infra: n│      esc x  close the right pane; esc again goes back to the que │               │
 │   DONE ▸      │          /  filter the queue                                     │               │
 │               │          *  in the queue: this repo only, or every project       │               │
 │               │          i  the MR description                                   │               │
@@ -18,7 +18,7 @@ expression: "render(&mut app, 100, 40)"
 │               │  click !42  open the MR, in terminals that follow links          │               │
 │               │  tab S-tab  next, previous file                                  │               │
 │               │      ]c [c  next, previous hunk                                  │               │
-│               │      ]n [n  next, previous thread                                │               │
+│               │      ]n [n  next, previous line with a conversation; the pane fo │               │
 │               │      ]f [f  next, previous file with an open thread              │               │
 │               │         za  toggle the fold under the cursor                     │               │
 │               │          D  changed words inline, or every line split            │               │
@@ -38,7 +38,7 @@ expression: "render(&mut app, 100, 40)"
 │               │          V  select lines: c comments on them, y copies them      │               │
 │               │          E  write the comment in $EDITOR                         │               │
 │               │          s  suggestion in the editor, prefilled with the lines   │               │
-│               │    enter d  on a draft: edit, delete                             │               │
-│               │          P  publish: enter sends, e edits, m moves a lost draft  │               │
+│               │        e d  in the pane: edit, delete my draft                   │               │
+│               │        J K  in the pane: next, previous thread on the line       │               │
 ╰───────────────╰──────────────────────────────────────────────────────────────────╯───────────────╯
  gitlab.com · nina                                                                           ? help
