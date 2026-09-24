@@ -249,19 +249,22 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     vec![first, Line::from(second)]
 }
 
-/// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
-/// Zen's one line on top: which MR, whose, its size and its pipeline, all quiet.
+/// Zen's one line on top: which MR, whose, its size, its pipeline and its unresolved threads, all quiet.
 fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<'a> {
     let mr = &open.review.mr;
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
-    let pipeline = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
-    let (glyph, _) = pipeline_glyph(&pipeline, theme);
-    let tail = format!(" · {} · +{adds} −{dels} {glyph}", mr.author.username);
+    let status = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
+    let (glyph, _) = pipeline_glyph(&status, theme);
+    let pipeline = if glyph.is_empty() { String::new() } else { format!(" {glyph}") };
+    let unresolved = open.review.unresolved();
+    let threads = if unresolved > 0 { format!(" · ◆{unresolved}") } else { String::new() };
+    let tail = format!(" · {} · +{adds} −{dels}{pipeline}{threads}", mr.author.username);
     let head = format!("{sigil}{} ", mr.number);
     let title = truncate(&mr.title, width.saturating_sub(head.width() + tail.width()));
     Line::from(Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded)))
 }
 
+/// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
 fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     let mr = &open.review.mr;
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));

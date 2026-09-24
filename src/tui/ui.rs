@@ -37,7 +37,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let status_rows = u16::from(!app.zen || app.confirm.is_some() || app.pending == Some('\'') || app.quit_prompt().is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(f.area());
-    let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some() || o.pipeline.is_some());
+    let side_open = app.open.as_ref().is_some_and(super::app::Open::side_open);
     let shown = columns(main.width, side_open, app.focus == Focus::Side, app.zen);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };

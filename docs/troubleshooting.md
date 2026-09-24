@@ -14,7 +14,7 @@ Find your problem in the left column, then apply the fix.
 | My config seems ignored | It moved to `~/.config/revu/config.toml`; revu moves an old one there once |
 | revu stops at start with a config error | Fix the key the message names; revu refuses keys it does not know |
 | `a` does nothing | Switch Claude on and store its key; see the AI guide |
-| `q` does not quit | Press it twice: the first press asks, so a stray `q` never ends your session; set `[keys] quit_confirm = false` to quit at once |
+| `q` does not quit | Press it twice: the first press asks, so a stray `q` never ends your session; with a pane open, `q` closes it first; set `[keys] quit_confirm = false` to quit at once |
 
 ## Still stuck
 

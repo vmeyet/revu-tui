@@ -56,14 +56,15 @@ Focus moves with `h` `l` between the three panes, like slack-tui's channels, mes
 
 ## Zen
 
-`zz` hides everything but the diff, and `zz`, `esc` or `h` bring it back.
-No frames, no status line: one faded line on top says which MR, whose, its size and its pipeline.
+`zz` hides everything but the diff, and `zz`, `esc`, `h` or `←` bring it back.
+No frames, no status line: one faded line on top says which MR, whose, its size, its pipeline and `◆n` unresolved threads when there are any.
 The diff sits in a centred column, `[tui] zen_width` wide (100 by default, 60 at least).
 Nothing pulses; a toast shows for two seconds on the bottom row, and notifications wait until zen ends.
 A question that needs an answer (applying a suggestion, the `'` views) brings the status line back while it waits.
-`←` `→` open the previous or next MR in the order the queue shows them, without leaving zen: filter, sort, sections and stacks all count, folded sections do not.
+`[m` `]m` open the previous or next MR in the order the queue shows them, without leaving zen, and outside zen as well: filter, sort, sections and stacks all count, folded sections do not.
+The arrows mean what they mean outside zen: `←` `→` move focus.
 A line on top says where you are for a moment: `‹  !1797 feat add a page  ·  3/12  ›`.
-The thread pane still opens with `enter` or `l` on a marked line, as a page of its own, and `esc` closes it.
+The thread pane still opens with `enter` or `l` on a marked line, as a page of its own, and `esc`, `x` or `q` close it.
 
 ## The queue
 
@@ -209,7 +210,7 @@ One of:
 - **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, or a file's outdated threads), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff. The compose box sits at its bottom. It follows the cursor onto marked lines. Width: three columns from 150, the queue steps aside from 120, a page of its own below.
 - **Overview** (`o` on the header, or on open when there is no thread): description as markdown, labels, reviewers with their state, approvals, pipeline link, then the activity list (system notes) in `muted`.
 - **Pipeline** (`p`): the CI run of the head commit (GitLab's newest MR pipeline, GitHub's check runs grouped by workflow): a count per state, then each stage in the order it ran with its jobs, counted failures first, glyph, name and duration; the cursor starts on the first failure; `o` opens the job, `y` copies its link, `r` asks again, and a run still going is asked again every 15 s while the pane shows it. A failure the forge lets pass shows `!` in the warning colour. The header's pipeline word links to the run.
-- **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
+- **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` unresolved threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
 
 `zv` (in the diff or the tree) marks the file viewed and folds it. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
 - **AI answer** (M4): title `ask · file` and the streaming markdown; a `cached` tag when served from cache.
@@ -259,9 +260,9 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `:` | command line | M3 |
 | `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
 | `zz` | zen: the diff alone, quiet (`z` is the fold prefix) | M3 |
-| `←` `→` | in zen: the previous, next MR in the queue's order | M3 |
+| `[m` `]m` | the previous, next MR in the queue's order, in zen or not | M3 |
 | `?` | help | M1 |
-| `q` | quit (`ctrl-c` always) | M1 |
+| `q` | close the right pane when one is open and not from the queue, else quit (`ctrl-c` always quits) | M1 |
 
 ### Review
 
@@ -301,7 +302,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `S` | commit the note's suggestion on the MR branch, after a `y` (M5): GitLab applies it by its id; on GitHub, which has no API for it, revu commits the change itself through the contents API, only on the PR's own branch and with push access, else `o` opens it on the web |
 | `e` `d` `E` | edit, delete my draft; edit it in `$EDITOR` |
 | `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
-| `x` `esc` | close |
+| `x` `esc` `q` | close |
 
 In the compose box: `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
 

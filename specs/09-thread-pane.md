@@ -68,7 +68,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 
 - It **follows the cursor**: moving onto another marked line swaps the pane to that line's threads without moving focus.
 - On an unmarked line it keeps showing the last threads, with its title in `faded` and a `↑ line 57` hint, so reading the code around a thread keeps the thread in view.
-- `esc` or `x` from the diff or the pane closes it; `esc` in the diff with the pane closed goes back to the queue, as today.
+- `esc`, `x` or `q` from the diff or the pane closes it; `esc` in the diff with the pane closed goes back to the queue, as today.
 
 ### Width
 
@@ -125,7 +125,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `d` | pane | delete my draft | `d` on a draft row |
 | `J` `K` | pane | next, previous thread on the line | none |
 | `]n` `[n` | diff | next, previous marked line, across files; the pane follows when open | next thread row |
-| `x`, `esc` | diff or pane | close the pane | `esc` |
+| `x`, `esc`, `q` | diff or pane | close the pane | `esc` |
 | `u`, `o`, `y` | pane | open the first link, open the thread in the browser, copy its link | `u` only |
 
 Muscle memory holds: `c` comments, `r` replies, `R` resolves, `]n` walks the conversations.

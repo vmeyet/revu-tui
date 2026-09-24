@@ -16,7 +16,7 @@ impl App {
     pub(super) fn usage_name(&self, key: KeyEvent) -> Option<(&'static str, Place)> {
         self.usage.as_ref()?;
         let place = self.usage_place();
-        crate::usage::action(self.pending, key, place, self.in_zen_diff()).map(|name| (name, place))
+        crate::usage::action(self.pending, key, place).map(|name| (name, place))
     }
 
     /// Counts a key's action, and the habits a faster key would replace.

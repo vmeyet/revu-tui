@@ -80,11 +80,12 @@ impl App {
         }
         match key.code {
             KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
+            KeyCode::Char('q') if self.focus != Focus::Queue && self.open.as_ref().is_some_and(super::Open::side_open) => {
+                return self.handle_side_key(KeyEvent::from(KeyCode::Esc));
+            }
             KeyCode::Char('q') => return self.quit_key(super::quit::QuitKey::Q),
             KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('Y') => self.start_share(None),
-            KeyCode::Left if self.in_zen_diff() => return self.zen_step(false),
-            KeyCode::Right if self.in_zen_diff() => return self.zen_step(true),
             KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
@@ -118,11 +119,7 @@ impl App {
         }
         self.focus = match (self.focus, &self.open) {
             (Focus::Queue, _) => return self.open_selected(),
-            (Focus::Review, Some(open))
-                if open.pane.is_some() || open.tree.is_some() || open.answer.is_some() || open.pipeline.is_some() =>
-            {
-                Focus::Side
-            }
+            (Focus::Review, Some(open)) if open.side_open() => Focus::Side,
             (Focus::Side, _) => Focus::Side,
             (focus, _) => focus,
         };
@@ -274,6 +271,7 @@ impl App {
         if self.focus == Focus::Queue {
             let open = match (prefix, c) {
                 ('[' | ']', 'r') => return self.walk_reviews(prefix == ']'),
+                ('[' | ']', 'm') => return self.step_mr(prefix == ']'),
                 ('z', 'o') => Some(true),
                 ('z', 'c') => Some(false),
                 ('z', 'a') => None,
@@ -300,6 +298,7 @@ impl App {
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
             ('[' | ']', 'r') => return self.walk_reviews(forward),
+            ('[' | ']', 'm') => return self.step_mr(forward),
             ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
             ('[' | ']', 'n') => return self.jump_to_marked(forward),
             ('[' | ']', 'f') => {

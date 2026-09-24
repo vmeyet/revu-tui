@@ -17,16 +17,16 @@ expression: "render(&mut app, 100, 30)"
 │                    │      ]n [n  next, previous conversation               │;                    │
 │   ── ▸ DONE · 1 ───│      ]f [f  next, previous file with a thread         │                     │
 │                    │      ]r [r  next, previous MR that needs you          │rd) -> Key {         │
-│                    │                                                       │                     │
-│                    │  QUEUE                                                │, card.expiry()))    │
-│                    │          /  filter: words @author !42 ~label          │new                  │
+│                    │      ]m [m  next, previous MR in the queue            │                     │
+│                    │                                                       │, card.expiry()))    │
+│                    │  QUEUE                                                │new                  │
+│                    │          /  filter: words @author !42 ~label          │                     │
 │                    │      ' 1-9  a saved view, by letter or rank           │                     │
-│                    │          *  this repo, or every project               │                     │
-│                    │          s  next sort order                           │       +1 −1  folded │
+│                    │          *  this repo, or every project               │       +1 −1  folded │
+│                    │          s  next sort order                           │                     │
 │                    │          S  group by author                           │                     │
 │                    │      zo zc  open, fold the section or stack           │                     │
 │                    │                                                       │                     │
-│                    │  VIEW                                                 │                     │
 │                    │                                                       │                     │
 │                    ╰────────────────── 1–22 of 69 · j k scroll · esc close ╯                     │
 │                                ││                                                                │

@@ -11,7 +11,7 @@ Each thread reads its comment first, then its file name and line.
 `enter` goes there in the diff.
 `k` above the first thread, or `g`, takes you back to the top.
 `p` opens the pipeline, `esc` closes the cover.
-The file tree, `t`, lists the files.
+The file tree, `t`, lists the files, with `◆n` for the unresolved threads in each.
 
 ## Comment
 
@@ -45,6 +45,7 @@ A line with a conversation has a mark left of its numbers.
 | `]n` `[n` | Next, previous line with a conversation; a folded file or hunk on the way opens |
 | `r` | Reply, as a draft |
 | `R` | Resolve or unresolve |
+| `q`, `x` or `esc` | Close the pane |
 | `e` `d` | Edit, delete your draft |
 | `S` | Apply the suggestion under the cursor, after a `y` |
 | `+` | React to the note under the cursor |
