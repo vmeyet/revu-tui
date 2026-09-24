@@ -10,7 +10,8 @@
 | The status line | Hidden; a toast shows for two seconds at the bottom |
 | The MR header | One faded line on top; `◆3` counts the unresolved threads |
 | File and hunk headers | Pinned at the top of the column while you scroll |
-| The diff | A centred column, 100 columns wide |
+| The diff | A centred column, 70 % of the screen and 100 columns at least |
+| The thread pane | The same column, with one faded title line and no frame |
 | Notifications | Held until you leave zen |
 
 ## Move between MRs
@@ -27,6 +28,8 @@ A line on top says which MR you are on, for example `3/12`.
 The thread pane still opens with `enter` or `→` on a marked line; `q`, `x` or `esc` close it.
 
 ## Change the width
+
+A fixed width stops the column from growing with the screen.
 
 ```toml
 [tui]

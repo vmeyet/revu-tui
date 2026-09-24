@@ -50,7 +50,7 @@ fn settings() -> Settings {
         keymap: crate::keymap::Keymap::default(),
         pictures: None,
         queue_layout: crate::config::QueueLayout::default(),
-        zen_width: 100,
+        zen_width: None,
         views: vec![],
         share: vec![],
         prefetch: 0,
@@ -2842,9 +2842,27 @@ fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
     let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
     assert!(first.trim_start().starts_with("!42 feat: charge cards at checkout"), "{first}");
     let indent = first.len() - first.trim_start().len();
-    assert_eq!(indent, (160 - 100) / 2 + 1, "a 100-column column in the middle, then its padding");
+    assert_eq!(indent, (160 - 112) / 2 + 1, "70 % of the screen in the middle, then its padding");
     insta::assert_snapshot!("zen_wide", screen);
     insta::assert_snapshot!("zen_medium", render(&mut app, 100, 30));
+}
+
+#[test]
+fn zen_opens_the_thread_pane_in_the_diff_column_without_a_frame() {
+    let mut app = with_review();
+    press(&mut app, "zz]n");
+    let diff = render(&mut app, 160, 45);
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.focus, Focus::Side);
+    let screen = render(&mut app, 160, 45);
+    assert!(!screen.contains('╭') && !screen.contains('╰'), "no frame:\n{screen}");
+    let indent = |screen: &str| {
+        let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
+        first.len() - first.trim_start().len()
+    };
+    assert_eq!(indent(&screen), indent(&diff), "the title starts where the zen header does:\n{screen}");
+    insta::assert_snapshot!("zen_thread_wide", screen);
+    insta::assert_snapshot!("zen_thread_medium", render(&mut app, 100, 30));
 }
 
 #[test]
@@ -2937,7 +2955,7 @@ fn zen_pins_the_file_and_hunk_inside_its_column() {
     assert!(app.open.as_ref().unwrap().pinned_file.is_some(), "{screen}");
     let pinned = screen.lines().find(|l| l.contains("src/pay/charge.rs")).expect(&screen);
     let indent = pinned.len() - pinned.trim_start().len();
-    assert!(indent >= (160 - 100) / 2, "inside the centred column:\n{screen}");
+    assert!(indent >= (160 - 112) / 2, "inside the centred column:\n{screen}");
     assert!(screen.contains("fn refund"), "the cursor's hunk too:\n{screen}");
     insta::assert_snapshot!("zen_pinned", screen);
     let _ = render(&mut app, 160, 18);

@@ -3,7 +3,7 @@ use super::app::{App, Entry, EntryKind, Focus, Open};
 use super::field::Field;
 use super::images::Thumbs;
 use super::theme::Theme;
-use super::ui::{pane, short_age};
+use super::ui::{short_age, side_pane};
 use crate::forge::Note;
 use crate::review::image::{self, Image};
 use crate::review::{Conversation, Place, Review, Thread};
@@ -47,6 +47,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
     let me = app.me.clone();
     let ascii = app.ascii;
     let focused = app.focus == Focus::Side;
+    let zen = app.zen;
     let compose = app.input.is_some().then(|| (app.input_label(), app.buffer.clone()));
     let host = app.host.clone();
     let thumbs = &app.thumbs;
@@ -55,7 +56,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
     let Some(pane) = open.pane.clone() else { return vec![] };
     let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&host), &open.key.project, url);
     let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
-    let block = pane_block(theme, &title(&open.review, &pane.place, conversations.len(), here), focused);
+    let block = side_pane(theme, &title(&open.review, &pane.place, conversations.len(), here), focused, zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let inner = match &compose {
@@ -193,11 +194,6 @@ pub(super) fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Fie
     let height = inner.height as usize;
     let scroll = (caret_row + 1).saturating_sub(height);
     f.render_widget(Paragraph::new(rows.into_iter().skip(scroll).take(height).collect::<Vec<_>>()), inner);
-}
-
-/// The pane's frame; its title fades when the reader looks at another line.
-pub(super) fn pane_block(theme: Theme, title: &str, focused: bool) -> ratatui::widgets::Block<'static> {
-    pane(theme, title, focused)
 }
 
 /// Keeps the cursor's lines in view: the top of the entry first, then as much of it as fits.
