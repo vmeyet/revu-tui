@@ -23,6 +23,7 @@ mod share;
 mod syntax;
 pub mod tui;
 mod update;
+mod usage;
 mod version;
 
 /// Moves what the tool kept under its old name, `gitlabmr`, to `revu`; runs before anything reads the config.

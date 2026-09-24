@@ -24,6 +24,9 @@ pub struct Config {
     pub open: Open,
     #[serde(default, skip_serializing_if = "Notify::is_default")]
     pub notify: Notify,
+    /// What revu counts about how it is used, on this machine only; off by default.
+    #[serde(default, skip_serializing_if = "Usage::is_default")]
+    pub usage: Usage,
     #[serde(default, skip_serializing_if = "Keys::is_default")]
     pub keys: Keys,
     /// `[share]`: where `Y` posts an MR, through a command of the user's choosing.
@@ -246,6 +249,21 @@ impl Default for Notify {
 }
 
 impl Notify {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// `[usage]`: count the actions used and the time per screen, into the cache, for `revu usage`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Usage {
+    /// Off by default: nothing is counted until this is true.
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Usage {
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -533,6 +551,7 @@ mod tests {
             open: Open { default: Some("hx".into()), files: BTreeMap::from([("*.md".into(), "glow -p".into())]) },
             hosts: BTreeMap::from([("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })]),
             notify: Notify { enabled: false },
+            usage: Usage { enabled: true },
             keys: Keys {
                 layout: Layout::Azerty,
                 bind: BTreeMap::from([("next_thread".into(), Bind::One("N".into())), ("jump".into(), Bind::Many(vec!["ctrl-p".into()]))]),

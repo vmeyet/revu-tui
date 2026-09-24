@@ -143,6 +143,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         prefetch: ctx.config.queue.prefetch,
         ascii: ctx.config.tui.ascii,
         quit_confirm: ctx.config.keys.quit_confirm,
+        usage: ctx.config.usage.enabled,
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();
@@ -155,10 +156,17 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Sc
     let (tx, mut rx) = mpsc::unbounded_channel::<Incoming>();
     let mut keys = Keys::new();
     let mut ticks = tokio::time::interval(TICK);
+    let mut flushed = Instant::now();
     for action in app.start() {
         spawn(action, backend, tx.clone());
     }
     while !app.should_quit {
+        if flushed.elapsed() >= USAGE_FLUSH {
+            flushed = Instant::now();
+            if let Some(counts) = app.take_usage() {
+                tokio::spawn(save_usage(counts));
+            }
+        }
         let frame = terminal.draw(|f| ui::draw(f, app))?;
         let links = hyperlinks(frame.buffer, &app.links);
         print_links(&links);
@@ -188,7 +196,20 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Sc
             view_inline(terminal, screen, &mut keys, app, view);
         }
     }
+    app.tick();
+    if let Some(counts) = app.take_usage() {
+        save_usage(counts).await;
+    }
     Ok(())
+}
+
+/// `[usage]` counts go to the cache now and then, not on every key.
+const USAGE_FLUSH: Duration = Duration::from_secs(60);
+
+/// Adds `counts` to today's line of the usage file; a failure costs a minute of counts, nothing else.
+async fn save_usage(counts: crate::usage::Counts) {
+    let today = chrono::Local::now().date_naive();
+    let _ = blocking(move || crate::usage::record(&Cache::shared(), today, &counts)).await;
 }
 
 /// The reader's program owns the terminal until it exits; the app, untouched, draws again after.

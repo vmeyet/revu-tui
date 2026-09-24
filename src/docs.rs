@@ -225,6 +225,14 @@ pub const SETTINGS: &[Setting] = &[
         example: "false",
     },
     Setting {
+        table: "usage",
+        key: "enabled",
+        kind: "true or false",
+        default: "`false`",
+        meaning: "Count the actions you use and the time per screen, on this machine only, for `revu usage`.",
+        example: "true",
+    },
+    Setting {
         table: "keys",
         key: "layout",
         kind: "`qwerty` or `azerty`",
@@ -503,6 +511,7 @@ mod tests {
             ("Queue", "queue"),
             ("Review", "review"),
             ("Notify", "notify"),
+            ("Usage", "usage"),
             ("Tui", "tui"),
             ("Typesafe", "ai.typesafe"),
             ("Anthropic", "ai.anthropic"),
@@ -510,7 +519,7 @@ mod tests {
             ("Share", "share"),
             ("ShareTarget", "share.targets.<name>"),
         ];
-        let nested = ["queue", "review", "tui", "ai", "open", "notify", "keys", "hosts", "share"];
+        let nested = ["queue", "review", "tui", "ai", "open", "notify", "keys", "hosts", "share", "usage"];
         for (name, table) in tables {
             let start = source.find(&format!("pub struct {name} {{")).unwrap_or_else(|| panic!("struct {name}"));
             let body = &source[start..start + source[start..].find("\n}").unwrap()];

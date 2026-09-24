@@ -48,6 +48,8 @@ pub struct Settings {
     pub ascii: bool,
     /// `[keys] quit_confirm`: `q` and `ctrl-c` need a second press.
     pub quit_confirm: bool,
+    /// `[usage] enabled`: count the actions used and the time per screen.
+    pub usage: bool,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -134,6 +136,14 @@ pub struct App {
     /// A quit key pressed once, and when: the same key again inside the window quits.
     pub quitting: Option<(super::quit::QuitKey, Instant)>,
     pub quit_confirm: bool,
+    /// What this session counted since the last flush; `None` when `[usage]` is off.
+    pub usage: Option<crate::usage::Tally>,
+    /// The last time screen time was counted.
+    pub usage_at: Instant,
+    /// How many j or k in a row moved through a diff that has hunks or threads to jump to.
+    pub walk: u32,
+    /// Zen was on at some point this session.
+    pub zen_seen: bool,
     pub keymap: crate::keymap::Keymap,
     pub pending: Option<char>,
     /// The input row is open for this; `buffer` holds what is typed.
@@ -236,6 +246,10 @@ impl App {
             held: None,
             quitting: None,
             quit_confirm: settings.quit_confirm,
+            usage: settings.usage.then(crate::usage::Tally::default),
+            usage_at: now,
+            walk: 0,
+            zen_seen: false,
             keymap: settings.keymap,
             pending: None,
             input: None,
@@ -281,6 +295,7 @@ impl App {
 
     /// Called on every tick: what the clock says is due, at most once per due date.
     pub fn tick(&mut self) -> Vec<Action> {
+        self.count_time();
         let mut actions = vec![];
         if self.poll.queue_due.is_some_and(|due| self.now >= due) && !self.queue_loading {
             self.queue_loading = true;
