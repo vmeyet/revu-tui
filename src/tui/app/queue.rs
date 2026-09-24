@@ -9,7 +9,6 @@ pub enum Badge {
     Failed,
     Running,
     Activity,
-    Approved,
     Draft,
 }
 
@@ -182,6 +181,17 @@ impl App {
         mrs.iter().filter_map(|mr| self.badge(mr)).min()
     }
 
+    /// A stack carries the approval mark when every one of its MRs does.
+    pub fn stack_approved(&self, mrs: &[&QueueMr]) -> bool {
+        !mrs.is_empty() && mrs.iter().all(|mr| self.approved(mr))
+    }
+
+    /// The approval mark, beside the badge: on my MR, the forge would let it merge; on anyone
+    /// else's, I approved it. An MR no rule guards counts as approved, so mine also needs an approver.
+    pub fn approved(&self, mr: &QueueMr) -> bool {
+        if mr.author == self.me { mr.approved && !mr.approved_by.is_empty() } else { mr.approved_by.contains(&self.me) }
+    }
+
     /// The row's host, named only when rows from several hosts share the queue.
     pub fn host_tag(&self, mr: &QueueMr) -> Option<String> {
         self.sections.as_ref().filter(|s| s.mixes_hosts()).and_then(|_| self.hosts.tag(&mr.key()))
@@ -192,16 +202,9 @@ impl App {
         let failed = mr.conflicts || pipeline.as_deref() == Some("failed");
         let running = matches!(pipeline.as_deref(), Some("running" | "pending" | "created" | "waiting_for_resource" | "preparing"));
         let activity = self.opened.get(&mr.key()).is_some_and(|opened| mr.updated_at > *opened);
-        let approved = mr.approved_by.iter().any(|u| u == &self.me);
-        [
-            (failed, Badge::Failed),
-            (running, Badge::Running),
-            (activity, Badge::Activity),
-            (approved, Badge::Approved),
-            (mr.draft, Badge::Draft),
-        ]
-        .into_iter()
-        .find_map(|(on, badge)| on.then_some(badge))
+        [(failed, Badge::Failed), (running, Badge::Running), (activity, Badge::Activity), (mr.draft, Badge::Draft)]
+            .into_iter()
+            .find_map(|(on, badge)| on.then_some(badge))
     }
 
     /// The cursor walks MR rows and the headers of folded sections, the only row such a section has.

@@ -144,13 +144,13 @@ fn indent_span(theme: Theme, indent: usize) -> Option<Span<'static>> {
     (indent > 0).then(|| Span::styled(format!("{:<indent$}", "│"), Style::default().fg(theme.faded)))
 }
 
-/// Line one: the kind as a chip, the title, then Jev's mark and the badge at the right edge.
+/// Line one: the kind as a chip, the title, then Jev's mark, the approval mark and the badge at the right edge.
 /// Line two, all faded: who, the number, the size when it fits, and the age at the right edge.
 fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
     let (kind, rest) = conventional(&mr.title);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
-    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.badge(mr));
+    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
     let used = BAR_W + indent + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
     let title = truncate(rest, width.saturating_sub(used));
     let pad = width.saturating_sub(used + title.width()) + 1;
@@ -195,10 +195,10 @@ fn number_of(app: &App, mr: &QueueMr) -> String {
     format!("{}{}", app.hosts.kind_of(&mr.key()).sigil(), mr.number)
 }
 
-/// One line per MR: `!iid title`, the host when mixed, Jev's mark and the badge.
+/// One line per MR: `!iid title`, the host when mixed, Jev's mark, the approval mark and the badge.
 fn compact(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
-    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.badge(mr));
+    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
     let iid = format!("{} ", number_of(app, mr));
     let tag = app.host_tag(mr).map(|t| format!("{t} "));
     let tag_w = tag.as_ref().map_or(0, |t| t.width());
@@ -228,7 +228,7 @@ fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: u
     let fold = Span::styled(if open { "▾ " } else { "▸ " }, Style::default().fg(theme.muted));
     let (kind, title) = stack_title(mrs);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
-    let tail = right_marks(app, None, app.stack_badge(mrs));
+    let tail = right_marks(app, None, app.stack_approved(mrs), app.stack_badge(mrs));
     let who = short_name(&base.author);
     let count = format!("{} MRs", mrs.len());
     let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
@@ -290,12 +290,14 @@ pub fn short_name(author: &str) -> &str {
     }
 }
 
-/// Jev's mark (two cells when Jev is on) then the badge, flush right, so titles keep one width.
-fn right_marks(app: &App, mark: Option<Mark>, badge: Option<Badge>) -> Vec<Span<'static>> {
+/// Jev's mark (two cells when Jev is on), the approval mark (two cells) then the badge, flush
+/// right, so titles keep one width.
+fn right_marks(app: &App, mark: Option<Mark>, approved: bool, badge: Option<Badge>) -> Vec<Span<'static>> {
     let mut spans = vec![];
     if app.triaged() {
         spans.push(mark_span(app, mark));
     }
+    spans.push(if approved { Span::styled("✓ ", Style::default().fg(app.theme.success)) } else { Span::raw("  ") });
     spans.push(badge.map_or_else(|| Span::raw(" "), |b| badge_span(app, b)));
     spans
 }
@@ -350,7 +352,6 @@ fn badge_span(app: &App, badge: Badge) -> Span<'static> {
         Badge::Failed => Span::styled("✗", Style::default().fg(theme.danger)),
         Badge::Running => Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.muted)),
         Badge::Activity => Span::styled("●", Style::default().fg(if pulse_on(app) { theme.accent } else { theme.faded })),
-        Badge::Approved => Span::styled("✓", Style::default().fg(theme.success)),
         Badge::Draft => Span::styled("D", Style::default().fg(theme.muted)),
     }
 }

@@ -4,7 +4,7 @@ expression: screen
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
 │   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +61 −1 · 2 files · ✓ success                   │
-│ ▎ feat charge cards at chec…   ││   1 of 2 approvals                                                                 │
+│ ▎ feat charge cards at ch…     ││   1 of 2 approvals                                                                 │
 │ ▎ omar · !42 · +412 −38     2h ││  ▾ src/pay/charge.rs                                                        +60 −0 │
 │                                ││     ▾ @@ -40,0 +71,30 @@ fn refund                                                 │
 │   ── MINE · 1 ──────────────── ││           74 +    let step_74 = 74;                                                │

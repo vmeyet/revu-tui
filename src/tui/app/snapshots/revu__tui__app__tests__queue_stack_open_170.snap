@@ -18,9 +18,9 @@ expression: "render(&mut app, 170, 30)"
 │   lea · !51 · +412 −38                2h ││                                                    open a merge request                                                    │
 │ ▎ ▾ feat read shared PDFs              ✗ ││                                                    to read its diff here                                                   │
 │ ▎   romain · 3 MRs · stack            2h ││                                                                                                                            │
-│   │ feat read shared PDFs from the dr…   ││                                                                                                                            │
+│   │ feat read shared PDFs from the …     ││                                                                                                                            │
 │   │ romain · !61 · +412 −38           2h ││                                                                                                                            │
-│   │ feat read shared PDFs page by page ✗ ││                                                                                                                            │
+│   │ feat read shared PDFs page by p…   ✗ ││                                                                                                                            │
 │   │ romain · !62 · +412 −38           2h ││                                                                                                                            │
 │   │ feat read shared PDFs with OCR       ││                                                                                                                            │
 │   │ romain · !63 · +412 −38           2h ││                                                                                                                            │
