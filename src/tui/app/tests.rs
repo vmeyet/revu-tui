@@ -593,6 +593,23 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
 }
 
 #[test]
+fn option_arrows_jump_words_in_the_compose_box_whatever_the_terminal_sends() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    press(&mut app, "fix the bug");
+    let alt = |code| KeyEvent::new(code, KeyModifiers::ALT);
+    app.handle_key(alt(KeyCode::Left));
+    app.handle_key(alt(KeyCode::Char('b')));
+    press(&mut app, "x");
+    assert_eq!(app.buffer.text(), "fix xthe bug", "⌥← and esc-b both jump a word back, and type nothing");
+    app.handle_key(alt(KeyCode::Right));
+    app.handle_key(alt(KeyCode::Char('f')));
+    app.handle_key(alt(KeyCode::Backspace));
+    assert_eq!(app.buffer.text(), "fix xthe ", "⌥→ and esc-f jump a word on, ⌥⌫ deletes the word before");
+}
+
+#[test]
 fn the_compose_box_edits_in_place_keeps_its_text_on_esc_and_takes_newlines() {
     let mut app = with_review();
     on_line(&mut app);

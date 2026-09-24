@@ -38,6 +38,7 @@ impl App {
 
     pub(super) fn handle_input_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        let alt = key.modifiers.contains(KeyModifiers::ALT);
         let newline = key.modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SHIFT);
         match key.code {
             KeyCode::Esc => self.leave_input(),
@@ -45,6 +46,9 @@ impl App {
             KeyCode::Char('j') if ctrl => self.buffer.insert('\n'),
             KeyCode::Enter => return self.submit_input(),
             KeyCode::Char('o') if ctrl => return self.move_to_editor(),
+            KeyCode::Left | KeyCode::Char('b') if alt => self.buffer.word_left(),
+            KeyCode::Right | KeyCode::Char('f') if alt => self.buffer.word_right(),
+            KeyCode::Backspace if alt => self.buffer.delete_word(),
             KeyCode::Left => self.buffer.left(),
             KeyCode::Right => self.buffer.right(),
             KeyCode::Home => self.buffer.start(),

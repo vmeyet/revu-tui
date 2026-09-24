@@ -66,6 +66,19 @@ impl Field {
         self.cursor = self.next().unwrap_or(self.cursor);
     }
 
+    /// To the start of the word the cursor follows, as `⌥←` does in a macOS text field.
+    pub fn word_left(&mut self) {
+        self.cursor = self.word_start();
+    }
+
+    /// To the end of the word ahead of the cursor, as `⌥→` does in a macOS text field.
+    pub fn word_right(&mut self) {
+        let rest = &self.text[self.cursor..];
+        let word = rest.trim_start();
+        let skipped = rest.len() - word.len();
+        self.cursor += skipped + word.find(char::is_whitespace).unwrap_or(word.len());
+    }
+
     pub fn start(&mut self) {
         self.cursor = 0;
     }
@@ -139,6 +152,35 @@ mod tests {
         field.left();
         field.left();
         assert_eq!(shown(&field), "|ab");
+    }
+
+    #[test]
+    fn word_jumps_land_on_word_edges_and_stop_at_both_ends() {
+        let mut field = typed("fix  the\nbug");
+        field.word_left();
+        assert_eq!(shown(&field), "fix  the\n|bug");
+        field.word_left();
+        assert_eq!(shown(&field), "fix  |the\nbug");
+        field.word_left();
+        field.word_left();
+        assert_eq!(shown(&field), "|fix  the\nbug");
+        field.word_right();
+        assert_eq!(shown(&field), "fix|  the\nbug");
+        field.word_right();
+        field.word_right();
+        assert_eq!(shown(&field), "fix  the\nbug|");
+        field.word_right();
+        assert_eq!(shown(&field), "fix  the\nbug|");
+    }
+
+    #[test]
+    fn word_jumps_step_over_accents_and_emoji_whole() {
+        let mut field = typed("été 🎉ok");
+        field.word_left();
+        assert_eq!(shown(&field), "été |🎉ok");
+        field.start();
+        field.word_right();
+        assert_eq!(shown(&field), "été| 🎉ok");
     }
 
     #[test]
