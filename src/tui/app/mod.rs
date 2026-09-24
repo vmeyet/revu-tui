@@ -25,7 +25,7 @@ mod write;
 
 pub use apply::Confirm;
 pub use ask::{Answer, AnswerState, Part};
-pub use brief::Brief;
+pub use brief::{Brief, FileRow, ThreadRow};
 pub use feedback::Toast;
 pub use order::QueueView;
 pub use pane::{Entry, EntryKind};

@@ -959,7 +959,7 @@ fn i_opens_the_description_from_the_queue_and_the_review_and_closes_on_esc() {
 }
 
 #[test]
-fn the_description_scrolls_and_the_view_stops_it_at_the_last_page() {
+fn the_cover_scrolls_its_text_and_keeps_the_cursor_row_in_sight() {
     let mut app = with_review();
     let long: String = (1..=80).map(|n| format!("line {n}\n")).collect();
     app.open = app.open.clone().map(|o| {
@@ -967,16 +967,72 @@ fn the_description_scrolls_and_the_view_stops_it_at_the_last_page() {
         std::sync::Arc::make_mut(&mut review.mr).description = long.clone();
         o.with_review(review)
     });
-    press(&mut app, "ijjj");
-    assert_eq!(app.brief.as_ref().unwrap().scroll, 3);
-    press(&mut app, "kg");
+    press(&mut app, "i");
+    app.handle_key(ctrl('d'));
+    assert_eq!(app.brief.as_ref().unwrap().scroll, 10);
+    app.handle_key(ctrl('u'));
     assert_eq!(app.brief.as_ref().unwrap().scroll, 0);
-    press(&mut app, "G");
     render(&mut app, 100, 30);
-    let bottom = app.brief.as_ref().unwrap().scroll;
-    assert!(bottom > 0 && bottom < 80, "clamped to the last page, got {bottom}");
-    press(&mut app, "k");
-    assert_eq!(app.brief.as_ref().unwrap().scroll, bottom - 1, "one step up from the bottom, not from usize::MAX");
+    press(&mut app, "G");
+    let screen = render(&mut app, 100, 30);
+    assert!(app.brief.as_ref().unwrap().scroll > 0, "the last file row pulls the page down");
+    assert!(screen.contains("▎   Cargo.lock"), "the cursor row is on screen:\n{screen}");
+}
+
+#[test]
+fn the_cover_walks_threads_then_files_and_enter_goes_there() {
+    let mut app = with_review();
+    press(&mut app, "i");
+    let brief = app.brief.clone().unwrap();
+    assert_eq!(brief.targets().len(), 3, "one open thread, two files");
+    press(&mut app, "j");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.brief, None);
+    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })), "on the file row");
+    assert_eq!(app.focus, Focus::Review);
+    press(&mut app, "i");
+    app.handle_key(code(KeyCode::Enter));
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(
+        open.pane.as_ref().map(|p| p.place.clone()),
+        Some(crate::review::Place::Outdated { file: 0 }),
+        "the outdated thread opens in the pane"
+    );
+    assert_eq!(app.focus, Focus::Side);
+}
+
+#[test]
+fn the_cover_lists_files_by_risk_once_jev_read_them() {
+    let mut app = with_review();
+    let risks = std::collections::BTreeMap::from([("Cargo.lock".to_owned(), crate::ai::triage::Risk::Security)]);
+    app.readings.insert(mr_key(), ("head".into(), crate::ai::triage::Reading { waits_on_me: false, risks }));
+    press(&mut app, "i");
+    let files = app.brief.clone().unwrap().files.unwrap();
+    assert_eq!(files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["Cargo.lock", "src/pay/charge.rs"]);
+    assert!(render(&mut app, 120, 40).contains("by risk"));
+}
+
+#[test]
+fn the_cover_from_the_queue_opens_the_mr_on_enter_and_has_no_pipeline_yet() {
+    let mut app = with_queue();
+    app.queue_move(0);
+    press(&mut app, "i");
+    assert!(app.brief.as_ref().unwrap().threads.is_none());
+    assert!(render(&mut app, 120, 40).contains("open the MR to see its threads and files"));
+    assert!(press(&mut app, "p").is_empty());
+    assert!(app.live_toast().unwrap().text.contains("open the MR"));
+    assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![Action::Open(mr_key())]);
+    assert_eq!(app.brief, None);
+}
+
+#[test]
+fn p_on_the_cover_opens_the_pipeline_pane() {
+    let mut app = with_review();
+    press(&mut app, "i");
+    let actions = press(&mut app, "p");
+    assert_eq!(app.brief, None);
+    assert!(app.pipeline_open());
+    assert_eq!(actions.len(), 1, "the pipeline loads");
 }
 
 #[test]
@@ -989,7 +1045,8 @@ fn snapshot_description_modal() {
         o.with_review(review)
     });
     press(&mut app, "i");
-    insta::assert_snapshot!("description_modal", render(&mut app, 100, 24));
+    insta::assert_snapshot!("description_modal", render(&mut app, 120, 40));
+    insta::assert_snapshot!("description_modal_small", render(&mut app, 80, 24));
 }
 
 #[test]

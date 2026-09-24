@@ -2,6 +2,14 @@
 
 Comment on lines, reply in threads, then publish everything as one review.
 
+## See the whole MR first
+
+`i` opens the MR's cover.
+It shows the description, the pipeline, who reviews, the open threads and the files.
+Files come riskiest first when Jev is on, else biggest first.
+`j` `k` walk the threads and files, and `enter` goes there in the diff.
+`p` opens the pipeline, `esc` closes the cover.
+
 ## Comment
 
 | Key | Does |
