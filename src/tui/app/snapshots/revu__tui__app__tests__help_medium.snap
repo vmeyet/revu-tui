@@ -7,7 +7,7 @@ expression: "render(&mut app, 100, 30)"
 │ ▎ feat charge cards│                                                       │ed                   │
 │ ▎ omar · !42 · +412│  MOVE                                                 │                     │
 │                    │        j k  move                                      │                     │
-│   ── MINE · 1 ─────│        g G  first, last                               │ −2  ◆1 · 1 outdated │
+│   ── MINE · 1 ─────│        g G  first, last                               │ −2  ✓1 · 1 outdated │
 │   fix flaky cache t│      ^d ^u  half a page                               │e                    │
 │   nina · !41 · +3 −│        h l  pane to the left, to the right            │ard, amount: Money)… │
 │                    │      enter  open, or toggle the fold                  │();                  │

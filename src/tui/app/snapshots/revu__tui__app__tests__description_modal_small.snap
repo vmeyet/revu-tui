@@ -22,7 +22,7 @@ expression: "render(&mut app, 80, 24)"
 │   │                                                                      │s… │
 │   │  THREADS  1 open                                                     │   │
 │   │                                                                      │   │
-│   ╰ j k move · enter go there · p pipeline · o browser · esc close ──────╯ed │
+│   ╰ src/pay/charge.rs (outdated) · enter go there · esc close ───────────╯ed │
 │                                ││                                            │
 ╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                        ? help

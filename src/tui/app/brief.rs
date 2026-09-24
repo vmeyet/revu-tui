@@ -1,18 +1,16 @@
-//! The MR's cover page, `i`: what it says about itself, its checks, who reviews it, its open
-//! threads and its files, from the queue row or the open review. Threads and files are rows the
-//! cursor walks; `enter` jumps to one in the diff. It opens only on demand: an MR opens on its diff.
+//! The MR's cover page, `i`: what it says about itself, its checks, who reviews it and its open
+//! threads, from the queue row or the open review. Threads are rows the cursor walks; `enter` jumps
+//! to one in the diff. It opens only on demand: an MR opens on its diff.
 use super::{Action, App, Focus};
-use crate::ai::triage::Risk;
 use crate::forge::checks::JobState;
 use crate::forge::{MrKey, QueueMr, ReviewState};
 use crate::review::{Place, Review, Row, Side};
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::collections::BTreeMap;
 
 const HALF_PAGE: usize = 10;
-/// Words of a thread's first note on its row.
-const FIRST_WORDS: usize = 8;
+/// Words of a thread's first note kept for its row; the view cuts them to the width.
+const FIRST_WORDS: usize = 40;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Brief {
@@ -34,10 +32,8 @@ pub struct Brief {
     pub threads: Option<Vec<ThreadRow>>,
     /// Open threads as the queue counts them, shown when `threads` is `None`.
     pub unresolved: usize,
-    /// The files, riskiest (or biggest) first; `None` from the queue.
-    pub files: Option<Vec<FileRow>>,
-    /// Which thread or file row the cursor is on: threads first, then files.
-    pub selected: usize,
+    /// The thread the cursor is on; `None` while reading above them, after `g` or `k` past the first.
+    pub selected: Option<usize>,
     /// First line shown; the view clamps it and keeps the cursor on screen while it moves.
     pub scroll: usize,
     /// The cursor moved since the last frame, so the view brings it into sight.
@@ -65,27 +61,13 @@ pub struct ReviewLine {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadRow {
     pub id: String,
-    /// `path:line`, `path (outdated)` or `the MR`.
+    /// `path:line`, `path (outdated)` or `the MR`: the whole place, shown while the row is selected.
     pub place: String,
+    /// The same place with the file name only, for the row's quiet second line.
+    pub short_place: String,
     pub author: String,
     pub first_words: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FileRow {
-    pub index: usize,
-    pub path: String,
-    pub additions: usize,
-    pub deletions: usize,
-    pub viewed: bool,
-    pub risk: Option<Risk>,
-}
-
-/// What `enter` on the cursor's row leads to.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Target {
-    Thread(String),
-    File(usize),
+    pub replies: usize,
 }
 
 impl Brief {
@@ -113,22 +95,14 @@ impl Brief {
             },
             threads: None,
             unresolved: mr.unresolved as usize,
-            files: None,
-            selected: 0,
+            selected: None,
             scroll: 0,
             follow: false,
         }
     }
 
-    /// `checks` are the jobs when the pipeline pane already fetched them; `risks` Jev's reading.
-    pub fn of_review(
-        key: MrKey,
-        review: &Review,
-        sigil: char,
-        me: &str,
-        checks: Option<&crate::forge::checks::Checks>,
-        risks: Option<&BTreeMap<String, Risk>>,
-    ) -> Self {
+    /// `checks` are the jobs when the pipeline pane already fetched them.
+    pub fn of_review(key: MrKey, review: &Review, sigil: char, me: &str, checks: Option<&crate::forge::checks::Checks>) -> Self {
         let mr = &review.mr;
         let failed = checks.map_or_else(Vec::new, |c| {
             c.jobs().filter(|j| j.state == JobState::Failed && !j.allowed_to_fail).map(|j| j.name.clone()).collect()
@@ -154,26 +128,36 @@ impl Brief {
                 i_approved: mr.approvals.user_has_approved,
                 i_review: mr.reviewers.iter().any(|u| u.username == me),
             },
+            selected: (!threads.is_empty()).then_some(0),
             unresolved: threads.len(),
             threads: Some(threads),
-            files: Some(files_by_risk(review, risks)),
-            selected: 0,
             scroll: 0,
             follow: false,
         }
     }
 
-    /// Threads then files: the rows the cursor walks, in the order they are drawn.
-    pub fn targets(&self) -> Vec<Target> {
-        let threads = self.threads.iter().flatten().map(|t| Target::Thread(t.id.clone()));
-        let files = self.files.iter().flatten().map(|f| Target::File(f.index));
-        threads.chain(files).collect()
+    /// The threads the cursor walks, in the order they are drawn.
+    pub fn targets(&self) -> Vec<String> {
+        self.threads.iter().flatten().map(|t| t.id.clone()).collect()
     }
 
-    fn moved(&self, by: isize) -> Self {
+    /// The selected thread, for its full place and for `enter`.
+    pub fn selected_thread(&self) -> Option<&ThreadRow> {
+        self.threads.as_ref()?.get(self.selected?)
+    }
+
+    fn down(&self) -> Self {
         let last = self.targets().len().saturating_sub(1);
-        let selected = self.selected.saturating_add_signed(by).min(last);
-        Self { selected, follow: true, ..self.clone() }
+        let selected = self.selected.map_or(0, |i| (i + 1).min(last));
+        Self { selected: Some(selected), follow: true, ..self.clone() }
+    }
+
+    /// Up from the first thread lets go of it and scrolls on, so the head and description come back.
+    fn up(&self) -> Self {
+        match self.selected {
+            Some(i) if i > 0 => Self { selected: Some(i - 1), follow: true, ..self.clone() },
+            _ => Self { selected: None, ..self.scrolled(-1) },
+        }
     }
 
     fn scrolled(&self, by: isize) -> Self {
@@ -192,35 +176,18 @@ fn open_threads(review: &Review) -> Vec<ThreadRow> {
     threads
         .into_iter()
         .map(|t| {
-            let place = match &t.anchor {
-                Some(a) if t.outdated => format!("{} (outdated)", a.path),
-                Some(a) => format!("{}:{}", a.path, a.line),
-                None => "the MR".to_owned(),
+            let name = |path: &str| path.rsplit('/').next().unwrap_or(path).to_owned();
+            let (place, short_place) = match &t.anchor {
+                Some(a) if t.outdated => (format!("{} (outdated)", a.path), format!("{} (outdated)", name(&a.path))),
+                Some(a) => (format!("{}:{}", a.path, a.line), format!("{}:{}", name(&a.path), a.line)),
+                None => ("the MR".to_owned(), "on the MR".to_owned()),
             };
             let note = t.first();
             let first_words = note.body.split_whitespace().take(FIRST_WORDS).collect::<Vec<_>>().join(" ");
-            ThreadRow { id: t.id.clone(), place, author: note.author.username.clone(), first_words }
+            let replies = t.notes.len().saturating_sub(1);
+            ThreadRow { id: t.id.clone(), place, short_place, author: note.author.username.clone(), first_words, replies }
         })
         .collect()
-}
-
-/// Files riskiest first when Jev read them, else the biggest change first.
-fn files_by_risk(review: &Review, risks: Option<&BTreeMap<String, Risk>>) -> Vec<FileRow> {
-    let mut files: Vec<FileRow> = review
-        .files
-        .iter()
-        .enumerate()
-        .map(|(index, f)| FileRow {
-            index,
-            path: f.new_path.clone(),
-            additions: f.additions,
-            deletions: f.deletions,
-            viewed: review.viewed.contains(&f.new_path),
-            risk: risks.and_then(|r| r.get(&f.new_path).copied()),
-        })
-        .collect();
-    files.sort_by_key(|f| (std::cmp::Reverse(f.risk), std::cmp::Reverse(f.additions + f.deletions), f.index));
-    files
 }
 
 impl App {
@@ -229,16 +196,15 @@ impl App {
         self.brief = self.selected_mr().map(|mr| Brief::of_queue(mr, self.hosts.kind_of(&mr.key()).sigil(), &self.me));
     }
 
-    /// `i` in the review: the cover with its threads, files and, once fetched, failed jobs.
+    /// `i` in the review: the cover with its threads and, once fetched, failed jobs.
     pub(super) fn open_brief_from_review(&mut self) {
         let Some(open) = &self.open else { return };
         let checks = open.pipeline.as_ref().and_then(|p| match &p.run {
             super::pipeline::Run::Ready(checks) => Some(checks),
             _ => None,
         });
-        let risks = self.readings.get(&open.key).map(|(_, reading)| &reading.risks);
         let sigil = self.hosts.kind_of(&open.key).sigil();
-        self.brief = Some(Brief::of_review(open.key.clone(), &open.review, sigil, &self.me, checks, risks));
+        self.brief = Some(Brief::of_review(open.key.clone(), &open.review, sigil, &self.me, checks));
     }
 
     pub(super) fn handle_brief_key(&mut self, key: KeyEvent) -> Vec<Action> {
@@ -252,28 +218,29 @@ impl App {
             KeyCode::Char('p') => return self.brief_pipeline(),
             KeyCode::Char('d') if ctrl => Some(brief.scrolled(HALF_PAGE as isize)),
             KeyCode::Char('u') if ctrl => Some(brief.scrolled(-(HALF_PAGE as isize))),
-            KeyCode::Char('j') | KeyCode::Down if walks => Some(brief.moved(1)),
-            KeyCode::Char('k') | KeyCode::Up if walks => Some(brief.moved(-1)),
+            KeyCode::Char('j') | KeyCode::Down if walks => Some(brief.down()),
+            KeyCode::Char('k') | KeyCode::Up if walks => Some(brief.up()),
             KeyCode::Char('j') | KeyCode::Down => Some(brief.scrolled(1)),
             KeyCode::Char('k') | KeyCode::Up => Some(brief.scrolled(-1)),
-            KeyCode::Char('g') => Some(Brief { scroll: 0, selected: 0, follow: false, ..brief }),
-            KeyCode::Char('G') if walks => Some(brief.moved(isize::MAX / 2)),
+            KeyCode::Char('g') => Some(Brief { scroll: 0, selected: None, follow: false, ..brief }),
+            KeyCode::Char('G') if walks => {
+                Some(Brief { selected: Some(brief.targets().len() - 1), follow: true, scroll: usize::MAX, ..brief })
+            }
             KeyCode::Char('G') => Some(Brief { scroll: usize::MAX, ..brief }),
             _ => Some(brief),
         };
         vec![]
     }
 
-    /// `enter`: the thread or file under the cursor in the diff; from the queue, the MR itself.
+    /// `enter`: the thread under the cursor in the diff; from the queue, the MR itself.
     fn brief_enter(&mut self, brief: &Brief) -> Vec<Action> {
         self.brief = None;
         if self.open.as_ref().is_none_or(|o| o.key != brief.key) {
             return self.open_selected();
         }
         self.focus = Focus::Review;
-        match brief.targets().get(brief.selected) {
-            Some(Target::Thread(id)) => self.show_thread(id),
-            Some(Target::File(index)) => self.show_file(*index),
+        match brief.selected_thread() {
+            Some(thread) => self.show_thread(&thread.id.clone()),
             None => vec![],
         }
     }

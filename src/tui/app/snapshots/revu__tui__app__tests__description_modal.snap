@@ -7,33 +7,33 @@ expression: "render(&mut app, 120, 40)"
 │ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved                                       │
 │ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                                                        │
 │                                ││                                                                                    │
-│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge.rs                                        +4 −2  ◆1 · 1 outdated │
+│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge.rs                                        +4 −2  ✓1 · 1 outdated │
 │   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                                        │
-│   ni╭ !42 feat: charge cards at checkout ──────────────────────────────────────────────────────────────────────╮t> { │
-│     │                                                                                                          │     │
-│   ──│  omar  feat/checkout → main  2h                                                                          │     │
-│   in│                                                                                                          │     │
-│   om│  ## Why                                                                                                  │     │
-│     │                                                                                                          │     │
-│   ──│  Cards were charged twice.                                                                               │     │
+│   nina · !41 · +3 −1        4h ││      12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> { │
+│     ╭ !42 feat: charge cards at checkout ──────────────────────────────────────────────────────────────────────╮     │
+│   ──│                                                                                                          │     │
+│   in│  omar  feat/checkout → main  2h                                                                          │     │
+│   om│                                                                                                          │     │
+│     │  ## Why                                                                                                  │     │
+│   ──│                                                                                                          │     │
+│     │  Cards were charged twice.                                                                               │     │
 │     │                                                                                                          │     │
 │     │  • retry with idempotency_key                                                                            │     │
 │     │  • log the attempt                                                                                       │     │
 │     │                                                                                                          │     │
 │     │  CHECKS                                                                                                  │     │
-│     │  ✓ success                                                                                               │     │
-│     │                                                                                                          │lded │
+│     │  ✓ success                                                                                               │lded │
+│     │                                                                                                          │     │
 │     │  REVIEW                                                                                                  │     │
 │     │  1 of 2 approvals  ·  you are not a reviewer                                                             │     │
 │     │                                                                                                          │     │
 │     │  THREADS  1 open                                                                                         │     │
-│     │  ▎ src/pay/charge.rs (outdated) · lea · Should this retry on timeout?                                    │     │
+│     │  ▎ lea · Should this retry on timeout?                                                                   │     │
+│     │  ▎ charge.rs (outdated)                                                                                  │     │
 │     │                                                                                                          │     │
-│     │  FILES  2 · by size                                                                                      │     │
-│     │      src/pay/charge.rs                                                                            +4 −2  │     │
-│     │      Cargo.lock                                                                                   +1 −1  │     │
-│     │                                                                                                          │     │
-│     ╰ j k move · enter go there · p pipeline · o browser · esc close ──────────────────────────────────────────╯     │
+│     ╰ src/pay/charge.rs (outdated) · enter go there · esc close ───────────────────────────────────────────────╯     │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
 │                                ││                                                                                    │
 │                                ││                                                                                    │
 │                                ││                                                                                    │

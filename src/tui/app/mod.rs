@@ -32,7 +32,7 @@ mod zen;
 
 pub use apply::Confirm;
 pub use ask::{Answer, AnswerState, Part};
-pub use brief::{Brief, FileRow, ThreadRow};
+pub use brief::{Brief, ThreadRow};
 pub use feedback::Toast;
 pub use inbox::{Spot, progress_bar};
 pub use order::QueueView;

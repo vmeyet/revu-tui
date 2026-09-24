@@ -7,7 +7,7 @@ expression: "render(&mut app, 100, 24)"
 │ ▎ feat charge card╭ search · MRs · @author !42 ~label draft:no ──────────────╮                   │
 │ ▎ omar · !42 · +41│ › @omar▌                                                 │                   │
 │                   │                                                          │                   │
-│   ── MINE · 1 ────│ ▎◆ !42 feat: charge cards at checkout  omar              │2  ◆1 · 1 outdated │
+│   ── MINE · 1 ────│ ▎◆ !42 feat: charge cards at checkout  omar              │2  ✓1 · 1 outdated │
 │   fix flaky cache │  ◆ !35 infra: new runner  omar                           │                   │
 │   nina · !41 · +3 │   ↑↓ pick · enter opens · > commands · / files · esc     │d, amount: Money)… │
 │                   │                                                          │;                  │

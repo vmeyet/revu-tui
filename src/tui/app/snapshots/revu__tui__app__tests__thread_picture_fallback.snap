@@ -7,7 +7,7 @@ expression: screen
 │ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 4 threads, 2 unresolved         ││ ▎lea · 1h                                                │
 │ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                          ││ ▎Look:                                                   │
 │                                ││                                                      ││ ▎[image: the chart]                                      │
-│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge.rs          +4 −2  ◆2 · 1 outdated ││ ▎thanks                                                  │
+│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge.rs       +4 −2  ◆1 ✓1 · 1 outdated ││ ▎thanks                                                  │
 │   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge          ││                                                          │
 │   nina · !41 · +3 −1        4h ││      12   12  pub async fn charge(card: &Card, amou… ││  1 more thread in this file · ]n                         │
 │                                ││  ✓   13      -    let client = Client::new();        ││                                                          │

@@ -7,7 +7,7 @@ expression: "render(&mut app, 100, 24)"
 │ ▎ feat charge card╭ search · files of the open MR ───────────────────────────╮                   │
 │ ▎ omar · !42 · +41│ / ch▌                                                    │                   │
 │                   │                                                          │                   │
-│   ── MINE · 1 ────│ ▎· src/pay/charge.rs                                     │2  ◆1 · 1 outdated │
+│   ── MINE · 1 ────│ ▎· src/pay/charge.rs                                     │2  ✓1 · 1 outdated │
 │   fix flaky cache │   ↑↓ pick · enter jumps · ⌫ back to MRs · esc            │                   │
 │   nina · !41 · +3 │                                                          │d, amount: Money)… │
 │                   │                                                          │;                  │

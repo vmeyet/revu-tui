@@ -7,7 +7,7 @@ expression: screen
 
                                 ◆ 1 on the MR  enter opens
 
-                               ▎▾ src/pay/charge.rs                                                        +4 −2  ◆1 · 1 outdated
+                               ▎▾ src/pay/charge.rs                                                        +4 −2  ✓1 · 1 outdated
                                    ▾ @@ -12,4 +12,5 @@ pub async fn charge
                                     12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {
                                 ✓   13      -    let client = Client::new();

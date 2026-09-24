@@ -55,7 +55,6 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let folded = app.header_folded;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
     let wrap = app.wrap;
-    let pinning = !app.zen;
     let Some(open) = app.open.as_mut() else { return };
     let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
     let header = match (zen, folded) {
@@ -75,7 +74,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
             vec![row_line(&open.review, &anchors, row, selected, in_range, width, theme)]
         }
     };
-    let pinning = pinning && height >= PIN_MIN_HEIGHT;
+    let pinning = height >= PIN_MIN_HEIGHT;
     let pinned_at = |open: &Open| if pinning { pins(&open.rows, open.scroll, open.selected) } else { Pins::default() };
     open.scroll = if pinning {
         settle_with_pins(&open.rows, open.scroll, open.selected, height).0
@@ -415,19 +414,27 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme:
     };
     let counts = format!("+{} −{}", file.additions, file.deletions);
     let in_file = |a: &crate::review::Anchor| a.path == file.new_path || a.path == file.old_path;
-    let threads = review.threads.iter().filter(|t| !t.outdated && t.anchor.as_ref().is_some_and(in_file)).count();
+    let on_lines: Vec<&crate::review::Thread> =
+        review.threads.iter().filter(|t| !t.outdated && t.anchor.as_ref().is_some_and(in_file)).collect();
+    let resolved = on_lines.iter().filter(|t| t.resolved).count();
+    let unresolved = on_lines.len() - resolved;
     let drafts = review.drafts.iter().filter(|d| d.reply_to.is_none() && d.anchor.as_ref().is_some_and(in_file)).count();
     let outdated = review.outdated(&file.new_path).len();
-    let anchors = [
-        (threads > 0).then(|| format!("  ◆{threads}")),
-        (drafts > 0).then(|| format!(" ◇{drafts}")),
-        (outdated > 0).then(|| format!(" · {outdated} outdated")),
+    let (warn, faded) = (Style::default().fg(theme.warn), Style::default().fg(theme.faded));
+    let anchors: Vec<(String, Style)> = [
+        (unresolved > 0).then(|| (format!("◆{unresolved}"), warn)),
+        (resolved > 0).then(|| (format!("✓{resolved}"), faded)),
+        (drafts > 0).then(|| (format!("◇{drafts}"), warn)),
     ]
     .into_iter()
     .flatten()
-    .collect::<String>();
+    .enumerate()
+    .map(|(i, (text, style))| (format!("{}{text}", if i == 0 { "  " } else { " " }), style))
+    .chain((outdated > 0).then(|| (format!(" · {outdated} outdated"), warn)))
+    .collect();
+    let anchors_w: usize = anchors.iter().map(|(text, _)| text.width()).sum();
     let state = file_state(file, review, open);
-    let tail_w = counts.width() + anchors.width() + state.as_ref().map_or(0, |s| s.width() + 2);
+    let tail_w = counts.width() + anchors_w + state.as_ref().map_or(0, |s| s.width() + 2);
     let name_room = width.saturating_sub(mark.width() + tail_w + 2);
     let name = truncate(&format!("{dir}{base}"), name_room);
     let (dir, base) = match name.rsplit_once('/') {
@@ -443,8 +450,8 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme:
         Span::styled(format!("+{}", file.additions), Style::default().fg(theme.success)),
         Span::raw(" "),
         Span::styled(format!("−{}", file.deletions), Style::default().fg(theme.danger)),
-        Span::styled(anchors, Style::default().fg(theme.warn)),
     ];
+    spans.extend(anchors.into_iter().map(|(text, style)| Span::styled(text, style)));
     if let Some(state) = state {
         spans.push(Span::styled(format!("  {state}"), Style::default().fg(theme.faded)));
     }
@@ -661,6 +668,32 @@ mod tests {
 
     fn spans_text(spans: &[Span]) -> String {
         spans.iter().map(|s| s.content.to_string()).collect()
+    }
+
+    /// The fixture review with its first file's line threads replaced by `resolved` flags, one thread each.
+    fn with_line_threads(resolved: &[bool]) -> Review {
+        let base = crate::review::tests::review();
+        let sample = base.threads.iter().find(|t| t.anchor.is_some() && !t.outdated).cloned().expect("a line thread");
+        let others = base.threads.iter().filter(|t| t.id != sample.id).cloned();
+        let made = resolved.iter().enumerate().map(|(i, &r)| crate::review::Thread { id: format!("t{i}"), resolved: r, ..sample.clone() });
+        Review { threads: others.chain(made).collect::<Vec<_>>().into(), ..base }
+    }
+
+    fn file_row(review: &Review) -> Vec<Span<'static>> {
+        file_spans(review, &review.files[0], true, 120, Theme::default())
+    }
+
+    #[test]
+    fn a_file_counts_open_and_resolved_threads_apart() {
+        let all_resolved = file_row(&with_line_threads(&[true, true, true]));
+        let text = spans_text(&all_resolved);
+        assert!(text.contains("✓3") && !text.contains('◆'), "only resolved threads need nothing: {text}");
+        let resolved = all_resolved.iter().find(|s| s.content.contains("✓3")).unwrap();
+        assert_eq!(resolved.style.fg, Some(Theme::default().faded));
+        let mixed = spans_text(&file_row(&with_line_threads(&[false, true, true])));
+        assert!(mixed.contains("◆1 ✓2"), "{mixed}");
+        let none = spans_text(&file_row(&with_line_threads(&[])));
+        assert!(!none.contains('◆') && !none.contains('✓'), "{none}");
     }
 
     fn cart() -> crate::review::File {

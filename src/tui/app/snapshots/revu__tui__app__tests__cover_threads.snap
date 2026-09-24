@@ -1,0 +1,44 @@
+---
+source: src/tui/app/tests.rs
+expression: screen
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
+│ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved                   │
+│ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                                    │
+│                                ││                                                                │
+│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge.rs                    +4 −2  ✓1 · 1 outdated │
+│   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                    │
+│   nina · !41 · +3 −1        4h ││      12   12  pub async fn charge(card: &Card, amount: Money)… │
+│                                ││  ✓   13      -    let client = Client::new();                  │
+│   ── WATCHING · 1 ──────────── ││           13 +    let client = Client::with_key(idempotency_k… │
+│   i╭ !42 feat: charge cards at checkout ────────────────────────────────────────────────────╮    │
+│   o│                                                                                        │t?; │
+│    │  omar  feat/checkout → main  2h                                                        │    │
+│   ─│                                                                                        │    │
+│    │  no description                                                                        │    │
+│    │                                                                                        │    │
+│    │  CHECKS                                                                                │    │
+│    │  ✓ success                                                                             │    │
+│    │                                                                                        │    │
+│    │  REVIEW                                                                                │    │
+│    │  1 of 2 approvals  ·  you are not a reviewer                                           │ded │
+│    │                                                                                        │    │
+│    │  THREADS  2 open                                                                       │    │
+│    │  ▎ nina · should this retry on timeout, the provider says keys are safe to reuse       │    │
+│    │  ▎ syncSlackUsers.ts:10                                                                │    │
+│    │    nina · should this retry on timeout, the provider says keys are safe to reuse       │    │
+│    │    syncSlackUsers.ts:11 · 1 reply                                                      │    │
+│    │                                                                                        │    │
+│    ╰ …in/integration/slack/useCases/sync/syncSlackUsers.ts:10 · enter go there · esc close ─╯    │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                            ? help

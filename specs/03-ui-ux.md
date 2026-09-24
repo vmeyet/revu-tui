@@ -113,9 +113,10 @@ On a terminal at least 160 columns wide the queue is 44 columns instead of 34, w
 Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done` and `Drafts` start folded. The cursor skips the headers of open sections and author headers, stops on folded ones, their only row, and opening a section puts it on its first MR.
 Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
 `i` opens the MR's cover, on demand only: opening an MR still lands on its diff.
-It shows the author, branches, age and labels, the description as light markdown, then CHECKS (pipeline status, failed job names once the pipeline pane fetched them), REVIEW (approvals n of m, reviewers and their state, mine), THREADS (each open thread as `path:line · author · first words`) and FILES (riskiest first once Jev read them, else biggest, with `+/-` and a viewed tick).
-`j k` walk the thread and file rows, `enter` goes there in the diff (a thread also opens in the pane), `p` opens the pipeline pane, `^d ^u` scroll, `o` opens the MR, `esc` `i` `q` close.
-From the queue the cover knows the row only: threads and files wait for the MR, and `enter` opens it.
+It shows the author, branches, age and labels, the description as light markdown, then CHECKS (pipeline status, failed job names once the pipeline pane fetched them), REVIEW (approvals n of m, reviewers and their state, mine) and THREADS: each open thread on two lines, `author · first words` on the full width, then a faded `file.rs:57 · 2 replies`; the selected thread's full `path:line` shows in the bottom border, its start cut when it does not fit. The file tree (`t`) lists the files, so the cover does not.
+`j k` walk the threads, `enter` goes there in the diff (a thread also opens in the pane), `p` opens the pipeline pane, `^d ^u` scroll, `o` opens the MR, `esc` `i` `q` close.
+`k` on the first thread lets go of it and scrolls on to the top; `g` goes to the top and stays there with nothing selected; `j` picks the first thread again.
+From the queue the cover knows the row only: threads wait for the MR, and `enter` opens it.
 The filter `/` narrows rows by title, author and iid, live.
 
 Empty queue:
@@ -151,7 +152,7 @@ A hunk row is `▾ @@ -a,b +c,d @@ context`, `muted`, with the function context 
 Sticky headers: once a file's own row scrolls above the view, a copy stays pinned at the top of the diff, on the surface colour, until the next file's row reaches the top.
 When the cursor's hunk header has also scrolled off, it is pinned below the file.
 The cursor never hides under the pins, and `za` or `zc` on a line then folds the pinned file and lands on its row (`src/tui/app/pins.rs`).
-Pins are off below 20 diff rows and in reading mode (`zz`).
+Pins are off below 20 diff rows; in zen (`zz`) they sit inside the centred column.
 
 ### Lines
 
