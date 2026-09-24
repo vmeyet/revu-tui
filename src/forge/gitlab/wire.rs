@@ -44,6 +44,15 @@ pub struct Mr {
     pub labels: Vec<String>,
     #[serde(default)]
     pub approvals: Approvals,
+    /// The project's squash setting as it applies to this MR.
+    #[serde(default)]
+    pub squash_on_merge: bool,
+    #[serde(default)]
+    pub squash: bool,
+    #[serde(default)]
+    pub force_remove_source_branch: Option<bool>,
+    #[serde(default)]
+    pub should_remove_source_branch: Option<bool>,
 }
 
 impl Mr {
@@ -68,6 +77,11 @@ impl Mr {
             reviewers: self.reviewers.into_iter().map(forge::User::from).collect(),
             labels: self.labels,
             approvals: self.approvals.into(),
+            merge: forge::MergePlan {
+                method: if self.squash_on_merge || self.squash { forge::MergeMethod::Squash } else { forge::MergeMethod::Merge },
+                remove_branch: self.should_remove_source_branch.or(self.force_remove_source_branch).unwrap_or(false),
+            },
+            mine: false,
         }
     }
 }

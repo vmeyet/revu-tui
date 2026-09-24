@@ -13,6 +13,8 @@ pub mod docs;
 pub mod list;
 /// `revu login` and `revu logout`.
 pub mod login;
+/// `revu merge`.
+pub mod merge;
 /// `revu publish`.
 pub mod publish;
 /// `revu share`.

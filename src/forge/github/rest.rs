@@ -270,12 +270,36 @@ impl Client {
     }
 
     /// An approval is a review of its own. GitHub has no taking it back for the one who gave it.
+    /// GitHub deletes the branch itself when the repo says so; `sha` refuses a push made after the reader looked.
+    pub async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
+        let method = match plan.method {
+            forge::MergeMethod::Merge => "merge",
+            forge::MergeMethod::Squash => "squash",
+            forge::MergeMethod::Rebase => "rebase",
+        };
+        let path = format!("{}/pulls/{}/merge", repo_path(&key.project), key.number);
+        self.put_json::<serde_json::Value>(&path, &json!({"sha": head, "merge_method": method})).await.map(|_| ()).map_err(merge_refused)
+    }
+
     pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
         if !approve {
             bail!("GitHub cannot unapprove; request changes or dismiss the review from the web");
         }
         let path = format!("{}/pulls/{}/reviews", repo_path(&key.project), key.number);
         self.post_json::<serde_json::Value>(&path, &json!({"event": "APPROVE"})).await.map(|_| ()).map_err(cannot_approve)
+    }
+}
+
+/// The answers GitHub gives a merge it will not do, in words the reader can act on.
+fn merge_refused(err: anyhow::Error) -> anyhow::Error {
+    let text = err.to_string();
+    match () {
+        () if text.contains("HTTP 409") => anyhow!("the branch moved since you read it: refresh with r and look at the new commits"),
+        () if text.contains("HTTP 405") => {
+            anyhow!("GitHub will not merge it yet: {}", text.rsplit_once(" 405 ").map_or(text.as_str(), |(_, rest)| rest))
+        }
+        () if text.contains("HTTP 403") => anyhow!("you are not allowed to merge into this branch"),
+        () => err,
     }
 }
 
@@ -306,6 +330,35 @@ mod tests {
         json!({"id": id, "node_id": format!("N_{id}"), "body": "hi", "user": {"id": 2, "login": "nina"}, "created_at": "2026-09-22T10:00:00Z", "updated_at": "2026-09-22T10:00:00Z"})
     }
 
+    #[tokio::test]
+    async fn merge_sends_the_head_and_the_method_and_words_the_refusals() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/repos/acme/widgets/pulls/42/merge"))
+            .and(body_partial_json(json!({"sha": "bbbb", "merge_method": "squash"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"merged": true, "sha": "cccc"})))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/repos/acme/widgets/pulls/43/merge"))
+            .respond_with(
+                ResponseTemplate::new(409).set_body_json(json!({"message": "Head branch was modified. Review and try the merge again."})),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/repos/acme/widgets/pulls/44/merge"))
+            .respond_with(ResponseTemplate::new(405).set_body_json(json!({"message": "Required status check \"ci\" is expected."})))
+            .mount(&server)
+            .await;
+        let client = client(&server);
+        let plan = forge::MergePlan { method: forge::MergeMethod::Squash, remove_branch: false };
+        client.merge(&key(), "bbbb", plan).await.unwrap();
+        let moved = client.merge(&MrKey::new("acme/widgets", 43), "bbbb", plan).await.unwrap_err().to_string();
+        assert!(moved.contains("the branch moved"), "{moved}");
+        let early = client.merge(&MrKey::new("acme/widgets", 44), "bbbb", plan).await.unwrap_err().to_string();
+        assert!(early.contains("GitHub will not merge it yet") && early.contains("status check"), "{early}");
+    }
     #[tokio::test]
     async fn files_follow_the_pages_and_read_renames_binaries_and_withheld_diffs() {
         let server = MockServer::start().await;

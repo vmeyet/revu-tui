@@ -15,7 +15,7 @@ expression: "render(&mut app, 160, 45)"
 │   infra: new runner   │      esc x  close the pane, back to the queue             ⌥enter ^o  in the box: new line, $EDITOR          │                        │
 │   omar · !35 · +0 −0  │  tab S-tab  next, previous file                                 esc  drop the selection, leave the box      │                        │
 │                       │      ]c [c  next, previous hunk                                   P  publish every draft                    │                        │
-│   ── ▸ DONE · 1 ──────│      ]n [n  next, previous conversation                           A  approve, unapprove                     │                        │
+│   ── ▸ DONE · 1 ──────│      ]n [n  next, previous conversation                         A M  approve or unapprove, merge mine       │                        │
 │                       │      ]f [f  next, previous file with a thread                     Y  share the MR, after a preview          │                        │
 │                       │      ]r [r  next, previous MR that needs you                                                                │                        │
 │                       │                                                           THREAD PANE                                       │                        │

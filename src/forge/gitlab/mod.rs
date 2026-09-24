@@ -29,6 +29,8 @@ pub struct Client {
     host: String,
     budget: super::budget::Budget,
     base: Url,
+    /// My username here, asked once: an MR reads as mine by it.
+    me: std::sync::Arc<tokio::sync::OnceCell<String>>,
 }
 
 impl Client {
@@ -43,7 +45,7 @@ impl Client {
             .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let base = Url::parse(&format!("https://{}/api/v4/", credentials.host)).context("host is not a hostname")?;
-        Ok(Self { http, host: credentials.host.clone(), base, budget: super::budget::Budget::default() })
+        Ok(Self { http, host: credentials.host.clone(), base, budget: super::budget::Budget::default(), me: std::sync::Arc::default() })
     }
 
     /// For tests: point at a mock server. The host guard still applies to that server's host.
@@ -112,6 +114,11 @@ impl Client {
 
     pub async fn me(&self) -> Result<User> {
         self.get::<wire::User>("user").await.map(User::from)
+    }
+
+    /// My username on this host, asked the first time and kept for the session.
+    pub async fn my_name(&self) -> Result<String> {
+        self.me.get_or_try_init(|| async { self.me().await.map(|u| u.username) }).await.cloned()
     }
 
     /// One request with the token, retried once after the wait GitLab asks for on 429.

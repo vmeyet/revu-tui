@@ -85,6 +85,18 @@ Approve a merge request (`--undo` takes it back)
 |---|---|
 | `--undo` | Remove your approval instead. |
 
+## `revu merge`
+
+Merge your own approved merge request, after a yes (`--yes` skips the question)
+
+| Argument | Means |
+|---|---|
+| `MR` | `group/project!42`, `!42`, an MR URL, or nothing for the current branch. |
+
+| Flag | Means |
+|---|---|
+| `-y, --yes` | Merge without asking. |
+
 ## `revu publish`
 
 Publish every draft comment you hold on a merge request as one review.

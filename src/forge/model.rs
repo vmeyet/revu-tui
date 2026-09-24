@@ -49,6 +49,59 @@ pub struct Mr {
     pub reviewers: Vec<User>,
     pub labels: Vec<String>,
     pub approvals: Approvals,
+    /// How the forge merges it, from its project settings; the confirmation names the method.
+    #[serde(default)]
+    pub merge: MergePlan,
+    /// I wrote it, as the host that holds it knows me: a queue can mix hosts, and names differ on each.
+    #[serde(default)]
+    pub mine: bool,
+}
+
+impl Mr {
+    /// Why I may not merge this MR from revu, or `None` when I may: it is mine, open, not a draft,
+    /// green, without conflicts, and approved by someone with no approval left to give.
+    pub fn merge_refusal(&self) -> Option<String> {
+        let approvals = &self.approvals;
+        let reason = match () {
+            () if !self.mine => "only your own MRs merge from revu".to_owned(),
+            () if self.state != "opened" => format!("this MR is {}", self.state),
+            () if self.draft => "a draft cannot merge: mark it ready first".to_owned(),
+            () if self.conflicts => "it has conflicts with its target branch".to_owned(),
+            () if self.pipeline.as_ref().is_some_and(|p| p.status == "failed") => "its pipeline failed".to_owned(),
+            () if approvals.approved_by.is_empty() => "nobody approved it yet".to_owned(),
+            () if approvals.approvals_left > 0 => {
+                format!("it needs {} more approval{}", approvals.approvals_left, if approvals.approvals_left == 1 { "" } else { "s" })
+            }
+            () => return None,
+        };
+        Some(reason)
+    }
+}
+
+/// How a forge merges an MR, as its project allows and prefers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MergeMethod {
+    #[default]
+    Merge,
+    Squash,
+    Rebase,
+}
+
+impl MergeMethod {
+    pub fn word(self) -> &'static str {
+        match self {
+            MergeMethod::Merge => "merge commit",
+            MergeMethod::Squash => "squash",
+            MergeMethod::Rebase => "rebase",
+        }
+    }
+}
+
+/// The method, and whether the forge deletes the source branch afterwards.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MergePlan {
+    pub method: MergeMethod,
+    pub remove_branch: bool,
 }
 
 /// The diff a review reads: its base, where the branch started (GitLab tells it apart from the
@@ -231,5 +284,50 @@ mod tests {
         assert_eq!((context.side(), context.number()), (Side::New, Some(12)));
         assert_eq!((removed.side(), removed.number()), (Side::Old, Some(13)));
         assert_eq!((added.side(), added.number()), (Side::New, Some(14)));
+    }
+
+    fn mergeable() -> Mr {
+        let lea = User { id: 3, username: "lea".into(), name: "Léa".into() };
+        Mr {
+            project: "acme/widgets".into(),
+            number: 42,
+            title: "feat: charge cards".into(),
+            description: String::new(),
+            state: "opened".into(),
+            draft: false,
+            author: User { id: 5, username: "nina".into(), name: "Nina".into() },
+            source_branch: "feat/checkout".into(),
+            target_branch: "main".into(),
+            web_url: String::new(),
+            updated_at: DateTime::default(),
+            refs: Refs { base: "a".into(), start: "a".into(), head: "b".into() },
+            pipeline: Some(Pipeline { status: "success".into(), web_url: None }),
+            changes_count: None,
+            conflicts: false,
+            reviewers: vec![],
+            labels: vec![],
+            approvals: Approvals { approved: true, approved_by: vec![lea], ..Approvals::default() },
+            merge: MergePlan::default(),
+            mine: true,
+        }
+    }
+
+    #[test]
+    fn only_my_open_green_approved_mrs_may_merge_and_each_refusal_says_why() {
+        assert_eq!(mergeable().merge_refusal(), None);
+        let cases: [(Mr, &str); 7] = [
+            (Mr { mine: false, ..mergeable() }, "only your own MRs merge from revu"),
+            (Mr { state: "merged".into(), ..mergeable() }, "this MR is merged"),
+            (Mr { draft: true, ..mergeable() }, "a draft cannot merge: mark it ready first"),
+            (Mr { conflicts: true, ..mergeable() }, "it has conflicts with its target branch"),
+            (Mr { pipeline: Some(Pipeline { status: "failed".into(), web_url: None }), ..mergeable() }, "its pipeline failed"),
+            (Mr { approvals: Approvals { approved: true, ..Approvals::default() }, ..mergeable() }, "nobody approved it yet"),
+            (Mr { approvals: Approvals { approvals_left: 2, ..mergeable().approvals }, ..mergeable() }, "it needs 2 more approvals"),
+        ];
+        for (mr, reason) in cases {
+            assert_eq!(mr.merge_refusal().as_deref(), Some(reason));
+        }
+        let running = Mr { pipeline: Some(Pipeline { status: "running".into(), web_url: None }), ..mergeable() };
+        assert_eq!(running.merge_refusal(), None, "a running pipeline is the forge's call: it may merge when it passes");
     }
 }

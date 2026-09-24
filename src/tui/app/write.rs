@@ -26,6 +26,7 @@ impl App {
             KeyCode::Char('R') => self.toggle_resolved(),
             KeyCode::Char('s') => self.compose_here(true),
             KeyCode::Char('A') => self.toggle_approval(),
+            KeyCode::Char('M') => self.merge_here(),
             KeyCode::Char('P') => {
                 self.open_publish();
                 vec![]
@@ -359,6 +360,7 @@ impl App {
             Failure::Approve => self.warn(message),
             Failure::Checks => self.checks_failed(message),
             Failure::Apply => self.warn(format!("not applied: {message}")),
+            Failure::Merge => self.warn(format!("not merged: {message}")),
             Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage | Failure::Ready => self.warn(message),
         }
     }

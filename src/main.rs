@@ -39,6 +39,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Diff(args)) => commands::diff::run(&ctx, args).await,
         Some(Command::Comment(args)) => commands::comment::run(&ctx, args).await,
         Some(Command::Approve(args)) => commands::approve::run(&ctx, args).await,
+        Some(Command::Merge(args)) => commands::merge::run(&ctx, args).await,
         Some(Command::Publish(args)) => commands::publish::run(&ctx, args).await,
         Some(Command::Share(args)) => commands::share::run(&ctx, args).await,
         Some(Command::Ai(args)) => commands::ai::ask(&ctx, args).await,

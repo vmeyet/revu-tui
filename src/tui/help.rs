@@ -72,7 +72,7 @@ pub const GROUPS: [Group; 7] = [
             ("⌥enter ^o", "in the box: new line, $EDITOR"),
             ("esc", "drop the selection, leave the box"),
             ("P", "publish every draft"),
-            ("A", "approve, unapprove"),
+            ("A M", "approve or unapprove, merge mine"),
             ("Y", "share the MR, after a preview"),
         ],
     },

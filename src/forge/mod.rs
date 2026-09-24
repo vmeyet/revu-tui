@@ -11,8 +11,8 @@ pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{
-    Applicable, Approvals, DiffFile, Discussion, Draft, LineRef, Mr, MrKey, NewDraft, Note, Pipeline, Position, Refs, Side, Suggestion,
-    User,
+    Applicable, Approvals, DiffFile, Discussion, Draft, LineRef, MergeMethod, MergePlan, Mr, MrKey, NewDraft, Note, Pipeline, Position,
+    Refs, Side, Suggestion, User,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -256,6 +256,14 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.approve(key, approve).await,
             Forge::GitHub(client) => client.approve(key, approve).await,
+        }
+    }
+
+    /// Merges the MR as `plan` says, only while its head is still `head`: a push in between is refused.
+    pub async fn merge(&self, key: &MrKey, head: &str, plan: MergePlan) -> Result<()> {
+        match self {
+            Forge::GitLab(client) => client.merge(key, head, plan).await,
+            Forge::GitHub(client) => client.merge(key, head, plan).await,
         }
     }
 
