@@ -30,6 +30,7 @@ impl App {
                 self.ask_triage();
                 let notice = self.notify_new();
                 self.notice(notice);
+                self.prefetch();
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
             Incoming::Discussions { key, discussions } => {
@@ -95,6 +96,9 @@ impl App {
             self.opened.insert(key, self.today);
             self.schedule_review();
             self.ask_reading();
+            if self.prefetch_due {
+                self.prefetch();
+            }
         }
     }
 

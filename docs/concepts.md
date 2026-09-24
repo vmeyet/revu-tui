@@ -69,6 +69,8 @@ flowchart LR
 
 revu asks the forge at start, then again every minute.
 It paints from its cache first, so the screen is never empty.
+It also loads the first 5 MRs that need you ahead, so opening them needs no network.
+`[queue] prefetch` changes that number, and 0 turns it off.
 
 ## What "needs me" means
 

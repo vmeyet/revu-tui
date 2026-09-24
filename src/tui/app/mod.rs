@@ -12,6 +12,7 @@ mod order;
 mod pane;
 mod pins;
 mod pipeline;
+pub mod prefetch;
 mod queue;
 mod review;
 mod share;
@@ -33,6 +34,7 @@ pub use order::QueueView;
 pub use pane::{Entry, EntryKind};
 pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
 pub use pipeline::{Pipeline, Run};
+pub use prefetch::Ahead;
 pub use queue::{Badge, QueueRow};
 pub use review::Open;
 pub use share::{Sharing, Stage as ShareStage};
@@ -72,6 +74,8 @@ pub enum Action {
     },
     /// Paint from the cache at once, then fetch the MR, its diffs and its discussions.
     Open(MrKey),
+    /// Load these MRs into the cache ahead of time, quietly: nothing answers.
+    Prefetch(Vec<Ahead>),
     RefreshMr(MrKey),
     RefreshDiscussions(MrKey),
     SaveState {

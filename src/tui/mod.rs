@@ -33,7 +33,7 @@ use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Q
 use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
-use app::{Action, App, Failure, Incoming, Input, Part, QueueView, Settings};
+use app::{Action, Ahead, App, Failure, Incoming, Input, Part, QueueView, Settings};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
@@ -43,6 +43,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 const TICK: Duration = Duration::from_millis(100);
+/// How many MRs load ahead at once: enough to fill the cache soon, few enough to leave the network to the reader.
+const AHEAD: usize = 2;
 
 /// What survives between two openings of one MR, in the cache.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -77,7 +79,12 @@ struct Backend {
     jev: Option<TypeSafe>,
     /// Claude, when `[ai.anthropic]` is on and a key was found.
     claude: Option<Claude>,
+    /// MRs being opened right now: loading ahead waits while there are any.
+    opening: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
+
+/// What opening an MR fetches: the MR, its diffs, its discussions and my drafts.
+type Fetched = (Mr, Vec<DiffFile>, Vec<Discussion>, Vec<HeldDraft>);
 
 /// An answer kept in the cache: asking the same thing about the same diff paints it at once.
 #[derive(Serialize, Deserialize)]
@@ -112,6 +119,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
         jev: jev(&ctx.config.ai),
         claude: claude(&ctx.config.ai),
+        opening: std::sync::Arc::default(),
     };
     let settings = Settings {
         theme,
@@ -129,6 +137,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         zen_width: ctx.config.tui.zen_width(),
         views: ctx.config.queue.views.clone().into_iter().collect(),
         share: crate::share::targets(&ctx.config.share),
+        prefetch: ctx.config.queue.prefetch,
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();
@@ -281,12 +290,14 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 }
             }
             Action::Open(key) => {
+                let _opening = Opening::start(&backend.opening);
                 let wanted = key.clone();
                 if let Some(cached) = backend.off(move |b| b.open_cached(&wanted)).await.ok().flatten() {
                     send(cached);
                 }
                 send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Open, &e)));
             }
+            Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::SaveState { key, fold, viewed, split } => {
@@ -447,6 +458,31 @@ fn save_theme(name: &str) -> Result<()> {
 /// Runs `work` on tokio's blocking pool: file I/O and CPU-heavy work stay off the threads that drive the network.
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
     tokio::task::spawn_blocking(work).await.context("a background task stopped")?
+}
+
+/// Runs `load` over `plan`, at most `cap` at a time.
+async fn in_turn<T, F, Fut>(plan: Vec<T>, cap: usize, load: F)
+where
+    F: Fn(T) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    futures_util::stream::iter(plan).for_each_concurrent(cap, load).await;
+}
+
+/// Counts an MR being opened for as long as it lives, so loading ahead steps aside.
+struct Opening(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl Opening {
+    fn start(count: &std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self(count.clone())
+    }
+}
+
+impl Drop for Opening {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
@@ -667,21 +703,54 @@ impl Backend {
     }
 
     async fn fetch_review(&self, key: MrKey) -> Result<Incoming> {
-        let forge = self.forge_of(&key);
-        let (mr, diffs, discussions, drafts) =
-            tokio::try_join!(forge.mr(&key), forge.diffs(&key), forge.discussions(&key), forge.drafts(&key))?;
+        let fetched = self.fetch(&key).await?;
         self.off(move |b| {
-            let cache = b.cache_of(&key);
-            let _ = cache.write_entry(&keys::mr(&key), &mr);
-            let _ = cache.write(&keys::diffs(&key, &mr.refs.head), &diffs);
-            let _ = cache.write(&keys::discussions(&key), &discussions);
-            let _ = cache.write(&keys::drafts(&key), &drafts);
+            b.keep(&key, &fetched);
             let state = MrState { opened_at: Some(Utc::now()), ..b.state(&key) };
-            let _ = cache.write(&keys::state(&key), &state);
+            let _ = b.cache_of(&key).write(&keys::state(&key), &state);
+            let (mr, diffs, discussions, drafts) = fetched;
             let review = b.build(&key, mr, &diffs, discussions, &drafts);
             Incoming::Review { key, review: Box::new(review), cached: None }
         })
         .await
+    }
+
+    /// Everything opening an MR needs, from the forge.
+    async fn fetch(&self, key: &MrKey) -> Result<Fetched> {
+        let forge = self.forge_of(key);
+        Ok(tokio::try_join!(forge.mr(key), forge.diffs(key), forge.discussions(key), forge.drafts(key))?)
+    }
+
+    /// Writes what a fetch brought where opening reads it; a failed write only costs a later fetch.
+    fn keep(&self, key: &MrKey, (mr, diffs, discussions, drafts): &Fetched) {
+        let cache = self.cache_of(key);
+        let _ = cache.write_entry(&keys::mr(key), mr);
+        let _ = cache.write(&keys::diffs(key, &mr.refs.head), diffs);
+        let _ = cache.write(&keys::discussions(key), discussions);
+        let _ = cache.write(&keys::drafts(key), drafts);
+    }
+
+    /// Loads one MR into the cache ahead of time, quietly. It never marks the MR opened, so its
+    /// activity dot stays; it steps aside while an MR is being opened or requests run low.
+    async fn load_ahead(&self, ahead: Ahead) {
+        let busy = self.opening.load(std::sync::atomic::Ordering::SeqCst) > 0;
+        let low = self.forge_of(&ahead.key).rate().remaining.is_some_and(|left| left < app::prefetch::SPARE);
+        let (wanted, seen) = (ahead.key.clone(), ahead.updated_at);
+        if busy || low || self.off(move |b| b.is_fresh(&wanted, seen)).await.unwrap_or(true) {
+            return;
+        }
+        if let Ok(fetched) = self.fetch(&ahead.key).await {
+            let key = ahead.key;
+            let _ = self.off(move |b| b.keep(&key, &fetched)).await;
+        }
+    }
+
+    /// The cache already holds this MR as the queue last saw it, diff included.
+    fn is_fresh(&self, key: &MrKey, seen: DateTime<Utc>) -> bool {
+        let cache = self.cache_of(key);
+        cache
+            .read_entry::<Mr>(&keys::mr(key))
+            .is_some_and(|mr| mr.value.updated_at >= seen && cache.has(&keys::diffs(key, &mr.value.refs.head)))
     }
 
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
@@ -874,6 +943,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            opening: std::sync::Arc::default(),
         };
         backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
         let state = backend.state(&key());
@@ -900,6 +970,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            opening: std::sync::Arc::default(),
         };
         let mr = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
         let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
@@ -945,6 +1016,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: Some(Claude::with_base(&server.uri(), ai::Secret::new("sk-ant-test"), "claude-opus-5")),
+            opening: std::sync::Arc::default(),
         };
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
@@ -975,6 +1047,106 @@ mod tests {
         })
     }
 
+    /// One MR on the mock GitLab, changed at `updated`; each of its five requests may come `times` times.
+    async fn mount_mr(server: &wiremock::MockServer, updated: &str, times: u64) {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, ResponseTemplate};
+        let base = "/api/v4/projects/acme%2Fwidgets/merge_requests/42";
+        let mr = serde_json::json!({
+            "id": 1042, "iid": 42, "project_id": 7, "title": "feat: charge cards", "description": "", "state": "opened", "draft": false,
+            "author": {"id": 5, "username": "omar", "name": "Omar"}, "source_branch": "feat/checkout", "target_branch": "main",
+            "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/42", "updated_at": updated, "sha": "bbbb",
+            "diff_refs": {"base_sha": "aaaa", "head_sha": "bbbb", "start_sha": "aaaa"}
+        });
+        let answers = [
+            (base.to_owned(), mr),
+            (format!("{base}/approvals"), serde_json::json!({"approved": false, "approvals_left": 1, "approved_by": []})),
+            (format!("{base}/diffs"), serde_json::json!([{"diff": "@@ -1 +1 @@\n-a\n+b\n", "old_path": "a.rs", "new_path": "a.rs"}])),
+            (format!("{base}/discussions"), serde_json::json!([])),
+            (format!("{base}/draft_notes"), serde_json::json!([])),
+        ];
+        for (route, body) in answers {
+            Mock::given(method("GET"))
+                .and(path(route))
+                .respond_with(ResponseTemplate::new(200).set_body_json(body))
+                .expect(times)
+                .mount(server)
+                .await;
+        }
+    }
+
+    fn ahead(updated: &str) -> Ahead {
+        Ahead { key: key(), updated_at: updated.parse().unwrap() }
+    }
+
+    #[tokio::test]
+    async fn loading_ahead_fills_the_cache_opening_reads_without_marking_the_mr_opened() {
+        let server = wiremock::MockServer::start().await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", 1).await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
+        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        let Some(Incoming::Review { cached, .. }) = backend.open_cached(&key()) else { panic!("opening paints from the cache") };
+        assert!(cached.is_some());
+        assert_eq!(backend.state(&key()).opened_at, None, "loading ahead never hides the activity dot");
+    }
+
+    #[tokio::test]
+    async fn a_cache_as_new_as_the_queue_is_not_fetched_again_and_a_newer_change_is() {
+        let server = wiremock::MockServer::start().await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", 2).await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
+        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        backend.load_ahead(ahead("2026-09-22T10:00:00Z")).await;
+    }
+
+    #[tokio::test]
+    async fn loading_ahead_steps_aside_while_an_mr_opens() {
+        let server = wiremock::MockServer::start().await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", 0).await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
+        let _opening = Opening::start(&backend.opening);
+        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+    }
+
+    #[tokio::test]
+    async fn loading_ahead_stops_when_requests_run_low() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, ResponseTemplate};
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/user"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("ratelimit-remaining", "150")
+                    .set_body_json(serde_json::json!({"id": 1, "username": "nina", "name": "Nina"})),
+            )
+            .mount(&server)
+            .await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", 0).await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
+        backend.forge.me().await.unwrap();
+        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+    }
+
+    #[tokio::test]
+    async fn in_turn_runs_at_most_the_cap_at_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let (running, most) = (AtomicUsize::new(0), AtomicUsize::new(0));
+        in_turn((0..6).collect(), 2, |_: u32| async {
+            let now = running.fetch_add(1, Ordering::SeqCst) + 1;
+            most.fetch_max(now, Ordering::SeqCst);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            running.fetch_sub(1, Ordering::SeqCst);
+        })
+        .await;
+        assert_eq!(most.load(Ordering::SeqCst), 2);
+    }
+
     fn backend_on(server: &wiremock::MockServer) -> Backend {
         let creds = crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
         let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap());
@@ -992,6 +1164,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            opening: std::sync::Arc::default(),
         }
     }
 
@@ -1054,6 +1227,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            opening: std::sync::Arc::default(),
         }
     }
 

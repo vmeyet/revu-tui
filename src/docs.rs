@@ -48,6 +48,14 @@ pub const SETTINGS: &[Setting] = &[
     Setting { table: "queue", key: "groups", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting { table: "queue", key: "projects", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting {
+        table: "queue",
+        key: "prefetch",
+        kind: "number",
+        default: "`5`",
+        meaning: "How many MRs that need you load ahead, so opening them needs no network; 0 turns it off.",
+        example: "5",
+    },
+    Setting {
         table: "queue.ready",
         key: "command",
         kind: "command line",

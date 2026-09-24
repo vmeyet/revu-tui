@@ -53,6 +53,11 @@ impl Cache {
         Ok(path)
     }
 
+    /// Whether an entry is there, without reading it: a big diff is not parsed only to be dropped.
+    pub fn has(&self, key: &str) -> bool {
+        self.dir.join(key).is_file()
+    }
+
     /// A missing or unreadable file is a miss; an unreadable one is removed so it cannot fail again.
     pub fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let path = self.dir.join(key);

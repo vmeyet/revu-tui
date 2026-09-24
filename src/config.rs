@@ -96,7 +96,7 @@ pub struct Host {
 }
 
 /// Which MRs the queue shows beyond the ones GitLab lists for me.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Queue {
     #[serde(default)]
@@ -115,6 +115,34 @@ pub struct Queue {
     /// Where "ready for review" comes from: a command printing MR links.
     #[serde(default, skip_serializing_if = "Ready::is_default")]
     pub ready: Ready,
+    /// How many MRs that need me are loaded ahead, so opening them needs no network; 0 turns it off.
+    #[serde(default = "default_prefetch", skip_serializing_if = "is_default_prefetch")]
+    pub prefetch: usize,
+}
+
+const PREFETCH: usize = 5;
+
+impl Default for Queue {
+    fn default() -> Self {
+        Self {
+            groups: vec![],
+            projects: vec![],
+            watch_labels: vec![],
+            views: BTreeMap::new(),
+            rules: crate::forge::rules::Rules::default(),
+            ready: Ready::default(),
+            prefetch: PREFETCH,
+        }
+    }
+}
+
+fn default_prefetch() -> usize {
+    PREFETCH
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if passes a reference")]
+fn is_default_prefetch(n: &usize) -> bool {
+    *n == PREFETCH
 }
 
 /// `[queue.ready]`: a command whose output names the MRs ready for review.
