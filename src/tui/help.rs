@@ -49,7 +49,8 @@ pub const GROUPS: [Group; 7] = [
             ("D", "changed words inline, or split"),
             ("t", "file tree"),
             ("p", "pipeline"),
-            ("zz", "reading mode"),
+            ("zz", "zen: the diff alone, quiet"),
+            ("← →", "in zen: previous, next MR"),
             ("w", "wrap long lines"),
             ("W", "hide whitespace-only changes"),
             ("+", "more lines around the hunk"),
@@ -226,6 +227,8 @@ mod tests {
     fn as_default(word: &str) -> String {
         match word {
             "S-tab" => "backtab".to_owned(),
+            "←" => "left".to_owned(),
+            "→" => "right".to_owned(),
             _ => word.strip_prefix('^').map_or_else(|| word.to_owned(), |rest| format!("ctrl-{rest}")),
         }
     }

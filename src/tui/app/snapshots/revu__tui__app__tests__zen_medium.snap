@@ -1,0 +1,25 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 30)"
+---
+
+ !42 feat: charge cards at checkout · omar · +5 −3 ✓
+
+  ◆ 1 on the MR  enter opens
+
+ ▎▾ src/pay/charge.rs                                                        +4 −2  ◆1 · 1 outdated
+     ▾ @@ -12,4 +12,5 @@ pub async fn charge
+      12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {
+  ✓   13      -    let client = Client::new();
+           13 +    let client = Client::with_key(idempotency_key(card));
+           14 +    let attempt = Attempt::first();
+      14   15      let response = client.charge(amount).await?;
+      15   16      audit::record(&response);
+     ▾ @@ -40,3 +41,4 @@ fn idempotency_key
+      40   41  fn idempotency_key(card: &Card) -> Key {
+      41      -    Key::from(card.number())
+           42 +    Key::from((card.number(), card.expiry()))
+           43 +    // hunk two, line 43 is new
+      42   44  }
+
+  ▸ Cargo.lock                                                                        +1 −1  folded

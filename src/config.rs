@@ -230,6 +230,27 @@ pub struct Tui {
     pub images: Option<bool>,
     #[serde(default, skip_serializing_if = "QueueLayout::is_default")]
     pub queue: QueueLayout,
+    /// How wide the diff reads in zen, `zz`, in columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zen_width: Option<u16>,
+}
+
+/// A comfortable line of code with both gutters and the sign.
+const ZEN_WIDTH: u16 = 100;
+/// Narrower than this, a diff line and its gutters no longer fit.
+const MIN_ZEN_WIDTH: u16 = 60;
+
+impl Tui {
+    pub fn zen_width(&self) -> u16 {
+        self.zen_width.unwrap_or(ZEN_WIDTH)
+    }
+
+    fn check(&self) -> Result<()> {
+        match self.zen_width {
+            Some(width) if width < MIN_ZEN_WIDTH => bail!("`tui.zen_width = {width}` is too narrow: {MIN_ZEN_WIDTH} is the least"),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// How a queue row reads: two lines (the title, then number, author, age and size), or one.
@@ -441,6 +462,7 @@ impl Config {
         config.queue.check().with_context(|| format!("in {}", path.display()))?;
         config.ai.check().with_context(|| format!("in {}", path.display()))?;
         config.share.check().with_context(|| format!("in {}", path.display()))?;
+        config.tui.check().with_context(|| format!("in {}", path.display()))?;
         crate::keymap::Keymap::new(&config.keys).with_context(|| format!("in {}", path.display()))?;
         Ok(config)
     }
@@ -528,6 +550,20 @@ mod tests {
         assert!(bad.contains("queue.views.front") && bad.contains("size: takes small or large") && bad.contains("config.toml"), "{bad}");
         let clash = load("[queue.views]\nfront = \"@me\"\nfixes = \"fix\"\n").unwrap_err();
         assert!(clash.contains("both start with `f`"), "{clash}");
+    }
+
+    #[test]
+    fn zen_width_defaults_to_100_and_refuses_a_column_too_narrow() {
+        let load = |toml: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, toml).unwrap();
+            Config::load_from(&path).map_err(|e| format!("{e:#}"))
+        };
+        assert_eq!(load("").unwrap().tui.zen_width(), 100);
+        assert_eq!(load("[tui]\nzen_width = 120\n").unwrap().tui.zen_width(), 120);
+        let narrow = load("[tui]\nzen_width = 40\n").unwrap_err();
+        assert!(narrow.contains("zen_width") && narrow.contains("config.toml"), "{narrow}");
     }
 
     #[test]

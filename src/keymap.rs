@@ -23,7 +23,9 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("unfold_all", "zR"),
     ("fold_header", "zh"),
     ("viewed", "zv"),
-    ("reading", "zz"),
+    ("zen", "zz"),
+    ("prev_mr", "left"),
+    ("next_mr", "right"),
     ("split", "D"),
     ("tree", "t"),
     ("pipeline", "p"),
@@ -330,6 +332,8 @@ impl Keymap {
 fn help_word(word: &str) -> Option<Vec<Key>> {
     match word {
         "S-tab" => parse("backtab").ok(),
+        "←" => parse("left").ok(),
+        "→" => parse("right").ok(),
         _ => match word.strip_prefix('^') {
             Some(rest) if rest.chars().count() == 1 => parse(&format!("ctrl-{rest}")).ok(),
             _ => parse(word).ok(),
@@ -440,7 +444,7 @@ mod tests {
         assert_eq!(map.feed(None, press(')')), Feed::Hold(press(')')), "`)` waits: it may start `)x`");
         assert_eq!(chars(&map.feed(Some(press(')')), press('x'))), "]n");
         assert_eq!(chars(&map.feed(Some(press(')')), press('c'))), "]c", "anything else is still the `]` prefix");
-        let zx = Keymap::new(&keys(Layout::Qwerty, &[("reading", &["zx"])])).unwrap();
+        let zx = Keymap::new(&keys(Layout::Qwerty, &[("zen", &["zx"])])).unwrap();
         assert_eq!(chars(&zx.feed(Some(press('z')), press('a'))), "za", "holding `z` never breaks `za`");
     }
 

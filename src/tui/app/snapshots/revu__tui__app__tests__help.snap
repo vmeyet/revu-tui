@@ -4,19 +4,18 @@ expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                  │
-│ ▎ feat charge cards at checkout          ││                                                                                                                  │
-│ ▎ omar · !42 · +412 −38   ╭ keys ────────────────────────────────────────────────────────────────────────────────────────────────╮                           │
-│                           │                                                                                                      │                           │
-│   ── MINE · 1 ────────────│  MOVE                                              COMMENT & PUBLISH                                 │                           │
-│   fix flaky cache test    │        j k  move                                           c  comment on the line                    │                           │
-│   nina · !41 · +3 −1      │        g G  first, last                                    C  comment on the old side                │                           │
-│                           │      ^d ^u  half a page                                    V  select lines                           │                           │
-│   ── WATCHING · 1 ────────│        h l  pane to the left, to the right                 s  suggest a change                       │                           │
-│   infra: new runner       │      enter  open, or toggle the fold                       E  write in $EDITOR                       │                           │
-│   omar · !35 · +0 −0      │      esc x  close the pane, back to the queue      ⌥enter ^o  in the box: new line, $EDITOR          │                           │
-│                           │  tab S-tab  next, previous file                          esc  drop the selection, leave the box      │                           │
-│   ── ▸ DONE · 1 ──────────│      ]c [c  next, previous hunk                            P  publish every draft                    │                           │
-│                           │      ]n [n  next, previous conversation                    A  approve, unapprove                     │                           │
+│ ▎ feat charge cards at che╭ keys ────────────────────────────────────────────────────────────────────────────────────────────────╮                           │
+│ ▎ omar · !42 · +412 −38   │                                                                                                      │                           │
+│                           │  MOVE                                              COMMENT & PUBLISH                                 │                           │
+│   ── MINE · 1 ────────────│        j k  move                                           c  comment on the line                    │                           │
+│   fix flaky cache test    │        g G  first, last                                    C  comment on the old side                │                           │
+│   nina · !41 · +3 −1      │      ^d ^u  half a page                                    V  select lines                           │                           │
+│                           │        h l  pane to the left, to the right                 s  suggest a change                       │                           │
+│   ── WATCHING · 1 ────────│      enter  open, or toggle the fold                       E  write in $EDITOR                       │                           │
+│   infra: new runner       │      esc x  close the pane, back to the queue      ⌥enter ^o  in the box: new line, $EDITOR          │                           │
+│   omar · !35 · +0 −0      │  tab S-tab  next, previous file                          esc  drop the selection, leave the box      │                           │
+│                           │      ]c [c  next, previous hunk                            P  publish every draft                    │                           │
+│   ── ▸ DONE · 1 ──────────│      ]n [n  next, previous conversation                    A  approve, unapprove                     │                           │
 │                           │      ]f [f  next, previous file with a thread              Y  share the MR, after a preview          │                           │
 │                           │                                                                                                      │                           │
 │                           │  QUEUE                                             THREAD PANE                                       │                           │
@@ -32,13 +31,14 @@ expression: "render(&mut app, 160, 45)"
 │                           │          D  changed words inline, or split           a t c a  thread, comment, anything              │                           │
 │                           │          t  file tree                                c ⏎ R y  answer: draft, follow up, again, copy  │                           │
 │                           │          p  pipeline                                                                                 │                           │
-│                           │         zz  reading mode                           SEARCH & APP                                      │                           │
-│                           │          w  wrap long lines                               ^k  MRs · / files · > commands             │                           │
-│                           │          W  hide whitespace-only changes                   :  commands: :go !42, :set theme=nord     │                           │
-│                           │          +  more lines around the hunk                   o y  open in the browser, copy the link     │                           │
-│                           │          v  the file in your own program                   r  refresh                                │                           │
-│                           │   za zc zo  toggle, close, open the fold                   ?  this help                              │                           │
-│                           │      zM zR  fold, unfold every file                     q ^c  quit                                   │                           │
+│                           │         zz  zen: the diff alone, quiet             SEARCH & APP                                      │                           │
+│                           │        ← →  in zen: previous, next MR                     ^k  MRs · / files · > commands             │                           │
+│                           │          w  wrap long lines                                :  commands: :go !42, :set theme=nord     │                           │
+│                           │          W  hide whitespace-only changes                 o y  open in the browser, copy the link     │                           │
+│                           │          +  more lines around the hunk                     r  refresh                                │                           │
+│                           │          v  the file in your own program                   ?  this help                              │                           │
+│                           │   za zc zo  toggle, close, open the fold                q ^c  quit                                   │                           │
+│                           │      zM zR  fold, unfold every file                                                                  │                           │
 │                           │         zh  fold the MR header                                                                       │                           │
 │                           │         zv  file viewed: it folds away                                                               │                           │
 │                           │                                                                                                      │                           │

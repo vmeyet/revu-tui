@@ -12,7 +12,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Block, Padding, Paragraph};
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
@@ -35,8 +35,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         }
         None => "Review".to_owned(),
     };
-    let block = pane(theme, &title, app.focus == Focus::Review);
-    if let Some(open) = &app.open {
+    let zen = app.zen;
+    let block = if zen { Block::default().padding(Padding::new(1, 1, 1, 0)) } else { pane(theme, &title, app.focus == Focus::Review) };
+    if let Some(open) = app.open.as_ref().filter(|_| !zen) {
         app.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
     }
     let inner = block.inner(area);
@@ -50,10 +51,15 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let today = app.today;
     let folded = app.header_folded;
+    let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
     let wrap = app.wrap;
     let Some(open) = app.open.as_mut() else { return };
     let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
-    let header = if folded { vec![folded_header(open, theme)] } else { header_lines(open, theme, today, inner.width as usize) };
+    let header = match (zen, folded) {
+        (true, _) => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
+        (false, true) => vec![folded_header(open, theme)],
+        (false, false) => header_lines(open, theme, today, inner.width as usize),
+    };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
     let height = body.height as usize;
     let width = body.width as usize;
@@ -71,7 +77,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         open.scroll += 1;
     }
     let lines: Vec<Line> = (open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height).collect();
-    let pipeline = if folded { None } else { pipeline_link(&open.review, &header, inner) };
+    let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
     app.links.extend(pipeline);
@@ -203,6 +209,18 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
 }
 
 /// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
+/// Zen's one line on top: which MR, whose, its size and its pipeline, all quiet.
+fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<'a> {
+    let mr = &open.review.mr;
+    let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
+    let pipeline = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
+    let (glyph, _) = pipeline_glyph(&pipeline, theme);
+    let tail = format!(" · {} · +{adds} −{dels} {glyph}", mr.author.username);
+    let head = format!("{sigil}{} ", mr.number);
+    let title = truncate(&mr.title, width.saturating_sub(head.width() + tail.width()));
+    Line::from(Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded)))
+}
+
 fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     let mr = &open.review.mr;
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
