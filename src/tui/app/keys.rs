@@ -292,7 +292,7 @@ impl App {
             ('z', 'R') => return self.fold_all(false),
             ('[' | ']', 'r') => return self.walk_reviews(forward),
             ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
-            ('[' | ']', 'n') => self.jump_to_marked(forward),
+            ('[' | ']', 'n') => return self.jump_to_marked(forward),
             ('[' | ']', 'f') => {
                 let wanted = self.files_with_unresolved();
                 self.review_jump(forward, move |r| matches!(r, Row::File { index, .. } if wanted.contains(index)));

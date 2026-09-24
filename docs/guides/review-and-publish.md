@@ -42,7 +42,7 @@ A line with a conversation has a mark left of its numbers.
 | Key | Does |
 |---|---|
 | `enter` or `l` on a marked line | Open its threads in the right pane |
-| `]n` `[n` | Next, previous line with a conversation |
+| `]n` `[n` | Next, previous line with a conversation; a folded file or hunk on the way opens |
 | `r` | Reply, as a draft |
 | `R` | Resolve or unresolve |
 | `e` `d` | Edit, delete your draft |

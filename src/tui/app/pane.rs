@@ -138,12 +138,27 @@ impl App {
     }
 
     /// `]n` `[n`: the next marked line, in any open file; the pane follows when open.
-    pub(super) fn jump_to_marked(&mut self, forward: bool) {
-        let Some(open) = &self.open else { return };
-        let markers = open.review.markers();
-        let marked: Vec<bool> = open.rows.iter().map(|row| open.is_marked_in(&markers, row)).collect();
-        self.review_jump_where(forward, |index| marked[index]);
+    /// `]n` `[n`: the next conversation in file then line order, folded or not; a folded file
+    /// or hunk on the way opens, and stays open like one opened by hand.
+    pub(super) fn jump_to_marked(&mut self, forward: bool) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let Some(target) = next_marked(open, forward) else {
+            self.toast("nothing to jump to");
+            return vec![];
+        };
+        let fold = unfolded_for(open, &target);
+        let changed = fold != open.review.fold;
+        let laid = if changed { open.relaid(open.review.with_fold(fold)) } else { open.clone() };
+        let index = laid.rows.iter().position(|row| super::review::same_place(row, &target)).unwrap_or(laid.selected);
+        let next = laid.move_to(index);
+        let actions = if changed {
+            self.keep(next)
+        } else {
+            self.open = Some(next);
+            vec![]
+        };
         self.follow_cursor();
+        actions
     }
 
     pub(super) fn handle_pane_key(&mut self, key: KeyEvent) -> Vec<Action> {
@@ -246,6 +261,35 @@ fn first_link(text: &str) -> Option<String> {
     let rest = &text[start..];
     let end = rest.find(|c: char| c.is_whitespace() || matches!(c, ')' | '>' | ']')).unwrap_or(rest.len());
     Some(rest[..end].to_owned())
+}
+
+/// The next marked row after the cursor, wrapping, among the rows the review shows with every fold open.
+fn next_marked(open: &Open, forward: bool) -> Option<Row> {
+    let every = open.review.with_fold(crate::diff::fold::FoldState::default()).rows();
+    let markers = open.review.markers();
+    let here = open.row().and_then(|row| every.iter().position(|r| super::review::same_place(r, row))).unwrap_or(0);
+    let len = every.len();
+    (1..=len)
+        .map(|k| if forward { (here + k) % len } else { (here + len - k % len) % len })
+        .find(|&i| i != here && open.is_marked_in(&markers, &every[i]))
+        .map(|i| every[i].clone())
+}
+
+/// The fold state with the target's file and hunk open; the rest as the reader left it.
+fn unfolded_for(open: &Open, target: &Row) -> crate::diff::fold::FoldState {
+    let fold = open.review.fold.clone();
+    let Some(file) = target.file() else { return fold };
+    let path = &open.review.files[file].new_path;
+    let fold = if fold.file_is_open(path) { fold } else { fold.toggle_file(path) };
+    let hunk = match target {
+        Row::Hunk { index, .. } => Some(*index),
+        Row::Line { hunk, .. } | Row::Pair { hunk, .. } | Row::Context { hunk, .. } => Some(*hunk),
+        _ => None,
+    };
+    match hunk {
+        Some(hunk) if !fold.hunk_is_open(path, hunk) => fold.toggle_hunk(path, hunk),
+        _ => fold,
+    }
 }
 
 #[cfg(test)]
