@@ -3,6 +3,7 @@ use super::*;
 use crate::forge::gitlab::fixture;
 use crate::forge::{DiffFile, Discussion, Emoji, Kind, Mr};
 use crate::review::{Place, Row};
+use crate::tui::help::Help;
 use crate::tui::theme::Theme;
 use crate::tui::ui;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -469,12 +470,18 @@ fn queue_failures_toast_and_stop_the_spinner() {
 fn help_and_quit() {
     let mut app = app();
     press(&mut app, "?");
-    assert_eq!(app.help, Some(0));
+    assert_eq!(app.help, Some(Help::default()));
     press(&mut app, "jjk");
-    assert_eq!(app.help, Some(1), "moving keys scroll the list");
+    assert_eq!(app.help, Some(Help { scroll: 1, every_key: false }), "moving keys scroll the list");
     press(&mut app, "G");
-    assert_eq!(app.help, Some(crate::tui::help::last_row()));
-    press(&mut app, "x");
+    assert_eq!(app.help, Some(Help { scroll: crate::tui::help::last_row(false, Focus::Queue), every_key: false }));
+    press(&mut app, "?");
+    assert_eq!(app.help, Some(Help { scroll: 0, every_key: true }), "a second `?` lists every key from the top");
+    press(&mut app, "G");
+    assert_eq!(app.help.map(|h| h.scroll), Some(crate::tui::help::last_row(true, Focus::Queue)));
+    press(&mut app, "?");
+    assert_eq!(app.help, None, "`?` on every key closes it");
+    press(&mut app, "?x");
     assert_eq!(app.help, None, "any other key closes it");
     app.handle_key(ctrl('c'));
     app.handle_key(ctrl('c'));
@@ -514,24 +521,65 @@ fn snapshot_thread_open() {
     insta::assert_snapshot!("thread_open", render(&mut app, 120, 24));
 }
 
+/// The group titles the open key list shows, as its uppercase headers.
+fn help_titles(app: &mut App) -> Vec<&'static str> {
+    let screen = render(app, 160, 45);
+    crate::tui::help::GROUPS.iter().map(|g| g.title).filter(|t| screen.contains(&format!("  {} ", t.to_uppercase()))).collect()
+}
+
+#[test]
+fn the_first_question_mark_lists_the_keys_of_the_focused_pane_and_the_second_every_key() {
+    let mut queue = with_queue();
+    press(&mut queue, "?");
+    assert_eq!(help_titles(&mut queue), ["move", "queue", "search & app"]);
+    let mut diff = with_review();
+    assert_eq!(diff.focus, Focus::Review);
+    press(&mut diff, "?");
+    assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "ask claude", "search & app"]);
+    let mut thread = with_review();
+    press(&mut thread, "]n");
+    thread.handle_key(code(KeyCode::Enter));
+    assert_eq!(thread.focus, Focus::Side);
+    press(&mut thread, "?");
+    assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "ask claude", "search & app"]);
+    press(&mut thread, "?");
+    assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(|g| g.title));
+    thread.handle_key(code(KeyCode::Esc));
+    assert_eq!(thread.help, None);
+}
+
+#[test]
+fn snapshot_help_for_the_queue() {
+    let mut app = with_queue();
+    press(&mut app, "?");
+    insta::assert_snapshot!("help_queue", render(&mut app, 160, 45));
+}
+
+#[test]
+fn snapshot_help_for_the_diff() {
+    let mut app = with_review();
+    press(&mut app, "?");
+    insta::assert_snapshot!("help_diff", render(&mut app, 100, 30));
+}
+
 #[test]
 fn snapshot_help() {
     let mut app = with_queue();
-    press(&mut app, "?");
+    press(&mut app, "??");
     insta::assert_snapshot!("help", render(&mut app, 160, 45));
 }
 
 #[test]
 fn snapshot_help_medium() {
     let mut app = with_review();
-    press(&mut app, "?");
+    press(&mut app, "??");
     insta::assert_snapshot!("help_medium", render(&mut app, 100, 30));
 }
 
 #[test]
 fn snapshot_help_scrolls_on_a_small_terminal() {
     let mut app = with_queue();
-    press(&mut app, "?jjj");
+    press(&mut app, "??jjj");
     insta::assert_snapshot!("help_small", render(&mut app, 80, 24));
 }
 
@@ -1441,7 +1489,7 @@ fn tab_completes_verbs_mrs_and_themes_and_up_recalls() {
     assert!(app.completions_for("go ").contains(&"!42".to_owned()));
     assert!(app.completions_for("set theme=").contains(&"theme=tokyonight".to_owned()));
     run_line(&mut app, "help");
-    assert_eq!(app.help, Some(0));
+    assert_eq!(app.help, Some(Help::default()));
     press(&mut app, "x:");
     app.handle_key(code(KeyCode::Up));
     assert_eq!(app.palette.as_ref().unwrap().input, "help");
@@ -1496,7 +1544,7 @@ fn greater_than_switches_to_commands_and_backspace_comes_back_to_mrs() {
     app.handle_key(code(KeyCode::Tab));
     assert_eq!(app.palette.as_ref().unwrap().input, "help ");
     app.handle_key(code(KeyCode::Enter));
-    assert_eq!(app.help, Some(0));
+    assert_eq!(app.help, Some(Help::default()));
     press(&mut app, "x");
     app.handle_key(ctrl_k());
     press(&mut app, ">");
@@ -2309,8 +2357,20 @@ fn snapshot_help_with_the_azerty_preset_and_a_binding() {
         next_thread = "N"
         "#,
     );
-    press(&mut app, "?");
+    press(&mut app, "??");
     insta::assert_snapshot!("help_azerty", render(&mut app, 160, 45));
+}
+
+#[test]
+fn a_key_bound_to_help_widens_and_closes_the_list_like_the_question_mark() {
+    let mut app = with_queue();
+    app.keymap = keymap("[bind]\nhelp = \"F\"");
+    press(&mut app, "F");
+    assert_eq!(app.help, Some(Help::default()));
+    press(&mut app, "F");
+    assert_eq!(app.help, Some(Help { scroll: 0, every_key: true }));
+    press(&mut app, "F");
+    assert_eq!(app.help, None);
 }
 
 /// The review with one more thread on added line 13 whose note carries `body`, its pane open.

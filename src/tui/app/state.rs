@@ -164,8 +164,8 @@ pub struct App {
     pub viewing: Option<crate::open::View>,
     /// What the editor's text turned into; the loop drains it after `apply`.
     pub composed: Vec<Action>,
-    /// The key list, open, with how far it is scrolled.
-    pub help: Option<usize>,
+    /// The key list, open.
+    pub help: Option<crate::tui::help::Help>,
     pub palette: Option<crate::tui::palette::Palette>,
     pub palette_history: Vec<String>,
     pub ground: Option<u32>,

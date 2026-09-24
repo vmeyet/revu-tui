@@ -106,8 +106,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if let Some(palette) = &app.palette {
         super::palette_view::draw(f, app, palette, main);
     }
-    if let Some(scroll) = app.help {
-        super::help::draw(f, app, main, scroll);
+    if let Some(help) = app.help {
+        super::help::draw(f, app, main, help);
     }
 }
 

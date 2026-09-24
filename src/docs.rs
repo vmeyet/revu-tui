@@ -310,7 +310,7 @@ fn keys_page() -> Result<String> {
         "# Keys".to_owned(),
         String::new(),
         "Every key revu reads, grouped by task.".to_owned(),
-        "Press `?` in revu for the same list, with your own keys.".to_owned(),
+        "Press `?` in revu for the keys of the pane you are in, `?` again for this whole list, with your own keys.".to_owned(),
         "A key like `]n` is two keys in a row: `]`, then `n`.".to_owned(),
     ];
     for group in &GROUPS {

@@ -1,5 +1,6 @@
-//! The `?` overlay: every key, grouped by task in the order a review goes, in one or two columns.
-use super::app::App;
+//! The `?` overlay: the keys of the focused pane, or every key after a second `?`, grouped by task in the order a
+//! review goes, in one or two columns.
+use super::app::{App, Focus};
 use super::ui::{pane, truncate};
 use crate::keymap::Keymap;
 use ratatui::Frame;
@@ -13,6 +14,15 @@ use unicode_width::UnicodeWidthStr;
 pub struct Group {
     pub title: &'static str,
     pub keys: &'static [(&'static str, &'static str)],
+    /// The panes whose first `?` shows it.
+    pub focus: &'static [Focus],
+}
+
+/// The overlay while open: how far it scrolled, and whether it lists every key or the focused pane's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Help {
+    pub scroll: usize,
+    pub every_key: bool,
 }
 
 pub const GROUPS: [Group; 7] = [
@@ -32,6 +42,7 @@ pub const GROUPS: [Group; 7] = [
             ("]r [r", "next, previous MR that needs you"),
             ("]m [m", "next, previous MR in the queue"),
         ],
+        focus: &[Focus::Queue, Focus::Review],
     },
     Group {
         title: "queue",
@@ -43,6 +54,7 @@ pub const GROUPS: [Group; 7] = [
             ("S", "group by author"),
             ("zo zc", "open, fold the section or stack"),
         ],
+        focus: &[Focus::Queue],
     },
     Group {
         title: "view",
@@ -60,6 +72,7 @@ pub const GROUPS: [Group; 7] = [
             ("zh", "fold the MR header"),
             ("zv", "file viewed: it folds away"),
         ],
+        focus: &[Focus::Review],
     },
     Group {
         title: "comment & publish",
@@ -78,6 +91,7 @@ pub const GROUPS: [Group; 7] = [
             ("H", "mark mine draft or ready"),
             ("Y", "share the MR, after a preview"),
         ],
+        focus: &[Focus::Review, Focus::Side],
     },
     Group {
         title: "thread pane",
@@ -89,6 +103,7 @@ pub const GROUPS: [Group; 7] = [
             ("S +", "apply the suggestion, react"),
             ("u", "open the first link"),
         ],
+        focus: &[Focus::Side],
     },
     Group {
         title: "ask claude",
@@ -97,6 +112,7 @@ pub const GROUPS: [Group; 7] = [
             ("a t c a", "thread, comment, anything"),
             ("c ⏎ R y", "answer: draft, follow up, again, copy"),
         ],
+        focus: &[Focus::Review, Focus::Side],
     },
     Group {
         title: "search & app",
@@ -108,6 +124,7 @@ pub const GROUPS: [Group; 7] = [
             ("?", "this help"),
             ("q ^c", "quit: twice; q closes a pane first"),
         ],
+        focus: &[Focus::Queue, Focus::Review, Focus::Side],
     },
 ];
 
@@ -121,9 +138,14 @@ const KEY_GAP: usize = 2;
 /// From this overlay width the groups share two columns.
 const TWO_COLUMNS_FROM: u16 = 100;
 
-/// The last row the list can scroll to: the whole list in one column, so scrolling never stops short.
-pub fn last_row() -> usize {
-    column_height(&GROUPS.iter().map(|g| g.keys.len()).collect::<Vec<_>>()).saturating_sub(1)
+/// The groups the overlay lists: every one, or those of the focused pane.
+fn groups(every_key: bool, focus: Focus) -> impl Iterator<Item = &'static Group> {
+    GROUPS.iter().filter(move |g| every_key || g.focus.contains(&focus))
+}
+
+/// The last row the list can scroll to: its groups in one column, so scrolling never stops short.
+pub fn last_row(every_key: bool, focus: Focus) -> usize {
+    column_height(&groups(every_key, focus).map(|g| g.keys.len()).collect::<Vec<_>>()).saturating_sub(1)
 }
 
 /// Rows a column of groups takes: a header per group, its keys, one blank row between groups.
@@ -137,8 +159,8 @@ pub fn split(sizes: &[usize]) -> usize {
 }
 
 /// The groups with their keys as they are in effect: the user's bindings, `(`/`)` on AZERTY.
-fn shown(keymap: &Keymap) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
-    GROUPS.iter().map(|g| (g.title, g.keys.iter().map(|(keys, what)| (keymap.label(keys), *what)).collect())).collect()
+fn shown(keymap: &Keymap, every_key: bool, focus: Focus) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
+    groups(every_key, focus).map(|g| (g.title, g.keys.iter().map(|(keys, what)| (keymap.label(keys), *what)).collect())).collect()
 }
 
 /// A column of groups as lines: faded uppercase headers, keys right-aligned in the accent.
@@ -174,8 +196,8 @@ fn natural_width(groups: &[(&str, Vec<(String, &str)>)]) -> usize {
 }
 
 /// The overlay, centred, at most 90 % of the screen each way; it scrolls by `scroll` rows when taller than that.
-pub fn draw(f: &mut Frame, app: &App, area: Rect, scroll: usize) {
-    let groups = shown(&app.keymap);
+pub fn draw(f: &mut Frame, app: &App, area: Rect, help: Help) {
+    let groups = shown(&app.keymap, help.every_key, app.focus);
     let sizes: Vec<usize> = groups.iter().map(|(_, keys)| keys.len()).collect();
     let max_w = area.width * 9 / 10;
     let two = max_w >= TWO_COLUMNS_FROM;
@@ -198,12 +220,13 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect, scroll: usize) {
     let frame_y = usize::from(2 + 2 * PAD_Y);
     let height = ((rows + frame_y) as u16).min(area.height * 9 / 10).max(area.height.min(8));
     let visible = usize::from(height).saturating_sub(frame_y);
-    let top = scroll.min(rows.saturating_sub(visible));
+    let top = help.scroll.min(rows.saturating_sub(visible));
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
+    let more = if help.every_key { "" } else { "? every key · " };
     let hint = if rows > visible {
-        format!(" {}–{} of {} · j k scroll · esc close ", top + 1, (top + visible).min(rows), rows)
+        format!(" {}–{} of {} · j k scroll · {more}esc close ", top + 1, (top + visible).min(rows), rows)
     } else {
-        " esc close ".to_owned()
+        format!(" {more}esc close ")
     };
     let block = pane(app.theme, "keys", true)
         .title_bottom(Line::from(Span::styled(hint, Style::default().fg(app.theme.faded))).right_aligned())
@@ -269,6 +292,15 @@ mod tests {
     fn a_column_counts_headers_and_the_blank_rows_between_groups() {
         assert_eq!(column_height(&[2, 3]), 3 + 4 + 1);
         assert_eq!(column_height(&[]), 0);
-        assert_eq!(last_row() + 1, column_height(&GROUPS.iter().map(|g| g.keys.len()).collect::<Vec<_>>()));
+        assert_eq!(last_row(true, Focus::Queue) + 1, column_height(&GROUPS.iter().map(|g| g.keys.len()).collect::<Vec<_>>()));
+    }
+
+    #[test]
+    fn a_pane_lists_its_own_groups_and_every_key_lists_them_all() {
+        let titles = |every_key, focus| groups(every_key, focus).map(|g| g.title).collect::<Vec<_>>();
+        assert_eq!(titles(false, Focus::Queue), ["move", "queue", "search & app"]);
+        assert_eq!(titles(false, Focus::Review), ["move", "view", "comment & publish", "ask claude", "search & app"]);
+        assert_eq!(titles(false, Focus::Side), ["comment & publish", "thread pane", "ask claude", "search & app"]);
+        assert_eq!(titles(true, Focus::Side), GROUPS.map(|g| g.title));
     }
 }

@@ -2,7 +2,7 @@
 # Keys
 
 Every key revu reads, grouped by task.
-Press `?` in revu for the same list, with your own keys.
+Press `?` in revu for the keys of the pane you are in, `?` again for this whole list, with your own keys.
 A key like `]n` is two keys in a row: `]`, then `n`.
 
 ## Move

@@ -4,6 +4,7 @@ use crate::forge::MrKey;
 use crate::fuzzy;
 use crate::query::Query;
 use crate::review::Row;
+use crate::tui::help::Help;
 use crate::tui::palette::{self, Candidate, Command, MAX_SHOWN, Mode, Palette, Slot, Target};
 use crate::tui::theme::Theme;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -155,7 +156,7 @@ impl App {
                 vec![]
             }
             Command::Help => {
-                self.help = Some(0);
+                self.help = Some(Help::default());
                 vec![]
             }
             Command::Quit => {
