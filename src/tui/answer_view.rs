@@ -31,7 +31,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     };
     let [body, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
     let width = body.width.saturating_sub(1) as usize;
-    let lines: Vec<Line> = body_lines(&answer.text, theme).into_iter().flat_map(|line| wrap(line, width)).collect();
+    let lines: Vec<Line> = body_lines(&answer.text, width, theme).into_iter().flat_map(|line| wrap(line, width)).collect();
     let height = body.height as usize;
     let scroll = scroll_of(&answer, lines.len(), height);
     let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|l| indent(l)).collect();
