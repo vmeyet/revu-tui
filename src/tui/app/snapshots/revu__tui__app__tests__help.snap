@@ -37,7 +37,7 @@ expression: "render(&mut app, 160, 45)"
 │                       │        w W  wrap long lines, hide whitespace changes            o y  open in the browser, copy the link     │                        │
 │                       │          +  more lines around the hunk                            r  refresh                                │                        │
 │                       │          v  the file in your own program                          ?  this help                              │                        │
-│                       │   za zc zo  toggle, close, open the fold                       q ^c  quit                                   │                        │
+│                       │   za zc zo  toggle, close, open the fold                       q ^c  quit: press twice                      │                        │
 │                       │      zM zR  fold, unfold every file                                                                         │                        │
 │                       │         zh  fold the MR header                                                                              │                        │
 │                       │         zv  file viewed: it folds away                                                                      │                        │

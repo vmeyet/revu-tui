@@ -233,6 +233,14 @@ pub const SETTINGS: &[Setting] = &[
         example: "\"azerty\"",
     },
     Setting {
+        table: "keys",
+        key: "quit_confirm",
+        kind: "true or false",
+        default: "`true`",
+        meaning: "`q` and `ctrl-c` quit on a second press; `false` quits on the first.",
+        example: "true",
+    },
+    Setting {
         table: "keys.bind",
         key: "<action>",
         kind: "key or list of keys",

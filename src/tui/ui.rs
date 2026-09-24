@@ -34,7 +34,7 @@ pub struct Link {
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
     let input_rows = u16::from(app.filtering);
-    let status_rows = u16::from(!app.zen || app.confirm.is_some() || app.pending == Some('\''));
+    let status_rows = u16::from(!app.zen || app.confirm.is_some() || app.pending == Some('\'') || app.quit_prompt().is_some());
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some() || o.pipeline.is_some());
@@ -200,6 +200,10 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     if let Some(confirm) = &app.confirm {
         let line = Line::from(Span::styled(format!(" ? {}", confirm.question()), Style::default().fg(theme.warn)));
         f.render_widget(Paragraph::new(line), area);
+        return;
+    }
+    if let Some(prompt) = app.quit_prompt() {
+        f.render_widget(Paragraph::new(Line::from(Span::styled(format!(" {prompt}"), Style::default().fg(theme.warn)))), area);
         return;
     }
     if app.offer.is_some() {

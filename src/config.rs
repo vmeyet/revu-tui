@@ -35,7 +35,7 @@ pub struct Config {
 }
 
 /// `[keys]`: keys the user adds on top of revu's own.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Keys {
     /// `azerty`: `(` and `)` do what `[` and `]` do, which a Mac French keyboard types with ⌥⇧.
@@ -44,6 +44,15 @@ pub struct Keys {
     /// An action name (`next_thread`) to one key or a list: `"n"`, `")n"`, `"ctrl-p"`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub bind: BTreeMap<String, Bind>,
+    /// `q` and `ctrl-c` need a second press; `false` quits on the first.
+    #[serde(default = "on")]
+    pub quit_confirm: bool,
+}
+
+impl Default for Keys {
+    fn default() -> Self {
+        Self { layout: Layout::default(), bind: BTreeMap::new(), quit_confirm: true }
+    }
 }
 
 impl Keys {
@@ -527,6 +536,7 @@ mod tests {
             keys: Keys {
                 layout: Layout::Azerty,
                 bind: BTreeMap::from([("next_thread".into(), Bind::One("N".into())), ("jump".into(), Bind::Many(vec!["ctrl-p".into()]))]),
+                quit_confirm: false,
             },
             share: Share {
                 command: Some("slack send '#review'".into()),

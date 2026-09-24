@@ -104,6 +104,7 @@ Tokens never go here: they live in the macOS keychain.
 | Key | Type | Default | Does |
 |---|---|---|---|
 | `layout` | `qwerty` or `azerty` | `qwerty` | With `azerty`, `(` and `)` work like `[` and `]`. |
+| `quit_confirm` | true or false | `true` | `q` and `ctrl-c` quit on a second press; `false` quits on the first. |
 
 ## `[keys.bind]`
 
@@ -187,6 +188,7 @@ enabled = false
 
 [keys]
 layout = "azerty"
+quit_confirm = true
 
 [keys.bind]
 next_thread = "N"

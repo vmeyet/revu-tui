@@ -365,7 +365,7 @@ mod tests {
 
     fn keys(layout: Layout, bind: &[(&str, &[&str])]) -> Keys {
         let bind = bind.iter().map(|(a, k)| ((*a).to_owned(), Bind::Many(k.iter().map(|s| (*s).to_owned()).collect()))).collect();
-        Keys { layout, bind }
+        Keys { layout, bind, ..Keys::default() }
     }
 
     fn press(c: char) -> KeyEvent {
