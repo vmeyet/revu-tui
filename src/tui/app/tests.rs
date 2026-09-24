@@ -53,6 +53,7 @@ fn settings() -> Settings {
         zen_width: 100,
         views: vec![],
         share: vec![],
+        prefetch: 0,
     }
 }
 
@@ -2880,4 +2881,47 @@ fn zo_under_a_pinned_file_keeps_its_usual_meaning() {
     render(&mut app, 120, 30);
     press(&mut app, "zo");
     assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+}
+
+fn planned(actions: &[Action]) -> Option<Vec<u64>> {
+    actions.iter().find_map(|a| match a {
+        Action::Prefetch(plan) => Some(plan.iter().map(|ahead| ahead.key.number).collect()),
+        _ => None,
+    })
+}
+
+fn fresh_queue() -> Incoming {
+    Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false }
+}
+
+#[test]
+fn a_fresh_queue_loads_ahead_what_needs_me_and_a_cached_one_does_not() {
+    let mut app = App::new(Settings { prefetch: 5, ..settings() });
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: true });
+    assert_eq!(planned(&app.take_actions()), None, "a cached answer is not news");
+    app.apply(fresh_queue());
+    let plan = planned(&app.take_actions()).expect("a plan");
+    assert!(!plan.is_empty() && plan.len() <= 5, "{plan:?}");
+}
+
+#[test]
+fn loading_ahead_waits_for_an_opening_then_goes() {
+    let mut app = App::new(Settings { prefetch: 5, ..settings() });
+    app.opening = Some(mr_key());
+    app.apply(fresh_queue());
+    assert_eq!(planned(&app.take_actions()), None, "the MR being opened goes first");
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+    let plan = planned(&app.take_actions()).expect("the held plan goes out once the MR arrived");
+    assert!(!plan.contains(&mr_key().number), "the open MR is not loaded again");
+}
+
+#[test]
+fn loading_ahead_is_off_at_zero_and_when_requests_run_low() {
+    let mut off = App::new(Settings { prefetch: 0, ..settings() });
+    off.apply(fresh_queue());
+    assert_eq!(planned(&off.take_actions()), None);
+    let mut low = App::new(Settings { prefetch: 5, ..settings() });
+    low.rate = crate::forge::RateLimit { remaining: Some(150), wait: None };
+    low.apply(fresh_queue());
+    assert_eq!(planned(&low.take_actions()), None);
 }

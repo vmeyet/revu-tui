@@ -42,6 +42,8 @@ pub struct Settings {
     /// `[share]`: where `Y` can post an MR, the bare target first.
     pub share: Vec<crate::share::Target>,
     pub views: Vec<(String, String)>,
+    /// `[queue] prefetch`: how many MRs that need me are loaded ahead; 0 turns it off.
+    pub prefetch: usize,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -104,6 +106,10 @@ pub struct App {
     pub queue_view: super::QueueView,
     pub queue_layout: crate::config::QueueLayout,
     pub queue_loading: bool,
+    /// How many MRs to load ahead after each fresh queue.
+    pub prefetch_limit: usize,
+    /// A plan held back while an MR was being opened: it goes out once that MR arrived.
+    pub prefetch_due: bool,
     pub open: Option<Open>,
     /// The MR being fetched for the first time; the review pane shows a spinner until it lands.
     pub opening: Option<MrKey>,
@@ -198,6 +204,8 @@ impl App {
             closed_sections: std::collections::BTreeSet::from(["DONE", "DRAFTS", "OTHER"]),
             queue_view: super::QueueView::default(),
             queue_layout: settings.queue_layout,
+            prefetch_limit: settings.prefetch,
+            prefetch_due: false,
             queue_loading: true,
             open: None,
             opening: None,
