@@ -56,6 +56,7 @@ fn settings() -> Settings {
         prefetch: 0,
         ascii: false,
         quit_confirm: true,
+        usage: false,
     }
 }
 
@@ -3422,4 +3423,89 @@ fn bracket_n_backwards_opens_a_fold_too() {
     assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
     assert!(marker_here(&app).is_some());
     assert!(is_saved_fold(&actions));
+}
+
+/// The review of `with_long_review`, counting.
+fn counting() -> App {
+    let mut app = with_long_review();
+    app.usage = Some(crate::usage::Tally::default());
+    app
+}
+
+#[test]
+fn keys_are_counted_by_action_in_memory_only() {
+    let mut app = counting();
+    press(&mut app, "]nzajj");
+    let counts = app.take_usage().unwrap();
+    assert_eq!(counts.actions.get("next_thread"), Some(&1));
+    assert_eq!(counts.actions.get("fold_toggle"), Some(&1));
+    assert_eq!(counts.actions.get("move_down"), Some(&2));
+    assert_eq!(app.take_usage(), None, "taken once, gone");
+}
+
+#[test]
+fn typed_text_is_never_counted() {
+    let mut app = counting();
+    to_step(&mut app, 1);
+    press(&mut app, "c");
+    app.take_usage();
+    press(&mut app, "secret words");
+    assert_eq!(app.take_usage(), None, "keys in a text box name no action");
+}
+
+#[test]
+fn usage_off_counts_nothing() {
+    let mut app = with_long_review();
+    press(&mut app, "]njjj");
+    app.now += std::time::Duration::from_secs(5);
+    app.tick();
+    assert_eq!(app.take_usage(), None);
+}
+
+#[test]
+fn time_goes_to_the_screen_on_show() {
+    let mut app = counting();
+    app.now += std::time::Duration::from_secs(3);
+    app.tick();
+    press(&mut app, "zz");
+    app.now += std::time::Duration::from_secs(2);
+    app.tick();
+    let counts = app.take_usage().unwrap();
+    assert_eq!((counts.screens.get("diff"), counts.screens.get("zen")), (Some(&3), Some(&2)));
+}
+
+#[test]
+fn a_long_walk_where_a_jump_existed_is_a_hint_once() {
+    let mut app = counting();
+    press(&mut app, &"j".repeat(30));
+    assert_eq!(app.take_usage().unwrap().hints.get("long_walk"), Some(&1), "one hint per walk, not per step");
+    press(&mut app, &"j".repeat(10));
+    press(&mut app, "zc");
+    press(&mut app, &"j".repeat(10));
+    assert!(app.take_usage().unwrap().hints.is_empty(), "another action ends the walk");
+}
+
+#[test]
+fn changing_mr_from_the_queue_after_zen_is_a_hint() {
+    let mut app = counting();
+    press(&mut app, "zz");
+    app.tick();
+    press(&mut app, "zz");
+    app.focus = Focus::Queue;
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.take_usage().unwrap().hints.get("queue_after_zen"), Some(&1));
+}
+
+#[test]
+fn a_bare_number_in_the_search_is_a_hint_and_commands_are_counted() {
+    let mut app = counting();
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+    press(&mut app, "42");
+    app.handle_key(code(KeyCode::Enter));
+    let counts = app.take_usage().unwrap();
+    assert_eq!(counts.actions.get("jump"), Some(&1));
+    assert_eq!(counts.hints.get("palette_number"), Some(&1));
+    press(&mut app, ":help");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.take_usage().unwrap().actions.get(":help"), Some(&1));
 }

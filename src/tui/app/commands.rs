@@ -51,16 +51,26 @@ impl App {
             let line = palette.submit();
             self.palette_history.clone_from(&palette.history);
             return match palette::parse(&line) {
-                Ok(command) => self.run_command(command),
+                Ok(command) => {
+                    self.count_command(&command);
+                    self.run_command(command)
+                }
                 Err(reason) => {
                     self.warn(reason);
                     vec![]
                 }
             };
         }
+        if !palette.input.is_empty() && palette.input.trim().chars().all(|c| c.is_ascii_digit()) {
+            self.count_hint("palette_number");
+        }
         match self.palette_candidates(&palette).into_iter().nth(palette.selected).map(|c| c.target) {
-            Some(Target::Mr(key)) => self.open_key(key),
+            Some(Target::Mr(key)) => {
+                self.count("palette_mr");
+                self.open_key(key)
+            }
             Some(Target::File(index)) => {
+                self.count("palette_file");
                 self.focus = Focus::Review;
                 self.review_jump_to(|row| matches!(row, Row::File { index: i, .. } if *i == index));
                 vec![]

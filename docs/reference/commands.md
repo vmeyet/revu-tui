@@ -182,3 +182,11 @@ Rebuild and install the latest `revu` with cargo.
 | Flag | Means |
 |---|---|
 | `-f, --force` | Install even when the running binary is already the latest commit. |
+
+## `revu usage`
+
+What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.
+
+| Flag | Means |
+|---|---|
+| `--since` | How far back to look: `30d`, `4w`, or `all`. |

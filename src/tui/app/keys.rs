@@ -60,8 +60,17 @@ impl App {
         }
     }
 
-    /// A key after the user's bindings turned it into revu's own: prefixes, then the pane's keys.
+    /// A key after the user's bindings turned it into revu's own, counted when `[usage]` is on.
     fn dispatch(&mut self, key: KeyEvent) -> Vec<Action> {
+        let named = self.usage_name(key);
+        let was_zen = self.zen;
+        let actions = self.dispatch_key(key);
+        self.count_key(named, was_zen);
+        actions
+    }
+
+    /// Prefixes first, then the keys every pane shares, then the pane's own.
+    fn dispatch_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if let Some(prefix) = self.pending.take() {
             return self.handle_prefixed(prefix, key);
         }

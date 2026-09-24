@@ -26,6 +26,7 @@ mod state;
 mod tests;
 mod tree;
 mod triage;
+mod usage;
 mod view;
 mod write;
 mod zen;

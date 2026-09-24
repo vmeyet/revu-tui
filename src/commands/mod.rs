@@ -24,5 +24,7 @@ pub mod show;
 mod target;
 /// `revu update`.
 pub mod update;
+/// `revu usage`.
+pub mod usage;
 /// `revu whoami`.
 pub mod whoami;

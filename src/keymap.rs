@@ -115,7 +115,7 @@ impl Key {
         Some(Self { code, ctrl, alt })
     }
 
-    fn event(self) -> KeyEvent {
+    pub(crate) fn event(self) -> KeyEvent {
         let code = match self.code {
             Code::Char(c) => KeyCode::Char(c),
             Code::Tab => KeyCode::Tab,
@@ -153,7 +153,7 @@ impl Key {
         }
     }
 
-    fn plain_char(self) -> Option<char> {
+    pub(crate) fn plain_char(self) -> Option<char> {
         match self.code {
             Code::Char(c) if !self.ctrl && !self.alt => Some(c),
             _ => None,

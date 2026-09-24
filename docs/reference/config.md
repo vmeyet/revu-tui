@@ -99,6 +99,12 @@ Tokens never go here: they live in the macOS keychain.
 |---|---|---|---|
 | `enabled` | true or false | true | A macOS notification when an MR lands in TO REVIEW. |
 
+## `[usage]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `enabled` | true or false | `false` | Count the actions you use and the time per screen, on this machine only, for `revu usage`. |
+
 ## `[keys]`
 
 | Key | Type | Default | Does |
@@ -185,6 +191,9 @@ default = "hx"
 
 [notify]
 enabled = false
+
+[usage]
+enabled = true
 
 [keys]
 layout = "azerty"

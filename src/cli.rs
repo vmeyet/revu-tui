@@ -60,6 +60,8 @@ pub enum Command {
     },
     /// Rebuild and install the latest `revu` with cargo.
     Update(UpdateArgs),
+    /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.
+    Usage(UsageArgs),
     /// Write the reference pages under `docs/reference/` from the code.
     #[command(hide = true)]
     Docs(DocsArgs),
@@ -74,6 +76,14 @@ pub struct DocsArgs {
     /// Write nothing; fail when a page on disk differs from the code.
     #[arg(long)]
     pub check: bool,
+}
+
+/// Flags of `revu usage`.
+#[derive(Args, Debug)]
+pub struct UsageArgs {
+    /// How far back to look: `30d`, `4w`, or `all`.
+    #[arg(long, default_value = "30d")]
+    pub since: String,
 }
 
 /// Flags of `revu update`.
