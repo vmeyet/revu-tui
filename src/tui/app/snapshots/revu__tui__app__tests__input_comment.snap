@@ -23,6 +23,6 @@ expression: "render(&mut app, 120, 24)"
 │      42   44  }                                                      ││                                              │
 │                                                                      ││ ╭ new thread · charge.rs:13–14 ────────────╮ │
 │  ▸ Cargo.lock                                          +1 −1  folded ││ │fold the                                  │ │
-│                                                                      ││ ╰ enter save · ⌥enter newline ─────────────╯ │
+│                                                                      ││ ╰ enter save · ⌘enter post · ⌥enter newline╯ │
 ╰──────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved · 1 draft · P to publish                                                       ? help

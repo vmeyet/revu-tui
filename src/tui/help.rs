@@ -69,6 +69,7 @@ pub const GROUPS: [Group; 7] = [
             ("V", "select lines"),
             ("s", "suggest a change"),
             ("E", "write in $EDITOR"),
+            ("⌘enter ^s", "in the box: post now, no draft"),
             ("⌥enter ^o", "in the box: new line, $EDITOR"),
             ("⌥← ⌥→ ⌥⌫", "in the box: word back, on, delete"),
             ("esc", "drop the selection, leave the box"),

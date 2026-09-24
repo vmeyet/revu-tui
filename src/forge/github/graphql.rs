@@ -628,6 +628,16 @@ impl Client {
         self.graphql::<Value>(&query, json!({"id": discussion})).await.map(|_| ())
     }
 
+    /// A public reply: on a review thread, in it; GitHub has no thread for any other comment, so
+    /// the reply is a new comment on the PR.
+    pub async fn reply(&self, key: &MrKey, thread: &str, body: &str) -> Result<()> {
+        if !thread.starts_with("PRRT_") {
+            return self.comment(key, body, None).await.map(|_| ());
+        }
+        let query = "mutation($thread: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $thread, body: $body}) { clientMutationId } }";
+        self.graphql::<Value>(query, json!({"thread": thread, "body": body})).await.map(|_| ())
+    }
+
     async fn open_review(&self, pull_request: &str) -> Result<Comment> {
         let query = format!(
             "mutation($pr: ID!) {{ addPullRequestReview(input: {{pullRequestId: $pr}}) {{ pullRequestReview {{ {COMMENT_FIELDS} }} }} }}"
@@ -1016,6 +1026,34 @@ mod tests {
         let client = client(&server);
         client.resolve("PRRT_1", false).await.unwrap();
         assert!(client.resolve("IC_1", true).await.unwrap_err().to_string().contains("only review threads"));
+    }
+
+    #[tokio::test]
+    async fn a_reply_goes_in_its_review_thread_and_on_the_pr_for_a_loose_comment() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("addPullRequestReviewThreadReply"))
+            .and(body_partial_json(json!({"variables": {"thread": "PRRT_1", "body": "agreed"}})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"data": {"addPullRequestReviewThreadReply": {"clientMutationId": null}}})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/repos/acme/widgets/issues/42/comments"))
+            .and(body_partial_json(json!({"body": "agreed"})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+                "id": 8, "node_id": "IC_8", "body": "agreed", "user": {"id": 2, "login": "nina"},
+                "created_at": "2026-09-22T10:00:00Z", "updated_at": "2026-09-22T10:00:00Z"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = client(&server);
+        client.reply(&key(), "PRRT_1", "agreed").await.unwrap();
+        client.reply(&key(), "IC_1", "agreed").await.unwrap();
     }
 
     fn draft_state_mock(is_draft: bool) -> Mock {

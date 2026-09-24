@@ -34,7 +34,7 @@ use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Q
 use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Review};
 use anyhow::{Context as _, Result};
-use app::{Action, Ahead, App, Failure, Incoming, Input, Part, QueueView, Settings};
+use app::{Action, Ahead, App, Failure, Incoming, Input, Part, Post, QueueView, Settings};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
@@ -411,6 +411,12 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::Publish { key, approve, count } => {
                 send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }
+            Action::Post { key, to, body } => {
+                send(match post(backend.forge_of(&key), &key, &to, &body).await {
+                    Ok(()) => Incoming::Posted { key, to },
+                    Err(e) => failed(Failure::Post { key, to }, &e),
+                });
+            }
             Action::Resolve { key, thread, resolved } => send(backend.forge_of(&key).resolve(&key, &thread, resolved).await.map_or_else(
                 |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
                 |()| Incoming::Resolved { key, thread: thread.clone(), resolved },
@@ -568,6 +574,13 @@ impl Opening {
 impl Drop for Opening {
     fn drop(&mut self) {
         self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+async fn post(forge: &Forge, key: &MrKey, to: &Post, body: &str) -> Result<()> {
+    match to {
+        Post::Thread(position) => forge.comment(key, body, Some(position)).await.map(|_| ()),
+        Post::Reply(thread) => forge.reply(key, thread, body).await,
     }
 }
 

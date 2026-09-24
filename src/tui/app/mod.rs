@@ -119,6 +119,12 @@ pub enum Action {
         key: MrKey,
         id: u64,
     },
+    /// `⌘enter`: the text goes public at once, no draft.
+    Post {
+        key: MrKey,
+        to: Post,
+        body: String,
+    },
     /// Every draft at once, then the approval when asked.
     Publish {
         key: MrKey,
@@ -214,6 +220,13 @@ pub enum Action {
     },
 }
 
+/// Where a comment posted at once goes: a new thread on a line (or range), or the end of a thread.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Post {
+    Thread(Box<Position>),
+    Reply(String),
+}
+
 /// What the input row is for while it is open.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Input {
@@ -247,6 +260,11 @@ pub enum Failure {
         index: usize,
     },
     Publish,
+    /// The comment stayed off the forge; its text waits in the box.
+    Post {
+        key: MrKey,
+        to: Post,
+    },
     /// Jev could not answer; the views go on without its marks.
     Triage,
     Resolve {
@@ -322,6 +340,10 @@ pub enum Incoming {
         key: MrKey,
         approved: bool,
         count: usize,
+    },
+    Posted {
+        key: MrKey,
+        to: Post,
     },
     Resolved {
         key: MrKey,

@@ -52,6 +52,7 @@ impl App {
             Incoming::File { key, path, text } => self.apply_file(&key, path, &text),
             Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(&key, index, id),
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
+            Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
             Incoming::Image { url, image } => self.thumbs.arrived(&url, image),

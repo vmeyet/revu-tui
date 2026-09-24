@@ -168,7 +168,7 @@ pub(super) fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Fie
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.accent))
         .title(Span::styled(format!(" {label} "), Style::default().fg(theme.accent)))
-        .title_bottom(Span::styled(" enter save · ⌥enter newline ", Style::default().fg(theme.faded)));
+        .title_bottom(Span::styled(" enter save · ⌘enter post · ⌥enter newline ", Style::default().fg(theme.faded)));
     let inner = block.inner(area);
     f.render_widget(block, area);
     let width = inner.width.max(1) as usize;

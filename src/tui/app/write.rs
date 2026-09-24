@@ -358,6 +358,7 @@ impl App {
                 }
                 self.warn(message);
             }
+            Failure::Post { key, to } => self.post_failed(&key, &to, &message),
             Failure::Approve => self.warn(message),
             Failure::Checks => self.checks_failed(message),
             Failure::Apply => self.warn(format!("not applied: {message}")),

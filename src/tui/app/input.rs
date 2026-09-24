@@ -1,5 +1,5 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
-use super::{Action, App, Input, Open};
+use super::{Action, App, Input, MrKey, Open, Post};
 use crate::review::{Draft, Place, Review};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -40,8 +40,11 @@ impl App {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         let newline = key.modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SHIFT);
+        let post = key.modifiers.contains(KeyModifiers::SUPER);
         match key.code {
             KeyCode::Esc => self.leave_input(),
+            KeyCode::Enter if post => return self.post_input(),
+            KeyCode::Char('s') if ctrl => return self.post_input(),
             KeyCode::Enter if newline => self.buffer.insert('\n'),
             KeyCode::Char('j') if ctrl => self.buffer.insert('\n'),
             KeyCode::Enter => return self.submit_input(),
@@ -84,6 +87,35 @@ impl App {
         }
         self.focus = self.compose_from;
         vec![Action::Compose { input, draft: text }]
+    }
+
+    /// `⌘enter`, `ctrl-s`: a new thread or a reply goes public at once; any other box saves as
+    /// `enter` does. The text waits under its target until the forge takes it, so a failure loses nothing.
+    fn post_input(&mut self) -> Vec<Action> {
+        let Some(to) = self.input.as_ref().and_then(Post::of) else { return self.submit_input() };
+        let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
+        let body = self.buffer.text().trim().to_owned();
+        if body.is_empty() {
+            return vec![];
+        }
+        self.leave_input();
+        vec![Action::Post { key, to, body }]
+    }
+
+    pub(super) fn apply_posted(&mut self, key: &MrKey, to: &Post) {
+        self.unsent.remove(&target_key(&to.input()));
+        self.toast("posted");
+        if self.open.as_ref().is_some_and(|o| &o.key == key) {
+            self.poll.discussions_due = Some(self.now);
+        }
+    }
+
+    /// The box comes back with the text when nothing else is being written on that MR.
+    pub(super) fn post_failed(&mut self, key: &MrKey, to: &Post, message: &str) {
+        self.warn(format!("not posted: {message}"));
+        if self.input.is_none() && self.open.as_ref().is_some_and(|o| &o.key == key) {
+            self.open_input(to.input(), "");
+        }
     }
 
     fn submit_input(&mut self) -> Vec<Action> {
@@ -154,6 +186,23 @@ impl App {
             Some(Input::Ask { .. }) => "ask Claude".to_owned(),
             Some(Input::FollowUp) => "follow-up".to_owned(),
             None => String::new(),
+        }
+    }
+}
+
+impl Post {
+    fn of(input: &Input) -> Option<Self> {
+        match input {
+            Input::Comment { position } => Some(Post::Thread(position.clone())),
+            Input::Reply { thread } => Some(Post::Reply(thread.clone())),
+            Input::EditDraft { .. } | Input::Ask { .. } | Input::FollowUp => None,
+        }
+    }
+
+    fn input(&self) -> Input {
+        match self {
+            Post::Thread(position) => Input::Comment { position: position.clone() },
+            Post::Reply(thread) => Input::Reply { thread: thread.clone() },
         }
     }
 }
