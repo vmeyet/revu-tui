@@ -1,12 +1,13 @@
 //! The review pane: rows from `Review::rows()` turned into styled lines, only for the visible window.
 use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
+use super::table::{self, TableLine};
 use super::theme::Theme;
 use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::Kind;
 use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
-use crate::syntax::Token;
+use crate::syntax::{self, Token};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -315,27 +316,39 @@ fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, selected: bool, i
         Row::File { index, open } => spans.extend(file_spans(review, &review.files[*index], *open, body, theme)),
         Row::Hunk { file, index, open } => spans.extend(hunk_spans(&review.files[*file], *index, *open, body, theme)),
         Row::Line { file, hunk, index } => {
-            let line = &review.files[*file].hunks[*hunk].lines[*index];
-            spans.extend(line_spans(line, review.files[*file].spans(*hunk, *index), selected || in_range, body, theme));
+            let file = &review.files[*file];
+            let line = &file.hunks[*hunk].lines[*index];
+            let drawn = line_spans(line, file.spans(*hunk, *index), selected || in_range, body, theme);
+            spans.extend(with_table_lines(drawn, file, &line.text, theme));
         }
         Row::Pair { file, hunk, removed, added } => {
-            let lines = &review.files[*file].hunks[*hunk].lines;
-            let code = review.files[*file].spans(*hunk, *added);
-            let (old, new) = (&lines[*removed], &lines[*added]);
-            if review.quiet_whitespace && same_but_whitespace(&old.text, &new.text) {
-                spans.extend(quiet_spans(old, new, code, selected || in_range, body, theme));
+            let file = &review.files[*file];
+            let code = file.spans(*hunk, *added);
+            let (old, new) = (&file.hunks[*hunk].lines[*removed], &file.hunks[*hunk].lines[*added]);
+            let drawn = if review.quiet_whitespace && same_but_whitespace(&old.text, &new.text) {
+                quiet_spans(old, new, code, selected || in_range, body, theme)
             } else {
-                spans.extend(pair_spans(old, new, code, selected || in_range, body, theme));
-            }
+                pair_spans(old, new, code, selected || in_range, body, theme)
+            };
+            spans.extend(with_table_lines(drawn, file, &new.text, theme));
         }
         Row::Context { file, old, new, .. } => {
-            let path = &review.files[*file].new_path;
-            let text = review.context.texts.get(path).and_then(|t| t.get(*new as usize - 1)).cloned().unwrap_or_default();
+            let file = &review.files[*file];
+            let text = review.context.texts.get(&file.new_path).and_then(|t| t.get(*new as usize - 1)).cloned().unwrap_or_default();
             let line = DiffLine { kind: LineKind::Context, old: Some(*old), new: Some(*new), text, words: vec![], no_newline: false };
-            spans.extend(line_spans(&line, &[], selected || in_range, body, theme));
+            spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, theme));
         }
     }
     Line::from(spans)
+}
+
+/// A drawn diff line, its table pipes as box lines when `text` is a table line of a markdown file;
+/// the gutter and the sign before the text stay as they are.
+fn with_table_lines<'a>(mut spans: Vec<Span<'a>>, file: &File, text: &str, theme: Theme) -> Vec<Span<'a>> {
+    let Some(line) = TableLine::of(text).filter(|_| syntax::is_markdown(&file.new_path)) else { return spans };
+    let text_spans = spans.split_off(2.min(spans.len()));
+    spans.extend(table::boxed(text_spans, line, theme));
+    spans
 }
 
 /// What the anchor column draws from: the marks of every line, and the range comment the pane is on.
@@ -770,6 +783,40 @@ mod tests {
             .map(|(i, line)| painted(&line_spans(line, file.spans(0, i), false, 100, theme)))
             .collect();
         insta::assert_snapshot!("highlighted_typescript_hunk", lines.join("\n---\n"));
+    }
+
+    fn pricing(path: &str) -> File {
+        File::from_diff(&crate::forge::DiffFile {
+            diff: "@@ -1,5 +1,5 @@\n # Plans\n \n-| Plan | Seats |\n+| Plan | Seats \\| max |\n |:-----|------:|\n | Team | *10* |\n"
+                .into(),
+            old_path: path.into(),
+            new_path: path.into(),
+            ..Default::default()
+        })
+    }
+
+    fn drawn_lines(file: &File, theme: Theme) -> Vec<Vec<Span<'static>>> {
+        let lines = &file.hunks[0].lines;
+        let each = lines.iter().enumerate().map(|(i, line)| (line_spans(line, file.spans(0, i), false, 60, theme), &line.text));
+        let pair = (pair_spans(&lines[2], &lines[3], file.spans(0, 3), false, 60, theme), &lines[3].text);
+        each.chain([pair]).map(|(spans, text)| with_table_lines(spans, file, text, theme)).collect()
+    }
+
+    #[test]
+    fn snapshot_markdown_table_hunk() {
+        let theme = Theme::named("tokyonight").unwrap();
+        let lines: Vec<String> = drawn_lines(&pricing("docs/pricing.md"), theme).iter().map(|spans| painted(spans)).collect();
+        insta::assert_snapshot!("markdown_table_hunk", lines.join("\n---\n"));
+    }
+
+    #[test]
+    fn table_pipes_stay_raw_outside_markdown_and_in_the_diff_text() {
+        let file = pricing("docs/pricing.txt");
+        let theme = Theme::default();
+        assert!(drawn_lines(&file, theme).iter().all(|spans| !spans_text(spans).contains('│')));
+        let markdown = pricing("docs/pricing.md");
+        assert!(drawn_lines(&markdown, theme).iter().all(|spans| !spans_text(&spans[..2]).contains('│')), "the gutter stays");
+        assert_eq!(markdown.hunks[0].lines[3].text, "| Plan | Seats \\| max |", "only the drawing changes");
     }
 
     #[test]
