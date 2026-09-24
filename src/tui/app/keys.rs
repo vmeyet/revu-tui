@@ -1,5 +1,6 @@
 use super::{Action, App, Focus};
 use crate::review::Row;
+use crate::tui::help::{self, Help};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 const HALF_PAGE: isize = 10;
@@ -20,8 +21,8 @@ impl App {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return self.quit_key(super::quit::QuitKey::CtrlC);
         }
-        if let Some(scroll) = self.help {
-            self.help = help_scroll(scroll, key);
+        if let Some(open) = self.help {
+            self.help = self.help_key(open, key);
             return vec![];
         }
         if let Some(answered) = self.answer_offer(key) {
@@ -84,7 +85,7 @@ impl App {
                 return self.handle_side_key(KeyEvent::from(KeyCode::Esc));
             }
             KeyCode::Char('q') => return self.quit_key(super::quit::QuitKey::Q),
-            KeyCode::Char('?') => self.help = Some(0),
+            KeyCode::Char('?') => self.help = Some(Help::default()),
             KeyCode::Char('Y') => self.start_share(None),
             KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
@@ -333,11 +334,24 @@ impl App {
     pub(super) fn answer_open(&self) -> bool {
         self.open.as_ref().is_some_and(|o| o.answer.is_some())
     }
+
+    /// `?`, or the user's key for it, widens the focused pane's keys to every key, then closes the list.
+    fn help_key(&self, open: Help, key: KeyEvent) -> Option<Help> {
+        if self.is_help_key(key) {
+            return (!open.every_key).then_some(Help { scroll: 0, every_key: true });
+        }
+        let last = help::last_row(open.every_key, self.focus);
+        help_scroll(open.scroll, last, key).map(|scroll| Help { scroll, ..open })
+    }
+
+    fn is_help_key(&self, key: KeyEvent) -> bool {
+        let crate::keymap::Feed::Keys(keys) = self.keymap.feed(None, key) else { return false };
+        keys.first().is_some_and(|k| k.code == KeyCode::Char('?'))
+    }
 }
 
 /// Moving keys scroll the key list; any other key closes it.
-fn help_scroll(scroll: usize, key: KeyEvent) -> Option<usize> {
-    let last = crate::tui::help::last_row();
+fn help_scroll(scroll: usize, last: usize, key: KeyEvent) -> Option<usize> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => Some((scroll + 1).min(last)),

@@ -242,7 +242,7 @@ While publishing, the modal shows the spinner and disables keys; a failure keeps
 
 ## Keys
 
-Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
+Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 
 ### Everywhere
 
@@ -264,7 +264,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
 | `zz` | zen: the diff alone, quiet (`z` is the fold prefix) | M3 |
 | `[m` `]m` | the previous, next MR in the queue's order, in zen or not | M3 |
-| `?` | help | M1 |
+| `?` | help: the focused pane's keys; again, every key | M1 |
 | `q` | close the right pane when one is open and not from the queue, else quit (`ctrl-c` always quits) | M1 |
 
 ### Review
@@ -353,6 +353,9 @@ Whether the terminal has focus cannot be told reliably, so there is no quiet mod
 ## Help overlay (`?`)
 
 Every key, grouped by task in the order a review goes: MOVE, QUEUE, VIEW, COMMENT & PUBLISH, THREAD PANE, ASK CLAUDE, SEARCH & APP.
+The first `?` shows only the groups of the focused pane; `?` again shows every group; a third `?`, like any key that does not scroll, closes it.
+The queue gets MOVE, QUEUE, SEARCH & APP; the diff MOVE, VIEW, COMMENT & PUBLISH, ASK CLAUDE, SEARCH & APP; the right pane COMMENT & PUBLISH, THREAD PANE, ASK CLAUDE, SEARCH & APP.
+While filtered, the bottom border ends on `? every key`.
 Group titles are faded uppercase; keys are right-aligned in the accent, bold; what they do is plain text, a few words each.
 Two columns when the overlay is at least 100 columns wide, split between groups so both columns end level; one column below.
 The frame pads two columns on the sides and one row above and below; a blank row separates groups and six columns separate the two columns.

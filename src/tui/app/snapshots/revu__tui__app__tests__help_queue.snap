@@ -1,0 +1,49 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 160, 45)"
+---
+╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                  │
+│ ▎ feat charge cards at checkout          ││                                                                                                                  │
+│ ▎ omar · !42 · +412 −38               2h ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│   ── MINE · 1 ────────────────────────── ││                                                                                                                  │
+│   fix flaky cache test                 D ││                                                                                                                  │
+│   nina · !41 · +3 −1                  4h ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│   ── WATCHING · 1 ────────────────────── ││                                                                                                                  │
+│   infra: new runner                    ⠋ ││                                                                                                                  │
+│   omar · !35 · +0 −0                  2d ││                                                                                                                  │
+│                              ╭ keys ─────────────────────────────────────────────────────────────────────────────────────────╮                               │
+│   ── ▸ DONE · 1 ─────────────│                                                                                               │                               │
+│                              │  MOVE                                              QUEUE                                      │                               │
+│                              │        j k  move                                       /  filter: words @author !42 ~label    │                               │
+│                              │        g G  first, last                            ' 1-9  a saved view, by letter or rank     │                               │
+│                              │      ^d ^u  half a page                                *  this repo, or every project         │                               │
+│                              │        h l  pane to the left, to the right             s  next sort order                     │                               │
+│                              │      enter  open, or toggle the fold                   S  group by author                     │                               │
+│                              │      esc x  close the pane, back to the queue      zo zc  open, fold the section or stack     │                               │
+│                              │  tab S-tab  next, previous file                                                               │                               │
+│                              │      ]c [c  next, previous hunk                    SEARCH & APP                               │                               │
+│                              │      ]n [n  next, previous conversation               ^k  MRs · / files · > commands          │                               │
+│                              │      ]f [f  next, previous file with a thread          :  commands: :go !42, :set theme=nord  │                               │
+│                              │      ]r [r  next, previous MR that needs you         o y  open in the browser, copy the link  │                               │
+│                              │      ]m [m  next, previous MR in the queue             r  refresh                             │                               │
+│                              │                                                        ?  this help                           │                               │
+│                              │                                                     q ^c  quit: twice; q closes a pane first  │                               │
+│                              │                                                                                               │                               │
+│                              ╰────────────────────────────────────────────────────────────────────── ? every key · esc close ╯                               │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+│                                          ││                                                                                                                  │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                                                                       ? help
