@@ -188,8 +188,8 @@ pub const SETTINGS: &[Setting] = &[
         table: "tui",
         key: "zen_width",
         kind: "number",
-        default: "`100`",
-        meaning: "How wide the diff reads in zen, `zz`, in columns; 60 at least.",
+        default: "70 % of the screen, 100 at least",
+        meaning: "How wide the diff reads in zen, `zz`, in columns; 60 at least. Set, it stays fixed.",
         example: "100",
     },
     Setting {

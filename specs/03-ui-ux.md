@@ -58,13 +58,15 @@ Focus moves with `h` `l` between the three panes, like slack-tui's channels, mes
 
 `zz` hides everything but the diff, and `zz`, `esc`, `h` or `←` bring it back.
 No frames, no status line: one faded line on top says which MR, whose, its size, its pipeline and `◆n` unresolved threads when there are any.
-The diff sits in a centred column, `[tui] zen_width` wide (100 by default, 60 at least).
+The diff sits in a centred column, 70 % of the screen and never under 100 columns, nor wider than the screen; `[tui] zen_width` fixes it instead (60 at least).
 Nothing pulses; a toast shows for two seconds on the bottom row, and notifications wait until zen ends.
 A question that needs an answer (applying a suggestion, the `'` views) brings the status line back while it waits.
 `[m` `]m` open the previous or next MR in the order the queue shows them, without leaving zen, and outside zen as well: filter, sort, sections and stacks all count, folded sections do not.
 The arrows mean what they mean outside zen: `←` `→` move focus.
 A line on top says where you are for a moment: `‹  !1797 feat add a page  ·  3/12  ›`.
 The thread pane still opens with `enter` or `l` on a marked line, as a page of its own, and `esc`, `x` or `q` close it.
+It takes the diff's column, with no frame: one faded title line where the zen header sits, then its content from the diff's first column.
+The file tree, the pipeline and an AI answer open the same way.
 
 ## The queue
 

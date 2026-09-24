@@ -38,7 +38,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         None => "Review".to_owned(),
     };
     let zen = app.zen;
-    let block = if zen { Block::default().padding(Padding::new(1, 1, 1, 0)) } else { pane(theme, &title, app.focus == Focus::Review) };
+    let block = if zen { Block::default().padding(Padding::horizontal(1)) } else { pane(theme, &title, app.focus == Focus::Review) };
     if let Some(open) = app.open.as_ref().filter(|_| !zen) {
         app.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
     }

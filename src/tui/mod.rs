@@ -139,7 +139,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
         pictures,
         queue_layout: ctx.config.tui.queue,
-        zen_width: ctx.config.tui.zen_width(),
+        zen_width: ctx.config.tui.zen_width,
         views: ctx.config.queue.views.clone().into_iter().collect(),
         share: crate::share::targets(&ctx.config.share),
         prefetch: ctx.config.queue.prefetch,

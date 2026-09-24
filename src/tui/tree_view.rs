@@ -1,6 +1,6 @@
 //! The file tree pane: folders and files with the same counts and marks as the diff's file rows.
 use super::app::{App, Focus};
-use super::ui::{pane, settle_scroll, truncate};
+use super::ui::{settle_scroll, side_pane, truncate};
 use crate::ai::triage::Risk;
 use crate::review::tree::TreeRow;
 use crate::review::{File, Review};
@@ -18,7 +18,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let rows = open.tree_rows();
     let viewed = open.review.files.iter().filter(|f| open.review.viewed.contains(&f.new_path)).count();
     let title = format!("Files · {viewed}/{} viewed", open.review.files.len());
-    let block = pane(theme, &title, app.focus == Focus::Side);
+    let block = side_pane(theme, &title, app.focus == Focus::Side, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let height = inner.height as usize;

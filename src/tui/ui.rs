@@ -20,6 +20,10 @@ const WIDE: u16 = 150;
 /// From this width the diff and the right pane share the screen; below, the pane is a page of its own.
 const MEDIUM: u16 = 120;
 const SIDE_PCT: u16 = 40;
+/// Zen's column, unless `[tui] zen_width` fixes it: this share of the screen, never under `ZEN_MIN_W`.
+const ZEN_PCT: u32 = 70;
+/// A comfortable line of code with both gutters and the sign.
+const ZEN_MIN_W: u16 = 100;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
@@ -42,7 +46,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
-    let review = if app.zen && shown.side == 0 { centered(review, app.zen_width) } else { review };
+    let (review, side) = if app.zen {
+        let width = zen_width(app.zen_width, main.width);
+        (zen_column(review, width), zen_column(side, width))
+    } else {
+        (review, side)
+    };
     let side_open = side_open && shown.side > 0;
     if shown.queue > 0 {
         super::queue_view::draw(f, app, queue);
@@ -159,10 +168,16 @@ fn columns(width: u16, side_open: bool, side_focused: bool, zen: bool) -> Column
     }
 }
 
-/// `area` narrowed to `width` columns in its middle, for zen.
-fn centered(area: Rect, width: u16) -> Rect {
+/// Zen's column: `fixed` columns when `[tui] zen_width` sets it, else a share of the screen that grows with it.
+fn zen_width(fixed: Option<u16>, screen: u16) -> u16 {
+    let share = u16::try_from(u32::from(screen) * ZEN_PCT / 100).unwrap_or(screen);
+    fixed.unwrap_or(share.max(ZEN_MIN_W)).min(screen)
+}
+
+/// `area` narrowed to `width` columns in its middle, below the row the zen banner takes.
+fn zen_column(area: Rect, width: u16) -> Rect {
     let width = width.min(area.width);
-    Rect { x: area.x + (area.width - width) / 2, width, ..area }
+    Rect { x: area.x + (area.width - width) / 2, y: area.y + 1, width, height: area.height.saturating_sub(1) }
 }
 
 pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
@@ -173,6 +188,14 @@ pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
         .border_style(Style::default().fg(if focused { theme.accent } else { theme.border }))
         .title(Span::styled(format!(" {title} "), title_style))
         .padding(Padding::horizontal(1))
+}
+
+/// A right pane's frame; in zen, only a faded title line over the content, both where the diff's text starts.
+pub fn side_pane(theme: Theme, title: &str, focused: bool, zen: bool) -> Block<'static> {
+    if !zen {
+        return pane(theme, title, focused);
+    }
+    Block::default().title(Span::styled(format!(" {title}"), Style::default().fg(theme.faded))).padding(Padding::new(1, 1, 1, 0))
 }
 
 pub fn draw_empty(f: &mut Frame, theme: Theme, area: Rect, lines: &[&str]) {
@@ -384,6 +407,21 @@ mod columns_tests {
         assert_eq!(columns(200, false, false, true), Columns { queue: 0, side: 0, diff: true });
         assert_eq!(columns(200, true, true, true), Columns { queue: 0, side: 200, diff: false }, "the pane opens the narrow way");
         assert_eq!(columns(200, true, false, true), Columns { queue: 0, side: 0, diff: true });
+    }
+
+    #[test]
+    fn zen_takes_70_percent_of_the_screen_unless_the_config_fixes_it() {
+        assert_eq!(zen_width(None, 200), 140);
+        assert_eq!(zen_width(None, 120), 100, "never under 100");
+        assert_eq!(zen_width(None, 80), 80, "never wider than the screen");
+        assert_eq!(zen_width(Some(90), 200), 90, "the config wins");
+        assert_eq!(zen_width(Some(120), 100), 100);
+    }
+
+    #[test]
+    fn the_zen_column_sits_in_the_middle_under_the_banner_row() {
+        assert_eq!(zen_column(Rect::new(0, 0, 160, 40), 112), Rect::new(24, 1, 112, 39));
+        assert_eq!(zen_column(Rect::new(0, 0, 80, 40), 100), Rect::new(0, 1, 80, 39));
     }
 
     #[test]

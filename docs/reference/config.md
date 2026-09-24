@@ -78,7 +78,7 @@ Tokens never go here: they live in the macOS keychain.
 | `theme` | text | `default` | The colour palette. |
 | `queue` | `comfortable` or `compact` | `comfortable` | Two lines per MR in the queue, or one. |
 | `images` | true or false | true | Draw pictures from comments where the terminal can. |
-| `zen_width` | number | `100` | How wide the diff reads in zen, `zz`, in columns; 60 at least. |
+| `zen_width` | number | 70 % of the screen, 100 at least | How wide the diff reads in zen, `zz`, in columns; 60 at least. Set, it stays fixed. |
 | `ascii` | true or false | false | Reactions in plain words (`+1 2`) for terminals that draw emoji at the wrong width. |
 
 ## `[open]`

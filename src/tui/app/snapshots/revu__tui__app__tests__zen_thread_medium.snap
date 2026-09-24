@@ -1,0 +1,10 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 100, 30)"
+---
+
+ charge.rs:-13 · 1 thread
+
+ ▎✓ resolved
+ ▎you · 2h
+ ▎Why drop the plain client?

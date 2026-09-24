@@ -1,8 +1,8 @@
 //! The right pane while it holds Claude's answer: the text as it streams, then how it ended.
 use super::app::{Answer, AnswerState, App, Focus, Input};
 use super::theme::Theme;
-use super::thread_view::{body_lines, box_height, draw_compose, pane_block, wrap};
-use super::ui::{spinner, truncate};
+use super::thread_view::{body_lines, box_height, draw_compose, wrap};
+use super::ui::{side_pane, spinner, truncate};
 use crate::ai::anthropic::{Outcome, Stop};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -18,7 +18,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let compose = matches!(app.input, Some(Input::Ask { .. } | Input::FollowUp)).then(|| (app.input_label(), app.buffer.clone()));
     let Some(answer) = app.open.as_ref().and_then(|o| o.answer.clone()) else { return };
     let title = if answer.cached { format!("Claude · {} · cached", answer.label) } else { format!("Claude · {}", answer.label) };
-    let block = pane_block(theme, &title, focused);
+    let block = side_pane(theme, &title, focused, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let inner = match &compose {

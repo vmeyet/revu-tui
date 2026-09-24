@@ -36,8 +36,8 @@ pub struct Settings {
     pub pictures: Option<ratatui_image::picker::Picker>,
     /// `[tui] queue`: two-line rows, or one.
     pub queue_layout: crate::config::QueueLayout,
-    /// How wide the diff reads in zen.
-    pub zen_width: u16,
+    /// How wide the diff reads in zen; `None` grows it with the screen.
+    pub zen_width: Option<u16>,
     /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
     /// `[share]`: where `Y` can post an MR, the bare target first.
     pub share: Vec<crate::share::Target>,
@@ -91,8 +91,8 @@ pub struct App {
     pub wrap: bool,
     /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.
     pub zen: bool,
-    /// How wide the diff reads in zen, `[tui] zen_width`.
-    pub zen_width: u16,
+    /// How wide the diff reads in zen, `[tui] zen_width`; `None` grows it with the screen.
+    pub zen_width: Option<u16>,
     /// The MR zen just switched to, shown on top for a moment: when, and what it says.
     pub zen_switch: Option<(Instant, String)>,
     /// Notifications that arrived in zen, sent when it ends.
