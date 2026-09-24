@@ -1,4 +1,4 @@
-//! Everything that changes the MR: drafts, the publish modal, resolving, approving.
+//! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
 use super::{Action, App, Failure, Input, MrKey, Open};
 use crate::forge::Position;
 use crate::review::{Row, position, suggestion};
@@ -27,6 +27,7 @@ impl App {
             KeyCode::Char('s') => self.compose_here(true),
             KeyCode::Char('A') => self.toggle_approval(),
             KeyCode::Char('M') => self.merge_here(),
+            KeyCode::Char('H') => self.toggle_draft(),
             KeyCode::Char('P') => {
                 self.open_publish();
                 vec![]
@@ -361,6 +362,7 @@ impl App {
             Failure::Checks => self.checks_failed(message),
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),
+            Failure::SetDraft => self.warn(format!("not changed: {message}")),
             Failure::React { thread, index, emoji, on } => self.react_failed(&thread, index, emoji, on, &message),
             Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage | Failure::Ready => self.warn(message),
         }

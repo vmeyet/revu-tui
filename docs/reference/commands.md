@@ -97,6 +97,18 @@ Merge your own approved merge request, after a yes (`--yes` skips the question)
 |---|---|
 | `-y, --yes` | Merge without asking. |
 
+## `revu ready`
+
+Mark your own merge request ready for review (`--undo` makes it a draft again)
+
+| Argument | Means |
+|---|---|
+| `MR` | `group/project!42`, `!42`, an MR URL, or nothing for the current branch. |
+
+| Flag | Means |
+|---|---|
+| `--undo` | Make it a draft instead. |
+
 ## `revu publish`
 
 Publish every draft comment you hold on a merge request as one review.

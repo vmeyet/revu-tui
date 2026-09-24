@@ -50,6 +50,7 @@ impl App {
             Command::Go(_) => ":go",
             Command::Open => ":open",
             Command::Merge => ":merge",
+            Command::Ready => ":ready",
             Command::Approve => ":approve",
             Command::Publish => ":publish",
             Command::All => ":all",

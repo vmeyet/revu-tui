@@ -107,14 +107,20 @@ const GROUPS: &[(&str, &[&str])] = &[
             "description",
         ],
     ),
-    ("comment & publish", &["comment", "comment_old", "select", "suggest", "editor", "resolve", "publish", "approve", "merge", "share"]),
+    (
+        "comment & publish",
+        &["comment", "comment_old", "select", "suggest", "editor", "resolve", "publish", "approve", "merge", "ready", "share"],
+    ),
     (
         "thread pane",
         &["reply", "react", "apply_suggestion", "edit_draft", "delete_draft", "close_pane", "next_in_line", "prev_in_line", "open_link"],
     ),
     ("ask claude", &["ask_explain", "ask_risks", "ask_summary", "ask_thread", "ask_comment", "ask_free"]),
     ("search & app", &["palette", "jump", "palette_mr", "palette_file", "open_browser", "copy_link", "help", "quit"]),
-    ("commands", &[":go", ":open", ":approve", ":merge", ":publish", ":all", ":set", ":view", ":ai", ":ask", ":share", ":help", ":quit"]),
+    (
+        "commands",
+        &[":go", ":open", ":approve", ":merge", ":ready", ":publish", ":all", ":set", ":view", ":ai", ":ask", ":share", ":help", ":quit"],
+    ),
 ];
 
 /// A habit a faster key replaces, with what to try instead.
@@ -236,6 +242,7 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('s') => "suggest",
         KeyCode::Char('A') => "approve",
         KeyCode::Char('M') => "merge",
+        KeyCode::Char('H') => "ready",
         KeyCode::Char('P') => "publish",
         KeyCode::Char('D') => "split",
         KeyCode::Char('t') => "tree",

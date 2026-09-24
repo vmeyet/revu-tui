@@ -66,6 +66,7 @@ async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()>
 async fn publish(&self, key: &MrKey, approve: bool) -> Result<()>
 async fn resolve(&self, key: &MrKey, discussion: &str, resolved: bool) -> Result<()>
 async fn approve(&self, key: &MrKey, approve: bool) -> Result<()>
+async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()>
 async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion>
 ```
 
@@ -85,6 +86,7 @@ async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) ->
 | Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked | `submitPullRequestReview` with `COMMENT` or `APPROVE`, in one call |
 | Resolve | `PUT …/discussions/:id resolved=` | GraphQL `resolveReviewThread` / `unresolveReviewThread` |
 | Approve | `POST …/approve`, `…/unapprove` | `POST pulls/:n/reviews` with `APPROVE`; there is no unapprove for the reviewer, the error says to request changes or dismiss from the web |
+| Draft or ready | GraphQL `mergeRequestSetDraft(projectPath, iid, draft)`; a no-op when already there | GraphQL `pullRequest { id isDraft }`, then `convertPullRequestToDraft` or `markPullRequestReadyForReview` by node id, skipped when already there |
 | Suggestions | ```` ```suggestion:-0+0 ```` fence | ```` ```suggestion ```` fence over the commented lines; the range comes from `start`/`line` |
 | Line URL | `web_url/diffs#sha1(path)_old_new` | `web_url/files#diff-sha256(path)R<new>` or `L<old>` |
 | Sigil | `group/project!42` | `owner/repo#42` |

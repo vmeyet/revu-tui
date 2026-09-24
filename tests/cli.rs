@@ -66,6 +66,7 @@ fn show_rejects_a_reference_before_touching_the_network() {
 fn write_commands_explain_themselves() {
     revu().args(["comment", "--help"]).assert().success().stdout(predicate::str::contains("--at"));
     revu().args(["approve", "--help"]).assert().success().stdout(predicate::str::contains("--undo"));
+    revu().args(["ready", "--help"]).assert().success().stdout(predicate::str::contains("--undo"));
     revu().args(["publish", "--help"]).assert().success().stdout(predicate::str::contains("draft"));
 }
 

@@ -76,6 +76,15 @@ impl Mr {
         };
         Some(reason)
     }
+
+    /// Why I may not mark this MR a draft or ready from revu, or `None` when I may: it is mine and open.
+    pub fn draft_refusal(&self) -> Option<String> {
+        match () {
+            () if !self.mine => Some("it is not yours".to_owned()),
+            () if self.state != "opened" => Some(format!("this MR is {}", self.state)),
+            () => None,
+        }
+    }
 }
 
 /// How a forge merges an MR, as its project allows and prefers.
@@ -468,5 +477,13 @@ mod tests {
         }
         let running = Mr { pipeline: Some(Pipeline { status: "running".into(), web_url: None }), ..mergeable() };
         assert_eq!(running.merge_refusal(), None, "a running pipeline is the forge's call: it may merge when it passes");
+    }
+
+    #[test]
+    fn only_my_open_mrs_turn_draft_or_ready() {
+        assert_eq!(mergeable().draft_refusal(), None);
+        assert_eq!(Mr { draft: true, ..mergeable() }.draft_refusal(), None);
+        assert_eq!(Mr { mine: false, ..mergeable() }.draft_refusal().as_deref(), Some("it is not yours"));
+        assert_eq!(Mr { state: "closed".into(), ..mergeable() }.draft_refusal().as_deref(), Some("this MR is closed"));
     }
 }

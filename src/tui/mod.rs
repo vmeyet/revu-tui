@@ -427,6 +427,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.forge_of(&key).merge(&key, &head, plan).await;
                 send(outcome.map_or_else(|e| failed(Failure::Merge, &e), |()| Incoming::Merged { key }));
             }
+            Action::SetDraft { key, draft } => {
+                let outcome = backend.forge_of(&key).set_draft(&key, draft).await;
+                send(outcome.map_or_else(|e| failed(Failure::SetDraft, &e), |()| Incoming::DraftSet { key, draft }));
+            }
             Action::Apply { key, branch, suggestion } => {
                 let outcome = backend.forge_of(&key).apply(&key, &branch, &suggestion).await;
                 send(outcome.map_or_else(|e| failed(Failure::Apply, &e), |()| Incoming::Applied { key, branch }));

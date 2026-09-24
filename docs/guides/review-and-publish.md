@@ -72,6 +72,14 @@ Set `[tui] ascii = true` when your terminal draws emoji at the wrong width.
 
 `A` approves or unapproves without publishing.
 
+## Draft or ready
+
+`H` marks your own MR ready for review when it is a draft, and a draft when it is ready.
+revu does not ask first: `H` again takes it back.
+A toast names the new state, and the header and the queue follow.
+revu refuses, and says why, when the MR is not yours or is no longer open.
+`revu ready !42` does the same from the shell, and `--undo` makes it a draft again.
+
 ## Merge
 
 `M` merges your own MR once it is approved.

@@ -57,6 +57,11 @@ query Mr($owner: String!, $name: String!, $number: Int!) {
   }
 }";
 
+const DRAFT_STATE: &str = r"
+query DraftState($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id isDraft } }
+}";
+
 const THREADS: &str = r"
 query Threads($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
@@ -253,6 +258,24 @@ impl Pr {
             merge: forge::MergePlan::default(),
         }
     }
+}
+
+#[derive(Deserialize)]
+struct DraftStateData {
+    repository: Option<DraftStateRepository>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DraftStateRepository {
+    pull_request: Option<DraftState>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DraftState {
+    id: String,
+    is_draft: bool,
 }
 
 #[derive(Deserialize)]
@@ -505,6 +528,19 @@ impl Client {
         self.graphql::<serde_json::Value>(&query, json!({"id": node, "content": emoji.github()})).await.map(|_| ())
     }
 
+    /// Marks the PR a draft, or ready for review; asked first, so a PR already there is left alone.
+    pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
+        let (owner, name) = owner_and_name(&key.project)?;
+        let data: DraftStateData = self.graphql(DRAFT_STATE, json!({"owner": owner, "name": name, "number": key.number})).await?;
+        let pr = data.repository.and_then(|r| r.pull_request).with_context(|| format!("{}#{} not found", key.project, key.number))?;
+        if pr.is_draft == draft {
+            return Ok(());
+        }
+        let verb = if draft { "convertPullRequestToDraft" } else { "markPullRequestReadyForReview" };
+        let query = format!("mutation($id: ID!) {{ {verb}(input: {{pullRequestId: $id}}) {{ clientMutationId }} }}");
+        self.graphql::<Value>(&query, json!({"id": pr.id})).await.map(|_| ())
+    }
+
     pub(super) async fn threads(&self, key: &MrKey) -> Result<PrThreads> {
         let (owner, name) = owner_and_name(&key.project)?;
         let data: ThreadsData = self.graphql(THREADS, json!({"owner": owner, "name": name, "number": key.number})).await?;
@@ -651,7 +687,7 @@ mod tests {
     use super::*;
     use crate::auth::Credentials;
     use crate::forge::{LineRef, ReviewState};
-    use wiremock::matchers::{body_string_contains, method, path};
+    use wiremock::matchers::{body_partial_json, body_string_contains, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn key() -> MrKey {
@@ -980,5 +1016,43 @@ mod tests {
         let client = client(&server);
         client.resolve("PRRT_1", false).await.unwrap();
         assert!(client.resolve("IC_1", true).await.unwrap_err().to_string().contains("only review threads"));
+    }
+
+    fn draft_state_mock(is_draft: bool) -> Mock {
+        Mock::given(method("POST")).and(path("/graphql")).and(body_string_contains("query DraftState")).respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"data": {"repository": {"pullRequest": {"id": "PR_42", "isDraft": is_draft}}}})),
+        )
+    }
+
+    #[tokio::test]
+    async fn set_draft_converts_a_ready_pr_by_its_node_id() {
+        let server = MockServer::start().await;
+        draft_state_mock(false).mount(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("convertPullRequestToDraft"))
+            .and(body_partial_json(json!({"variables": {"id": "PR_42"}})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"data": {"convertPullRequestToDraft": {"clientMutationId": null}}})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        client(&server).set_draft(&key(), true).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn set_draft_leaves_a_pr_already_in_that_state_alone() {
+        let server = MockServer::start().await;
+        draft_state_mock(false).mount(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("mutation"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&server)
+            .await;
+        client(&server).set_draft(&key(), false).await.unwrap();
     }
 }

@@ -45,6 +45,8 @@ pub enum Command {
     Approve(ApproveArgs),
     /// Merge your own approved merge request, after a yes (`--yes` skips the question).
     Merge(MergeArgs),
+    /// Mark your own merge request ready for review (`--undo` makes it a draft again).
+    Ready(ReadyArgs),
     /// Publish every draft comment you hold on a merge request as one review.
     Publish(RefArgs),
     /// Post a merge request through a `[share]` command: a chat channel, a webhook, a script.
@@ -175,6 +177,16 @@ pub struct MergeArgs {
     /// Merge without asking.
     #[arg(long, short)]
     pub yes: bool,
+}
+
+/// Arguments of `revu ready`.
+#[derive(Args, Debug)]
+pub struct ReadyArgs {
+    /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
+    pub mr: Option<String>,
+    /// Make it a draft instead.
+    #[arg(long)]
+    pub undo: bool,
 }
 
 /// `revu ai`: one subcommand.

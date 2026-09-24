@@ -4,7 +4,7 @@
 //! asking me score 185, mine 87 (the rules skip them, so they skip the fields) and a project's
 //! open MRs 124: each call stays under the limit, one query for all would not.
 use super::Client;
-use crate::forge::{Queue, QueueMr, ReviewState, ReviewerState};
+use crate::forge::{MrKey, Queue, QueueMr, ReviewState, ReviewerState};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -43,6 +43,11 @@ const FIELDS: &str = "id iid title description draft webUrl updatedAt createdAt
 /// What only the "needs me" rules read: approvals still missing, and who commented.
 const RULES: &str = "approvalsLeft commenters { nodes { username } }";
 
+const SET_DRAFT: &str = r"
+mutation SetDraft($project: ID!, $iid: String!, $draft: Boolean!) {
+  mergeRequestSetDraft(input: {projectPath: $project, iid: $iid, draft: $draft}) { errors }
+}";
+
 fn filled(body: &str) -> String {
     body.replace("FIELDS", FIELDS).replace("RULES", RULES)
 }
@@ -72,6 +77,19 @@ impl Client {
         let open_body = json!({"query": project_query(), "variables": {"project": path}});
         let (asking, authored, open) = tokio::try_join!(asking, authored, self.post_json::<Answer>("graphql", &open_body))?;
         queue_from(asking, authored, Some((open, path)))
+    }
+}
+
+impl Client {
+    /// Marks the MR a draft, or ready; GitLab leaves an MR already there as it is.
+    pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
+        let variables = json!({"project": key.project, "iid": key.number.to_string(), "draft": draft});
+        let answer = self.post_json::<Answer>("graphql", &json!({"query": SET_DRAFT, "variables": variables})).await?;
+        let payload = data_of(answer)?.merge_request_set_draft.context("GraphQL answered without the merge request")?;
+        if !payload.errors.is_empty() {
+            bail!("GitLab: {}", payload.errors.join("; "));
+        }
+        Ok(())
     }
 }
 
@@ -175,6 +193,12 @@ struct GraphqlError {
 struct Data {
     current_user: Option<WireUser>,
     project: Option<WireProjectMrs>,
+    merge_request_set_draft: Option<MutationPayload>,
+}
+
+#[derive(Deserialize)]
+struct MutationPayload {
+    errors: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -410,5 +434,28 @@ mod tests {
         let body = FIXTURE.replacen("\"data\": {", "\"data\": {\"project\": null, ", 1);
         let err = queue_from_json(&body, Some("acme/gone")).unwrap_err().to_string();
         assert!(err.contains("acme/gone"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn set_draft_sends_the_project_the_iid_and_the_state_and_reads_the_errors() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .and(body_partial_json(json!({"variables": {"project": "acme/widgets", "iid": "42", "draft": true}})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"mergeRequestSetDraft": {"errors": []}}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .and(body_partial_json(json!({"variables": {"iid": "43"}})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"mergeRequestSetDraft": {"errors": ["no can do"]}}})))
+            .mount(&server)
+            .await;
+        let client =
+            Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
+        client.set_draft(&MrKey::new("acme/widgets", 42), true).await.unwrap();
+        let err = client.set_draft(&MrKey::new("acme/widgets", 43), true).await.unwrap_err().to_string();
+        assert!(err.contains("no can do"), "{err}");
     }
 }
