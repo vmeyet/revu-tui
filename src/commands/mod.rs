@@ -15,6 +15,8 @@ pub mod list;
 pub mod login;
 /// `revu publish`.
 pub mod publish;
+/// `revu share`.
+pub mod share;
 /// `revu show`.
 pub mod show;
 mod target;

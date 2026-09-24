@@ -4,18 +4,13 @@
 use crate::ctx::Home;
 use crate::forge::rules::Rules;
 use crate::forge::{Forge, MrKey, Queue, QueueMr, Sections};
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
-/// Enough for thousands of links; a command printing more is cut here, never read whole.
-const OUTPUT_CAP: u64 = 1024 * 1024;
-const STDERR_CAP: u64 = 16 * 1024;
 
 /// One MR link found in the command's output.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,39 +60,7 @@ pub async fn output(command: &str) -> Result<String> {
 }
 
 async fn output_within(command: &str, limit: Duration) -> Result<String> {
-    let words = shell_words::split(command).with_context(|| format!("ready command `{command}` does not split into words"))?;
-    let Some((program, args)) = words.split_first() else { bail!("the ready command is empty") };
-    let mut child = tokio::process::Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .with_context(|| format!("ready command: cannot run `{program}`"))?;
-    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else { bail!("ready command: no output pipes") };
-    let run = async {
-        let (out, err) = tokio::join!(read_capped(stdout, OUTPUT_CAP), read_capped(stderr, STDERR_CAP));
-        let status = child.wait().await?;
-        anyhow::Ok((status, out?, err?))
-    };
-    let (status, out, err) = tokio::time::timeout(limit, run)
-        .await
-        .with_context(|| format!("ready command `{program}` took longer than {}s", limit.as_secs()))??;
-    let cut_at_cap = out.len() as u64 == OUTPUT_CAP;
-    if !status.success() && !cut_at_cap {
-        let why = String::from_utf8_lossy(&err).lines().find(|l| !l.trim().is_empty()).map_or("no message", str::trim).to_owned();
-        bail!("ready command `{program}` failed: {why}");
-    }
-    Ok(String::from_utf8_lossy(&out).into_owned())
-}
-
-/// Up to `cap` bytes, then the pipe closes: a command printing more gets a broken pipe and ends,
-/// instead of blocking on a pipe nobody reads while the other one waits for it to finish.
-async fn read_capped(pipe: impl tokio::io::AsyncRead + Unpin, cap: u64) -> std::io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    pipe.take(cap).read_to_end(&mut bytes).await?;
-    Ok(bytes)
+    crate::program::run(command, None, "ready command", limit).await
 }
 
 /// What the ready command said last for a scope, and the MRs it named that no list of mine holds.
@@ -156,11 +119,7 @@ pub async fn resolve(output: String, main: &Forge, others: &[Home], scope: Optio
 
 /// The command reads as words; checked when the config loads.
 pub fn check(command: &str) -> Result<()> {
-    let words = shell_words::split(command).with_context(|| format!("`queue.ready.command` does not split into words: {command}"))?;
-    if words.is_empty() {
-        bail!("`queue.ready.command` is empty");
-    }
-    Ok(())
+    crate::program::check(command, "queue.ready.command")
 }
 
 #[cfg(test)]
@@ -214,15 +173,8 @@ mod tests {
         assert_eq!(keys(Some("acme/widgets")), [MrKey::new("acme/widgets", 42)], "a checkout keeps to its project");
     }
 
-    fn script(body: &str) -> (tempfile::TempDir, String) {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("source.sh");
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let command = shell_words::quote(&path.to_string_lossy()).into_owned();
-        (dir, command)
-    }
+    use crate::program::OUTPUT_CAP;
+    use crate::program::tests::script;
 
     #[tokio::test]
     async fn a_command_that_prints_links_is_read() {

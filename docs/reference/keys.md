@@ -62,6 +62,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `esc` | drop the selection, leave the box |
 | `P` | publish every draft |
 | `A` | approve, unapprove |
+| `Y` | share the MR, after a preview |
 
 ## Thread pane
 
@@ -143,6 +144,7 @@ A bound key adds to the default key, it does not replace it.
 | `resolve` | `R` |
 | `publish` | `P` |
 | `approve` | `A` |
+| `share` | `Y` |
 | `open_browser` | `o` |
 | `copy_link` | `y` |
 | `scope` | `*` |

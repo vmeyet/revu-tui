@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 529
 expression: "render(&mut app, 80, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────╮
@@ -22,7 +23,7 @@ expression: "render(&mut app, 80, 24)"
 │            │          S  group by author                        │            │
 │            │      zo zc  open, fold the section or stack        │            │
 │            │                                                    │            │
-│            ╰─────────────── 4–19 of 66 · j k scroll · esc close ╯            │
+│            ╰─────────────── 4–19 of 67 · j k scroll · esc close ╯            │
 │                                ││                                            │
 ╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina                                                       ? help

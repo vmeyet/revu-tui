@@ -13,6 +13,7 @@ mod pane;
 mod pipeline;
 mod queue;
 mod review;
+mod share;
 mod stack;
 mod state;
 #[cfg(test)]
@@ -31,6 +32,7 @@ pub use pane::{Entry, EntryKind};
 pub use pipeline::{Pipeline, Run};
 pub use queue::{Badge, QueueRow};
 pub use review::Open;
+pub use share::{Sharing, Stage as ShareStage};
 pub use state::{App, Settings};
 pub use tree::Tree;
 pub use triage::Mark;
@@ -78,6 +80,12 @@ pub enum Action {
     },
     OpenUrl(String),
     Yank(String),
+    /// Pipe `message` to the share target's command; `done` is the toast when it worked.
+    Share {
+        target: Box<crate::share::Target>,
+        message: String,
+        done: String,
+    },
     /// Post the draft at `index` of the open review; the answer carries the id GitLab gave it.
     SaveDraft {
         key: MrKey,

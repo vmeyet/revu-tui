@@ -88,6 +88,46 @@ pub const SETTINGS: &[Setting] = &[
         example: "[\"wip\", \"not ready\"]",
     },
     Setting {
+        table: "share",
+        key: "command",
+        kind: "command line",
+        default: "none",
+        meaning: "What `Y` posts through: the message arrives on its stdin.",
+        example: "\"slack send '#review'\"",
+    },
+    Setting {
+        table: "share",
+        key: "template",
+        kind: "text with placeholders",
+        default: "`[{ref} {title}]({url})` then `_{note}_`",
+        meaning: "The message; a line with `{note}` goes when the note is empty.",
+        example: "\"[{ref} {title}]({url})\\n_{note}_\"",
+    },
+    Setting {
+        table: "share.targets",
+        key: "<name>",
+        kind: "table",
+        default: "none",
+        meaning: "One more place to post to; `Y` asks which when there are several.",
+        example: "{ command = \"slack send '#team'\" }",
+    },
+    Setting {
+        table: "share.targets.<name>",
+        key: "command",
+        kind: "command line",
+        default: "none",
+        meaning: "What this target posts through: the message arrives on its stdin.",
+        example: "\"slack send '#team'\"",
+    },
+    Setting {
+        table: "share.targets.<name>",
+        key: "template",
+        kind: "text with placeholders",
+        default: "`[share] template`",
+        meaning: "This target's message.",
+        example: "\"{ref} {title} {url}\"",
+    },
+    Setting {
         table: "queue.views",
         key: "<name>",
         kind: "search query",
@@ -315,7 +355,7 @@ pub fn example_toml() -> String {
     let mut lines = vec![];
     let mut current = None;
     for setting in SETTINGS.iter().filter(|s| !s.meaning.starts_with("Not used")) {
-        let table = setting.table.replace("<host>", "git.acme.dev");
+        let table = setting.table.replace("<host>", "git.acme.dev").replace("<name>", "team");
         if current.as_deref() != Some(table.as_str()) {
             if !table.is_empty() {
                 lines.push(String::new());
@@ -436,8 +476,10 @@ mod tests {
             ("Typesafe", "ai.typesafe"),
             ("Anthropic", "ai.anthropic"),
             ("Open", "open"),
+            ("Share", "share"),
+            ("ShareTarget", "share.targets.<name>"),
         ];
-        let nested = ["queue", "review", "tui", "ai", "open", "notify", "keys", "hosts"];
+        let nested = ["queue", "review", "tui", "ai", "open", "notify", "keys", "hosts", "share"];
         for (name, table) in tables {
             let start = source.find(&format!("pub struct {name} {{")).unwrap_or_else(|| panic!("struct {name}"));
             let body = &source[start..start + source[start..].find("\n}").unwrap()];

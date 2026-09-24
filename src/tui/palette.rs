@@ -65,11 +65,13 @@ pub enum Command {
     AiOn,
     /// `:ask <question>`: a free question to Claude about what is under the cursor.
     Ask(String),
+    /// `:share [target]`: post the MR through a `[share]` command, after a preview.
+    Share(Option<String>),
     Help,
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 11] = [
+pub const VERBS: [(&str, &str); 12] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
@@ -79,6 +81,7 @@ pub const VERBS: [(&str, &str); 11] = [
     ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     ("ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
     ("ai", "switch AI off or back on for this session: :ai off, :ai on"),
+    ("share", "post the MR through a [share] command: :share · :share review"),
     ("help", "show the keys"),
     ("quit", "leave"),
 ];
@@ -104,6 +107,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "ai" => Err(":ai off or :ai on; the config says which providers exist".into()),
         "ask" if rest.is_empty() => Err(":ask needs a question".into()),
         "ask" => Ok(Command::Ask(rest.to_owned())),
+        "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
         "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => {

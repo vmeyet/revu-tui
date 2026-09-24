@@ -65,7 +65,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_filter(f, app, input);
     }
     draw_status(f, app, status);
-    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.palette.is_some();
+    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.palette.is_some() || app.sharing.is_some();
     if modal {
         app.links.clear();
     }
@@ -86,6 +86,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if app.brief.is_some() {
         brief_view::draw(f, app, main);
+    }
+    if let Some(sharing) = &app.sharing {
+        super::share_view::draw(f, app, sharing, main);
     }
     if let Some(palette) = &app.palette {
         super::palette_view::draw(f, app, palette, main);

@@ -36,6 +36,26 @@ Tokens never go here: they live in the macOS keychain.
 | `reviewed_comments` | number | `3` | An MR with this many comments from others and none from you sorts last. |
 | `not_ready` | list of text | `["wip", "do not review", "don't review", "not ready"]` | Words in the title or the description's first paragraph that mark an MR as not ready. |
 
+## `[share]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `command` | command line | none | What `Y` posts through: the message arrives on its stdin. |
+| `template` | text with placeholders | `[{ref} {title}]({url})` then `_{note}_` | The message; a line with `{note}` goes when the note is empty. |
+
+## `[share.targets]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `<name>` | table | none | One more place to post to; `Y` asks which when there are several. |
+
+## `[share.targets.<name>]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `command` | command line | none | What this target posts through: the message arrives on its stdin. |
+| `template` | text with placeholders | `[share] template` | This target's message. |
+
 ## `[queue.views]`
 
 | Key | Type | Default | Does |
@@ -126,6 +146,17 @@ enabled = true
 stale_days = 14
 reviewed_comments = 3
 not_ready = ["wip", "not ready"]
+
+[share]
+command = "slack send '#review'"
+template = "[{ref} {title}]({url})\n_{note}_"
+
+[share.targets]
+mine = { command = "slack send '#team'" }
+
+[share.targets.team]
+command = "slack send '#team'"
+template = "{ref} {title} {url}"
 
 [queue.views]
 mine = "@me ~frontend"
