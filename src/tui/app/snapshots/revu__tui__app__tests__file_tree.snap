@@ -7,7 +7,7 @@ expression: "render(&mut app, 120, 20)"
 │   1 of 2 approvals · 3 threads, 1 unresolved · viewed 1/2 ━━━━━───── ││    ▾ pay/                                    │
 │  ◆ 1 on the MR  enter opens                                          ││ ▎      charge.rs                  +4 −2 ◆2 ✓ │
 │                                                                      ││    Cargo.lock                          +1 −1 │
-│ ▎▸ src/pay/charge.rs                  +4 −2  ◆1 · 1 outdated  viewed ││                                              │
+│ ▎▸ src/pay/charge.rs                  +4 −2  ✓1 · 1 outdated  viewed ││                                              │
 │                                                                      ││                                              │
 │  ▸ Cargo.lock                                          +1 −1  folded ││                                              │
 │                                                                      ││                                              │

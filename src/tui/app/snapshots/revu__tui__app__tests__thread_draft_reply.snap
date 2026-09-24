@@ -7,7 +7,7 @@ expression: "render(&mut app, 120, 24)"
 │   1 of 2 approvals · 3 threads, 1 unresolved                         ││ ▎you · 2h                                    │
 │  ◆ 1 on the MR  enter opens                                          ││ ▎Why drop the plain client?                  │
 │                                                                      ││  you · draft ◇                               │
-│  ▾ src/pay/charge.rs                          +4 −2  ◆1 · 1 outdated ││  agreed, keys are per card                   │
+│  ▾ src/pay/charge.rs                          +4 −2  ✓1 · 1 outdated ││  agreed, keys are per card                   │
 │     ▾ @@ -12,4 +12,5 @@ pub async fn charge                          ││                                              │
 │      12   12  pub async fn charge(card: &Card, amount: Money) -> Re… ││                                              │
 │ ▎◇   13      -    let client = Client::new();                        ││                                              │

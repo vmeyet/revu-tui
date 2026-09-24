@@ -9,6 +9,7 @@
 | The queue and the pane frames | Hidden |
 | The status line | Hidden; a toast shows for two seconds at the bottom |
 | The MR header | One faded line on top |
+| File and hunk headers | Pinned at the top of the column while you scroll |
 | The diff | A centred column, 100 columns wide |
 | Notifications | Held until you leave zen |
 

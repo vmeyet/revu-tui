@@ -7,7 +7,7 @@ expression: "render(&mut app, 80, 24)"
 │ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolv │
 │ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                │
 │                                ││                                            │
-│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge…  +4 −2  ◆1 · 1 outdated │
+│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge…  +4 −2  ✓1 · 1 outdated │
 │   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn ch…   │
 │   nina · !41 · +3 −1        4h ││      12   12  pub async fn charge(card: &C │
 │                                ││               ard, amount: Money) -> Resul │

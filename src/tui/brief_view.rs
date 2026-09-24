@@ -1,11 +1,10 @@
 //! The cover page, centred over the panes: calm sections under faded headers, the description in
-//! the same light markdown as notes, a cursor bar on the thread and file rows `enter` jumps to.
+//! the same light markdown as notes, a cursor bar on the thread rows `enter` jumps to.
 use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;
 use super::thread_view::body_lines;
 use super::ui::{pane, short_age, truncate};
-use crate::ai::triage::Risk;
 use crate::forge::ReviewState;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -20,6 +19,8 @@ const SIZE_PCT: u16 = 90;
 const MAX_WIDTH: u16 = 110;
 const PAD_X: u16 = 2;
 const PAD_Y: u16 = 1;
+/// Lines each thread takes: what it says, then where it is.
+const THREAD_ROWS: usize = 2;
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
@@ -33,10 +34,14 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let frame_y = 2 + 2 * PAD_Y;
     let height = (rows as u16).saturating_add(frame_y).min(area.height * SIZE_PCT / 100).max(area.height.min(10));
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
-    let hint = if from_review {
-        " j k move · enter go there · p pipeline · o browser · esc close "
-    } else {
-        " enter open the MR · j k scroll · o browser · esc close "
+    let hint = match (from_review, brief.selected_thread()) {
+        (true, Some(thread)) => {
+            let keys = " · enter go there · esc close ";
+            let room = usize::from(width).saturating_sub(4 + keys.width());
+            format!(" {}{keys}", keep_end(&thread.place, room))
+        }
+        (true, None) => " j k move · p pipeline · o browser · esc close ".to_owned(),
+        (false, _) => " enter open the MR · j k scroll · o browser · esc close ".to_owned(),
     };
     let block = pane(theme, &format!("{}{} {}", brief.sigil, brief.number, brief.title), true)
         .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y))
@@ -44,10 +49,11 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let inner = block.inner(popup);
     let visible = usize::from(inner.height);
     if brief.follow
-        && let Some(&line) = target_lines.get(brief.selected)
+        && let Some(&line) = brief.selected.and_then(|i| target_lines.get(i))
     {
         let at = wrapped_rows(&lines[..line], inner.width);
-        brief.scroll = brief.scroll.clamp(at.saturating_sub(visible.saturating_sub(1)), at);
+        let end = wrapped_rows(&lines[..(line + THREAD_ROWS).min(lines.len())], inner.width);
+        brief.scroll = brief.scroll.clamp(end.saturating_sub(visible), at);
         brief.follow = false;
     }
     brief.scroll = brief.scroll.min(rows.saturating_sub(visible));
@@ -56,7 +62,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(paragraph.block(block).style(Style::default().bg(theme.surface)), popup);
 }
 
-/// The cover's lines, and the line each cursor row sits on, threads then files.
+/// The cover's lines, and the line each thread row starts on.
 fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) -> (Vec<Line<'a>>, Vec<usize>) {
     let mut lines = head(brief, theme, today);
     lines.push(Line::default());
@@ -69,22 +75,16 @@ fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) ->
     section(&mut lines, "review", "", theme);
     lines.extend(review_lines(brief, theme, width));
     let mut targets = vec![];
-    if let (Some(threads), Some(files)) = (&brief.threads, &brief.files) {
+    if let Some(threads) = &brief.threads {
         let open = if threads.is_empty() { "none open".to_owned() } else { format!("{} open", threads.len()) };
         section(&mut lines, "threads", &open, theme);
         for (i, thread) in threads.iter().enumerate() {
             targets.push(lines.len());
-            lines.push(thread_line(thread, brief.selected == i, theme, width));
-        }
-        let by = if files.iter().any(|f| f.risk.is_some()) { "by risk" } else { "by size" };
-        section(&mut lines, "files", &format!("{} · {by}", files.len()), theme);
-        for (i, file) in files.iter().enumerate() {
-            targets.push(lines.len());
-            lines.push(file_line(file, brief.selected == threads.len() + i, theme, width));
+            lines.extend(thread_lines(thread, brief.selected == Some(i), theme, width));
         }
     } else {
         section(&mut lines, "threads", &format!("{} open", brief.unresolved), theme);
-        lines.push(Line::from(Span::styled("open the MR to see its threads and files", Style::default().fg(theme.faded))));
+        lines.push(Line::from(Span::styled("open the MR to see its threads", Style::default().fg(theme.faded))));
     }
     (lines, targets)
 }
@@ -166,60 +166,64 @@ fn review_lines<'a>(brief: &Brief, theme: Theme, width: usize) -> Vec<Line<'a>> 
     lines
 }
 
-fn thread_line<'a>(thread: &super::app::ThreadRow, selected: bool, theme: Theme, width: usize) -> Line<'a> {
-    let head = format!("{} · {} · ", thread.place, thread.author);
-    let room = width.saturating_sub(2 + head.width());
-    Line::from(vec![
+/// The comment first, on the whole width; where it sits comes second, short and quiet.
+fn thread_lines<'a>(thread: &super::app::ThreadRow, selected: bool, theme: Theme, width: usize) -> [Line<'a>; 2] {
+    let author = format!("{} · ", thread.author);
+    let room = width.saturating_sub(2 + author.width());
+    let what = Line::from(vec![
         bar(selected, theme),
-        Span::styled(thread.place.clone(), Style::default().fg(if selected { theme.accent } else { theme.muted })),
-        Span::styled(format!(" · {} · ", thread.author), Style::default().fg(theme.faded)),
+        Span::styled(author, Style::default().fg(if selected { theme.accent } else { theme.user(&thread.author) })),
         Span::raw(truncate(&thread.first_words, room)),
-    ])
-}
-
-fn file_line<'a>(file: &super::app::FileRow, selected: bool, theme: Theme, width: usize) -> Line<'a> {
-    let tick = if file.viewed { "✓ " } else { "  " };
-    let counts = format!("+{} −{}", file.additions, file.deletions);
-    let risk = file.risk.map_or(String::new(), |r| format!("  {}", risk_word(r)));
-    let room = width.saturating_sub(2 + tick.width() + counts.width() + risk.width() + 2);
-    let path = truncate(&file.path, room);
-    let pad = room.saturating_sub(path.width()) + 2;
-    let path_style = if selected { Style::default().fg(theme.accent) } else { Style::default() };
-    Line::from(vec![
-        bar(selected, theme),
-        Span::styled(tick, Style::default().fg(theme.success)),
-        Span::styled(path, path_style),
-        Span::raw(" ".repeat(pad)),
-        Span::styled(format!("+{}", file.additions), Style::default().fg(theme.success)),
-        Span::styled(format!(" −{}", file.deletions), Style::default().fg(theme.danger)),
-        Span::styled(risk, Style::default().fg(file.risk.map_or(theme.faded, |r| risk_colour(r, theme)))),
-    ])
+    ]);
+    let replies = match thread.replies {
+        0 => String::new(),
+        1 => " · 1 reply".to_owned(),
+        n => format!(" · {n} replies"),
+    };
+    let place = truncate(&format!("{}{replies}", thread.short_place), width.saturating_sub(2));
+    let bar_style = Style::default().fg(theme.accent);
+    let r#where = Line::from(vec![
+        Span::styled(if selected { "▎ " } else { "  " }, bar_style),
+        Span::styled(place, Style::default().fg(theme.faded)),
+    ]);
+    [what, r#where]
 }
 
 fn bar<'a>(selected: bool, theme: Theme) -> Span<'a> {
     Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent))
 }
 
-fn risk_word(risk: Risk) -> &'static str {
-    match risk {
-        Risk::Cosmetic => "cosmetic",
-        Risk::Logic => "logic",
-        Risk::Data => "data",
-        Risk::Security => "security",
+/// `text` cut from the left to `room` columns, so a path keeps its file name and line.
+fn keep_end(text: &str, room: usize) -> String {
+    if text.width() <= room {
+        return text.to_owned();
     }
-}
-
-fn risk_colour(risk: Risk, theme: Theme) -> ratatui::style::Color {
-    match risk {
-        Risk::Cosmetic => theme.faded,
-        Risk::Logic => theme.muted,
-        Risk::Data => theme.warn,
-        Risk::Security => theme.danger,
+    let mut kept = String::new();
+    let mut used = 1;
+    for c in text.chars().rev() {
+        let w = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+        if used + w > room {
+            break;
+        }
+        kept.insert(0, c);
+        used += w;
     }
+    format!("…{kept}")
 }
 
 /// Rows the wrapped text takes, close enough to stop the scroll at the last page.
 fn wrapped_rows(lines: &[Line], width: u16) -> usize {
     let width = usize::from(width.max(1));
     lines.iter().map(|l| l.width().max(1).div_ceil(width)).sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keep_end;
+
+    #[test]
+    fn a_long_place_keeps_its_end() {
+        assert_eq!(keep_end("src/a.rs:3", 20), "src/a.rs:3");
+        assert_eq!(keep_end("apps/backend/src/sync/users.ts:10", 17), "…sync/users.ts:10");
+    }
 }

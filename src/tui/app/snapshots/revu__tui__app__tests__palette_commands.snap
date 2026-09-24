@@ -7,7 +7,7 @@ expression: "render(&mut app, 100, 24)"
 │ ▎ feat charge card╭ search · commands ───────────────────────────────────────╮                   │
 │ ▎ omar · !42 · +41│ > pu▌blish                                               │                   │
 │                   │                                                          │                   │
-│   ── MINE · 1 ────│   publish  publish every draft, in the publish modal     │2  ◆1 · 1 outdated │
+│   ── MINE · 1 ────│   publish  publish every draft, in the publish modal     │2  ✓1 · 1 outdated │
 │   fix flaky cache │   tab completes · enter runs · ⌫ back to MRs · esc       │                   │
 │   nina · !41 · +3 │                                                          │d, amount: Money)… │
 │                   │                                                          │;                  │

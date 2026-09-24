@@ -978,22 +978,18 @@ fn the_cover_scrolls_its_text_and_keeps_the_cursor_row_in_sight() {
     render(&mut app, 100, 30);
     press(&mut app, "G");
     let screen = render(&mut app, 100, 30);
-    assert!(app.brief.as_ref().unwrap().scroll > 0, "the last file row pulls the page down");
-    assert!(screen.contains("▎   Cargo.lock"), "the cursor row is on screen:\n{screen}");
+    assert!(app.brief.as_ref().unwrap().scroll > 0, "the last thread pulls the page down");
+    assert!(screen.lines().any(|l| l.contains("▎ ") && l.contains("(outdated)")), "the cursor row is on screen:\n{screen}");
 }
 
 #[test]
-fn the_cover_walks_threads_then_files_and_enter_goes_there() {
+fn the_cover_walks_threads_and_enter_goes_there() {
     let mut app = with_review();
     press(&mut app, "i");
     let brief = app.brief.clone().unwrap();
-    assert_eq!(brief.targets().len(), 3, "one open thread, two files");
-    press(&mut app, "j");
-    app.handle_key(code(KeyCode::Enter));
-    assert_eq!(app.brief, None);
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })), "on the file row");
-    assert_eq!(app.focus, Focus::Review);
-    press(&mut app, "i");
+    assert_eq!(brief.targets().len(), 1, "one open thread, and no file rows any more");
+    assert_eq!(brief.selected, Some(0), "the first thread is ready for enter");
+    assert!(!render(&mut app, 120, 40).contains("FILES"));
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_ref().unwrap();
     assert_eq!(
@@ -1004,15 +1000,63 @@ fn the_cover_walks_threads_then_files_and_enter_goes_there() {
     assert_eq!(app.focus, Focus::Side);
 }
 
-#[test]
-fn the_cover_lists_files_by_risk_once_jev_read_them() {
+/// The cover over the review, its threads replaced by `count` threads on a deep path.
+fn cover_with_threads(count: usize) -> App {
     let mut app = with_review();
-    let risks = std::collections::BTreeMap::from([("Cargo.lock".to_owned(), crate::ai::triage::Risk::Security)]);
-    app.readings.insert(mr_key(), ("head".into(), crate::ai::triage::Reading { waits_on_me: false, risks }));
     press(&mut app, "i");
-    let files = app.brief.clone().unwrap().files.unwrap();
-    assert_eq!(files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["Cargo.lock", "src/pay/charge.rs"]);
-    assert!(render(&mut app, 120, 40).contains("by risk"));
+    let threads = (0..count)
+        .map(|i| super::ThreadRow {
+            id: format!("t{i}"),
+            place: format!("apps/backend/src/domain/integration/slack/useCases/sync/syncSlackUsers.ts:{}", 10 + i),
+            short_place: format!("syncSlackUsers.ts:{}", 10 + i),
+            author: "nina".into(),
+            first_words: "should this retry on timeout, the provider says keys are safe to reuse".into(),
+            replies: i,
+        })
+        .collect::<Vec<_>>();
+    app.brief = app.brief.take().map(|b| super::Brief { threads: Some(threads), selected: Some(0), ..b });
+    app
+}
+
+#[test]
+fn a_thread_reads_its_comment_first_and_its_place_second() {
+    let mut app = cover_with_threads(2);
+    let screen = render(&mut app, 100, 40);
+    let comment = screen.lines().position(|l| l.contains("nina · should this retry on timeout")).expect(&screen);
+    let place = screen.lines().nth(comment + 1).unwrap();
+    assert!(place.contains("syncSlackUsers.ts:10") && !place.contains("useCases"), "the file name only:\n{screen}");
+    assert!(screen.contains("syncSlackUsers.ts:11 · 1 reply"), "{screen}");
+    let bottom = screen.lines().find(|l| l.contains("enter go there")).expect(&screen);
+    assert!(bottom.contains("sync/syncSlackUsers.ts:10"), "the place of the selected thread, its end kept:\n{bottom}");
+    let wide = render(&mut app, 160, 40);
+    assert!(wide.contains("apps/backend/src/domain/integration/slack/useCases/sync/syncSlackUsers.ts:10"), "whole when it fits");
+    insta::assert_snapshot!("cover_threads", screen);
+}
+
+#[test]
+fn up_from_the_first_thread_scrolls_back_to_the_top_and_g_stays_there() {
+    let mut app = cover_with_threads(20);
+    press(&mut app, "G");
+    render(&mut app, 100, 24);
+    let bottom = app.brief.as_ref().unwrap().scroll;
+    assert!(bottom > 0, "the last thread is below the first page");
+    press(&mut app, "g");
+    render(&mut app, 100, 24);
+    let brief = app.brief.as_ref().unwrap();
+    assert_eq!((brief.scroll, brief.selected), (0, None), "g stays at the top: nothing pulls it back down");
+    press(&mut app, "j");
+    assert_eq!(app.brief.as_ref().unwrap().selected, Some(0));
+    for _ in 0..3 {
+        press(&mut app, "j");
+    }
+    render(&mut app, 100, 24);
+    let before = app.brief.as_ref().unwrap().scroll;
+    for _ in 0..(before + 10) {
+        press(&mut app, "k");
+    }
+    render(&mut app, 100, 24);
+    let brief = app.brief.as_ref().unwrap();
+    assert_eq!((brief.scroll, brief.selected), (0, None), "k past the first thread lets go and reaches the head");
 }
 
 #[test]
@@ -1021,7 +1065,7 @@ fn the_cover_from_the_queue_opens_the_mr_on_enter_and_has_no_pipeline_yet() {
     app.queue_move(0);
     press(&mut app, "i");
     assert!(app.brief.as_ref().unwrap().threads.is_none());
-    assert!(render(&mut app, 120, 40).contains("open the MR to see its threads and files"));
+    assert!(render(&mut app, 120, 40).contains("open the MR to see its threads"));
     assert!(press(&mut app, "p").is_empty());
     assert!(app.live_toast().unwrap().text.contains("open the MR"));
     assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![Action::Open(mr_key())]);
@@ -2835,12 +2879,19 @@ fn a_long_file_keeps_its_name_and_hunk_pinned_above_the_diff() {
 }
 
 #[test]
-fn zen_pins_nothing() {
+fn zen_pins_the_file_and_hunk_inside_its_column() {
     let mut app = with_long_review();
     to_step(&mut app, 55);
     press(&mut app, "zz");
-    let _ = render(&mut app, 160, 45);
-    assert_eq!(app.open.as_ref().unwrap().pinned_file, None, "zen keeps the column bare");
+    let screen = render(&mut app, 160, 45);
+    assert!(app.open.as_ref().unwrap().pinned_file.is_some(), "{screen}");
+    let pinned = screen.lines().find(|l| l.contains("src/pay/charge.rs")).expect(&screen);
+    let indent = pinned.len() - pinned.trim_start().len();
+    assert!(indent >= (160 - 100) / 2, "inside the centred column:\n{screen}");
+    assert!(screen.contains("fn refund"), "the cursor's hunk too:\n{screen}");
+    insta::assert_snapshot!("zen_pinned", screen);
+    let _ = render(&mut app, 160, 18);
+    assert_eq!(app.open.as_ref().unwrap().pinned_file, None, "short screens still pin nothing, in zen too");
 }
 
 #[test]
