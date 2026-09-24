@@ -142,6 +142,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         share: crate::share::targets(&ctx.config.share),
         prefetch: ctx.config.queue.prefetch,
         ascii: ctx.config.tui.ascii,
+        quit_confirm: ctx.config.keys.quit_confirm,
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();

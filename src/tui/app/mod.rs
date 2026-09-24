@@ -16,6 +16,7 @@ mod pins;
 mod pipeline;
 pub mod prefetch;
 mod queue;
+pub(crate) mod quit;
 mod react;
 mod review;
 mod share;

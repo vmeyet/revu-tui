@@ -93,7 +93,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `o` `y` | open in the browser, copy the link |
 | `r` | refresh |
 | `?` | this help |
-| `q` `^c` | quit |
+| `q` `^c` | quit: press twice |
 
 ## AZERTY
 

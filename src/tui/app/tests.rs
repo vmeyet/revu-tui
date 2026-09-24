@@ -55,6 +55,7 @@ fn settings() -> Settings {
         share: vec![],
         prefetch: 0,
         ascii: false,
+        quit_confirm: true,
     }
 }
 
@@ -474,6 +475,7 @@ fn help_and_quit() {
     assert_eq!(app.help, Some(crate::tui::help::last_row()));
     press(&mut app, "x");
     assert_eq!(app.help, None, "any other key closes it");
+    app.handle_key(ctrl('c'));
     app.handle_key(ctrl('c'));
     assert!(app.should_quit);
 }
@@ -3211,4 +3213,90 @@ fn ascii_draws_reactions_in_plain_words() {
     app.ascii = true;
     let screen = render(&mut app, 150, 24);
     assert!(screen.contains("+1 2") && !screen.contains("👍"), "{screen}");
+}
+
+#[test]
+fn q_asks_first_and_quits_on_the_second_press() {
+    let mut app = with_review();
+    press(&mut app, "q");
+    assert!(!app.should_quit);
+    assert_eq!(app.quit_prompt().as_deref(), Some("press q again to quit"));
+    assert!(render(&mut app, 120, 24).contains("press q again to quit"));
+    press(&mut app, "q");
+    assert!(app.should_quit);
+}
+
+#[test]
+fn a_single_q_times_out() {
+    let mut app = with_review();
+    press(&mut app, "q");
+    app.now += crate::tui::app::quit::QUIT_WINDOW;
+    assert_eq!(app.quit_prompt(), None, "the prompt is gone");
+    press(&mut app, "q");
+    assert!(!app.should_quit, "a late second press only asks again");
+    assert!(app.quit_prompt().is_some());
+}
+
+#[test]
+fn another_key_calls_the_quit_off_and_does_its_own_job() {
+    let mut app = with_review();
+    let before = app.open.as_ref().unwrap().selected;
+    press(&mut app, "q");
+    press(&mut app, "j");
+    assert_eq!(app.quit_prompt(), None);
+    assert_ne!(app.open.as_ref().unwrap().selected, before, "j still moves");
+    press(&mut app, "q");
+    assert!(!app.should_quit, "the next q starts over");
+}
+
+#[test]
+fn ctrl_c_quits_on_its_own_second_press_only() {
+    let mut app = with_review();
+    app.handle_key(ctrl('c'));
+    assert_eq!(app.quit_prompt().as_deref(), Some("press ctrl-c again to quit"));
+    press(&mut app, "q");
+    assert!(!app.should_quit, "q does not finish a ctrl-c quit");
+    app.handle_key(ctrl('c'));
+    app.handle_key(ctrl('c'));
+    assert!(app.should_quit);
+}
+
+#[test]
+fn the_prompt_names_unsaved_drafts_and_a_comment_in_the_box() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    type_text(&mut app, "nit");
+    press(&mut app, "q");
+    assert_eq!(app.quit_prompt().as_deref(), Some("1 draft unsaved · q again to quit"));
+    press(&mut app, "c");
+    press(&mut app, "half");
+    app.handle_key(ctrl('c'));
+    assert_eq!(app.quit_prompt().as_deref(), Some("1 draft unsaved · a comment in the box · ctrl-c again to quit"));
+}
+
+#[test]
+fn colon_q_quits_at_once_and_one_press_is_back_with_quit_confirm_off() {
+    let mut app = with_review();
+    press(&mut app, ":q");
+    app.handle_key(code(KeyCode::Enter));
+    assert!(app.should_quit, ":q is deliberate");
+    let mut quick = App::new(Settings { quit_confirm: false, ..settings() });
+    press(&mut quick, "q");
+    assert!(quick.should_quit);
+}
+
+#[test]
+fn q_still_closes_a_modal_before_it_asks() {
+    let mut app = with_review();
+    press(&mut app, "i");
+    press(&mut app, "q");
+    assert!(app.brief.is_none() && app.quit_prompt().is_none(), "the modal closes, nothing asks");
+}
+
+#[test]
+fn zen_shows_the_quit_prompt() {
+    let mut app = with_review();
+    press(&mut app, "zzq");
+    assert!(render(&mut app, 160, 45).contains("press q again to quit"));
 }

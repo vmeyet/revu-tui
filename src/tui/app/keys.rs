@@ -5,11 +5,20 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 const HALF_PAGE: isize = 10;
 
 impl App {
+    /// Any key but the one finishing a quit calls the pending quit off, then does its own job.
     pub fn handle_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        let pending = self.quitting;
+        let actions = self.route_key(key);
+        if self.quitting == pending {
+            self.quitting = None;
+        }
+        actions
+    }
+
+    fn route_key(&mut self, key: KeyEvent) -> Vec<Action> {
         self.news = None;
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-            self.should_quit = true;
-            return vec![];
+            return self.quit_key(super::quit::QuitKey::CtrlC);
         }
         if let Some(scroll) = self.help {
             self.help = help_scroll(scroll, key);
@@ -62,7 +71,7 @@ impl App {
         }
         match key.code {
             KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
-            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char('q') => return self.quit_key(super::quit::QuitKey::Q),
             KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('Y') => self.start_share(None),
             KeyCode::Left if self.in_zen_diff() => return self.zen_step(false),

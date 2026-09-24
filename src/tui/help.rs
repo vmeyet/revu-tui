@@ -103,7 +103,7 @@ pub const GROUPS: [Group; 7] = [
             ("o y", "open in the browser, copy the link"),
             ("r", "refresh"),
             ("?", "this help"),
-            ("q ^c", "quit"),
+            ("q ^c", "quit: press twice"),
         ],
     },
 ];

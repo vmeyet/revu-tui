@@ -46,6 +46,8 @@ pub struct Settings {
     pub prefetch: usize,
     /// `[tui] ascii`: reactions in plain words, for terminals that draw emoji at the wrong width.
     pub ascii: bool,
+    /// `[keys] quit_confirm`: `q` and `ctrl-c` need a second press.
+    pub quit_confirm: bool,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -129,6 +131,9 @@ pub struct App {
     /// First half of `z`, `[` or `]`.
     /// The first key of a two-key binding of the user's, waiting for its second.
     pub held: Option<crossterm::event::KeyEvent>,
+    /// A quit key pressed once, and when: the same key again inside the window quits.
+    pub quitting: Option<(super::quit::QuitKey, Instant)>,
+    pub quit_confirm: bool,
     pub keymap: crate::keymap::Keymap,
     pub pending: Option<char>,
     /// The input row is open for this; `buffer` holds what is typed.
@@ -229,6 +234,8 @@ impl App {
             open: None,
             opening: None,
             held: None,
+            quitting: None,
+            quit_confirm: settings.quit_confirm,
             keymap: settings.keymap,
             pending: None,
             input: None,
