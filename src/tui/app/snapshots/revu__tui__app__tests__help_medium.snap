@@ -3,32 +3,32 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 30)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   ── TO REVIEW · 1 ──╭ keys ──────────────────────────────────────────────╮ · 2 files · ✓ succes │
-│ ▎ feat charge cards a│                                                    │ved                   │
-│ ▎ omar · !42 · +412 −│  MOVE                                              │                      │
-│                      │        j k  move                                   │                      │
-│   ── MINE · 1 ───────│        g G  first, last                            │4 −2  ◆1 · 1 outdated │
-│   fix flaky cache tes│      ^d ^u  half a page                            │ge                    │
-│   nina · !41 · +3 −1 │        h l  pane to the left, to the right         │Card, amount: Money)… │
-│                      │      enter  open, or toggle the fold               │w();                  │
-│   ── WATCHING · 1 ───│      esc x  close the pane, back to the queue      │th_key(idempotency_k… │
-│   infra: new runner  │  tab S-tab  next, previous file                    │first();              │
-│   omar · !35 · +0 −0 │      ]c [c  next, previous hunk                    │harge(amount).await?; │
-│                      │      ]n [n  next, previous conversation            │);                    │
-│   ── ▸ DONE · 1 ─────│      ]f [f  next, previous file with a thread      │y                     │
-│                      │                                                    │ard) -> Key {         │
-│                      │  QUEUE                                             │)                     │
-│                      │          /  filter: words @author !42 ~label       │), card.expiry()))    │
-│                      │      ' 1-9  a saved view, by letter or rank        │ new                  │
-│                      │          *  this repo, or every project            │                      │
-│                      │          s  next sort order                        │                      │
-│                      │          S  group by author                        │        +1 −1  folded │
-│                      │      zo zc  open, fold the section or stack        │                      │
-│                      │                                                    │                      │
-│                      │  VIEW                                              │                      │
-│                      │          i  the MR cover page                      │                      │
-│                      │                                                    │                      │
-│                      ╰─────────────── 1–22 of 68 · j k scroll · esc close ╯                      │
+│   ── TO REVIEW · 1 ╭ keys ─────────────────────────────────────────────────╮· 2 files · ✓ succes │
+│ ▎ feat charge cards│                                                       │ed                   │
+│ ▎ omar · !42 · +412│  MOVE                                                 │                     │
+│                    │        j k  move                                      │                     │
+│   ── MINE · 1 ─────│        g G  first, last                               │ −2  ◆1 · 1 outdated │
+│   fix flaky cache t│      ^d ^u  half a page                               │e                    │
+│   nina · !41 · +3 −│        h l  pane to the left, to the right            │ard, amount: Money)… │
+│                    │      enter  open, or toggle the fold                  │();                  │
+│   ── WATCHING · 1 ─│      esc x  close the pane, back to the queue         │h_key(idempotency_k… │
+│   infra: new runner│  tab S-tab  next, previous file                       │irst();              │
+│   omar · !35 · +0 −│      ]c [c  next, previous hunk                       │arge(amount).await?; │
+│                    │      ]n [n  next, previous conversation               │;                    │
+│   ── ▸ DONE · 1 ───│      ]f [f  next, previous file with a thread         │                     │
+│                    │      ]r [r  next, previous MR that needs you          │rd) -> Key {         │
+│                    │                                                       │                     │
+│                    │  QUEUE                                                │, card.expiry()))    │
+│                    │          /  filter: words @author !42 ~label          │new                  │
+│                    │      ' 1-9  a saved view, by letter or rank           │                     │
+│                    │          *  this repo, or every project               │                     │
+│                    │          s  next sort order                           │       +1 −1  folded │
+│                    │          S  group by author                           │                     │
+│                    │      zo zc  open, fold the section or stack           │                     │
+│                    │                                                       │                     │
+│                    │  VIEW                                                 │                     │
+│                    │                                                       │                     │
+│                    ╰────────────────── 1–22 of 68 · j k scroll · esc close ╯                     │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

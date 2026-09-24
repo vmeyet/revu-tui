@@ -328,6 +328,7 @@ impl App {
         if approved {
             self.set_approved(key, true);
         }
+        self.offer_next();
     }
 
     pub(super) fn apply_resolved(&mut self, key: &MrKey, thread: &str, resolved: bool) {

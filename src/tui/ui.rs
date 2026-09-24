@@ -202,6 +202,17 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(Paragraph::new(line), area);
         return;
     }
+    if app.offer.is_some() {
+        let line = Line::from(vec![
+            Span::styled(" next MR that needs you: ", muted),
+            Span::styled("enter", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(" next MR · ", muted),
+            Span::styled("esc", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(" stay", muted),
+        ]);
+        f.render_widget(Paragraph::new(line), area);
+        return;
+    }
     if app.pending == Some('\'') {
         let line = Line::from(Span::styled(format!(" ' {}", app.views_hint()), Style::default().fg(theme.accent)));
         f.render_widget(Paragraph::new(line), area);

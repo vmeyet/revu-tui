@@ -16,6 +16,8 @@ use ratatui::widgets::{Block, Padding, Paragraph};
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
+/// Cells of the viewed-files bar in the review header.
+const PROGRESS_W: usize = 10;
 const GUTTER_W: usize = 4;
 /// The glyph and count column before the line numbers.
 const ANCHOR_W: usize = 2;
@@ -231,6 +233,16 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     if mr.conflicts {
         second.push(dot());
         second.push(Span::styled("conflicts", Style::default().fg(theme.danger)));
+    }
+    let (viewed, files) = (open.review.viewed.len(), open.review.files.len());
+    if viewed > 0 {
+        if second.len() > 1 {
+            second.push(dot());
+        }
+        let (done, left) = super::app::progress_bar(viewed, files, PROGRESS_W);
+        second.push(Span::styled(format!("viewed {viewed}/{files} "), muted));
+        second.push(Span::styled(done, Style::default().fg(if viewed == files { theme.success } else { theme.accent })));
+        second.push(Span::styled(left, Style::default().fg(theme.faded)));
     }
     if second.len() == 1 {
         return vec![first];

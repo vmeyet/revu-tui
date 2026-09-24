@@ -62,5 +62,7 @@ A line with a conversation has a mark left of its numbers.
 
 ## See also
 
+- [Review mode](review-mode.md), to go through every MR that needs you.
+
 - [Concepts: draft and review](../concepts.md#draft).
 - [Keys](../reference/keys.md).

@@ -29,6 +29,7 @@ pub const GROUPS: [Group; 7] = [
             ("]c [c", "next, previous hunk"),
             ("]n [n", "next, previous conversation"),
             ("]f [f", "next, previous file with a thread"),
+            ("]r [r", "next, previous MR that needs you"),
         ],
     },
     Group {
@@ -51,8 +52,7 @@ pub const GROUPS: [Group; 7] = [
             ("p", "pipeline"),
             ("zz", "zen: the diff alone, quiet"),
             ("← →", "in zen: previous, next MR"),
-            ("w", "wrap long lines"),
-            ("W", "hide whitespace-only changes"),
+            ("w W", "wrap long lines, hide whitespace changes"),
             ("+", "more lines around the hunk"),
             ("v", "the file in your own program"),
             ("za zc zo", "toggle, close, open the fold"),

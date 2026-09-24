@@ -3,26 +3,26 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 80, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────╮
-│   ── TO REV╭ keys ──────────────────────────────────────────────╮            │
-│ ▎ feat char│                                                    │            │
-│ ▎ omar · !4│      ^d ^u  half a page                            │            │
-│            │        h l  pane to the left, to the right         │            │
-│   ── MINE ·│      enter  open, or toggle the fold               │            │
-│   fix flaky│      esc x  close the pane, back to the queue      │            │
-│   nina · !4│  tab S-tab  next, previous file                    │            │
-│            │      ]c [c  next, previous hunk                    │            │
-│   ── WATCHI│      ]n [n  next, previous conversation            │            │
-│   infra: ne│      ]f [f  next, previous file with a thread      │            │
-│   omar · !3│                                                    │e           │
-│            │  QUEUE                                             │            │
-│   ── ▸ DONE│          /  filter: words @author !42 ~label       │            │
-│            │      ' 1-9  a saved view, by letter or rank        │            │
-│            │          *  this repo, or every project            │            │
-│            │          s  next sort order                        │            │
-│            │          S  group by author                        │            │
-│            │      zo zc  open, fold the section or stack        │            │
-│            │                                                    │            │
-│            ╰─────────────── 4–19 of 68 · j k scroll · esc close ╯            │
+│   ── TO R╭ keys ─────────────────────────────────────────────────╮           │
+│ ▎ feat ch│                                                       │           │
+│ ▎ omar · │      ^d ^u  half a page                               │           │
+│          │        h l  pane to the left, to the right            │           │
+│   ── MINE│      enter  open, or toggle the fold                  │           │
+│   fix fla│      esc x  close the pane, back to the queue         │           │
+│   nina · │  tab S-tab  next, previous file                       │           │
+│          │      ]c [c  next, previous hunk                       │           │
+│   ── WATC│      ]n [n  next, previous conversation               │           │
+│   infra: │      ]f [f  next, previous file with a thread         │           │
+│   omar · │      ]r [r  next, previous MR that needs you          │           │
+│          │                                                       │           │
+│   ── ▸ DO│  QUEUE                                                │           │
+│          │          /  filter: words @author !42 ~label          │           │
+│          │      ' 1-9  a saved view, by letter or rank           │           │
+│          │          *  this repo, or every project               │           │
+│          │          s  next sort order                           │           │
+│          │          S  group by author                           │           │
+│          │                                                       │           │
+│          ╰────────────────── 4–19 of 68 · j k scroll · esc close ╯           │
 │                                ││                                            │
 ╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina                                                       ? help
