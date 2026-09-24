@@ -226,8 +226,6 @@ No websocket: GitLab has none for this. Polling at these rates stays far under t
 host = "gitlab.com"          # default host; `revu --host` and GITLAB_HOST override
 
 [queue]
-groups = ["acme"]            # limit the queue to these groups (optional)
-projects = []                # or these projects (optional)
 watch_labels = ["infra"]     # MRs with these labels appear in Watching
 
 [review]

@@ -8,7 +8,6 @@ use revu::ctx::Ctx;
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    revu::adopt_old_name();
     if let Err(err) = run(cli).await {
         eprintln!("\x1b[31m✗\x1b[0m {err}");
         for cause in err.chain().skip(1) {

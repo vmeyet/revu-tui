@@ -11,7 +11,6 @@ mod docs;
 mod forge;
 mod fuzzy;
 mod keymap;
-mod legacy;
 mod mrref;
 mod open;
 mod program;
@@ -25,8 +24,3 @@ pub mod tui;
 mod update;
 mod usage;
 mod version;
-
-/// Moves what the tool kept under its old name, `gitlabmr`, to `revu`; runs before anything reads the config.
-pub fn adopt_old_name() {
-    legacy::move_dirs();
-}

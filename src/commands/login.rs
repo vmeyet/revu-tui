@@ -45,7 +45,7 @@ fn remember(config: &mut Config, host: &str, username: &str) {
 pub fn logout(host: Option<&str>) -> Result<()> {
     let mut config = Config::load()?;
     let host = auth::pick_host(&Env::default(), &config, host, |_| true);
-    crate::legacy::Keychain::open().delete(&host)?;
+    SecurityCli::new(auth::SERVICE).delete(&host)?;
     if let Some(entry) = config.hosts.get_mut(&host) {
         entry.username = None;
     }

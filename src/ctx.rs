@@ -1,5 +1,5 @@
 //! What every command opens first: the forge, the config, the cache and the checkout's project.
-use crate::auth::{self, Credentials, Env, SecretStore, Source};
+use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
 use crate::forge::{Forge, Kind};
@@ -22,7 +22,7 @@ impl Ctx {
     /// Reads the config, finds the token and the checkout's project.
     pub fn open(host: Option<&str>, json: bool) -> Result<Self> {
         let config = Config::load()?;
-        let store = crate::legacy::Keychain::open();
+        let store = SecurityCli::new(auth::SERVICE);
         let ctx = Self::build(&Env::from_process(), &store, config, host, json)?;
         let project = std::env::current_dir().ok().and_then(|dir| crate::mrref::checkout_project(&dir, &ctx.credentials.host));
         Ok(Self { project, ..ctx })
@@ -74,7 +74,7 @@ impl Ctx {
 
     /// The other hosts the config remembers a login for, each with a token found for it.
     pub(crate) fn others(&self) -> Vec<Home> {
-        let store = crate::legacy::Keychain::open();
+        let store = SecurityCli::new(auth::SERVICE);
         others(&Env::from_process(), &store, &self.config, &self.credentials.host)
     }
 }
