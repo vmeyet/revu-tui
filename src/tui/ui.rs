@@ -14,8 +14,6 @@ const QUEUE_W: u16 = 34;
 const WIDE_QUEUE_W: u16 = 44;
 /// From this terminal width the queue takes `WIDE_QUEUE_W`.
 const WIDE_QUEUE_FROM: u16 = 160;
-/// How wide the diff reads in reading mode: a comfortable line of code with both gutters.
-const READING_W: u16 = 120;
 const SIDE_W: u16 = 36;
 /// From this width the queue, the diff and the right pane sit side by side.
 const WIDE: u16 = 150;
@@ -36,14 +34,15 @@ pub struct Link {
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
     let input_rows = u16::from(app.filtering);
+    let status_rows = u16::from(!app.zen || app.confirm.is_some() || app.pending == Some('\''));
     let [main, input, status] =
-        Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(1)]).areas(f.area());
+        Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(|o| o.pane.is_some() || o.tree.is_some() || o.answer.is_some() || o.pipeline.is_some());
-    let shown = columns(main.width, side_open, app.focus == Focus::Side, app.reading);
+    let shown = columns(main.width, side_open, app.focus == Focus::Side, app.zen);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
-    let review = if app.reading && shown.side == 0 { centered(review, READING_W) } else { review };
+    let review = if app.zen && shown.side == 0 { centered(review, app.zen_width) } else { review };
     let side_open = side_open && shown.side > 0;
     if shown.queue > 0 {
         super::queue_view::draw(f, app, queue);
@@ -64,7 +63,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.filtering {
         draw_filter(f, app, input);
     }
-    draw_status(f, app, status);
+    if status_rows > 0 {
+        draw_status(f, app, status);
+    }
     let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.palette.is_some() || app.sharing.is_some();
     if modal {
         app.links.clear();
@@ -81,6 +82,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if !modal {
         draw_pictures(f, app, &pictures);
     }
+    if app.zen {
+        draw_zen_overlays(f, app, main);
+    }
     if let Some(publish) = app.publish.clone() {
         publish_view::draw(f, app, &publish, main);
     }
@@ -95,6 +99,24 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if let Some(scroll) = app.help {
         super::help::draw(f, app, main, scroll);
+    }
+}
+
+/// In zen: the MR just switched to, on top for a moment, and a fresh toast on the bottom row.
+fn draw_zen_overlays(f: &mut Frame, app: &App, area: Rect) {
+    let theme = app.theme;
+    if let Some(text) = app.zen_banner(app.now) {
+        let text = truncate(text, usize::from(area.width.saturating_sub(4)));
+        let line = Line::from(Span::styled(format!(" {text} "), Style::default().fg(theme.accent).bg(theme.surface)));
+        let width = u16::try_from(line.width()).unwrap_or(area.width).min(area.width);
+        let top = Rect { x: area.x + (area.width - width) / 2, y: area.y, width, height: 1 };
+        f.render_widget(Paragraph::new(line), top);
+    }
+    if let Some(toast) = app.live_toast().filter(|t| t.fresh(app.now)) {
+        let colour = if toast.danger { theme.danger } else { theme.muted };
+        let line = Line::from(Span::styled(truncate(&toast.text, usize::from(area.width)), Style::default().fg(colour)));
+        let bottom = Rect { y: area.bottom().saturating_sub(1), height: 1, ..area };
+        f.render_widget(Paragraph::new(line).alignment(Alignment::Center), bottom);
     }
 }
 
@@ -120,24 +142,24 @@ struct Columns {
 }
 
 /// The right pane's width rules: all three columns from 150, the queue steps aside from 120,
-/// and below that, or in reading mode, the pane is a page of its own while it has the keys.
-fn columns(width: u16, side_open: bool, side_focused: bool, reading: bool) -> Columns {
+/// and below that, or in zen, the pane is a page of its own while it has the keys.
+fn columns(width: u16, side_open: bool, side_focused: bool, zen: bool) -> Columns {
     let side = SIDE_W.max(width * SIDE_PCT / 100);
-    let queue = match (reading, width) {
+    let queue = match (zen, width) {
         (true, _) => 0,
         (false, WIDE_QUEUE_FROM..) => WIDE_QUEUE_W,
         (false, _) => QUEUE_W,
     };
     match (side_open, width) {
         (false, _) => Columns { queue, side: 0, diff: true },
-        (true, WIDE..) if !reading => Columns { queue, side, diff: true },
-        (true, MEDIUM..) if !reading => Columns { queue: 0, side, diff: true },
+        (true, WIDE..) if !zen => Columns { queue, side, diff: true },
+        (true, MEDIUM..) if !zen => Columns { queue: 0, side, diff: true },
         (true, _) if side_focused => Columns { queue: 0, side: width, diff: false },
         (true, _) => Columns { queue: 0, side: 0, diff: true },
     }
 }
 
-/// `area` narrowed to `width` columns in its middle, for reading mode.
+/// `area` narrowed to `width` columns in its middle, for zen.
 fn centered(area: Rect, width: u16) -> Rect {
     let width = width.min(area.width);
     Rect { x: area.x + (area.width - width) / 2, width, ..area }
@@ -332,7 +354,7 @@ mod columns_tests {
     }
 
     #[test]
-    fn reading_mode_never_puts_the_pane_beside_the_diff() {
+    fn zen_never_puts_the_pane_beside_the_diff() {
         assert_eq!(columns(200, false, false, true), Columns { queue: 0, side: 0, diff: true });
         assert_eq!(columns(200, true, true, true), Columns { queue: 0, side: 200, diff: false }, "the pane opens the narrow way");
         assert_eq!(columns(200, true, false, true), Columns { queue: 0, side: 0, diff: true });

@@ -59,7 +59,9 @@ impl App {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('?') => self.help = Some(0),
             KeyCode::Char('Y') => self.start_share(None),
-            KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
+            KeyCode::Left if self.in_zen_diff() => return self.zen_step(false),
+            KeyCode::Right if self.in_zen_diff() => return self.zen_step(true),
+            KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
             KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() => self.pending = Some('a'),
@@ -74,14 +76,14 @@ impl App {
         vec![]
     }
 
-    fn focus_left(&mut self) {
-        if self.focus == Focus::Review {
-            self.reading = false;
-        }
+    /// Left, toward the queue; from the diff it also leaves zen, which hides the queue.
+    fn focus_left(&mut self) -> Vec<Action> {
+        let released = if self.focus == Focus::Review { self.leave_zen() } else { vec![] };
         self.focus = match self.focus {
             Focus::Side => Focus::Review,
             _ => Focus::Queue,
         };
+        released
     }
 
     /// From the queue, right opens the selected MR, as `enter` does, so the diff always matches the row.
@@ -215,6 +217,7 @@ impl App {
             KeyCode::Enter => return self.enter_review_row(),
             KeyCode::Esc | KeyCode::Char('x') if self.answer_open() => self.close_answer(),
             KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => self.close_pane(),
+            KeyCode::Esc if self.zen => return self.leave_zen(),
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
             KeyCode::Char('i') => self.open_brief_from_review(),
@@ -249,10 +252,7 @@ impl App {
                 ('z', 'o') => Some(true),
                 ('z', 'c') => Some(false),
                 ('z', 'a') => None,
-                ('z', 'z') => {
-                    self.toggle_reading();
-                    return vec![];
-                }
+                ('z', 'z') => return self.toggle_zen(),
                 _ => return vec![],
             };
             if let Some(actions) = self.fold_stack(open) {
@@ -270,7 +270,7 @@ impl App {
             ('z', 'o') => return self.fold_at_cursor(Some(true)),
             ('z', 'c') => return self.fold_at_cursor(Some(false)),
             ('z', 'h') => self.header_folded = !self.header_folded,
-            ('z', 'z') => self.toggle_reading(),
+            ('z', 'z') => return self.toggle_zen(),
             ('z', 'v') => return self.toggle_viewed(),
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
@@ -283,16 +283,6 @@ impl App {
             _ => {}
         }
         vec![]
-    }
-
-    /// `zz`: the diff alone and centered; the queue comes back with `zz` or `h`.
-    fn toggle_reading(&mut self) {
-        if self.open.is_none() {
-            self.toast("open an MR first");
-            return;
-        }
-        self.reading = !self.reading;
-        self.focus = Focus::Review;
     }
 
     fn tree_open(&self) -> bool {

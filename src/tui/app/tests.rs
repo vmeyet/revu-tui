@@ -50,6 +50,7 @@ fn settings() -> Settings {
         keymap: crate::keymap::Keymap::default(),
         pictures: None,
         queue_layout: crate::config::QueueLayout::default(),
+        zen_width: 100,
         views: vec![],
         share: vec![],
     }
@@ -1447,14 +1448,14 @@ fn big_w_hides_whitespace_only_changes_and_back() {
 fn zz_reads_the_diff_alone_and_h_brings_the_queue_back() {
     let mut app = with_queue();
     press(&mut app, "zz");
-    assert!(!app.reading, "nothing to read before an MR is open");
+    assert!(!app.zen, "nothing to read before an MR is open");
     let mut app = with_review();
     press(&mut app, "zz");
-    assert!(app.reading);
+    assert!(app.zen);
     let screen = render(&mut app, 160, 20);
     assert!(!screen.contains("Queue"), "{screen}");
     press(&mut app, "h");
-    assert!(!app.reading);
+    assert!(!app.zen);
     assert_eq!(app.focus, Focus::Queue);
 }
 
@@ -2669,4 +2670,105 @@ fn snapshot_share_preview() {
     press(&mut app, "Y");
     type_text(&mut app, "needs a second pair of eyes");
     insta::assert_snapshot!("share_preview", render(&mut app, 120, 24));
+}
+
+#[test]
+fn zz_zen_order_is_the_queue_as_shown() {
+    let mut app = with_review();
+    press(&mut app, "zz");
+    let order = app.zen_order();
+    let shown: Vec<MrKey> = app
+        .queue_rows()
+        .iter()
+        .filter_map(|row| match row {
+            QueueRow::Mr(mr) | QueueRow::Stacked(mr) => Some(mr.key()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(order, shown, "every MR row, top to bottom, nothing from the folded sections");
+    let done = app.sections.clone().unwrap().done;
+    assert!(done.iter().all(|mr| !order.contains(&mr.key())), "Done is folded: its MRs are skipped");
+}
+
+#[test]
+fn arrows_in_zen_open_the_next_and_previous_mr_and_stay_in_zen() {
+    let mut app = with_review();
+    press(&mut app, "zz");
+    let order = app.zen_order();
+    assert!(order.len() > 1, "the fixture queue holds more than one MR");
+    assert_eq!(order[0], mr_key());
+    let actions = app.handle_key(code(KeyCode::Right));
+    assert_eq!(actions, vec![Action::Open(order[1].clone())]);
+    assert!(app.zen, "the MR changes, zen stays");
+    let banner = app.zen_banner(app.now).unwrap().to_owned();
+    assert!(banner.contains(&format!("2/{}", order.len())), "{banner}");
+    assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(order[1].clone()), "leaving zen shows the queue on it");
+    app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
+    assert_eq!(app.handle_key(code(KeyCode::Left)), vec![Action::Open(order[0].clone())]);
+    app.apply(Incoming::Review { key: order[0].clone(), review: Box::new(review()), cached: None });
+    assert!(app.handle_key(code(KeyCode::Left)).is_empty());
+    assert!(app.live_toast().unwrap().text.contains("first MR"));
+}
+
+#[test]
+fn arrows_outside_zen_keep_moving_between_panes() {
+    let mut app = with_review();
+    app.handle_key(code(KeyCode::Left));
+    assert_eq!(app.focus, Focus::Queue, "← is still a pane move outside zen");
+}
+
+#[test]
+fn esc_and_h_leave_zen() {
+    let mut app = with_review();
+    press(&mut app, "zz");
+    app.handle_key(code(KeyCode::Esc));
+    assert!(!app.zen);
+    assert_eq!(app.focus, Focus::Review, "esc leaves zen and stays on the diff");
+    press(&mut app, "zz");
+    press(&mut app, "h");
+    assert!(!app.zen);
+    assert_eq!(app.focus, Focus::Queue);
+}
+
+#[test]
+fn notifications_wait_for_zen_to_end() {
+    let mut app = with_review();
+    let full = sections();
+    let before = crate::forge::Sections { to_review: vec![], ..full.clone() };
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: before, opened: HashMap::new(), cached: false });
+    app.take_actions();
+    press(&mut app, "zz");
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: full, opened: HashMap::new(), cached: false });
+    assert!(app.take_actions().iter().all(|a| !matches!(a, Action::Notify { .. })), "zen is quiet");
+    let released = press(&mut app, "zz");
+    assert!(matches!(released.as_slice(), [Action::Notify { .. }]), "{released:?}");
+}
+
+#[test]
+fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
+    let mut app = with_review();
+    press(&mut app, "zz");
+    let screen = render(&mut app, 160, 45);
+    assert!(!screen.contains('╭') && !screen.contains("Queue") && !screen.contains("gitlab.com ·"), "{screen}");
+    assert!(app.links.is_empty(), "no link is printed over zen's one-line header: {:?}", app.links);
+    let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(first.trim_start().starts_with("!42 feat: charge cards at checkout"), "{first}");
+    let indent = first.len() - first.trim_start().len();
+    assert_eq!(indent, (160 - 100) / 2 + 1, "a 100-column column in the middle, then its padding");
+    insta::assert_snapshot!("zen_wide", screen);
+    insta::assert_snapshot!("zen_medium", render(&mut app, 100, 30));
+}
+
+#[test]
+fn a_toast_in_zen_shows_briefly_on_the_bottom_row() {
+    let mut app = with_review();
+    press(&mut app, "zz");
+    app.handle_key(code(KeyCode::Right));
+    let _ = render(&mut app, 160, 45);
+    press(&mut app, "w");
+    let screen = render(&mut app, 160, 45);
+    assert!(screen.lines().last().unwrap().contains("long lines wrap"), "{screen}");
+    app.now += std::time::Duration::from_secs(3);
+    let screen = render(&mut app, 160, 45);
+    assert!(!screen.contains("long lines wrap"), "gone after two seconds");
 }

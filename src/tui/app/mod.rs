@@ -22,6 +22,7 @@ mod tree;
 mod triage;
 mod view;
 mod write;
+mod zen;
 
 pub use apply::Confirm;
 pub use ask::{Answer, AnswerState, Part};

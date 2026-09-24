@@ -46,13 +46,24 @@ The mockup below predates it.
  gitlab.com · vivien · 2 drafts · P to publish                                                     ⠋ refreshing · ? help
 ```
 
-- Left pane: 34 columns, the queue. Hidden in reading mode (`zz`), where the diff sits centered at 120 columns; `h` or `zz` brings the queue back.
+- Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below.
 - Middle: the review, `Min(60)`.
 - Right: 32 columns or 40 % of the width, only when a thread, the MR overview, the file tree or an AI answer is open.
 - Row above the status line: the input row, only while typing.
 - Status line: host, user, pending drafts, then right aligned the poll state and `? help`. Toasts replace the left part for 4 s.
 
 Focus moves with `h` `l` between the three panes, like slack-tui's channels, messages and thread; `Tab` is reserved for the next file inside the review.
+
+## Zen
+
+`zz` hides everything but the diff, and `zz`, `esc` or `h` bring it back.
+No frames, no status line: one faded line on top says which MR, whose, its size and its pipeline.
+The diff sits in a centred column, `[tui] zen_width` wide (100 by default, 60 at least).
+Nothing pulses; a toast shows for two seconds on the bottom row, and notifications wait until zen ends.
+A question that needs an answer (applying a suggestion, the `'` views) brings the status line back while it waits.
+`←` `→` open the previous or next MR in the order the queue shows them, without leaving zen: filter, sort, sections and stacks all count, folded sections do not.
+A line on top says where you are for a moment: `‹  !1797 feat add a page  ·  3/12  ›`.
+The thread pane still opens with `enter` or `l` on a marked line, as a page of its own, and `esc` closes it.
 
 ## The queue
 
@@ -241,7 +252,8 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `i` | the MR cover: description, checks, reviews, threads, files | M3 |
 | `:` | command line | M3 |
 | `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
-| `zz` | reading mode (`z` is the fold prefix) | M3 |
+| `zz` | zen: the diff alone, quiet (`z` is the fold prefix) | M3 |
+| `←` `→` | in zen: the previous, next MR in the queue's order | M3 |
 | `?` | help | M1 |
 | `q` | quit (`ctrl-c` always) | M1 |
 

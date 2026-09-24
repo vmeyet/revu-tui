@@ -93,7 +93,7 @@ Then:
 
 - `:` palette with completion and history, `ctrl-k` jump across the queue and the open MR's files.
 - File tree pane `t`, viewed files `zv`, saved fold state.
-- Reading mode `z`, wrap `w`, whitespace toggle `W`, expand context `+`.
+- Zen `zz` (was reading mode `z`), wrap `w`, whitespace toggle `W`, expand context `+`.
 - Live `●` markers, rate-limit backoff in the status line, empty states and the loading skeleton, `:set theme=`.
 
 Acceptance: the designer test in `03-ui-ux.md` ("the screenshot test") passes on Ghostty and iTerm2 in a dark and a light theme.

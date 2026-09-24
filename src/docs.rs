@@ -176,6 +176,14 @@ pub const SETTINGS: &[Setting] = &[
         meaning: "Draw pictures from comments where the terminal can.",
         example: "false",
     },
+    Setting {
+        table: "tui",
+        key: "zen_width",
+        kind: "number",
+        default: "`100`",
+        meaning: "How wide the diff reads in zen, `zz`, in columns; 60 at least.",
+        example: "100",
+    },
     Setting { table: "tui", key: "ascii", kind: "true or false", default: "false", meaning: "Not used yet.", example: "false" },
     Setting {
         table: "open",

@@ -77,6 +77,7 @@ Tokens never go here: they live in the macOS keychain.
 | `theme` | text | `default` | The colour palette. |
 | `queue` | `comfortable` or `compact` | `comfortable` | Two lines per MR in the queue, or one. |
 | `images` | true or false | true | Draw pictures from comments where the terminal can. |
+| `zen_width` | number | `100` | How wide the diff reads in zen, `zz`, in columns; 60 at least. |
 | `ascii` | true or false | false | Not used yet. |
 
 ## `[open]`
@@ -170,6 +171,7 @@ inline_min_same = 60
 theme = "catppuccin"
 queue = "compact"
 images = false
+zen_width = 100
 
 [open]
 default = "hx"

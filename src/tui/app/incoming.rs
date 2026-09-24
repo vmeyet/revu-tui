@@ -29,7 +29,7 @@ impl App {
                 self.schedule_queue();
                 self.ask_triage();
                 let notice = self.notify_new();
-                self.composed.extend(notice);
+                self.notice(notice);
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
             Incoming::Discussions { key, discussions } => {

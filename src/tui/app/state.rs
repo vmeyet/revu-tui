@@ -36,6 +36,8 @@ pub struct Settings {
     pub pictures: Option<ratatui_image::picker::Picker>,
     /// `[tui] queue`: two-line rows, or one.
     pub queue_layout: crate::config::QueueLayout,
+    /// How wide the diff reads in zen.
+    pub zen_width: u16,
     /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
     /// `[share]`: where `Y` can post an MR, the bare target first.
     pub share: Vec<crate::share::Target>,
@@ -79,8 +81,14 @@ pub struct App {
     pub header_folded: bool,
     /// Long diff lines wrap under their text instead of ending in `…`, `w`.
     pub wrap: bool,
-    /// Reading mode, `zz`: the queue hides and the diff sits centered.
-    pub reading: bool,
+    /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.
+    pub zen: bool,
+    /// How wide the diff reads in zen, `[tui] zen_width`.
+    pub zen_width: u16,
+    /// The MR zen just switched to, shown on top for a moment: when, and what it says.
+    pub zen_switch: Option<(Instant, String)>,
+    /// Notifications that arrived in zen, sent when it ends.
+    pub quiet_notices: Vec<Action>,
     /// What the forge's rate limit says, copied in by the loop each tick.
     pub rate: crate::forge::RateLimit,
     /// What changed in the open MR since the reader last pressed a key: `● 2 new notes`.
@@ -177,7 +185,10 @@ impl App {
             filtering: false,
             header_folded: false,
             wrap: false,
-            reading: false,
+            zen: false,
+            zen_width: settings.zen_width,
+            zen_switch: None,
+            quiet_notices: vec![],
             rate: crate::forge::RateLimit::default(),
             news: None,
             confirm: None,

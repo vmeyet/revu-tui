@@ -39,7 +39,8 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `D` | changed words inline, or split |
 | `t` | file tree |
 | `p` | pipeline |
-| `zz` | reading mode |
+| `zz` | zen: the diff alone, quiet |
+| `←` `→` | in zen: previous, next MR |
 | `w` | wrap long lines |
 | `W` | hide whitespace-only changes |
 | `+` | more lines around the hunk |
@@ -127,7 +128,9 @@ A bound key adds to the default key, it does not replace it.
 | `unfold_all` | `zR` |
 | `fold_header` | `zh` |
 | `viewed` | `zv` |
-| `reading` | `zz` |
+| `zen` | `zz` |
+| `prev_mr` | `left` |
+| `next_mr` | `right` |
 | `split` | `D` |
 | `tree` | `t` |
 | `pipeline` | `p` |
