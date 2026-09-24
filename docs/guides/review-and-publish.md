@@ -44,6 +44,15 @@ A line with a conversation has a mark left of its numbers.
 | `R` | Resolve or unresolve |
 | `e` `d` | Edit, delete your draft |
 | `S` | Apply the suggestion under the cursor, after a `y` |
+| `+` | React to the note under the cursor |
+
+## React
+
+`+` opens the eight reactions both forges share: 👍 👎 😄 😕 💖 🎉 🚀 👀.
+Press `1` to `8`, or move with `h` `l` and press `enter`.
+Your reaction shows at once, and a second pick takes it off.
+Reactions show under each note, yours in the accent colour.
+Set `[tui] ascii = true` when your terminal draws emoji at the wrong width.
 
 ## Publish
 

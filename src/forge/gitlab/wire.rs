@@ -196,6 +196,8 @@ impl From<Note> for forge::Note {
                 .into_iter()
                 .map(|s| forge::Applicable { id: s.id, applied: s.applied, appliable: s.appliable })
                 .collect(),
+            reactions: vec![],
+            node: None,
         }
     }
 }

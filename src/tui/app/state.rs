@@ -44,6 +44,8 @@ pub struct Settings {
     pub views: Vec<(String, String)>,
     /// `[queue] prefetch`: how many MRs that need me are loaded ahead; 0 turns it off.
     pub prefetch: usize,
+    /// `[tui] ascii`: reactions in plain words, for terminals that draw emoji at the wrong width.
+    pub ascii: bool,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -97,6 +99,9 @@ pub struct App {
     pub news: Option<String>,
     /// A commit waiting for `y`; every key answers it first.
     pub confirm: Option<super::Confirm>,
+    /// The reaction picker `+` opened on a note; every key answers it first.
+    pub react: Option<super::Pick>,
+    pub ascii: bool,
     pub notify: bool,
     pub hosts: crate::forge::Hosts,
     /// What To review held at the last fresh answer, so only newcomers are announced.
@@ -206,6 +211,8 @@ impl App {
             rate: crate::forge::RateLimit::default(),
             news: None,
             confirm: None,
+            react: None,
+            ascii: settings.ascii,
             notify: settings.notify,
             hosts: settings.hosts,
             seen: None,

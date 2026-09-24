@@ -141,6 +141,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         views: ctx.config.queue.views.clone().into_iter().collect(),
         share: crate::share::targets(&ctx.config.share),
         prefetch: ctx.config.queue.prefetch,
+        ascii: ctx.config.tui.ascii,
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();
@@ -365,6 +366,11 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::LoadFile { key, path, sha } => {
                 let outcome = backend.forge_of(&key).file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
+            }
+            Action::React { key, thread, index, note, emoji, on } => {
+                if let Err(e) = backend.forge_of(&key).react(&note, emoji, on).await {
+                    send(failed(app::react_failure(thread, index, emoji, on), &e));
+                }
             }
             Action::Merge { key, head, plan } => {
                 let outcome = backend.forge_of(&key).merge(&key, &head, plan).await;

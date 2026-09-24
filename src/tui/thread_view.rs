@@ -45,6 +45,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
     let theme = app.theme;
     let today = app.today;
     let me = app.me.clone();
+    let ascii = app.ascii;
     let focused = app.focus == Focus::Side;
     let compose = app.input.is_some().then(|| (app.input_label(), app.buffer.clone()));
     let host = app.host.clone();
@@ -71,7 +72,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
         if index > 0 {
             lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
-        lines.extend(conversation_lines(open, conversation, index, &entries, theme, today, &me));
+        let look = Look { theme, today, me: &me, ascii };
+        lines.extend(conversation_lines(open, conversation, index, &entries, look));
     }
     let more = open.review.others_in_file(&pane.place);
     if more > 0 {
@@ -234,6 +236,15 @@ fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
     }
 }
 
+/// How notes read: the palette, today for ages, who "you" is, and emoji or their plain words.
+#[derive(Clone, Copy)]
+struct Look<'a> {
+    theme: Theme,
+    today: DateTime<Utc>,
+    me: &'a str,
+    ascii: bool,
+}
+
 /// A thread, or my new draft, as the pane shows it: status, notes, my replies; each line tagged
 /// with the cursor stop it belongs to.
 fn conversation_lines(
@@ -241,10 +252,9 @@ fn conversation_lines(
     conversation: &Conversation,
     index: usize,
     entries: &[Entry],
-    theme: Theme,
-    today: DateTime<Utc>,
-    me: &str,
+    look: Look,
 ) -> Vec<(Option<Entry>, Piece)> {
+    let theme = look.theme;
     let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
     let mut lines = vec![];
     if let Some(thread) = conversation.thread.as_deref().and_then(|id| open.review.thread(id)) {
@@ -253,7 +263,7 @@ fn conversation_lines(
         let replaced = thread.first().position.as_ref().map(|p| open.review.text_at(p)).unwrap_or_default();
         for (n, note) in thread.notes.iter().take(shown).enumerate() {
             let entry = stop(EntryKind::Note(n));
-            lines.extend(note_lines(note, &replaced, theme, today, me).into_iter().map(|line| (entry, line)));
+            lines.extend(note_lines(note, &replaced, look).into_iter().map(|line| (entry, line)));
         }
     }
     for &draft in &conversation.drafts {
@@ -339,7 +349,8 @@ fn draft_lines(draft: &crate::review::Draft, replaced: &[String], theme: Theme) 
 }
 
 /// `replaced` is the text of the lines the thread hangs on, which a suggestion in the note replaces.
-fn note_lines(note: &Note, replaced: &[String], theme: Theme, today: DateTime<Utc>, me: &str) -> Vec<Piece> {
+fn note_lines(note: &Note, replaced: &[String], look: Look) -> Vec<Piece> {
+    let Look { theme, today, me, ascii } = look;
     let author = if note.author.username == me { "you".to_owned() } else { note.author.username.clone() };
     let age = short_age((today - note.created_at).to_std().unwrap_or_default());
     let mut lines = vec![Piece::Text(Line::from(vec![
@@ -347,7 +358,21 @@ fn note_lines(note: &Note, replaced: &[String], theme: Theme, today: DateTime<Ut
         Span::styled(format!(" · {age}"), Style::default().fg(theme.muted)),
     ]))];
     lines.extend(body_pieces(&note.body, replaced, theme));
+    if !note.reactions.is_empty() {
+        lines.push(Piece::Text(reactions_line(&note.reactions, theme, ascii)));
+    }
     lines
+}
+
+/// `👍 2  🎉 1` under a note, mine in the accent colour.
+pub fn reactions_line(reactions: &[crate::forge::Reaction], theme: Theme, ascii: bool) -> Line<'static> {
+    let spans = reactions.iter().enumerate().flat_map(|(i, r)| {
+        let face = if ascii { r.emoji.text() } else { r.emoji.glyph() };
+        let style = if r.mine { Style::default().fg(theme.accent).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme.muted) };
+        let gap = if i == 0 { "" } else { "  " };
+        [Span::raw(gap), Span::styled(format!("{face} {}", r.count), style)]
+    });
+    Line::from(spans.collect::<Vec<_>>())
 }
 
 /// Code spans, bullets and quotes; the rest is the text as written, wrapped by the widget.

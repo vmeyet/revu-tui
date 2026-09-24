@@ -23,7 +23,7 @@ expression: "render(&mut app, 160, 45)"
 │                       │          /  filter: words @author !42 ~label                      R  resolve, unresolve                     │                        │
 │                       │      ' 1-9  a saved view, by letter or rank                     J K  next, previous thread on the line      │                        │
 │                       │          *  this repo, or every project                         e d  edit, delete my draft                  │                        │
-│                       │          s  next sort order                                       S  apply the suggestion, after a y        │                        │
+│                       │          s  next sort order                                     S +  apply the suggestion, react            │                        │
 │                       │          S  group by author                                       u  open the first link                    │                        │
 │                       │      zo zc  open, fold the section or stack                                                                 │                        │
 │                       │                                                           ASK CLAUDE                                        │                        │

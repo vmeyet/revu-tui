@@ -83,7 +83,7 @@ pub const GROUPS: [Group; 7] = [
             ("R", "resolve, unresolve"),
             ("J K", "next, previous thread on the line"),
             ("e d", "edit, delete my draft"),
-            ("S", "apply the suggestion, after a y"),
+            ("S +", "apply the suggestion, react"),
             ("u", "open the first link"),
         ],
     },

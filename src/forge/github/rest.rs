@@ -75,6 +75,8 @@ impl PostedComment {
             resolved: false,
             position,
             suggestions: vec![],
+            reactions: vec![],
+            node: None,
         };
         Discussion { id: self.node_id, notes: vec![note] }
     }

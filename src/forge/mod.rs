@@ -11,14 +11,14 @@ pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{
-    Applicable, Approvals, DiffFile, Discussion, Draft, LineRef, MergeMethod, MergePlan, Mr, MrKey, NewDraft, Note, Pipeline, Position,
-    Refs, Side, Suggestion, User,
+    Applicable, Approvals, DiffFile, Discussion, Draft, Emoji, LineRef, MergeMethod, MergePlan, Mr, MrKey, NewDraft, Note, Pipeline,
+    Position, Reaction, Refs, Side, Suggestion, User, tally, toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
 use crate::auth::Credentials;
 use crate::config::Config;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Which forge a host runs.
@@ -256,6 +256,15 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.approve(key, approve).await,
             Forge::GitHub(client) => client.approve(key, approve).await,
+        }
+    }
+
+    /// Adds my `emoji` to `note`, or takes it off. The note must carry the forge's GraphQL id.
+    pub async fn react(&self, note: &Note, emoji: Emoji, on: bool) -> Result<()> {
+        let node = note.node.as_deref().context("this note cannot take reactions yet: refresh with r")?;
+        match self {
+            Forge::GitLab(client) => client.react(node, emoji, on).await,
+            Forge::GitHub(client) => client.react(node, emoji, on).await,
         }
     }
 

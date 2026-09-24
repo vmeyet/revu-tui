@@ -1,5 +1,6 @@
 //! The GitLab backend: REST for one MR, GraphQL for the queue. Wire shapes live in `wire` and
 //! turn into the neutral model at this edge.
+mod award;
 mod graphql;
 mod rest;
 mod upload;

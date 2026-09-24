@@ -192,7 +192,14 @@ pub const SETTINGS: &[Setting] = &[
         meaning: "How wide the diff reads in zen, `zz`, in columns; 60 at least.",
         example: "100",
     },
-    Setting { table: "tui", key: "ascii", kind: "true or false", default: "false", meaning: "Not used yet.", example: "false" },
+    Setting {
+        table: "tui",
+        key: "ascii",
+        kind: "true or false",
+        default: "false",
+        meaning: "Reactions in plain words (`+1 2`) for terminals that draw emoji at the wrong width.",
+        example: "false",
+    },
     Setting {
         table: "open",
         key: "default",

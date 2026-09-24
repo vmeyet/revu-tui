@@ -176,6 +176,125 @@ pub struct Note {
     /// The suggestions the forge can apply for us, by id; GitHub has none, its suggestions live in the text only.
     #[serde(default)]
     pub suggestions: Vec<Applicable>,
+    /// The reactions on it, one entry per emoji that has any.
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
+    /// The forge's GraphQL id for the note, which reacting needs: `gid://gitlab/DiffNote/…`, GitHub's node id.
+    #[serde(default)]
+    pub node: Option<String>,
+}
+
+/// The reactions both forges share: GitHub's eight, which GitLab has under other names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Emoji {
+    ThumbsUp,
+    ThumbsDown,
+    Laugh,
+    Confused,
+    Heart,
+    Hooray,
+    Rocket,
+    Eyes,
+}
+
+impl Emoji {
+    pub const ALL: [Emoji; 8] =
+        [Emoji::ThumbsUp, Emoji::ThumbsDown, Emoji::Laugh, Emoji::Confused, Emoji::Heart, Emoji::Hooray, Emoji::Rocket, Emoji::Eyes];
+
+    /// The picture a terminal with emoji shows.
+    pub fn glyph(self) -> &'static str {
+        match self {
+            Emoji::ThumbsUp => "👍",
+            Emoji::ThumbsDown => "👎",
+            Emoji::Laugh => "😄",
+            Emoji::Confused => "😕",
+            Emoji::Heart => "💖",
+            Emoji::Hooray => "🎉",
+            Emoji::Rocket => "🚀",
+            Emoji::Eyes => "👀",
+        }
+    }
+
+    /// The same in plain text, for terminals that draw emoji at the wrong width.
+    pub fn text(self) -> &'static str {
+        match self {
+            Emoji::ThumbsUp => "+1",
+            Emoji::ThumbsDown => "-1",
+            Emoji::Laugh => ":D",
+            Emoji::Confused => ":/",
+            Emoji::Heart => "<3",
+            Emoji::Hooray => "\\o/",
+            Emoji::Rocket => "rocket",
+            Emoji::Eyes => "eyes",
+        }
+    }
+
+    /// GitLab's award name.
+    pub fn gitlab(self) -> &'static str {
+        match self {
+            Emoji::ThumbsUp => "thumbsup",
+            Emoji::ThumbsDown => "thumbsdown",
+            Emoji::Laugh => "laughing",
+            Emoji::Confused => "confused",
+            Emoji::Heart => "heart",
+            Emoji::Hooray => "tada",
+            Emoji::Rocket => "rocket",
+            Emoji::Eyes => "eyes",
+        }
+    }
+
+    /// GitHub's reaction content, as GraphQL spells it.
+    pub fn github(self) -> &'static str {
+        match self {
+            Emoji::ThumbsUp => "THUMBS_UP",
+            Emoji::ThumbsDown => "THUMBS_DOWN",
+            Emoji::Laugh => "LAUGH",
+            Emoji::Confused => "CONFUSED",
+            Emoji::Heart => "HEART",
+            Emoji::Hooray => "HOORAY",
+            Emoji::Rocket => "ROCKET",
+            Emoji::Eyes => "EYES",
+        }
+    }
+
+    /// The emoji a GitLab award name or a GitHub content stands for; others (GitLab has hundreds) are left out.
+    pub fn named(name: &str) -> Option<Emoji> {
+        Emoji::ALL.into_iter().find(|e| e.gitlab() == name || e.github() == name)
+    }
+}
+
+/// How many people reacted with `emoji`, me among them or not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reaction {
+    pub emoji: Emoji,
+    pub count: u32,
+    pub mine: bool,
+}
+
+/// Reactions tallied from `(emoji name, was it me)` pairs, in the order of `Emoji::ALL`.
+pub fn tally(awards: impl IntoIterator<Item = (Emoji, bool)>) -> Vec<Reaction> {
+    let mut counts = std::collections::BTreeMap::<Emoji, (u32, bool)>::new();
+    for (emoji, mine) in awards {
+        let entry = counts.entry(emoji).or_default();
+        entry.0 += 1;
+        entry.1 |= mine;
+    }
+    counts.into_iter().map(|(emoji, (count, mine))| Reaction { emoji, count, mine }).collect()
+}
+
+/// A note with my reaction `emoji` added (`on`) or taken off, counts kept right.
+pub fn toggled(reactions: &[Reaction], emoji: Emoji, on: bool) -> Vec<Reaction> {
+    let mut all: Vec<Reaction> = reactions.to_vec();
+    match all.iter_mut().find(|r| r.emoji == emoji) {
+        Some(r) if on && !r.mine => *r = Reaction { count: r.count + 1, mine: true, ..*r },
+        Some(r) if !on && r.mine => *r = Reaction { count: r.count.saturating_sub(1), mine: false, ..*r },
+        Some(_) => {}
+        None if on => all.push(Reaction { emoji, count: 1, mine: true }),
+        None => {}
+    }
+    all.retain(|r| r.count > 0);
+    all.sort_by_key(|r| r.emoji);
+    all
 }
 
 /// A suggestion to commit on the MR's branch: GitLab applies it by `id`; elsewhere the lines around
@@ -284,6 +403,26 @@ mod tests {
         assert_eq!((context.side(), context.number()), (Side::New, Some(12)));
         assert_eq!((removed.side(), removed.number()), (Side::Old, Some(13)));
         assert_eq!((added.side(), added.number()), (Side::New, Some(14)));
+    }
+
+    #[test]
+    fn the_eight_reactions_have_a_name_on_each_forge_and_toggle_their_count() {
+        for emoji in Emoji::ALL {
+            assert_eq!(Emoji::named(emoji.gitlab()), Some(emoji));
+            assert_eq!(Emoji::named(emoji.github()), Some(emoji));
+        }
+        assert_eq!(Emoji::named("100"), None, "GitLab's other awards are left out");
+        let now = tally([(Emoji::Rocket, false), (Emoji::ThumbsUp, true), (Emoji::ThumbsUp, false)]);
+        assert_eq!(
+            now,
+            [Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }, Reaction { emoji: Emoji::Rocket, count: 1, mine: false }]
+        );
+        let off = toggled(&now, Emoji::ThumbsUp, false);
+        assert_eq!(off[0], Reaction { emoji: Emoji::ThumbsUp, count: 1, mine: false });
+        let on = toggled(&now, Emoji::Eyes, true);
+        assert_eq!(on.last().copied(), Some(Reaction { emoji: Emoji::Eyes, count: 1, mine: true }));
+        assert_eq!(toggled(&on, Emoji::Eyes, false), now, "on then off gives back what was there");
+        assert_eq!(toggled(&now, Emoji::Rocket, false), now, "taking off a reaction I never gave changes nothing");
     }
 
     fn mergeable() -> Mr {
