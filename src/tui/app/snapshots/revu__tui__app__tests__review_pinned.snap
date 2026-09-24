@@ -1,0 +1,34 @@
+---
+source: src/tui/app/tests.rs
+expression: screen
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +61 −1 · 2 files · ✓ success                   │
+│ ▎ feat charge cards at chec…   ││   1 of 2 approvals                                                                 │
+│ ▎ omar · !42 · +412 −38     2h ││  ▾ src/pay/charge.rs                                                        +60 −0 │
+│                                ││     ▾ @@ -40,0 +71,30 @@ fn refund                                                 │
+│   ── MINE · 1 ──────────────── ││           74 +    let step_74 = 74;                                                │
+│   fix flaky cache test       D ││           75 +    let step_75 = 75;                                                │
+│   nina · !41 · +3 −1        4h ││           76 +    let step_76 = 76;                                                │
+│                                ││           77 +    let step_77 = 77;                                                │
+│   ── WATCHING · 1 ──────────── ││           78 +    let step_78 = 78;                                                │
+│   infra: new runner          ⠋ ││           79 +    let step_79 = 79;                                                │
+│   omar · !35 · +0 −0        2d ││           80 +    let step_80 = 80;                                                │
+│                                ││           81 +    let step_81 = 81;                                                │
+│   ── ▸ DONE · 1 ────────────── ││           82 +    let step_82 = 82;                                                │
+│                                ││           83 +    let step_83 = 83;                                                │
+│                                ││           84 +    let step_84 = 84;                                                │
+│                                ││           85 +    let step_85 = 85;                                                │
+│                                ││           86 +    let step_86 = 86;                                                │
+│                                ││           87 +    let step_87 = 87;                                                │
+│                                ││           88 +    let step_88 = 88;                                                │
+│                                ││           89 +    let step_89 = 89;                                                │
+│                                ││           90 +    let step_90 = 90;                                                │
+│                                ││           91 +    let step_91 = 91;                                                │
+│                                ││           92 +    let step_92 = 92;                                                │
+│                                ││           93 +    let step_93 = 93;                                                │
+│                                ││           94 +    let step_94 = 94;                                                │
+│                                ││           95 +    let step_95 = 95;                                                │
+│                                ││ ▎         96 +    let step_96 = 96;                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                               ? help

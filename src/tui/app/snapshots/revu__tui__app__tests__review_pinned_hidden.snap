@@ -1,0 +1,22 @@
+---
+source: src/tui/app/tests.rs
+expression: screen
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +61 −1 · 2 files · ✓ success                   │
+│ ▎ feat charge cards at chec…   ││   1 of 2 approvals                                                                 │
+│ ▎ omar · !42 · +412 −38     2h ││           30 +    let step_30 = 30;                                                │
+│                                ││     ▾ @@ -40,0 +71,30 @@ fn refund                                                 │
+│   ── MINE · 1 ──────────────── ││           71 +    let step_71 = 71;                                                │
+│   fix flaky cache test       D ││           72 +    let step_72 = 72;                                                │
+│   nina · !41 · +3 −1        4h ││           73 +    let step_73 = 73;                                                │
+│                                ││           74 +    let step_74 = 74;                                                │
+│   ── WATCHING · 1 ──────────── ││           75 +    let step_75 = 75;                                                │
+│   infra: new runner          ⠋ ││           76 +    let step_76 = 76;                                                │
+│   omar · !35 · +0 −0        2d ││           77 +    let step_77 = 77;                                                │
+│                                ││           78 +    let step_78 = 78;                                                │
+│   ── ▸ DONE · 1 ────────────── ││           79 +    let step_79 = 79;                                                │
+│                                ││           80 +    let step_80 = 80;                                                │
+│                                ││ ▎         81 +    let step_81 = 81;                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                               ? help

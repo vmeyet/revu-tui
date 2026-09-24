@@ -2772,3 +2772,112 @@ fn a_toast_in_zen_shows_briefly_on_the_bottom_row() {
     let screen = render(&mut app, 160, 45);
     assert!(!screen.contains("long lines wrap"), "gone after two seconds");
 }
+
+/// One long file (two hunks of 30 added lines) and a short one, so the diff scrolls past a header.
+fn long_review() -> Review {
+    let lines = |from: usize| (from..from + 30).map(|i| format!("+    let step_{i} = {i};\n")).collect::<String>();
+    let long = DiffFile {
+        diff: format!("@@ -0,0 +1,30 @@ fn charge\n{}@@ -40,0 +71,30 @@ fn refund\n{}", lines(1), lines(71)),
+        old_path: "src/pay/charge.rs".into(),
+        new_path: "src/pay/charge.rs".into(),
+        a_mode: "100644".into(),
+        b_mode: "100644".into(),
+        ..DiffFile::default()
+    };
+    let short = DiffFile {
+        diff: "@@ -1 +1 @@\n-a\n+b\n".into(),
+        old_path: "src/pay/mod.rs".into(),
+        new_path: "src/pay/mod.rs".into(),
+        a_mode: "100644".into(),
+        b_mode: "100644".into(),
+        ..DiffFile::default()
+    };
+    Review::new(mr(), &[long, short], vec![], &[])
+}
+
+fn with_long_review() -> App {
+    let mut app = with_review();
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(long_review()), cached: None });
+    app.focus = Focus::Review;
+    app
+}
+
+/// Puts the cursor on the `n`th added line of the long file.
+fn to_step(app: &mut App, n: usize) {
+    let open = app.open.as_ref().unwrap();
+    let at = open.rows.iter().enumerate().filter(|(_, r)| matches!(r, Row::Line { file: 0, .. })).nth(n).unwrap().0;
+    app.open = Some(Open { selected: at, ..open.clone() });
+}
+
+/// The text of the line under the cursor, as the diff draws it.
+fn cursor_text(app: &App) -> String {
+    let open = app.open.as_ref().unwrap();
+    match open.row() {
+        Some(Row::Line { file, hunk, index }) => open.review.files[*file].hunks[*hunk].lines[*index].text.trim().to_owned(),
+        _ => String::new(),
+    }
+}
+
+#[test]
+fn a_long_file_keeps_its_name_and_hunk_pinned_above_the_diff() {
+    let mut app = with_long_review();
+    to_step(&mut app, 55);
+    let screen = render(&mut app, 120, 30);
+    let open = app.open.as_ref().unwrap();
+    assert!(open.pinned_file.is_some(), "{screen}");
+    let body: Vec<&str> = screen.lines().skip_while(|l| !l.contains("charge.rs")).collect();
+    assert!(body.first().is_some_and(|l| l.contains("src/pay/charge.rs")), "the file is the first diff row:\n{screen}");
+    assert!(body.get(1).is_some_and(|l| l.contains("fn refund")), "the cursor's hunk follows it:\n{screen}");
+    insta::assert_snapshot!("review_pinned", screen);
+}
+
+#[test]
+fn zen_pins_nothing() {
+    let mut app = with_long_review();
+    to_step(&mut app, 55);
+    press(&mut app, "zz");
+    let _ = render(&mut app, 160, 45);
+    assert_eq!(app.open.as_ref().unwrap().pinned_file, None, "zen keeps the column bare");
+}
+
+#[test]
+fn a_short_view_pins_nothing() {
+    let mut app = with_long_review();
+    to_step(&mut app, 40);
+    let screen = render(&mut app, 120, 18);
+    assert_eq!(app.open.as_ref().unwrap().pinned_file, None);
+    insta::assert_snapshot!("review_pinned_hidden", screen);
+}
+
+#[test]
+fn the_cursor_line_stays_on_screen_below_the_pins() {
+    let mut app = with_long_review();
+    for _ in 0..70 {
+        press(&mut app, "j");
+        let screen = render(&mut app, 120, 30);
+        let text = cursor_text(&app);
+        assert!(text.is_empty() || screen.contains(&text), "`{text}` is hidden:\n{screen}");
+    }
+}
+
+#[test]
+fn za_under_a_pinned_file_folds_that_file_and_lands_on_its_row() {
+    let mut app = with_long_review();
+    to_step(&mut app, 40);
+    render(&mut app, 120, 30);
+    assert!(app.open.as_ref().unwrap().pinned_file.is_some());
+    press(&mut app, "za");
+    let open = app.open.as_ref().unwrap();
+    assert!(!open.review.fold.file_is_open("src/pay/charge.rs"));
+    assert!(matches!(open.row(), Some(Row::File { index: 0, .. })), "{:?}", open.row());
+    assert_eq!(open.pinned_file, None);
+}
+
+#[test]
+fn zo_under_a_pinned_file_keeps_its_usual_meaning() {
+    let mut app = with_long_review();
+    to_step(&mut app, 40);
+    render(&mut app, 120, 30);
+    press(&mut app, "zo");
+    assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+}

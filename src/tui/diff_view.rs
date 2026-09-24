@@ -1,5 +1,5 @@
 //! The review pane: rows from `Review::rows()` turned into styled lines, only for the visible window.
-use super::app::{App, Focus, Open};
+use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
 use super::theme::Theme;
 use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
@@ -53,6 +53,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let folded = app.header_folded;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
     let wrap = app.wrap;
+    let pinning = !app.zen;
     let Some(open) = app.open.as_mut() else { return };
     let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
     let header = match (zen, folded) {
@@ -72,15 +73,44 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
             vec![row_line(&open.review, &anchors, row, selected, in_range, width, theme)]
         }
     };
-    open.scroll = settle_scroll(open.scroll, open.selected, height);
-    while wrap && open.scroll < open.selected && (open.scroll..=open.selected).map(|i| render(open, i).len()).sum::<usize>() > height {
+    let pinning = pinning && height >= PIN_MIN_HEIGHT;
+    let pinned_at = |open: &Open| if pinning { pins(&open.rows, open.scroll, open.selected) } else { Pins::default() };
+    open.scroll = if pinning {
+        settle_with_pins(&open.rows, open.scroll, open.selected, height).0
+    } else {
+        settle_scroll(open.scroll, open.selected, height)
+    };
+    while wrap
+        && open.scroll < open.selected
+        && (open.scroll..=open.selected).map(|i| render(open, i).len()).sum::<usize>() > height - pinned_at(open).count()
+    {
         open.scroll += 1;
     }
-    let lines: Vec<Line> = (open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height).collect();
+    let pinned = pinned_at(open);
+    open.pinned_file = pinned.file;
+    let pinned_lines: Vec<Line> = [pinned.file, pinned.hunk]
+        .into_iter()
+        .flatten()
+        .map(|i| pinned_line(&open.review, &anchors, &open.rows[i], width, theme))
+        .collect();
+    let lines: Vec<Line> = pinned_lines
+        .into_iter()
+        .chain((open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height - pinned.count()))
+        .collect();
     let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
     app.links.extend(pipeline);
+}
+
+/// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
+/// reads as a bar the diff scrolls under.
+fn pinned_line<'a>(review: &Review, anchors: &Anchors, row: &Row, width: usize, theme: Theme) -> Line<'a> {
+    let line = row_line(review, anchors, row, false, false, width, theme);
+    let used: usize = line.spans.iter().map(Span::width).sum();
+    let mut spans = line.spans;
+    spans.push(Span::raw(" ".repeat(width.saturating_sub(used))));
+    Line::from(spans.into_iter().map(|s| s.patch_style(Style::default().bg(theme.surface))).collect::<Vec<_>>())
 }
 
 /// The pipeline word ends the header's first row; it links to the run on the forge.
