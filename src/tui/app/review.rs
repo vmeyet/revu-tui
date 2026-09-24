@@ -76,6 +76,11 @@ impl Open {
         Self { review, rows, selected, ..self.clone() }
     }
 
+    /// The right pane holds something: threads, the tree, an answer or the pipeline.
+    pub fn side_open(&self) -> bool {
+        self.pane.is_some() || self.tree.is_some() || self.answer.is_some() || self.pipeline.is_some()
+    }
+
     pub fn row(&self) -> Option<&Row> {
         self.rows.get(self.selected)
     }
@@ -234,9 +239,7 @@ impl App {
     /// Indexes of the files carrying an unresolved thread, for `]f` and `[f`.
     pub(super) fn files_with_unresolved(&self) -> Vec<usize> {
         let Some(open) = &self.open else { return vec![] };
-        let anchored = |path: &str| {
-            open.review.threads.iter().any(|t| t.resolvable && !t.resolved && t.anchor.as_ref().is_some_and(|a| a.path == path))
-        };
+        let anchored = |path: &str| open.review.threads.iter().any(|t| t.unresolved() && t.anchor.as_ref().is_some_and(|a| a.path == path));
         (0..open.review.files.len())
             .filter(|&i| anchored(&open.review.files[i].new_path) || anchored(&open.review.files[i].old_path))
             .collect()

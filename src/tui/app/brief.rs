@@ -167,7 +167,7 @@ impl Brief {
 
 /// Unresolved threads: those on lines first in file order, then outdated ones, then the MR's own.
 fn open_threads(review: &Review) -> Vec<ThreadRow> {
-    let mut threads: Vec<&crate::review::Thread> = review.threads.iter().filter(|t| t.resolvable && !t.resolved).collect();
+    let mut threads: Vec<&crate::review::Thread> = review.threads.iter().filter(|t| t.unresolved()).collect();
     threads.sort_by_key(|t| match &t.anchor {
         Some(a) if !t.outdated => (0, a.path.clone(), a.line),
         Some(a) => (1, a.path.clone(), a.line),

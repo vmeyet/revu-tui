@@ -55,12 +55,12 @@ fn row_line<'a>(app: &App, review: &Review, row: &TreeRow, selected: bool, width
     }
 }
 
-/// A file: its name, tinted by the risk Jev saw in it, then `+adds −dels`, `◆n` threads and `✓` once viewed, right aligned.
+/// A file: its name, tinted by the risk Jev saw in it, then `+adds −dels`, `◆n` unresolved threads and `✓` once viewed, right aligned.
 fn file_line<'a>(app: &App, review: &Review, file: &File, name: &str, depth: usize, bar: Span<'a>, width: usize) -> Line<'a> {
     let theme = app.theme;
     let risk = app.risk(&file.new_path);
     let viewed = review.viewed.contains(&file.new_path);
-    let threads = review.threads.iter().filter(|t| t.anchor.as_ref().is_some_and(|a| a.path == file.new_path)).count();
+    let threads = review.threads.iter().filter(|t| t.unresolved() && t.anchor.as_ref().is_some_and(|a| a.path == file.new_path)).count();
     let marks = format!("{}{}", if threads > 0 { format!(" ◆{threads}") } else { String::new() }, if viewed { " ✓" } else { "" });
     let counts = format!("+{} −{}", file.additions, file.deletions);
     let indent = "  ".repeat(depth) + "  ";

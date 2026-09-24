@@ -126,7 +126,7 @@ const GROUPS: &[(&str, &[&str])] = &[
 /// A habit a faster key replaces, with what to try instead.
 pub const HINTS: &[(&str, &str)] = &[
     ("long_walk", "walked 15 lines or more with j or k where ]n (next thread) or ]c (next hunk) jumps there"),
-    ("queue_after_zen", "went back to the queue to change MR after using zen; in zen, ← and → change MR"),
+    ("queue_after_zen", "went back to the queue to change MR after using zen; [m and ]m change MR, in zen too"),
     ("palette_number", "typed a bare number in the search; !42 (or #42 on GitHub) finds that MR directly"),
 ];
 
@@ -137,10 +137,10 @@ pub fn known() -> Vec<&'static str> {
 
 /// The action a key stands for, after the user's bindings turned it into revu's own.
 /// `prefix` is the first key of a two-key sequence already typed (`z`, `[`, `]`, `a`, `'`).
-pub fn action(prefix: Option<char>, key: KeyEvent, place: Place, zen_diff: bool) -> Option<&'static str> {
+pub fn action(prefix: Option<char>, key: KeyEvent, place: Place) -> Option<&'static str> {
     match prefix {
         Some(prefix) => prefixed(prefix, key),
-        None => single(key, place, zen_diff),
+        None => single(key, place),
     }
 }
 
@@ -161,6 +161,7 @@ fn prefixed(prefix: char, key: KeyEvent) -> Option<&'static str> {
         ('[' | ']', 'c') => pick(forward, "next_hunk", "prev_hunk"),
         ('[' | ']', 'f') => pick(forward, "next_file_unresolved", "prev_file_unresolved"),
         ('[' | ']', 'r') => pick(forward, "next_review", "prev_review"),
+        ('[' | ']', 'm') => pick(forward, "next_mr", "prev_mr"),
         ('a', 'e') => "ask_explain",
         ('a', 'r') => "ask_risks",
         ('a', 's') => "ask_summary",
@@ -175,7 +176,7 @@ fn pick(forward: bool, next: &'static str, prev: &'static str) -> &'static str {
     if forward { next } else { prev }
 }
 
-fn single(key: KeyEvent, place: Place, zen_diff: bool) -> Option<&'static str> {
+fn single(key: KeyEvent, place: Place) -> Option<&'static str> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let command = key.modifiers.contains(KeyModifiers::SUPER);
     if matches!(key.code, KeyCode::Char('k' | 'K')) && (ctrl || command) {
@@ -189,8 +190,6 @@ fn single(key: KeyEvent, place: Place, zen_diff: bool) -> Option<&'static str> {
         KeyCode::Char('q') => Some("quit"),
         KeyCode::Char('?') => Some("help"),
         KeyCode::Char('Y') => Some("share"),
-        KeyCode::Left if zen_diff => Some("prev_mr"),
-        KeyCode::Right if zen_diff => Some("next_mr"),
         KeyCode::Char('h') | KeyCode::Left => Some("focus_left"),
         KeyCode::Char('l') | KeyCode::Right => Some("focus_right"),
         KeyCode::Char('z' | '[' | ']' | 'a' | '\'') => None,
@@ -487,17 +486,17 @@ mod tests {
 
     #[test]
     fn keys_name_their_action_by_where_they_land() {
-        assert_eq!(action(None, key('s'), Place::Queue, false), Some("sort_queue"));
-        assert_eq!(action(None, key('s'), Place::Diff, false), Some("suggest"));
-        assert_eq!(action(None, key('S'), Place::Pane, false), Some("apply_suggestion"));
-        assert_eq!(action(None, key('+'), Place::Pane, false), Some("react"));
-        assert_eq!(action(None, key('+'), Place::Diff, false), Some("more_context"));
-        assert_eq!(action(None, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), Place::Diff, true), Some("next_mr"));
-        assert_eq!(action(None, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), Place::Diff, false), Some("focus_right"));
-        assert_eq!(action(Some(']'), key('n'), Place::Diff, false), Some("next_thread"));
-        assert_eq!(action(Some('a'), key('r'), Place::Diff, false), Some("ask_risks"));
-        assert_eq!(action(None, key('z'), Place::Diff, false), None, "a prefix alone is no action");
-        assert_eq!(action(None, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL), Place::Queue, false), Some("jump"));
+        assert_eq!(action(None, key('s'), Place::Queue), Some("sort_queue"));
+        assert_eq!(action(None, key('s'), Place::Diff), Some("suggest"));
+        assert_eq!(action(None, key('S'), Place::Pane), Some("apply_suggestion"));
+        assert_eq!(action(None, key('+'), Place::Pane), Some("react"));
+        assert_eq!(action(None, key('+'), Place::Diff), Some("more_context"));
+        assert_eq!(action(Some(']'), key('m'), Place::Diff), Some("next_mr"));
+        assert_eq!(action(None, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), Place::Diff), Some("focus_right"));
+        assert_eq!(action(Some(']'), key('n'), Place::Diff), Some("next_thread"));
+        assert_eq!(action(Some('a'), key('r'), Place::Diff), Some("ask_risks"));
+        assert_eq!(action(None, key('z'), Place::Diff), None, "a prefix alone is no action");
+        assert_eq!(action(None, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL), Place::Queue), Some("jump"));
     }
 
     #[test]
@@ -511,7 +510,7 @@ mod tests {
                 [first, second] => (first.plain_char(), second.event()),
                 _ => panic!("{name}"),
             };
-            let found = places.iter().any(|place| [false, true].iter().any(|zen| action(prefix, last, *place, *zen) == Some(*name)));
+            let found = places.iter().any(|place| action(prefix, last, *place) == Some(*name));
             assert!(found, "`{name}` ({keys}) is never counted");
         }
     }

@@ -14,13 +14,13 @@ expression: "render(&mut app, 80, 24)"
 │   ── WATC│      ]n [n  next, previous conversation               │           │
 │   infra: │      ]f [f  next, previous file with a thread         │           │
 │   omar · │      ]r [r  next, previous MR that needs you          │           │
-│          │                                                       │           │
-│   ── ▸ DO│  QUEUE                                                │           │
+│          │      ]m [m  next, previous MR in the queue            │           │
+│   ── ▸ DO│                                                       │           │
+│          │  QUEUE                                                │           │
 │          │          /  filter: words @author !42 ~label          │           │
 │          │      ' 1-9  a saved view, by letter or rank           │           │
 │          │          *  this repo, or every project               │           │
 │          │          s  next sort order                           │           │
-│          │          S  group by author                           │           │
 │          │                                                       │           │
 │          ╰────────────────── 4–19 of 69 · j k scroll · esc close ╯           │
 │                                ││                                            │

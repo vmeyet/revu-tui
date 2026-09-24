@@ -1476,6 +1476,25 @@ fn zv_marks_the_file_viewed_folds_it_and_saves_its_fingerprint() {
     assert!(app.open.as_ref().unwrap().review.fold.file_is_open(&path));
 }
 
+/// Resolves the one unresolved thread on `charge.rs`.
+fn resolve_the_diff_note(app: &mut App) {
+    let open = app.open.clone().unwrap();
+    app.open = Some(Open { review: open.review.with_resolved("9f2c0aa1d4e5b6c7", true), ..open });
+}
+
+#[test]
+fn the_tree_counts_only_unresolved_threads() {
+    let mut app = with_review();
+    press(&mut app, "t");
+    let charge_row = |app: &mut App| {
+        let screen = render(app, 120, 20);
+        screen.lines().filter_map(|l| l.split("││").nth(1)).find(|l| l.contains("charge.rs")).unwrap().to_owned()
+    };
+    assert!(charge_row(&mut app).contains("+4 −2 ◆1"), "the resolved thread is left out");
+    resolve_the_diff_note(&mut app);
+    assert!(!charge_row(&mut app).contains('◆'), "no mark once all are resolved");
+}
+
 #[test]
 fn snapshot_file_tree() {
     let mut app = with_review();
@@ -2741,30 +2760,49 @@ fn zz_zen_order_is_the_queue_as_shown() {
 }
 
 #[test]
-fn arrows_in_zen_open_the_next_and_previous_mr_and_stay_in_zen() {
+fn brackets_m_in_zen_open_the_next_and_previous_mr_and_stay_in_zen() {
     let mut app = with_review();
     press(&mut app, "zz");
     let order = app.zen_order();
     assert!(order.len() > 1, "the fixture queue holds more than one MR");
     assert_eq!(order[0], mr_key());
-    let actions = app.handle_key(code(KeyCode::Right));
-    assert_eq!(actions, vec![Action::Open(order[1].clone())]);
+    assert_eq!(press(&mut app, "]m"), vec![Action::Open(order[1].clone())]);
     assert!(app.zen, "the MR changes, zen stays");
     let banner = app.zen_banner(app.now).unwrap().to_owned();
     assert!(banner.contains(&format!("2/{}", order.len())), "{banner}");
     assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(order[1].clone()), "leaving zen shows the queue on it");
     app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
-    assert_eq!(app.handle_key(code(KeyCode::Left)), vec![Action::Open(order[0].clone())]);
+    assert_eq!(press(&mut app, "[m"), vec![Action::Open(order[0].clone())]);
     app.apply(Incoming::Review { key: order[0].clone(), review: Box::new(review()), cached: None });
-    assert!(app.handle_key(code(KeyCode::Left)).is_empty());
+    assert!(press(&mut app, "[m").is_empty());
     assert!(app.live_toast().unwrap().text.contains("first MR"));
 }
 
 #[test]
-fn arrows_outside_zen_keep_moving_between_panes() {
+fn brackets_m_outside_zen_open_the_next_mr_without_a_banner() {
     let mut app = with_review();
+    let order = app.zen_order();
+    assert_eq!(press(&mut app, "]m"), vec![Action::Open(order[1].clone())]);
+    assert!(!app.zen && app.zen_banner(app.now).is_none());
+    assert_eq!(app.focus, Focus::Review);
+    app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
+    app.focus = Focus::Queue;
+    assert_eq!(press(&mut app, "[m"), vec![Action::Open(order[0].clone())], "the queue reads it too");
+}
+
+#[test]
+fn arrows_in_zen_move_focus_as_outside_it() {
+    let mut app = with_review();
+    press(&mut app, "zz]n");
+    assert!(app.handle_key(code(KeyCode::Right)).is_empty(), "→ never changes MR");
+    assert!(app.open.as_ref().unwrap().pane.is_some(), "→ on a marked line opens the pane");
+    assert_eq!(app.focus, Focus::Side);
     app.handle_key(code(KeyCode::Left));
-    assert_eq!(app.focus, Focus::Queue, "← is still a pane move outside zen");
+    assert_eq!(app.focus, Focus::Review);
+    assert!(app.zen);
+    assert!(app.handle_key(code(KeyCode::Left)).is_empty());
+    assert!(!app.zen, "← from the diff leaves zen, as h does");
+    assert_eq!(app.focus, Focus::Queue);
 }
 
 #[test]
@@ -2810,10 +2848,19 @@ fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
 }
 
 #[test]
-fn a_toast_in_zen_shows_briefly_on_the_bottom_row() {
+fn the_zen_header_counts_unresolved_threads() {
     let mut app = with_review();
     press(&mut app, "zz");
-    app.handle_key(code(KeyCode::Right));
+    let header = |app: &mut App| render(app, 160, 45).lines().find(|l| !l.trim().is_empty()).unwrap().trim_end().to_owned();
+    assert!(header(&mut app).ends_with("omar · +5 −3 ✓ · ◆1"), "{}", header(&mut app));
+    resolve_the_diff_note(&mut app);
+    assert!(header(&mut app).ends_with("omar · +5 −3 ✓"), "no count once all are resolved");
+}
+
+#[test]
+fn a_toast_in_zen_shows_briefly_on_the_bottom_row() {
+    let mut app = with_review();
+    press(&mut app, "zz]m");
     let _ = render(&mut app, 160, 45);
     press(&mut app, "w");
     let screen = render(&mut app, 160, 45);
@@ -3295,6 +3342,31 @@ fn ascii_draws_reactions_in_plain_words() {
 }
 
 #[test]
+fn q_closes_the_right_pane_before_it_asks_to_quit() {
+    let mut app = with_review();
+    press(&mut app, "]nl");
+    assert!(app.open.as_ref().unwrap().pane.is_some());
+    press(&mut app, "q");
+    assert!(app.open.as_ref().unwrap().pane.is_none(), "the thread pane closes first");
+    assert_eq!((app.focus, app.quit_prompt()), (Focus::Review, None));
+    press(&mut app, "tq");
+    assert!(app.open.as_ref().unwrap().tree.is_none(), "so does the tree");
+    assert_eq!(app.quit_prompt(), None);
+    press(&mut app, "qq");
+    assert!(app.should_quit, "nothing left to close: the double press quits");
+}
+
+#[test]
+fn q_from_the_queue_asks_to_quit_even_with_a_pane_open() {
+    let mut app = with_review();
+    press(&mut app, "t");
+    app.focus = Focus::Queue;
+    press(&mut app, "q");
+    assert!(app.open.as_ref().unwrap().tree.is_some());
+    assert!(app.quit_prompt().is_some());
+}
+
+#[test]
 fn q_asks_first_and_quits_on_the_second_press() {
     let mut app = with_review();
     press(&mut app, "q");
@@ -3346,8 +3418,8 @@ fn the_prompt_names_unsaved_drafts_and_a_comment_in_the_box() {
     on_line(&mut app);
     press(&mut app, "c");
     type_text(&mut app, "nit");
-    press(&mut app, "q");
-    assert_eq!(app.quit_prompt().as_deref(), Some("1 draft unsaved · q again to quit"));
+    press(&mut app, "qq");
+    assert_eq!(app.quit_prompt().as_deref(), Some("1 draft unsaved · q again to quit"), "the first q closed the pane");
     press(&mut app, "c");
     press(&mut app, "half");
     app.handle_key(ctrl('c'));
@@ -3371,6 +3443,9 @@ fn q_still_closes_a_modal_before_it_asks() {
     press(&mut app, "i");
     press(&mut app, "q");
     assert!(app.brief.is_none() && app.quit_prompt().is_none(), "the modal closes, nothing asks");
+    let mut app = with_saved_draft();
+    press(&mut app, "Pq");
+    assert!(app.publish.is_none() && app.quit_prompt().is_none(), "so does the publish list");
 }
 
 #[test]

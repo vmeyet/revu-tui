@@ -29,6 +29,11 @@ impl Thread {
         Some(Self { id: discussion.id, resolvable: first.resolvable, resolved: first.resolved, anchor, outdated: false, notes })
     }
 
+    /// Still waits on someone: resolvable and not resolved yet.
+    pub fn unresolved(&self) -> bool {
+        self.resolvable && !self.resolved
+    }
+
     pub fn with_outdated(self, outdated: bool) -> Self {
         Self { outdated, ..self }
     }

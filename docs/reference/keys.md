@@ -20,6 +20,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `]n` `[n` | next, previous conversation |
 | `]f` `[f` | next, previous file with a thread |
 | `]r` `[r` | next, previous MR that needs you |
+| `]m` `[m` | next, previous MR in the queue |
 
 ## Queue
 
@@ -41,7 +42,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `t` | file tree |
 | `p` | pipeline |
 | `zz` | zen: the diff alone, quiet |
-| `←` `→` | in zen: previous, next MR |
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `+` | more lines around the hunk |
 | `v` | the file in your own program |
@@ -94,7 +94,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `o` `y` | open in the browser, copy the link |
 | `r` | refresh |
 | `?` | this help |
-| `q` `^c` | quit: press twice |
+| `q` `^c` | quit: twice; q closes a pane first |
 
 ## AZERTY
 
@@ -107,6 +107,7 @@ The old ones keep working.
 | `]n` `[n` | `)n` `(n` |
 | `]f` `[f` | `)f` `(f` |
 | `]r` `[r` | `)r` `(r` |
+| `]m` `[m` | `)m` `(m` |
 
 ## Actions you can bind
 
@@ -133,8 +134,8 @@ A bound key adds to the default key, it does not replace it.
 | `fold_header` | `zh` |
 | `viewed` | `zv` |
 | `zen` | `zz` |
-| `prev_mr` | `left` |
-| `next_mr` | `right` |
+| `prev_mr` | `[m` |
+| `next_mr` | `]m` |
 | `split` | `D` |
 | `tree` | `t` |
 | `pipeline` | `p` |

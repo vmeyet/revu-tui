@@ -315,7 +315,7 @@ impl Review {
     }
 
     pub fn unresolved(&self) -> usize {
-        self.threads.iter().filter(|t| t.resolvable && !t.resolved).count()
+        self.threads.iter().filter(|t| t.unresolved()).count()
     }
 
     pub fn thread(&self, id: &str) -> Option<&Thread> {

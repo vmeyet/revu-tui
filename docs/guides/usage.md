@@ -38,7 +38,7 @@ revu usage --json       # for a script
 | Hint | When | Try |
 |---|---|---|
 | Long walk | 15 lines or more with `j` or `k` in a diff with hunks or threads | `]n` or `]c` |
-| Queue after zen | You went back to the queue to change MR after using zen | `←` and `→` in zen |
+| Queue after zen | You went back to the queue to change MR after using zen | `[m` and `]m` |
 | Number in search | You typed a bare number in the search | `!42`, or `#42` on GitHub |
 
 ## See also

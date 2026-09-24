@@ -30,6 +30,7 @@ pub const GROUPS: [Group; 7] = [
             ("]n [n", "next, previous conversation"),
             ("]f [f", "next, previous file with a thread"),
             ("]r [r", "next, previous MR that needs you"),
+            ("]m [m", "next, previous MR in the queue"),
         ],
     },
     Group {
@@ -51,7 +52,6 @@ pub const GROUPS: [Group; 7] = [
             ("t", "file tree"),
             ("p", "pipeline"),
             ("zz", "zen: the diff alone, quiet"),
-            ("← →", "in zen: previous, next MR"),
             ("w W", "wrap long lines, hide whitespace changes"),
             ("+", "more lines around the hunk"),
             ("v", "the file in your own program"),
@@ -104,7 +104,7 @@ pub const GROUPS: [Group; 7] = [
             ("o y", "open in the browser, copy the link"),
             ("r", "refresh"),
             ("?", "this help"),
-            ("q ^c", "quit: press twice"),
+            ("q ^c", "quit: twice; q closes a pane first"),
         ],
     },
 ];

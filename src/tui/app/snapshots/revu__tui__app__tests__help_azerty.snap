@@ -18,27 +18,27 @@ expression: "render(&mut app, 160, 45)"
 │   ── ▸ DONE · 1 ──────│    N )n (n  next, previous conversation                         A M  approve or unapprove, merge mine       │                        │
 │                       │      )f (f  next, previous file with a thread                     H  mark mine draft or ready               │                        │
 │                       │      )r (r  next, previous MR that needs you                      Y  share the MR, after a preview          │                        │
-│                       │                                                                                                             │                        │
-│                       │  QUEUE                                                    THREAD PANE                                       │                        │
-│                       │          /  filter: words @author !42 ~label                      r  reply, as a draft                      │                        │
-│                       │      ' 1-9  a saved view, by letter or rank                       R  resolve, unresolve                     │                        │
-│                       │          *  this repo, or every project                         J K  next, previous thread on the line      │                        │
-│                       │          s  next sort order                                     e d  edit, delete my draft                  │                        │
-│                       │          S  group by author                                     S +  apply the suggestion, react            │                        │
-│                       │      zo zc  open, fold the section or stack                       u  open the first link                    │                        │
-│                       │                                                                                                             │                        │
-│                       │  VIEW                                                     ASK CLAUDE                                        │                        │
-│                       │          i  the MR cover page                               a e r s  explain, risks, summary                │                        │
-│                       │          D  changed words inline, or split                  a t c a  thread, comment, anything              │                        │
-│                       │          t  file tree                                       c ⏎ R y  answer: draft, follow up, again, copy  │                        │
-│                       │          p  pipeline                                                                                        │                        │
-│                       │         zz  zen: the diff alone, quiet                    SEARCH & APP                                      │                        │
-│                       │        ← →  in zen: previous, next MR                            ^k  MRs · / files · > commands             │                        │
+│                       │      )m (m  next, previous MR in the queue                                                                  │                        │
+│                       │                                                           THREAD PANE                                       │                        │
+│                       │  QUEUE                                                            r  reply, as a draft                      │                        │
+│                       │          /  filter: words @author !42 ~label                      R  resolve, unresolve                     │                        │
+│                       │      ' 1-9  a saved view, by letter or rank                     J K  next, previous thread on the line      │                        │
+│                       │          *  this repo, or every project                         e d  edit, delete my draft                  │                        │
+│                       │          s  next sort order                                     S +  apply the suggestion, react            │                        │
+│                       │          S  group by author                                       u  open the first link                    │                        │
+│                       │      zo zc  open, fold the section or stack                                                                 │                        │
+│                       │                                                           ASK CLAUDE                                        │                        │
+│                       │  VIEW                                                       a e r s  explain, risks, summary                │                        │
+│                       │          i  the MR cover page                               a t c a  thread, comment, anything              │                        │
+│                       │          D  changed words inline, or split                  c ⏎ R y  answer: draft, follow up, again, copy  │                        │
+│                       │          t  file tree                                                                                       │                        │
+│                       │          p  pipeline                                      SEARCH & APP                                      │                        │
+│                       │         zz  zen: the diff alone, quiet                           ^k  MRs · / files · > commands             │                        │
 │                       │        w W  wrap long lines, hide whitespace changes              :  commands: :go !42, :set theme=nord     │                        │
 │                       │          +  more lines around the hunk                          o y  open in the browser, copy the link     │                        │
 │                       │          v  the file in your own program                          r  refresh                                │                        │
 │                       │   za zc zo  toggle, close, open the fold                          ?  this help                              │                        │
-│                       │      zM zR  fold, unfold every file                            q ^c  quit: press twice                      │                        │
+│                       │      zM zR  fold, unfold every file                            q ^c  quit: twice; q closes a pane first     │                        │
 │                       │         zh  fold the MR header                                                                              │                        │
 │                       │         zv  file viewed: it folds away                                                                      │                        │
 │                       │                                                                                                             │                        │

@@ -212,7 +212,7 @@ impl App {
         }
         let last = self.draft_count();
         match key.code {
-            KeyCode::Esc => self.publish = None,
+            KeyCode::Esc | KeyCode::Char('q') => self.publish = None,
             KeyCode::Char('j') | KeyCode::Down => self.publish = Some(Publish { selected: (publish.selected + 1).min(last), ..publish }),
             KeyCode::Char('k') | KeyCode::Up => self.publish = Some(Publish { selected: publish.selected.saturating_sub(1), ..publish }),
             KeyCode::Char('a') => self.publish = Some(Publish { approve: !publish.approve, ..publish }),

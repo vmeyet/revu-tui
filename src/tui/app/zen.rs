@@ -1,5 +1,5 @@
-//! Zen, `zz`: the diff alone in a calm centred column. `←` `→` walk the queue's MRs in the order
-//! it shows them without leaving zen; notifications wait until zen ends.
+//! Zen, `zz`: the diff alone in a calm centred column. `[m` `]m` walk the queue's MRs in the order
+//! it shows them, in zen or not; notifications wait until zen ends.
 use super::queue::QueueRow;
 use super::{Action, App, Focus, MrKey};
 use std::time::Instant;
@@ -26,11 +26,6 @@ impl App {
         std::mem::take(&mut self.quiet_notices)
     }
 
-    /// Zen with the diff focused: where `←` `→` walk the MRs.
-    pub(super) fn in_zen_diff(&self) -> bool {
-        self.zen && self.focus == Focus::Review
-    }
-
     /// A notification, sent now or kept until zen ends.
     pub(super) fn notice(&mut self, action: Option<Action>) {
         match (action, self.zen) {
@@ -40,8 +35,8 @@ impl App {
         }
     }
 
-    /// `→` `←` in zen: the next or previous MR the queue shows, opened without leaving zen.
-    pub(super) fn zen_step(&mut self, forward: bool) -> Vec<Action> {
+    /// `]m` `[m`: the next or previous MR the queue shows, opened without leaving zen.
+    pub(super) fn step_mr(&mut self, forward: bool) -> Vec<Action> {
         let order = self.zen_order();
         let current = self.opening.clone().or_else(|| self.open.as_ref().map(|o| o.key.clone()));
         let at = current.and_then(|key| order.iter().position(|k| *k == key));
@@ -55,9 +50,9 @@ impl App {
             return vec![];
         };
         self.select_in_queue(&key);
-        let label =
-            self.queue_mr(&key).map_or_else(String::new, |mr| format!("{}{} {}", self.hosts.kind_of(&key).sigil(), mr.number, mr.title));
-        self.zen_switch = Some((self.now, format!("‹  {label}  ·  {}/{}  ›", next + 1, order.len())));
+        if self.zen {
+            self.zen_switch = Some((self.now, self.zen_banner_text(&key, next, order.len())));
+        }
         let actions = self.open_key(key);
         self.focus = Focus::Review;
         actions
@@ -99,6 +94,13 @@ impl App {
         if let Some(at) = at {
             self.queue_selected = at;
         }
+    }
+
+    /// `‹  !42 title  ·  3/12  ›`: where zen just went, with `at` counted from 0.
+    fn zen_banner_text(&self, key: &MrKey, at: usize, of: usize) -> String {
+        let label =
+            self.queue_mr(key).map_or_else(String::new, |mr| format!("{}{} {}", self.hosts.kind_of(key).sigil(), mr.number, mr.title));
+        format!("‹  {label}  ·  {}/{of}  ›", at + 1)
     }
 
     fn queue_mr(&self, key: &MrKey) -> Option<&crate::forge::QueueMr> {

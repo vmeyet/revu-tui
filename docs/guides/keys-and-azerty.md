@@ -19,6 +19,7 @@ Now `(` and `)` work like `[` and `]`.
 | `]n` `[n` | `)n` `(n` |
 | `]c` `[c` | `)c` `(c` |
 | `]f` `[f` | `)f` `(f` |
+| `]m` `[m` | `)m` `(m` |
 
 The bracket keys keep working.
 
