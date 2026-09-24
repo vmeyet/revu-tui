@@ -45,8 +45,6 @@ pub const SETTINGS: &[Setting] = &[
         meaning: "MRs with one of these labels go to WATCHING.",
         example: "[\"infra\"]",
     },
-    Setting { table: "queue", key: "groups", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
-    Setting { table: "queue", key: "projects", kind: "list of text", default: "`[]`", meaning: "Not used yet.", example: "[]" },
     Setting {
         table: "queue",
         key: "prefetch",

@@ -18,8 +18,6 @@ Tokens never go here: they live in the macOS keychain.
 | Key | Type | Default | Does |
 |---|---|---|---|
 | `watch_labels` | list of text | `[]` | MRs with one of these labels go to WATCHING. |
-| `groups` | list of text | `[]` | Not used yet. |
-| `projects` | list of text | `[]` | Not used yet. |
 | `prefetch` | number | `5` | How many MRs that need you load ahead, so opening them needs no network; 0 turns it off. |
 
 ## `[queue.ready]`

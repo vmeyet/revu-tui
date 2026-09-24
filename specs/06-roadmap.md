@@ -75,7 +75,7 @@ Done outside the original milestones, recorded so nobody plans them again:
 - **Queue:** scoped to the checkout's repo with an `OPEN` section, `*` or `--all` for every project; clickable `!iid` (OSC 8); description modal `i`.
 - **Diff:** inline one-word changes (`D` toggles split), tint from the terminal's own background (OSC 11, sign-only fallback), tree-sitter syntax highlighting for TS/TSX/JS/Python/JSON (replaces the `syntect` plan in M5).
 - **Themes:** the nine palettes, each with its diff and syntax colours.
-- **Tooling:** `revu update` (cargo install from the public repo), pedantic lints, CI (fmt, clippy, test), rename `gitlabmr`/`mr` → `revu` with a one-time move of config, cache and keychain.
+- **Tooling:** `revu update` (cargo install from the public repo), pedantic lints, CI (fmt, clippy, test), rename `gitlabmr`/`mr` → `revu` with a one-time move of config, cache and keychain (removed 2026-09-24).
 
 ## M3 · Polish
 

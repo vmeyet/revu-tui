@@ -111,10 +111,6 @@ pub struct Host {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Queue {
-    #[serde(default)]
-    pub groups: Vec<String>,
-    #[serde(default)]
-    pub projects: Vec<String>,
     /// MRs carrying one of these labels land in Watching.
     #[serde(default)]
     pub watch_labels: Vec<String>,
@@ -137,8 +133,6 @@ const PREFETCH: usize = 5;
 impl Default for Queue {
     fn default() -> Self {
         Self {
-            groups: vec![],
-            projects: vec![],
             watch_labels: vec![],
             views: BTreeMap::new(),
             rules: crate::forge::rules::Rules::default(),
