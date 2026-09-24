@@ -1,4 +1,4 @@
-use super::{Action, App, Brief, Focus};
+use super::{Action, App, Focus};
 use crate::review::Row;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -139,7 +139,7 @@ impl App {
             KeyCode::Char('\'') => self.pending = Some('\''),
             KeyCode::Char(c @ '1'..='9') => self.apply_view(c),
             KeyCode::Char('S') => return self.group_queue(),
-            KeyCode::Char('i') => self.brief = self.selected_mr().map(|mr| Brief::of_queue(mr, self.hosts.kind_of(&mr.key()).sigil())),
+            KeyCode::Char('i') => self.open_brief_from_queue(),
             KeyCode::Enter => return self.open_selected(),
             KeyCode::Char('r') => return self.refresh_queue(),
             KeyCode::Char('o') => return self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
@@ -217,7 +217,7 @@ impl App {
             KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => self.close_pane(),
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
-            KeyCode::Char('i') => self.brief = self.open.as_ref().map(|o| Brief::of_review(&o.review, self.hosts.kind_of(&o.key).sigil())),
+            KeyCode::Char('i') => self.open_brief_from_review(),
             KeyCode::Char('v') => return self.view_here(crate::review::Side::New),
             KeyCode::Char('o') => {
                 return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();

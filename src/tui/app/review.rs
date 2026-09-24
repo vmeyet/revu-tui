@@ -82,7 +82,7 @@ impl Open {
         self.cached.map(|(at, age)| age + now.saturating_duration_since(at))
     }
 
-    fn move_to(&self, index: usize) -> Self {
+    pub(super) fn move_to(&self, index: usize) -> Self {
         Self { selected: index.min(self.rows.len().saturating_sub(1)), ..self.clone() }
     }
 

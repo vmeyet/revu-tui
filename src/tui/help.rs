@@ -45,7 +45,7 @@ pub const GROUPS: [Group; 7] = [
     Group {
         title: "view",
         keys: &[
-            ("i", "the MR description"),
+            ("i", "the MR cover page"),
             ("D", "changed words inline, or split"),
             ("t", "file tree"),
             ("p", "pipeline"),

@@ -35,7 +35,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 
 | Keys | Does |
 |---|---|
-| `i` | the MR description |
+| `i` | the MR cover page |
 | `D` | changed words inline, or split |
 | `t` | file tree |
 | `p` | pipeline |

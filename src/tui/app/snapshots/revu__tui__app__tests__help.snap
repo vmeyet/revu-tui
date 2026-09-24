@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 515
 expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -29,7 +28,7 @@ expression: "render(&mut app, 160, 45)"
 │                           │      zo zc  open, fold the section or stack                u  open the first link                    │                           │
 │                           │                                                                                                      │                           │
 │                           │  VIEW                                              ASK CLAUDE                                        │                           │
-│                           │          i  the MR description                       a e r s  explain, risks, summary                │                           │
+│                           │          i  the MR cover page                        a e r s  explain, risks, summary                │                           │
 │                           │          D  changed words inline, or split           a t c a  thread, comment, anything              │                           │
 │                           │          t  file tree                                c ⏎ R y  answer: draft, follow up, again, copy  │                           │
 │                           │          p  pipeline                                                                                 │                           │

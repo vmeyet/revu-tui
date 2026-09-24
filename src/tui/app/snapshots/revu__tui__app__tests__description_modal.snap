@@ -1,28 +1,44 @@
 ---
 source: src/tui/app/tests.rs
-expression: "render(&mut app, 100, 24)"
+expression: "render(&mut app, 120, 40)"
 ---
-╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
-│ ▎ feat c╭ !42 feat: charge cards at checkout ──────────────────────────────────────────╮         │
-│ ▎ omar ·│ omar · feat/checkout → main                                                  │         │
-│         │                                                                              │         │
-│   ── MIN│ ## Why                                                                       │outdated │
-│   fix fl│                                                                              │         │
-│   nina ·│ Cards were charged twice.                                                    │ Money)… │
-│         │                                                                              │         │
-│   ── WAT│ • retry with idempotency_key                                                 │tency_k… │
-│   infra:│ • log the attempt                                                            │         │
-│   omar ·│                                                                              │.await?; │
-│         │                                                                              │         │
-│   ── ▸ D│                                                                              │         │
-│         │                                                                              │         │
-│         │                                                                              │         │
-│         │                                                                              │y()))    │
-│         │                                                                              │         │
-│         │                                                                              │         │
-│         ╰ j k scroll · o open in the browser · esc close ──────────────────────────────╯         │
-│                                ││  ▸ Cargo.lock                                    +1 −1  folded │
-│                                ││                                                                │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
- gitlab.com · nina · 1 unresolved                                                            ? help
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success                    │
+│ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved                                       │
+│ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                                                        │
+│                                ││                                                                                    │
+│   ── MINE · 1 ──────────────── ││ ▎▾ src/pay/charge.rs                                        +4 −2  ◆1 · 1 outdated │
+│   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                                        │
+│   ni╭ !42 feat: charge cards at checkout ──────────────────────────────────────────────────────────────────────╮t> { │
+│     │                                                                                                          │     │
+│   ──│  omar  feat/checkout → main  2h                                                                          │     │
+│   in│                                                                                                          │     │
+│   om│  ## Why                                                                                                  │     │
+│     │                                                                                                          │     │
+│   ──│  Cards were charged twice.                                                                               │     │
+│     │                                                                                                          │     │
+│     │  • retry with idempotency_key                                                                            │     │
+│     │  • log the attempt                                                                                       │     │
+│     │                                                                                                          │     │
+│     │  CHECKS                                                                                                  │     │
+│     │  ✓ success                                                                                               │     │
+│     │                                                                                                          │lded │
+│     │  REVIEW                                                                                                  │     │
+│     │  1 of 2 approvals  ·  you are not a reviewer                                                             │     │
+│     │                                                                                                          │     │
+│     │  THREADS  1 open                                                                                         │     │
+│     │  ▎ src/pay/charge.rs (outdated) · lea · Should this retry on timeout?                                    │     │
+│     │                                                                                                          │     │
+│     │  FILES  2 · by size                                                                                      │     │
+│     │      src/pay/charge.rs                                                                            +4 −2  │     │
+│     │      Cargo.lock                                                                                   +1 −1  │     │
+│     │                                                                                                          │     │
+│     ╰ j k move · enter go there · p pipeline · o browser · esc close ──────────────────────────────────────────╯     │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+│                                ││                                                                                    │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                                                ? help

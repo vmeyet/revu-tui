@@ -42,7 +42,7 @@ Press `enter` on an MR to open its diff.
 | `]c` `[c` | Next, previous change |
 | `tab` | Next file |
 | `za` | Fold or unfold the file or change under the cursor |
-| `i` | The MR description |
+| `i` | The MR cover: description, checks, reviews, open threads, files |
 
 ## 5. Leave a comment
 

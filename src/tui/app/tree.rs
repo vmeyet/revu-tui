@@ -74,7 +74,7 @@ impl App {
     }
 
     /// Puts the review's cursor on file `index`, unfolded, and hands the keys to the review.
-    fn show_file(&mut self, index: usize) -> Vec<Action> {
+    pub(super) fn show_file(&mut self, index: usize) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let path = open.review.files[index].new_path.clone();
         let actions = if open.review.fold.file_is_open(&path) { vec![] } else { self.set_file_fold(&path, Fold::Open) };

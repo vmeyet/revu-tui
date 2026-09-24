@@ -227,7 +227,7 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     Line::from(spans)
 }
 
-fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::Color) {
+pub(super) fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::Color) {
     match status.to_ascii_lowercase().as_str() {
         "success" => ("✓", theme.success),
         "failed" => ("✗", theme.danger),

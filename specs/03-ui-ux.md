@@ -101,7 +101,10 @@ Stacks start folded; the unfolded ones are remembered per scope with the order a
 On a terminal at least 160 columns wide the queue is 44 columns instead of 34, which shows about twice the title.
 Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done` and `Drafts` start folded. The cursor skips the headers of open sections and author headers, stops on folded ones, their only row, and opening a section puts it on its first MR.
 Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
-`i` opens the description modal: `!iid title`, author, branches, labels, then the description as light markdown; `j k ^d ^u g G` scroll, `o` opens the MR, `esc` `i` `q` close.
+`i` opens the MR's cover, on demand only: opening an MR still lands on its diff.
+It shows the author, branches, age and labels, the description as light markdown, then CHECKS (pipeline status, failed job names once the pipeline pane fetched them), REVIEW (approvals n of m, reviewers and their state, mine), THREADS (each open thread as `path:line · author · first words`) and FILES (riskiest first once Jev read them, else biggest, with `+/-` and a viewed tick).
+`j k` walk the thread and file rows, `enter` goes there in the diff (a thread also opens in the pane), `p` opens the pipeline pane, `^d ^u` scroll, `o` opens the MR, `esc` `i` `q` close.
+From the queue the cover knows the row only: threads and files wait for the MR, and `enter` opens it.
 The filter `/` narrows rows by title, author and iid, live.
 
 Empty queue:
@@ -235,7 +238,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `r` | refresh | M1 |
 | `/` | filter (queue) or search text (review) | M1 |
 | `*` | queue: this checkout's project, or every project | M3 |
-| `i` | the MR description, in a modal | M3 |
+| `i` | the MR cover: description, checks, reviews, threads, files | M3 |
 | `:` | command line | M3 |
 | `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
 | `zz` | reading mode (`z` is the fold prefix) | M3 |

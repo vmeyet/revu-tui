@@ -1,0 +1,28 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 80, 24)"
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge ca… ────────╮
+│   ╭ !42 feat: charge cards at checkout ──────────────────────────────────╮   │
+│ ▎ │                                                                      │lv │
+│ ▎ │  omar  feat/checkout → main  2h                                      │   │
+│   │                                                                      │   │
+│   │  ## Why                                                              │ed │
+│   │                                                                      │   │
+│   │  Cards were charged twice.                                           │&… │
+│   │                                                                      │e… │
+│   │  • retry with idempotency_key                                        │i… │
+│   │  • log the attempt                                                   │:… │
+│   │                                                                      │c… │
+│   │  CHECKS                                                              │e… │
+│   │  ✓ success                                                           │   │
+│   │                                                                      │C… │
+│   │  REVIEW                                                              │)) │
+│   │  1 of 2 approvals  ·  you are not a reviewer                         │(… │
+│   │                                                                      │s… │
+│   │  THREADS  1 open                                                     │   │
+│   │                                                                      │   │
+│   ╰ j k move · enter go there · p pipeline · o browser · esc close ──────╯ed │
+│                                ││                                            │
+╰────────────────────────────────╯╰────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                        ? help
