@@ -93,18 +93,20 @@ The host tag (`gitlab`, `github`) shows only when rows from several hosts share 
 A section header is a faded rule, `── OPEN · 28 ────`, filling the pane, with one blank line above it (not above the first); a folded one reads `── ▸ DONE · 3 ──`.
 It reads as a break between groups, never as one more row.
 A row takes two lines (`[tui] queue = "comfortable"`, the default).
-Line one: the `▎` bar when selected, the conventional-commit kind as a coloured chip (`feat` success, `fix` danger, `docs` link, `refactor`/`tech` mention, `test` code, `perf` warn, the rest muted; the scope is dropped), the rest of the title, then Jev's mark and the badge flush right.
+Line one: the `▎` bar when selected, the conventional-commit kind as a coloured chip (`feat` success, `fix` danger, `docs` link, `refactor`/`tech` mention, `test` code, `perf` warn, the rest muted; the scope is dropped), the rest of the title, then Jev's mark, the approval mark and the badge flush right.
 Line two, all `faded` so the eye goes from title to title: the author's short name (`romain.courtois` is `romain`: the handle up to its first `.`, `_` or `-`), `!iid`, the host when mixed and `+adds −dels` when they fit, and the age flush right.
-`[tui] queue = "compact"` keeps one line: `!iid` in `muted`, the title, then Jev's mark and one badge column at the right edge:
+`[tui] queue = "compact"` keeps one line: `!iid` in `muted`, the title, then Jev's mark, the approval mark and one badge column at the right edge.
+The badge is the most pressing of:
 
 | Badge | Means |
 |---|---|
 | `✗` danger | pipeline failed or conflicts |
 | `⠋` muted | pipeline running (spinner) |
-| `✓` success | approved by me |
 | `●` accent | activity since I last opened it |
 | `◆` warn | waits on me (Jev `waits_on_me`, M4) |
 | `D` muted | draft MR |
+
+The approval mark is two cells of its own, so a red or busy row still shows it: `✓` in `success` on my MR once the forge would merge it (approved, by at least one person), on anyone else's once I approved it, else blank; a stack shows it when all its MRs do.
 
 Rows sort by `updated_at` desc inside a section, and Jev ranks `To review` by urgency when it is on.
 `s` cycles the order inside every section: updated (default), oldest first (created), by author, smallest first (additions + deletions), most urgent first (only when Jev is on). `S` groups `OPEN` and `DRAFTS` by author with a faded sub-header per author. The pane title says both (`Queue · acme/widgets · by author, grouped by author`), and both are remembered per scope in the cache (`queue_view.<scope>.json`).

@@ -227,22 +227,50 @@ fn the_filter_narrows_live_and_esc_clears_it() {
 #[test]
 fn badges_follow_the_spec_order() {
     let mut app = with_queue();
-    let sections = app.sections.clone().unwrap();
-    let by_iid = |iid: u64| {
-        [&sections.to_review, &sections.mine, &sections.watching, &sections.done]
-            .into_iter()
-            .flatten()
-            .find(|m| m.number == iid)
-            .unwrap()
-            .clone()
-    };
-    assert_eq!(app.badge(&by_iid(40)), Some(Badge::Failed), "conflicts beat approved");
-    assert_eq!(app.badge(&by_iid(35)), Some(Badge::Running));
-    assert_eq!(app.badge(&by_iid(42)), None);
+    assert_eq!(app.badge(&queued(40)), Some(Badge::Failed));
+    assert_eq!(app.badge(&queued(35)), Some(Badge::Running));
+    assert_eq!(app.badge(&queued(42)), None);
     app.opened.insert(mr_key(), "2026-09-21T00:00:00Z".parse().unwrap());
-    assert_eq!(app.badge(&by_iid(42)), Some(Badge::Activity), "updated after it was last opened");
+    assert_eq!(app.badge(&queued(42)), Some(Badge::Activity), "updated after it was last opened");
     app.opened.insert(mr_key(), today());
-    assert_eq!(app.badge(&by_iid(42)), None);
+    assert_eq!(app.badge(&queued(42)), None);
+}
+
+fn queued(iid: u64) -> crate::forge::QueueMr {
+    let sections = sections();
+    [sections.to_review, sections.mine, sections.watching, sections.done].into_iter().flatten().find(|m| m.number == iid).unwrap()
+}
+
+#[test]
+fn my_mr_carries_the_approval_mark_once_the_forge_would_merge_it() {
+    let app = with_queue();
+    let mine = queued(41);
+    assert_eq!(mine.author, app.me);
+    assert!(!app.approved(&mine), "not approved");
+    assert!(app.approved(&crate::forge::QueueMr { approved: true, approved_by: vec!["lea".into()], ..mine.clone() }));
+    assert!(!app.approved(&crate::forge::QueueMr { approved: true, ..mine }), "no approval rule and nobody approved");
+}
+
+#[test]
+fn someone_elses_mr_carries_the_approval_mark_when_i_approved_it() {
+    let app = with_queue();
+    let theirs = queued(42);
+    assert!(!app.approved(&theirs));
+    assert!(
+        !app.approved(&crate::forge::QueueMr { approved: true, approved_by: vec!["lea".into()], ..theirs.clone() }),
+        "approved, not by me"
+    );
+    assert!(app.approved(&crate::forge::QueueMr { approved_by: vec!["nina".into()], ..theirs }));
+}
+
+#[test]
+fn a_failed_mr_i_approved_shows_both_marks() {
+    let mut app = with_queue();
+    let failed = queued(40);
+    assert_eq!((app.badge(&failed), app.approved(&failed)), (Some(Badge::Failed), true));
+    press(&mut app, "Gzo");
+    let screen = render(&mut app, 100, 20);
+    assert!(screen.contains("✓ ✗ │"), "{screen}");
 }
 
 #[test]

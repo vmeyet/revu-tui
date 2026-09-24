@@ -4,7 +4,7 @@ expression: "render(&mut app, 120, 30)"
 ---
 ╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ─────────── ││                                                                                    │
-│ ▎ feat charge cards at chec…   ││                                                                                    │
+│ ▎ feat charge cards at ch…     ││                                                                                    │
 │ ▎ omar · !42 · +412 −38     2h ││                                                                                    │
 │                                ││                                                                                    │
 │   ── MINE · 1 ──────────────── ││                                                                                    │
@@ -14,9 +14,9 @@ expression: "render(&mut app, 120, 30)"
 │   ── WATCHING · 0 ──────────── ││                                                                                    │
 │                                ││                                                                                    │
 │   ── OPEN · 2 ──────────────── ││                                                                                    │
-│   feat charge cards at chec…   ││                                                                                    │
+│   feat charge cards at ch…     ││                                                                                    │
 │   kim · !53 · +412 −38      2h ││                                open a merge request                                │
-│   feat charge cards at chec…   ││                                to read its diff here                               │
+│   feat charge cards at ch…     ││                                to read its diff here                               │
 │   omar · !52 · +412 −38     2h ││                                                                                    │
 │                                ││                                                                                    │
 │   ── ▸ DRAFTS · 1 ──────────── ││                                                                                    │

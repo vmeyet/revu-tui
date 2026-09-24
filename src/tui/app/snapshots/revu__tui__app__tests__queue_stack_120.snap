@@ -4,7 +4,7 @@ expression: "render(&mut app, 120, 26)"
 ---
 ╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ─────────── ││                                                                                    │
-│ ▎ feat charge cards at chec…   ││                                                                                    │
+│ ▎ feat charge cards at ch…     ││                                                                                    │
 │ ▎ omar · !42 · +412 −38     2h ││                                                                                    │
 │                                ││                                                                                    │
 │   ── MINE · 1 ──────────────── ││                                                                                    │

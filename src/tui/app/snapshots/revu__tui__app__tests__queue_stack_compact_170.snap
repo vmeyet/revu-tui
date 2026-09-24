@@ -13,10 +13,10 @@ expression: "render(&mut app, 170, 20)"
 │                                          ││                                                    open a merge request                                                    │
 │   ── OPEN · 4 ────────────────────────── ││                                                    to read its diff here                                                   │
 │   !51 chore: bump deps                   ││                                                                                                                            │
-│ ▎ ▾ romain · 3 MRs · read shared PDFs  ✗ ││                                                                                                                            │
-│   │ !61 feat: read shared PDFs from t…   ││                                                                                                                            │
-│   │ !62 feat: read shared PDFs page b… ✗ ││                                                                                                                            │
-│   │ !63 feat: read shared PDFs with O…   ││                                                                                                                            │
+│ ▎ ▾ romain · 3 MRs · read shared PD…   ✗ ││                                                                                                                            │
+│   │ !61 feat: read shared PDFs from…     ││                                                                                                                            │
+│   │ !62 feat: read shared PDFs page…   ✗ ││                                                                                                                            │
+│   │ !63 feat: read shared PDFs with…     ││                                                                                                                            │
 │                                          ││                                                                                                                            │
 │   ── ▸ DRAFTS · 1 ────────────────────── ││                                                                                                                            │
 │                                          ││                                                                                                                            │

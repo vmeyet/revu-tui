@@ -4,19 +4,19 @@ expression: "render(&mut app, 120, 20)"
 ---
 ╭ Queue · acme/widgets ──────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ─────────── ││                                                                                    │
-│   !42 feat: charge cards at…   ││                                                                                    │
+│   !42 feat: charge cards …     ││                                                                                    │
 │                                ││                                                                                    │
 │   ── MINE · 1 ──────────────── ││                                                                                    │
-│   !41 fix: flaky cache test  D ││                                                                                    │
+│   !41 fix: flaky cache te…   D ││                                                                                    │
 │                                ││                                                                                    │
 │   ── WATCHING · 0 ──────────── ││                                                                                    │
 │                                ││                                open a merge request                                │
 │   ── OPEN · 4 ──────────────── ││                                to read its diff here                               │
 │   !51 chore: bump deps         ││                                                                                    │
-│ ▎ ▾ romain · 3 MRs · read s… ✗ ││                                                                                    │
-│   │ !61 feat: read shared P…   ││                                                                                    │
-│   │ !62 feat: read shared P… ✗ ││                                                                                    │
-│   │ !63 feat: read shared P…   ││                                                                                    │
+│ ▎ ▾ romain · 3 MRs · read…   ✗ ││                                                                                    │
+│   │ !61 feat: read shared…     ││                                                                                    │
+│   │ !62 feat: read shared…   ✗ ││                                                                                    │
+│   │ !63 feat: read shared…     ││                                                                                    │
 │                                ││                                                                                    │
 │   ── ▸ DRAFTS · 1 ──────────── ││                                                                                    │
 │                                ││                                                                                    │

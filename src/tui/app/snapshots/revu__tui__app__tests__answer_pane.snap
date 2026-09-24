@@ -4,7 +4,7 @@ expression: "render(&mut app, 150, 20)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at che… ────────╮╭ Claude · explain · charge.rs hunk 1 · cached ────────────╮
 │   ── TO REVIEW · 1 ─────────── ││  omar · feat/checko… · 2h · +5 −3 · 2 files · ✓ succ ││  It swaps the client for one keyed by the card, so a     │
-│ ▎ feat charge cards at chec…   ││   1 of 2 approvals · 3 threads, 1 unresolved         ││  retry **reuses** the idempotency key.                   │
+│ ▎ feat charge cards at ch…     ││   1 of 2 approvals · 3 threads, 1 unresolved         ││  retry **reuses** the idempotency key.                   │
 │ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                          ││                                                          │
 │                                ││                                                      ││  • charge now takes the key                              │
 │   ── MINE · 1 ──────────────── ││  ▾ src/pay/charge.rs          +4 −2  ✓1 · 1 outdated ││  • nothing else moves                                    │
