@@ -148,6 +148,11 @@ Renames show `old → new`; a pure mode change shows `mode 644 → 755`.
 A hunk row is `▾ @@ -a,b +c,d @@ context`, `muted`, with the function context in `fg`; folded it appends `(n lines)`.
 `+` on a hunk (its header or any line in it) shows 10 more unchanged lines above and below it, read once from the whole file at the head commit (`Forge::file`: GitLab `repository/files/:path/raw`, GitHub `contents/:path` as raw). Lines between two hunks are never shown twice; old-side numbers follow the offset at each end of the hunk. Comments go on diff lines, not on these extra lines.
 
+Sticky headers: once a file's own row scrolls above the view, a copy stays pinned at the top of the diff, on the surface colour, until the next file's row reaches the top.
+When the cursor's hunk header has also scrolled off, it is pinned below the file.
+The cursor never hides under the pins, and `za` or `zc` on a line then folds the pinned file and lands on its row (`src/tui/app/pins.rs`).
+Pins are off below 20 diff rows and in reading mode (`zz`).
+
 ### Lines
 
 ```

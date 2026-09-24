@@ -24,6 +24,8 @@ pub struct Open {
     pub answer: Option<super::ask::Answer>,
     /// The CI run, when it holds the right pane.
     pub pipeline: Option<super::Pipeline>,
+    /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
+    pub pinned_file: Option<usize>,
 }
 
 impl Open {
@@ -42,6 +44,7 @@ impl Open {
             tree: None,
             answer: None,
             pipeline: None,
+            pinned_file: None,
         }
     }
 
@@ -240,7 +243,13 @@ impl App {
     }
 
     /// `za`: the file or hunk under the cursor; `zo` and `zc` only move in one direction.
+    /// While a file header is pinned above the diff, `za` and `zc` fold that file instead.
     pub(super) fn fold_at_cursor(&mut self, want_open: Option<bool>) -> Vec<Action> {
+        if want_open != Some(true)
+            && let Some(actions) = self.fold_pinned_file()
+        {
+            return actions;
+        }
         let Some(open) = &self.open else { return vec![] };
         let Some((path, hunk)) = open.fold_target() else { return vec![] };
         let fold = &open.review.fold;
@@ -256,6 +265,24 @@ impl App {
             None => fold.toggle_file(&path),
         };
         self.apply_fold(next)
+    }
+
+    /// Folds the pinned file and puts the cursor on its row, when the cursor sits inside it on a
+    /// line; on a hunk row the hunk still folds, as without a pin.
+    fn fold_pinned_file(&mut self) -> Option<Vec<Action>> {
+        let open = self.open.as_ref()?;
+        let Row::File { index: file, .. } = open.rows.get(open.pinned_file?)? else { return None };
+        let file = *file;
+        let row = open.row()?;
+        if !matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) || row.file() != Some(file) {
+            return None;
+        }
+        let path = open.review.files[file].new_path.clone();
+        let actions = self.set_file_fold(&path, crate::diff::fold::Fold::Closed);
+        let open = self.open.as_ref()?;
+        let at = open.rows.iter().position(|r| matches!(r, Row::File { index, .. } if *index == file))?;
+        self.open = Some(Open { pinned_file: None, ..open.move_to(at) });
+        Some(actions)
     }
 
     pub(super) fn fold_all(&mut self, closed: bool) -> Vec<Action> {
