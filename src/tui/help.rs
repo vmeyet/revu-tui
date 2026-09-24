@@ -70,6 +70,7 @@ pub const GROUPS: [Group; 7] = [
             ("s", "suggest a change"),
             ("E", "write in $EDITOR"),
             ("⌥enter ^o", "in the box: new line, $EDITOR"),
+            ("⌥← ⌥→ ⌥⌫", "in the box: word back, on, delete"),
             ("esc", "drop the selection, leave the box"),
             ("P", "publish every draft"),
             ("A M", "approve or unapprove, merge mine"),

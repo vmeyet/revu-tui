@@ -306,7 +306,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
 | `x` `esc` `q` | close |
 
-In the compose box: `enter` saves the draft, `⌥enter` adds a line, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
+In the compose box: `enter` saves the draft, `⌥enter` adds a line, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
 
 ### Your own keys (`[keys]`)
 

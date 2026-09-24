@@ -26,6 +26,7 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 The comment box sits at the bottom of the right pane.
 `enter` saves the draft.
 `⌥enter` adds a new line.
+`⌥←` and `⌥→` jump a word, `⌥⌫` deletes the word before the cursor.
 `ctrl-o` moves the text to `$EDITOR`.
 `esc` leaves the box and keeps the text for later.
 

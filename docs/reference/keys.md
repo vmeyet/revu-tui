@@ -60,6 +60,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `s` | suggest a change |
 | `E` | write in $EDITOR |
 | `⌥enter` `^o` | in the box: new line, $EDITOR |
+| `⌥←` `⌥→` `⌥⌫` | in the box: word back, on, delete |
 | `esc` | drop the selection, leave the box |
 | `P` | publish every draft |
 | `A` `M` | approve or unapprove, merge mine |
