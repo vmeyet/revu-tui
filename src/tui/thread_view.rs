@@ -2,6 +2,7 @@
 use super::app::{App, Entry, EntryKind, Focus, Open};
 use super::field::Field;
 use super::images::Thumbs;
+use super::table::table_lines;
 use super::theme::Theme;
 use super::ui::{short_age, side_pane};
 use crate::forge::Note;
@@ -73,7 +74,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
         if index > 0 {
             lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
-        let look = Look { theme, today, me: &me, ascii };
+        let look = Look { theme, today, me: &me, ascii, width };
         lines.extend(conversation_lines(open, conversation, index, &entries, look));
     }
     let more = open.review.others_in_file(&pane.place);
@@ -232,13 +233,15 @@ fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
     }
 }
 
-/// How notes read: the palette, today for ages, who "you" is, and emoji or their plain words.
+/// How notes read: the palette, today for ages, who "you" is, emoji or their plain words, and
+/// the columns a table may take.
 #[derive(Clone, Copy)]
 struct Look<'a> {
     theme: Theme,
     today: DateTime<Utc>,
     me: &'a str,
     ascii: bool,
+    width: usize,
 }
 
 /// A thread, or my new draft, as the pane shows it: status, notes, my replies; each line tagged
@@ -273,7 +276,7 @@ fn conversation_lines(
             thread.first().position.as_ref()
         });
         let replaced = position.map(|p| open.review.text_at(p)).unwrap_or_default();
-        lines.extend(draft_lines(draft, &replaced, theme).into_iter().map(|line| (entry, line)));
+        lines.extend(draft_lines(draft, &replaced, look).into_iter().map(|line| (entry, line)));
     }
     lines
 }
@@ -334,26 +337,27 @@ pub(super) fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
 }
 
 /// My draft: `you · draft ◇`, `unsaved` in danger until the forge holds it.
-fn draft_lines(draft: &crate::review::Draft, replaced: &[String], theme: Theme) -> Vec<Piece> {
+fn draft_lines(draft: &crate::review::Draft, replaced: &[String], look: Look) -> Vec<Piece> {
+    let theme = look.theme;
     let (state, colour) = if draft.id.is_none() { ("unsaved", theme.danger) } else { ("draft", theme.muted) };
     let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled("you", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {state} ◇"), Style::default().fg(colour)),
     ]))];
-    lines.extend(body_pieces(&draft.body, replaced, theme));
+    lines.extend(body_pieces(&draft.body, replaced, look.width, theme));
     lines
 }
 
 /// `replaced` is the text of the lines the thread hangs on, which a suggestion in the note replaces.
 fn note_lines(note: &Note, replaced: &[String], look: Look) -> Vec<Piece> {
-    let Look { theme, today, me, ascii } = look;
+    let Look { theme, today, me, ascii, width } = look;
     let author = if note.author.username == me { "you".to_owned() } else { note.author.username.clone() };
     let age = short_age((today - note.created_at).to_std().unwrap_or_default());
     let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {age}"), Style::default().fg(theme.muted)),
     ]))];
-    lines.extend(body_pieces(&note.body, replaced, theme));
+    lines.extend(body_pieces(&note.body, replaced, width, theme));
     if !note.reactions.is_empty() {
         lines.push(Piece::Text(reactions_line(&note.reactions, theme, ascii)));
     }
@@ -371,10 +375,10 @@ pub fn reactions_line(reactions: &[crate::forge::Reaction], theme: Theme, ascii:
     Line::from(spans.collect::<Vec<_>>())
 }
 
-/// Code spans, bullets and quotes; the rest is the text as written, wrapped by the widget.
-/// Pictures read as their `[image: …]` line, for the panes that never draw them.
-pub fn body_lines<'a>(body: &str, theme: Theme) -> Vec<Line<'a>> {
-    body_pieces(body, &[], theme)
+/// Code spans, bullets, quotes and tables `width` columns at most; the rest is the text as written,
+/// wrapped by the widget. Pictures read as their `[image: …]` line, for the panes that never draw them.
+pub fn body_lines<'a>(body: &str, width: usize, theme: Theme) -> Vec<Line<'a>> {
+    body_pieces(body, &[], width, theme)
         .into_iter()
         .map(|piece| match piece {
             Piece::Text(line) => line,
@@ -385,7 +389,7 @@ pub fn body_lines<'a>(body: &str, theme: Theme) -> Vec<Line<'a>> {
 
 /// A body as pieces, with a suggestion block drawn as a small diff (the `replaced` lines struck
 /// as `-`, the suggested ones as `+`, in the diff colours) and each picture under its line.
-fn body_pieces(body: &str, replaced: &[String], theme: Theme) -> Vec<Piece> {
+fn body_pieces(body: &str, replaced: &[String], width: usize, theme: Theme) -> Vec<Piece> {
     #[derive(PartialEq)]
     enum Fence {
         Out,
@@ -394,7 +398,8 @@ fn body_pieces(body: &str, replaced: &[String], theme: Theme) -> Vec<Piece> {
     }
     let mut fence = Fence::Out;
     let mut lines = vec![];
-    for raw in body.lines() {
+    let mut raws = body.lines().peekable();
+    while let Some(raw) = raws.next() {
         let opener = raw.trim_start();
         if opener.starts_with("```") {
             fence = match fence {
@@ -419,13 +424,24 @@ fn body_pieces(body: &str, replaced: &[String], theme: Theme) -> Vec<Piece> {
             }
             Fence::Out => {}
         }
-        let (text, pictures) = image::split(raw);
-        if pictures.is_empty() || !text.trim().is_empty() {
-            lines.push(Piece::Text(text_line(&text, theme)));
+        if !opener.starts_with('|') {
+            lines.extend(prose(raw, theme));
+            continue;
         }
-        lines.extend(pictures.into_iter().map(Piece::Picture));
+        let run: Vec<&str> = std::iter::once(raw).chain(std::iter::from_fn(|| raws.next_if(|l| l.trim_start().starts_with('|')))).collect();
+        match table_lines(&run, width, theme) {
+            Some(table) => lines.extend(table.into_iter().map(Piece::Text)),
+            None => lines.extend(run.iter().flat_map(|raw| prose(raw, theme))),
+        }
     }
     lines
+}
+
+/// A line outside fences and tables, each picture under it.
+fn prose(raw: &str, theme: Theme) -> Vec<Piece> {
+    let (text, pictures) = image::split(raw);
+    let line = (pictures.is_empty() || !text.trim().is_empty()).then(|| Piece::Text(text_line(&text, theme)));
+    line.into_iter().chain(pictures.into_iter().map(Piece::Picture)).collect()
 }
 
 /// One line of prose: bullets, quotes and code spans.
@@ -437,7 +453,7 @@ fn text_line(raw: &str, theme: Theme) -> Line<'static> {
     }
 }
 
-fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
+pub(super) fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
     text.split('`')
         .enumerate()
         .filter(|(_, part)| !part.is_empty())
@@ -474,7 +490,7 @@ mod tests {
     #[test]
     fn a_picture_leaves_its_line_and_sits_under_it() {
         let body = "Before:\n![the chart](/uploads/ab12/chart.png) broke\n<img alt=\"after\" src=\"https://x/a.png\">\n```\n![not](https://x/code.png)\n```";
-        let pieces = body_pieces(body, &[], Theme::default());
+        let pieces = body_pieces(body, &[], 80, Theme::default());
         let shape: Vec<String> = pieces
             .iter()
             .map(|p| match p {
@@ -504,7 +520,7 @@ mod tests {
         let Some(Mark::Link { url, .. }) = &rows[0].1 else { panic!("a link") };
         assert_eq!(url, "https://gitlab.com/acme/widgets/uploads/ab12/chart.png");
         assert_eq!(fallback(&Image { alt: " ".into(), url: "u".into() }), "[image]");
-        assert_eq!(text(&body_lines("![c](https://x/c.png)", Theme::default())), ["[image: c]"], "other panes show the line");
+        assert_eq!(text(&body_lines("![c](https://x/c.png)", 80, Theme::default())), ["[image: c]"], "other panes show the line");
     }
 
     #[test]
@@ -527,8 +543,15 @@ mod tests {
     #[test]
     fn bodies_keep_code_bullets_and_quotes() {
         let body = "Use `Key::from` here.\n- one\n> said\n```\nlet x = 1;\n```";
-        let lines = text(&body_lines(body, Theme::default()));
+        let lines = text(&body_lines(body, 80, Theme::default()));
         assert_eq!(lines, ["Use Key::from here.", "• one", "▏said", "  let x = 1;"]);
+    }
+
+    #[test]
+    fn a_table_is_drawn_and_pipes_without_a_delimiter_row_stay_text() {
+        let body = "Counts:\n| Name | Count |\n| --- | ---: |\n| alpha | 3 |\nthen\n| a | b |";
+        let lines = text(&body_lines(body, 80, Theme::default()));
+        assert_eq!(lines, ["Counts:", "Name  │ Count", "──────┼──────", "alpha │     3", "then", "| a | b |"]);
     }
 
     #[test]
@@ -543,9 +566,9 @@ mod tests {
     #[test]
     fn a_suggestion_reads_as_a_small_diff() {
         let body = "Try this:\n```suggestion:-0+0\nlet client = Client::default();\n```\nthanks";
-        let lines = text(&texts(body_pieces(body, &["let client = Client::new();".to_owned()], Theme::default())));
+        let lines = text(&texts(body_pieces(body, &["let client = Client::new();".to_owned()], 80, Theme::default())));
         assert_eq!(lines, ["Try this:", "- let client = Client::new();", "+ let client = Client::default();", "thanks"]);
-        assert_eq!(text(&body_lines("```rust\nlet x = 1;\n```", Theme::default())), ["  let x = 1;"], "other fences stay code");
+        assert_eq!(text(&body_lines("```rust\nlet x = 1;\n```", 80, Theme::default())), ["  let x = 1;"], "other fences stay code");
     }
 
     #[test]

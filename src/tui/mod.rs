@@ -16,6 +16,7 @@ mod publish_view;
 mod queue_view;
 mod screen;
 mod share_view;
+mod table;
 mod theme;
 mod thread_view;
 mod tree_view;

@@ -68,7 +68,7 @@ fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) ->
     lines.push(Line::default());
     match brief.description.trim() {
         "" => lines.push(Line::from(Span::styled("no description", Style::default().fg(theme.faded)))),
-        text => lines.extend(body_lines(text, theme)),
+        text => lines.extend(body_lines(text, width, theme)),
     }
     section(&mut lines, "checks", "", theme);
     lines.push(checks_line(brief, theme, width));
