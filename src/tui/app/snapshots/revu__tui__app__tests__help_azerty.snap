@@ -4,45 +4,45 @@ expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                  │
-│ ▎ feat charge cards at che╭ keys ────────────────────────────────────────────────────────────────────────────────────────────────╮                           │
-│ ▎ omar · !42 · +412 −38   │                                                                                                      │                           │
-│                           │  MOVE                                              COMMENT & PUBLISH                                 │                           │
-│   ── MINE · 1 ────────────│        j k  move                                           c  comment on the line                    │                           │
-│   fix flaky cache test    │        g G  first, last                                    C  comment on the old side                │                           │
-│   nina · !41 · +3 −1      │      ^d ^u  half a page                                    V  select lines                           │                           │
-│                           │        h l  pane to the left, to the right                 s  suggest a change                       │                           │
-│   ── WATCHING · 1 ────────│      enter  open, or toggle the fold                       E  write in $EDITOR                       │                           │
-│   infra: new runner       │      esc x  close the pane, back to the queue      ⌥enter ^o  in the box: new line, $EDITOR          │                           │
-│   omar · !35 · +0 −0      │  tab S-tab  next, previous file                          esc  drop the selection, leave the box      │                           │
-│                           │      )c (c  next, previous hunk                            P  publish every draft                    │                           │
-│   ── ▸ DONE · 1 ──────────│    N )n (n  next, previous conversation                    A  approve, unapprove                     │                           │
-│                           │      )f (f  next, previous file with a thread              Y  share the MR, after a preview          │                           │
-│                           │                                                                                                      │                           │
-│                           │  QUEUE                                             THREAD PANE                                       │                           │
-│                           │          /  filter: words @author !42 ~label               r  reply, as a draft                      │                           │
-│                           │      ' 1-9  a saved view, by letter or rank                R  resolve, unresolve                     │                           │
-│                           │          *  this repo, or every project                  J K  next, previous thread on the line      │                           │
-│                           │          s  next sort order                              e d  edit, delete my draft                  │                           │
-│                           │          S  group by author                                S  apply the suggestion, after a y        │                           │
-│                           │      zo zc  open, fold the section or stack                u  open the first link                    │                           │
-│                           │                                                                                                      │                           │
-│                           │  VIEW                                              ASK CLAUDE                                        │                           │
-│                           │          i  the MR cover page                        a e r s  explain, risks, summary                │                           │
-│                           │          D  changed words inline, or split           a t c a  thread, comment, anything              │                           │
-│                           │          t  file tree                                c ⏎ R y  answer: draft, follow up, again, copy  │                           │
-│                           │          p  pipeline                                                                                 │                           │
-│                           │         zz  zen: the diff alone, quiet             SEARCH & APP                                      │                           │
-│                           │        ← →  in zen: previous, next MR                     ^k  MRs · / files · > commands             │                           │
-│                           │          w  wrap long lines                                :  commands: :go !42, :set theme=nord     │                           │
-│                           │          W  hide whitespace-only changes                 o y  open in the browser, copy the link     │                           │
-│                           │          +  more lines around the hunk                     r  refresh                                │                           │
-│                           │          v  the file in your own program                   ?  this help                              │                           │
-│                           │   za zc zo  toggle, close, open the fold                q ^c  quit                                   │                           │
-│                           │      zM zR  fold, unfold every file                                                                  │                           │
-│                           │         zh  fold the MR header                                                                       │                           │
-│                           │         zv  file viewed: it folds away                                                               │                           │
-│                           │                                                                                                      │                           │
-│                           ╰─────────────────────────────────────────────────────────────────────────────────────────── esc close ╯                           │
+│ ▎ feat charge cards at╭ keys ───────────────────────────────────────────────────────────────────────────────────────────────────────╮                        │
+│ ▎ omar · !42 · +412 −3│                                                                                                             │                        │
+│                       │  MOVE                                                     COMMENT & PUBLISH                                 │                        │
+│   ── MINE · 1 ────────│        j k  move                                                  c  comment on the line                    │                        │
+│   fix flaky cache test│        g G  first, last                                           C  comment on the old side                │                        │
+│   nina · !41 · +3 −1  │      ^d ^u  half a page                                           V  select lines                           │                        │
+│                       │        h l  pane to the left, to the right                        s  suggest a change                       │                        │
+│   ── WATCHING · 1 ────│      enter  open, or toggle the fold                              E  write in $EDITOR                       │                        │
+│   infra: new runner   │      esc x  close the pane, back to the queue             ⌥enter ^o  in the box: new line, $EDITOR          │                        │
+│   omar · !35 · +0 −0  │  tab S-tab  next, previous file                                 esc  drop the selection, leave the box      │                        │
+│                       │      )c (c  next, previous hunk                                   P  publish every draft                    │                        │
+│   ── ▸ DONE · 1 ──────│    N )n (n  next, previous conversation                           A  approve, unapprove                     │                        │
+│                       │      )f (f  next, previous file with a thread                     Y  share the MR, after a preview          │                        │
+│                       │      )r (r  next, previous MR that needs you                                                                │                        │
+│                       │                                                           THREAD PANE                                       │                        │
+│                       │  QUEUE                                                            r  reply, as a draft                      │                        │
+│                       │          /  filter: words @author !42 ~label                      R  resolve, unresolve                     │                        │
+│                       │      ' 1-9  a saved view, by letter or rank                     J K  next, previous thread on the line      │                        │
+│                       │          *  this repo, or every project                         e d  edit, delete my draft                  │                        │
+│                       │          s  next sort order                                       S  apply the suggestion, after a y        │                        │
+│                       │          S  group by author                                       u  open the first link                    │                        │
+│                       │      zo zc  open, fold the section or stack                                                                 │                        │
+│                       │                                                           ASK CLAUDE                                        │                        │
+│                       │  VIEW                                                       a e r s  explain, risks, summary                │                        │
+│                       │          i  the MR cover page                               a t c a  thread, comment, anything              │                        │
+│                       │          D  changed words inline, or split                  c ⏎ R y  answer: draft, follow up, again, copy  │                        │
+│                       │          t  file tree                                                                                       │                        │
+│                       │          p  pipeline                                      SEARCH & APP                                      │                        │
+│                       │         zz  zen: the diff alone, quiet                           ^k  MRs · / files · > commands             │                        │
+│                       │        ← →  in zen: previous, next MR                             :  commands: :go !42, :set theme=nord     │                        │
+│                       │        w W  wrap long lines, hide whitespace changes            o y  open in the browser, copy the link     │                        │
+│                       │          +  more lines around the hunk                            r  refresh                                │                        │
+│                       │          v  the file in your own program                          ?  this help                              │                        │
+│                       │   za zc zo  toggle, close, open the fold                       q ^c  quit                                   │                        │
+│                       │      zM zR  fold, unfold every file                                                                         │                        │
+│                       │         zh  fold the MR header                                                                              │                        │
+│                       │         zv  file viewed: it folds away                                                                      │                        │
+│                       │                                                                                                             │                        │
+│                       ╰────────────────────────────────────────────────────────────────────────────────────────────────── esc close ╯                        │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

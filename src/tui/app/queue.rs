@@ -97,7 +97,7 @@ impl App {
 
     /// A section's rows in the chosen order, what others already review last. With the default
     /// order Jev still ranks To review.
-    fn in_order<'m>(&self, section: &str, rows: Vec<&'m QueueMr>) -> Vec<&'m QueueMr> {
+    pub(super) fn in_order<'m>(&self, section: &str, rows: Vec<&'m QueueMr>) -> Vec<&'m QueueMr> {
         let order = match self.queue_view.order {
             Order::Updated if section == "TO REVIEW" && self.triaged() => Order::Urgency,
             order => order,
@@ -143,7 +143,7 @@ impl App {
         self.sections.as_ref().is_some_and(|s| s == &Sections::default())
     }
 
-    fn matches_filter(&self, mr: &QueueMr) -> bool {
+    pub(super) fn matches_filter(&self, mr: &QueueMr) -> bool {
         self.filter.is_empty() || crate::query::Query::lenient(&self.filter).matches(mr, &self.me)
     }
 

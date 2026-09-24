@@ -19,6 +19,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `]c` `[c` | next, previous hunk |
 | `]n` `[n` | next, previous conversation |
 | `]f` `[f` | next, previous file with a thread |
+| `]r` `[r` | next, previous MR that needs you |
 
 ## Queue
 
@@ -41,8 +42,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `p` | pipeline |
 | `zz` | zen: the diff alone, quiet |
 | `←` `→` | in zen: previous, next MR |
-| `w` | wrap long lines |
-| `W` | hide whitespace-only changes |
+| `w` `W` | wrap long lines, hide whitespace changes |
 | `+` | more lines around the hunk |
 | `v` | the file in your own program |
 | `za` `zc` `zo` | toggle, close, open the fold |
@@ -105,6 +105,7 @@ The old ones keep working.
 | `]c` `[c` | `)c` `(c` |
 | `]n` `[n` | `)n` `(n` |
 | `]f` `[f` | `)f` `(f` |
+| `]r` `[r` | `)r` `(r` |
 
 ## Actions you can bind
 
@@ -119,6 +120,8 @@ A bound key adds to the default key, it does not replace it.
 | `prev_hunk` | `[c` |
 | `next_file_unresolved` | `]f` |
 | `prev_file_unresolved` | `[f` |
+| `next_review` | `]r` |
+| `prev_review` | `[r` |
 | `next_file` | `tab` |
 | `prev_file` | `backtab` |
 | `fold_toggle` | `za` |

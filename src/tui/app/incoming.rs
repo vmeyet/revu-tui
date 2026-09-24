@@ -33,6 +33,12 @@ impl App {
                 self.prefetch();
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
+            Incoming::Resume { key, spot } => self.resume(&key, &spot),
+            Incoming::Progress(counts) => {
+                let open = self.open.as_ref().map(|o| (o.key.clone(), o.review.viewed.len()));
+                self.viewed_counts = counts;
+                self.viewed_counts.extend(open);
+            }
             Incoming::Discussions { key, discussions } => {
                 if let Some(open) = self.open.as_ref().filter(|o| o.key == key) {
                     let fresh = open.review.with_discussions(discussions);
@@ -89,7 +95,12 @@ impl App {
             Some(open) => open.with_review(carry_folds(&open.review, &review)),
             None => Open::new(key.clone(), review),
         };
+        self.count_viewed(&key, &next.review);
+        let fresh_open = self.open.as_ref().is_none_or(|o| o.key != key);
         self.open = Some(Open { cached: cached.map(|age| (self.now, age)), ..next });
+        if fresh_open {
+            self.spot_saved = self.spot().map(|spot| (key.clone(), spot));
+        }
         if cached.is_none() {
             self.opening = None;
             self.offline = None;

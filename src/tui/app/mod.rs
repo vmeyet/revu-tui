@@ -4,6 +4,7 @@ mod ask;
 mod brief;
 mod commands;
 mod feedback;
+mod inbox;
 mod incoming;
 mod input;
 mod keys;
@@ -30,6 +31,7 @@ pub use apply::Confirm;
 pub use ask::{Answer, AnswerState, Part};
 pub use brief::{Brief, FileRow, ThreadRow};
 pub use feedback::Toast;
+pub use inbox::{Spot, progress_bar};
 pub use order::QueueView;
 pub use pane::{Entry, EntryKind};
 pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
@@ -84,6 +86,8 @@ pub enum Action {
         /// Viewed files with the fingerprint of the change seen.
         viewed: BTreeMap<String, String>,
         split: bool,
+        /// Where the cursor rests, so the MR opens there next time; `None` keeps what is saved.
+        spot: Option<Spot>,
     },
     OpenUrl(String),
     Yank(String),
@@ -254,6 +258,13 @@ pub enum Incoming {
         review: Box<Review>,
         cached: Option<Duration>,
     },
+    /// Where the reader left this MR last time, sent once it is painted.
+    Resume {
+        key: MrKey,
+        spot: Spot,
+    },
+    /// How many files of each started MR I marked viewed, for the queue.
+    Progress(HashMap<MrKey, usize>),
     Discussions {
         key: MrKey,
         discussions: Vec<Discussion>,

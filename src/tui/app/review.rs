@@ -169,7 +169,7 @@ fn is_selectable(row: &Row, on_the_mr: bool) -> bool {
 }
 
 /// Where the cursor starts: the first file, even when the header holds conversations.
-fn first_selectable(rows: &[Row]) -> usize {
+pub(super) fn first_selectable(rows: &[Row]) -> usize {
     rows.iter().position(|row| is_selectable(row, false)).unwrap_or(0)
 }
 
@@ -367,7 +367,9 @@ impl App {
             fold: review.fold.clone(),
             viewed: review.viewed_fingerprints(),
             split: review.split,
+            spot: None,
         };
+        self.count_viewed(&next.key, &next.review);
         self.open = Some(next);
         vec![action]
     }

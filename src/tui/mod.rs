@@ -58,6 +58,9 @@ struct MrState {
     opened_at: Option<DateTime<Utc>>,
     #[serde(default)]
     split: bool,
+    /// Where the cursor rested last: the MR opens there next time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    spot: Option<app::Spot>,
 }
 
 #[derive(Clone)]
@@ -275,7 +278,16 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 }
                 match backend.load_queue(scope).await {
                     Ok((answer, ready_failure)) => {
+                        let counted = match &answer {
+                            Incoming::Queue { sections, .. } => Some(sections.clone()),
+                            _ => None,
+                        };
                         send(answer);
+                        if let Some(sections) = counted
+                            && let Ok(progress) = backend.off(move |b| b.progress(&sections)).await
+                        {
+                            send(Incoming::Progress(progress));
+                        }
                         if let Some(message) = ready_failure {
                             send(Incoming::Failed { what: Failure::Ready, message });
                         }
@@ -292,16 +304,24 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::Open(key) => {
                 let _opening = Opening::start(&backend.opening);
                 let wanted = key.clone();
-                if let Some(cached) = backend.off(move |b| b.open_cached(&wanted)).await.ok().flatten() {
+                let cached = backend.off(move |b| b.open_cached(&wanted)).await.ok().flatten();
+                let painted = cached.is_some();
+                if let Some(cached) = cached {
                     send(cached);
+                    backend.resume(&key, &send).await;
                 }
-                send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Open, &e)));
+                let fresh = backend.fetch_review(key.clone()).await;
+                let arrived = fresh.is_ok();
+                send(fresh.unwrap_or_else(|e| failed(Failure::Open, &e)));
+                if arrived && !painted {
+                    backend.resume(&key, &send).await;
+                }
             }
             Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::SaveState { key, fold, viewed, split } => {
-                if let Err(e) = backend.off(move |b| b.save_state(&key, fold, viewed, split)).await.and_then(|saved| saved) {
+            Action::SaveState { key, fold, viewed, split, spot } => {
+                if let Err(e) = backend.off(move |b| b.save_state(&key, fold, viewed, split, spot)).await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -828,9 +848,38 @@ impl Backend {
             .with_drafts(drafts.iter().map(Draft::held).collect())
     }
 
-    fn save_state(&self, key: &MrKey, fold: FoldState, viewed_files: BTreeMap<String, String>, split: bool) -> Result<()> {
-        let state = MrState { fold, viewed_files, split, ..self.state(key) };
+    /// Saves what the reader chose; a `None` spot keeps the place saved before.
+    fn save_state(
+        &self,
+        key: &MrKey,
+        fold: FoldState,
+        viewed_files: BTreeMap<String, String>,
+        split: bool,
+        spot: Option<app::Spot>,
+    ) -> Result<()> {
+        let before = self.state(key);
+        let state = MrState { fold, viewed_files, split, spot: spot.or(before.spot.clone()), ..before };
         self.cache_of(key).write(&keys::state(key), &state)
+    }
+
+    /// Sends where the reader left `key` last time, when a place was saved.
+    async fn resume(&self, key: &MrKey, send: &impl Fn(Incoming)) {
+        let wanted = key.clone();
+        if let Ok(Some(spot)) = self.off(move |b| b.state(&wanted).spot).await {
+            send(Incoming::Resume { key: key.clone(), spot });
+        }
+    }
+
+    /// Viewed files per MR of the queue that I started, read from each MR's saved state.
+    fn progress(&self, sections: &Sections) -> HashMap<MrKey, usize> {
+        sections
+            .all()
+            .filter_map(|mr| {
+                let key = mr.key();
+                let state: MrState = self.cache_of(&key).read(&keys::state(&key))?;
+                (!state.viewed_files.is_empty()).then_some((key, state.viewed_files.len()))
+            })
+            .collect()
     }
 }
 
@@ -945,13 +994,18 @@ mod tests {
             claude: None,
             opening: std::sync::Arc::default(),
         };
-        backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true).unwrap();
+        let spot = app::Spot { path: "a.rs".into(), old: None, new: Some(3) };
+        backend
+            .save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true, Some(spot.clone()))
+            .unwrap();
+        backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true, None).unwrap();
         let state = backend.state(&key());
         assert_eq!(
             (state.viewed_files, state.split),
             (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true),
             "the split choice is remembered per MR"
         );
+        assert_eq!(state.spot, Some(spot), "a save without a place keeps the one saved before");
     }
 
     #[tokio::test]

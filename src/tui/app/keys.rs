@@ -15,6 +15,9 @@ impl App {
             self.help = help_scroll(scroll, key);
             return vec![];
         }
+        if let Some(answered) = self.answer_offer(key) {
+            return answered;
+        }
         if self.confirm.is_some() {
             return self.handle_confirm_key(key);
         }
@@ -249,6 +252,7 @@ impl App {
         }
         if self.focus == Focus::Queue {
             let open = match (prefix, c) {
+                ('[' | ']', 'r') => return self.walk_reviews(prefix == ']'),
                 ('z', 'o') => Some(true),
                 ('z', 'c') => Some(false),
                 ('z', 'a') => None,
@@ -274,6 +278,7 @@ impl App {
             ('z', 'v') => return self.toggle_viewed(),
             ('z', 'M') => return self.fold_all(true),
             ('z', 'R') => return self.fold_all(false),
+            ('[' | ']', 'r') => return self.walk_reviews(forward),
             ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
             ('[' | ']', 'n') => self.jump_to_marked(forward),
             ('[' | ']', 'f') => {

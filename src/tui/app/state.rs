@@ -110,6 +110,14 @@ pub struct App {
     pub prefetch_limit: usize,
     /// A plan held back while an MR was being opened: it goes out once that MR arrived.
     pub prefetch_due: bool,
+    /// The next MR that needs me, offered in the status line after a publish.
+    pub offer: Option<MrKey>,
+    /// Viewed files per started MR: the queue shows how far each review went.
+    pub viewed_counts: HashMap<MrKey, usize>,
+    /// The cursor's place as last saved, so a resting cursor is written once.
+    pub spot_saved: Option<(MrKey, super::Spot)>,
+    /// Where the cursor rests and since when: it is saved once it rested a moment.
+    pub spot_pending: Option<(super::Spot, Instant)>,
     pub open: Option<Open>,
     /// The MR being fetched for the first time; the review pane shows a spinner until it lands.
     pub opening: Option<MrKey>,
@@ -206,6 +214,10 @@ impl App {
             queue_layout: settings.queue_layout,
             prefetch_limit: settings.prefetch,
             prefetch_due: false,
+            offer: None,
+            viewed_counts: HashMap::new(),
+            spot_saved: None,
+            spot_pending: None,
             queue_loading: true,
             open: None,
             opening: None,
@@ -271,6 +283,7 @@ impl App {
             actions.push(Action::RefreshDiscussions(key));
         }
         actions.extend(self.pipeline_tick());
+        actions.extend(self.spot_tick());
         actions.extend(self.picture_requests());
         actions
     }
