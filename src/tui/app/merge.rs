@@ -28,6 +28,11 @@ impl App {
     /// The forge merged it: say so, and read the MR and the queue again so it leaves Mine.
     pub(super) fn merged(&mut self, key: &MrKey) -> Vec<Action> {
         self.toast(format!("merged {}{}", self.hosts.kind_of(key).sigil(), key.number));
+        self.reread(key)
+    }
+
+    /// The MR changed on the forge: read it and the queue again so the header and the rows agree.
+    pub(super) fn reread(&mut self, key: &MrKey) -> Vec<Action> {
         let mut actions = vec![Action::RefreshMr(key.clone())];
         actions.extend(self.refresh_queue());
         actions

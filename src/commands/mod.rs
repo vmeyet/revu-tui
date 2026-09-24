@@ -17,6 +17,8 @@ pub mod login;
 pub mod merge;
 /// `revu publish`.
 pub mod publish;
+/// `revu ready`.
+pub mod ready;
 /// `revu share`.
 pub mod share;
 /// `revu show`.

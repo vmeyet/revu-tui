@@ -22,7 +22,7 @@ expression: "render(&mut app, 80, 24)"
 │          │          s  next sort order                           │           │
 │          │          S  group by author                           │           │
 │          │                                                       │           │
-│          ╰────────────────── 4–19 of 68 · j k scroll · esc close ╯           │
+│          ╰────────────────── 4–19 of 69 · j k scroll · esc close ╯           │
 │                                ││                                            │
 ╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina                                                       ? help

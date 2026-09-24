@@ -18,6 +18,7 @@ pub mod prefetch;
 mod queue;
 pub(crate) mod quit;
 mod react;
+mod ready;
 mod review;
 mod share;
 mod stack;
@@ -167,6 +168,11 @@ pub enum Action {
         head: String,
         plan: crate::forge::MergePlan,
     },
+    /// Mark my MR a draft, or ready for review.
+    SetDraft {
+        key: MrKey,
+        draft: bool,
+    },
     /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
     Apply {
         key: MrKey,
@@ -254,6 +260,8 @@ pub enum Failure {
     Apply,
     /// The forge did not merge the MR.
     Merge,
+    /// The MR kept its draft state.
+    SetDraft,
     /// The reaction did not reach the forge; its count goes back.
     React {
         thread: String,
@@ -327,6 +335,11 @@ pub enum Incoming {
     /// The forge merged the MR.
     Merged {
         key: MrKey,
+    },
+    /// The MR is a draft now, or ready for review.
+    DraftSet {
+        key: MrKey,
+        draft: bool,
     },
     /// The suggestion is a commit on `branch` now.
     Applied {

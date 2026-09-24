@@ -73,6 +73,7 @@ pub const GROUPS: [Group; 7] = [
             ("esc", "drop the selection, leave the box"),
             ("P", "publish every draft"),
             ("A M", "approve or unapprove, merge mine"),
+            ("H", "mark mine draft or ready"),
             ("Y", "share the MR, after a preview"),
         ],
     },

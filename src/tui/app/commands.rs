@@ -133,6 +133,7 @@ impl App {
             Command::Open => self.open_in_browser(),
             Command::Approve => self.toggle_approval(),
             Command::Merge => self.merge_here(),
+            Command::Ready => self.toggle_draft(),
             Command::Publish => {
                 self.open_publish();
                 vec![]

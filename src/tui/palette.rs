@@ -51,6 +51,8 @@ pub enum Command {
     Open,
     /// `:merge`: my approved MR, after a yes.
     Merge,
+    /// `:ready`: my MR, ready for review when a draft, a draft when ready.
+    Ready,
     Approve,
     Publish,
     /// This repo only, or every project.
@@ -73,11 +75,12 @@ pub enum Command {
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 13] = [
+pub const VERBS: [(&str, &str); 14] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
     ("merge", "merge my approved MR, after a yes"),
+    ("ready", "mark my MR ready for review, or a draft again"),
     ("publish", "publish every draft, in the publish modal"),
     ("all", "the queue: this repo only, or every project"),
     ("set", "change and save a setting: :set theme=nord"),
@@ -99,6 +102,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "open" | "o" => Ok(Command::Open),
         "approve" | "a" => Ok(Command::Approve),
         "merge" => Ok(Command::Merge),
+        "ready" => Ok(Command::Ready),
         "publish" | "p" => Ok(Command::Publish),
         "all" | "*" => Ok(Command::All),
         "set" => {

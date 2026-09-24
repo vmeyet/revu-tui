@@ -276,6 +276,14 @@ impl Forge {
         }
     }
 
+    /// Marks the MR a draft, or ready; one already there stays as it is.
+    pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
+        match self {
+            Forge::GitLab(client) => client.set_draft(key, draft).await,
+            Forge::GitHub(client) => client.set_draft(key, draft).await,
+        }
+    }
+
     /// A public new thread, on a line when `position` is given.
     pub async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
         match self {

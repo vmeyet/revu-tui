@@ -45,6 +45,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("publish", "P"),
     ("approve", "A"),
     ("merge", "M"),
+    ("ready", "H"),
     ("share", "Y"),
     ("react", "+"),
     ("open_browser", "o"),
@@ -61,7 +62,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
 ];
 
 /// Every key revu reads outside a text box, in some pane: a user key may not take one of them.
-const TAKEN: &str = "qhl:z[]ai/*royjkgGDtpWw+xvcCVsEPAMmedJKRSuY?'123456789";
+const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtpWw+xvcCVsEPAMmedJKRSuY?'123456789";
 
 /// The second keys each built-in prefix already reads.
 const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnfr"), (']', "cnfr"), ('a', "ersta")];
