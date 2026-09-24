@@ -133,7 +133,8 @@ fn every_relative_link_points_at_a_file() {
             let Some(end) = after.find(')') else { break };
             let target = after[..end].split('#').next().unwrap_or("");
             rest = &after[end..];
-            if target.is_empty() || target.contains("://") || target.starts_with("mailto:") {
+            let placeholder = target.starts_with('{');
+            if target.is_empty() || placeholder || target.contains("://") || target.starts_with("mailto:") {
                 continue;
             }
             if !page.parent().unwrap().join(target).exists() {

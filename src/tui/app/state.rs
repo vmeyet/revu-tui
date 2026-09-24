@@ -37,6 +37,8 @@ pub struct Settings {
     /// `[tui] queue`: two-line rows, or one.
     pub queue_layout: crate::config::QueueLayout,
     /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
+    /// `[share]`: where `Y` can post an MR, the bare target first.
+    pub share: Vec<crate::share::Target>,
     pub views: Vec<(String, String)>,
 }
 
@@ -65,6 +67,10 @@ pub struct App {
     pub filter: String,
     /// The saved view the filter came from, named in the queue title until the filter changes.
     pub view: Option<String>,
+    /// Where `Y` can post an MR.
+    pub share_targets: Vec<crate::share::Target>,
+    /// The post being prepared; nothing is sent before its preview gets a `y`.
+    pub sharing: Option<super::Sharing>,
     pub views: Vec<(String, String)>,
     /// The filter row is taking keys.
     pub filtering: bool,
@@ -165,6 +171,8 @@ impl App {
             queue_scroll: 0,
             filter: String::new(),
             view: None,
+            share_targets: settings.share,
+            sharing: None,
             views: settings.views,
             filtering: false,
             header_folded: false,

@@ -138,6 +138,10 @@ impl App {
                 vec![]
             }
             Command::Ask(question) => self.ask_free(question),
+            Command::Share(target) => {
+                self.start_share(target.as_deref());
+                vec![]
+            }
             Command::Help => {
                 self.help = Some(0);
                 vec![]

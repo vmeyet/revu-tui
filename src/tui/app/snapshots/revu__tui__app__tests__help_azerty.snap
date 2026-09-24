@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 2103
 expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -17,28 +18,28 @@ expression: "render(&mut app, 160, 45)"
 │                           │  tab S-tab  next, previous file                          esc  drop the selection, leave the box      │                           │
 │   ── ▸ DONE · 1 ──────────│      )c (c  next, previous hunk                            P  publish every draft                    │                           │
 │                           │    N )n (n  next, previous conversation                    A  approve, unapprove                     │                           │
-│                           │      )f (f  next, previous file with a thread                                                        │                           │
-│                           │                                                    THREAD PANE                                       │                           │
-│                           │  QUEUE                                                     r  reply, as a draft                      │                           │
-│                           │          /  filter: words @author !42 ~label               R  resolve, unresolve                     │                           │
-│                           │      ' 1-9  a saved view, by letter or rank              J K  next, previous thread on the line      │                           │
-│                           │          *  this repo, or every project                  e d  edit, delete my draft                  │                           │
-│                           │          s  next sort order                                S  apply the suggestion, after a y        │                           │
-│                           │          S  group by author                                u  open the first link                    │                           │
-│                           │      zo zc  open, fold the section or stack                                                          │                           │
-│                           │                                                    ASK CLAUDE                                        │                           │
-│                           │  VIEW                                                a e r s  explain, risks, summary                │                           │
-│                           │          i  the MR description                       a t c a  thread, comment, anything              │                           │
-│                           │          D  changed words inline, or split           c ⏎ R y  answer: draft, follow up, again, copy  │                           │
-│                           │          t  file tree                                                                                │                           │
-│                           │          p  pipeline                               SEARCH & APP                                      │                           │
-│                           │         zz  reading mode                                  ^k  MRs · / files · > commands             │                           │
-│                           │          w  wrap long lines                                :  commands: :go !42, :set theme=nord     │                           │
-│                           │          W  hide whitespace-only changes                 o y  open in the browser, copy the link     │                           │
-│                           │          +  more lines around the hunk                     r  refresh                                │                           │
-│                           │          v  the file in your own program                   ?  this help                              │                           │
-│                           │   za zc zo  toggle, close, open the fold                q ^c  quit                                   │                           │
-│                           │      zM zR  fold, unfold every file                                                                  │                           │
+│                           │      )f (f  next, previous file with a thread              Y  share the MR, after a preview          │                           │
+│                           │                                                                                                      │                           │
+│                           │  QUEUE                                             THREAD PANE                                       │                           │
+│                           │          /  filter: words @author !42 ~label               r  reply, as a draft                      │                           │
+│                           │      ' 1-9  a saved view, by letter or rank                R  resolve, unresolve                     │                           │
+│                           │          *  this repo, or every project                  J K  next, previous thread on the line      │                           │
+│                           │          s  next sort order                              e d  edit, delete my draft                  │                           │
+│                           │          S  group by author                                S  apply the suggestion, after a y        │                           │
+│                           │      zo zc  open, fold the section or stack                u  open the first link                    │                           │
+│                           │                                                                                                      │                           │
+│                           │  VIEW                                              ASK CLAUDE                                        │                           │
+│                           │          i  the MR description                       a e r s  explain, risks, summary                │                           │
+│                           │          D  changed words inline, or split           a t c a  thread, comment, anything              │                           │
+│                           │          t  file tree                                c ⏎ R y  answer: draft, follow up, again, copy  │                           │
+│                           │          p  pipeline                                                                                 │                           │
+│                           │         zz  reading mode                           SEARCH & APP                                      │                           │
+│                           │          w  wrap long lines                               ^k  MRs · / files · > commands             │                           │
+│                           │          W  hide whitespace-only changes                   :  commands: :go !42, :set theme=nord     │                           │
+│                           │          +  more lines around the hunk                   o y  open in the browser, copy the link     │                           │
+│                           │          v  the file in your own program                   r  refresh                                │                           │
+│                           │   za zc zo  toggle, close, open the fold                   ?  this help                              │                           │
+│                           │      zM zR  fold, unfold every file                     q ^c  quit                                   │                           │
 │                           │         zh  fold the MR header                                                                       │                           │
 │                           │         zv  file viewed: it folds away                                                               │                           │
 │                           │                                                                                                      │                           │

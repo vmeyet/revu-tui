@@ -30,7 +30,7 @@ A group of MRs in the queue.
 |---|---|
 | TO REVIEW | MRs where you are a reviewer and have not approved yet |
 | MINE | MRs you wrote |
-| READY | MRs a [ready source](guides/ready-source.md) names, when they need you |
+| READY | MRs a [ready source](guides/ready-source.md) names, when they need you; [sharing](guides/share.md) to that source puts an MR here |
 | WATCHING | MRs assigned to you, or with a label from `[queue] watch_labels` |
 | OPEN | Every other open MR of the project |
 | DRAFTS | Other people's draft MRs, folded |

@@ -26,6 +26,9 @@ pub struct Config {
     pub notify: Notify,
     #[serde(default, skip_serializing_if = "Keys::is_default")]
     pub keys: Keys,
+    /// `[share]`: where `Y` posts an MR, through a command of the user's choosing.
+    #[serde(default, skip_serializing_if = "Share::is_default")]
+    pub share: Share,
     /// Per-host settings, for a host whose name does not say which forge it runs.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub hosts: BTreeMap<String, Host>,
@@ -322,6 +325,56 @@ impl Anthropic {
     }
 }
 
+/// `[share]`: `Y` posts an MR by piping a message to a command, so revu knows no chat tool.
+/// A bare `command` is the one target; `[share.targets.<name>]` adds named ones, and `Y` asks which.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Share {
+    /// Run as words, never through a shell; the message arrives on its stdin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// The message, with placeholders like `{ref}` and `{title}`; also the template of named targets that set none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    /// Named destinations, each with its own command and, optionally, its own template.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub targets: BTreeMap<String, ShareTarget>,
+}
+
+/// `[share.targets.<name>]`: one more place `Y` can post to.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShareTarget {
+    /// Run as words, never through a shell; the message arrives on its stdin.
+    pub command: String,
+    /// This target's message; `[share] template`, then the built-in one, when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+}
+
+impl Share {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Every command splits into words and every template names only placeholders revu fills.
+    fn check(&self) -> Result<()> {
+        if let Some(command) = &self.command {
+            crate::program::check(command, "share.command")?;
+        }
+        if let Some(template) = &self.template {
+            crate::share::check_template(template, "share.template")?;
+        }
+        for (name, target) in &self.targets {
+            crate::program::check(&target.command, &format!("share.targets.{name}.command"))?;
+            if let Some(template) = &target.template {
+                crate::share::check_template(template, &format!("share.targets.{name}.template"))?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// `v`: which program opens a file, by glob on its path, as in `"*.md" = "glow -p"`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -387,6 +440,7 @@ impl Config {
         config.open.check().with_context(|| format!("in {}", path.display()))?;
         config.queue.check().with_context(|| format!("in {}", path.display()))?;
         config.ai.check().with_context(|| format!("in {}", path.display()))?;
+        config.share.check().with_context(|| format!("in {}", path.display()))?;
         crate::keymap::Keymap::new(&config.keys).with_context(|| format!("in {}", path.display()))?;
         Ok(config)
     }
@@ -423,6 +477,11 @@ mod tests {
             keys: Keys {
                 layout: Layout::Azerty,
                 bind: BTreeMap::from([("next_thread".into(), Bind::One("N".into())), ("jump".into(), Bind::Many(vec!["ctrl-p".into()]))]),
+            },
+            share: Share {
+                command: Some("slack send '#review'".into()),
+                template: None,
+                targets: BTreeMap::from([("team".into(), ShareTarget { command: "hook".into(), template: Some("{url}".into()) })]),
             },
         };
         let text = toml::to_string_pretty(&config).unwrap();
@@ -538,5 +597,23 @@ mod tests {
         assert!(err.contains("config.toml") && err.contains("comment"), "{err}");
         std::fs::write(&path, "[keys]\nlayout = \"dvorak\"\n").unwrap();
         assert!(Config::load_from(&path).is_err(), "an unknown layout fails");
+    }
+
+    #[test]
+    fn share_commands_and_templates_are_checked_with_the_target_named() {
+        let load = |toml: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, toml).unwrap();
+            Config::load_from(&path).map_err(|e| format!("{e:#}"))
+        };
+        let ok =
+            load("[share]\ncommand = \"slack send '#review'\"\n[share.targets.team]\ncommand = \"hook\"\ntemplate = \"{ref} {url}\"\n")
+                .unwrap();
+        assert_eq!(ok.share.targets["team"].template.as_deref(), Some("{ref} {url}"));
+        let typo = load("[share.targets.team]\ncommand = \"hook\"\ntemplate = \"{titel}\"\n").unwrap_err();
+        assert!(typo.contains("share.targets.team.template") && typo.contains("{titel}") && typo.contains("config.toml"), "{typo}");
+        let quote = load("[share]\ncommand = \"slack 'open\"\n").unwrap_err();
+        assert!(quote.contains("share.command"), "{quote}");
     }
 }

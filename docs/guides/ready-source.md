@@ -43,5 +43,7 @@ A failure shows its error once, and the queue keeps the last good answer.
 
 ## See also
 
+- [Share an MR](share.md), to post one where this command reads.
+
 - [Concepts: what "needs me" means](../concepts.md#what-needs-me-means).
 - [Config reference](../reference/config.md).

@@ -40,6 +40,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Comment(args)) => commands::comment::run(&ctx, args).await,
         Some(Command::Approve(args)) => commands::approve::run(&ctx, args).await,
         Some(Command::Publish(args)) => commands::publish::run(&ctx, args).await,
+        Some(Command::Share(args)) => commands::share::run(&ctx, args).await,
         Some(Command::Ai(args)) => commands::ai::ask(&ctx, args).await,
         Some(Command::Tui) | None => revu::tui::run(ctx).await,
         Some(Command::Login(_) | Command::Logout { .. } | Command::Completions { .. } | Command::Update(_) | Command::Docs(_)) => {

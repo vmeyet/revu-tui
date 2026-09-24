@@ -45,6 +45,8 @@ pub enum Command {
     Approve(ApproveArgs),
     /// Publish every draft comment you hold on a merge request as one review.
     Publish(RefArgs),
+    /// Post a merge request through a `[share]` command: a chat channel, a webhook, a script.
+    Share(ShareArgs),
     /// The AI providers: store a key, forget it, see which one is on.
     Ai(AiArgs),
     /// Interactive review client.
@@ -122,6 +124,25 @@ pub struct CommentArgs {
     /// The comment, markdown.
     #[arg(required = true, trailing_var_arg = true)]
     pub text: Vec<String>,
+}
+
+/// Arguments of `revu share`.
+#[derive(Args, Debug)]
+pub struct ShareArgs {
+    /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
+    pub mr: Option<String>,
+    /// Which `[share.targets.<name>]` to post to; needed when there are several.
+    #[arg(long)]
+    pub target: Option<String>,
+    /// A line of context under the link.
+    #[arg(long)]
+    pub note: Option<String>,
+    /// Send without asking.
+    #[arg(long)]
+    pub yes: bool,
+    /// Print the message and send nothing.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// Arguments of `revu approve`.

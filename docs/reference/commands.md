@@ -93,6 +93,21 @@ Publish every draft comment you hold on a merge request as one review.
 |---|---|
 | `MR` | `group/project!42`, `!42` (project from the origin remote), an MR URL, or nothing for the current branch. |
 
+## `revu share`
+
+Post a merge request through a `[share]` command: a chat channel, a webhook, a script.
+
+| Argument | Means |
+|---|---|
+| `MR` | `group/project!42`, `!42`, an MR URL, or nothing for the current branch. |
+
+| Flag | Means |
+|---|---|
+| `--target` | Which `[share.targets.<name>]` to post to; needed when there are several. |
+| `--note` | A line of context under the link. |
+| `--yes` | Send without asking. |
+| `--dry-run` | Print the message and send nothing. |
+
 ## `revu ai`
 
 The AI providers: store a key, forget it, see which one is on.

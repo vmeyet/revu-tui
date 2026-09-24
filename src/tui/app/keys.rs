@@ -21,6 +21,9 @@ impl App {
         if self.input.is_some() {
             return self.handle_input_key(key);
         }
+        if self.sharing.is_some() {
+            return self.handle_share_key(key);
+        }
         if self.palette.is_some() {
             return self.handle_palette_key(key);
         }
@@ -55,6 +58,7 @@ impl App {
             KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('?') => self.help = Some(0),
+            KeyCode::Char('Y') => self.start_share(None),
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),

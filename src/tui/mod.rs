@@ -15,6 +15,7 @@ mod pipeline_view;
 mod publish_view;
 mod queue_view;
 mod screen;
+mod share_view;
 mod theme;
 mod thread_view;
 mod tree_view;
@@ -126,6 +127,7 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         pictures,
         queue_layout: ctx.config.tui.queue,
         views: ctx.config.queue.views.clone().into_iter().collect(),
+        share: crate::share::targets(&ctx.config.share),
     };
     let mut app = App::new(settings);
     let (mut terminal, screen) = screen::Screen::enter();
@@ -303,6 +305,9 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 if let Err(e) = blocking(move || save_theme(&name)).await {
                     send(failed(Failure::Local, &e));
                 }
+            }
+            Action::Share { target, message, done } => {
+                send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
             Action::Yank(url) => send(copy(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
             Action::SaveDraft { key, index, draft } => {
