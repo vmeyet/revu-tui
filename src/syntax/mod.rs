@@ -25,7 +25,6 @@ pub type Spans = Vec<(Range<usize>, Token)>;
 
 /// One language the diff can colour.
 pub struct Language {
-    #[cfg_attr(not(test), expect(dead_code, reason = "names the entry for readers and tests"))]
     pub name: &'static str,
     /// Lower-case file extensions, without the dot.
     pub extensions: &'static [&'static str],
@@ -52,14 +51,24 @@ impl Language {
 }
 
 /// Every language revu colours. Order matters only when two claim one extension: the first wins.
-pub static LANGUAGES: [Language; 6] = [
+pub static LANGUAGES: [Language; 7] = [
     Language::new("TypeScript", &["ts", "mts", "cts"], typescript),
     Language::new("TSX", &["tsx"], tsx),
     Language::new("JavaScript", &["js", "mjs", "cjs", "jsx"], javascript),
     Language::new("Python", &["py", "pyi"], python),
     Language::new("JSON", &["json", "jsonc"], json),
     Language::new("SQL", &["sql"], sql),
+    Language::new(MARKDOWN, &["md", "markdown"], markdown),
 ];
+
+/// Emphasis, code spans and links inside a markdown block; only ever reached as an injection.
+static MARKDOWN_INLINE: Language = Language::new("Markdown inline", &[], markdown_inline);
+
+const MARKDOWN: &str = "Markdown";
+
+pub fn is_markdown(path: &str) -> bool {
+    language_for(path, &LANGUAGES).is_some_and(|language| language.name == MARKDOWN)
+}
 
 /// The language of a path, by its extension; nothing is loaded by asking.
 pub fn language_for(path: &str, languages: &'static [Language]) -> Option<&'static Language> {
@@ -75,7 +84,7 @@ pub fn highlight(language: &Language, source: &str) -> Vec<Spans> {
     let mut lines: Vec<Spans> = vec![Vec::new(); starts.len()];
     let Some(config) = language.configuration() else { return lines };
     let mut highlighter = Highlighter::new();
-    let Ok(events) = highlighter.highlight(config, source.as_bytes(), None, None, |_| None) else { return lines };
+    let Ok(events) = highlighter.highlight(config, source.as_bytes(), None, None, injected) else { return lines };
     let mut stack: Vec<Token> = Vec::new();
     for event in events {
         match event {
@@ -92,6 +101,10 @@ pub fn highlight(language: &Language, source: &str) -> Vec<Spans> {
         }
     }
     lines
+}
+
+fn injected<'a>(name: &str) -> Option<&'a HighlightConfiguration> {
+    (name == "markdown_inline").then(|| MARKDOWN_INLINE.configuration()).flatten()
 }
 
 /// Splits a source range across the lines it spans, as byte ranges within each line.
@@ -113,7 +126,7 @@ fn push_span(lines: &mut [Spans], starts: &[usize], range: Range<usize>, token: 
 /// The capture names the grammars' queries use, most specific first, and the token each paints.
 /// tree-sitter matches a capture to the longest listed name that prefixes it, so `string` also
 /// covers `string.special`.
-const CAPTURES: [(&str, Token); 21] = [
+const CAPTURES: [(&str, Token); 27] = [
     ("keyword", Token::Keyword),
     ("conditional", Token::Keyword),
     ("repeat", Token::Keyword),
@@ -135,6 +148,12 @@ const CAPTURES: [(&str, Token); 21] = [
     ("operator", Token::Punctuation),
     ("punctuation", Token::Punctuation),
     ("tag", Token::Keyword),
+    ("text.title", Token::Keyword),
+    ("text.literal", Token::String),
+    ("text.emphasis", Token::Constant),
+    ("text.strong", Token::Constant),
+    ("text.reference", Token::Function),
+    ("text.uri", Token::Type),
 ];
 
 fn build(language: tree_sitter::Language, name: &str, highlights: &str, locals: &str) -> Option<HighlightConfiguration> {
@@ -185,6 +204,26 @@ fn sql() -> Option<HighlightConfiguration> {
         .map(|block| block.lines().filter(|line| line.trim() != "(literal) @string").collect::<Vec<_>>().join("\n"))
         .collect();
     build(tree_sitter_sequel::LANGUAGE.into(), "sql", &format!("{LITERALS}{}", kept.join("\n\n")), "")
+}
+
+/// The block grammar, handing each block's text to [`MARKDOWN_INLINE`]. The block lexer already
+/// cuts backticks and brackets out of that text as children, so the injection must keep them.
+/// Upstream colours no table: here its pipes and delimiter row are punctuation, its cells inline.
+fn markdown() -> Option<HighlightConfiguration> {
+    const TABLES: &str = r#"(pipe_table_header "|" @punctuation.delimiter)
+(pipe_table_row "|" @punctuation.delimiter)
+(pipe_table_delimiter_row) @punctuation.delimiter
+"#;
+    const INLINE: &str = r#"([(inline) (pipe_table_cell)] @injection.content
+  (#set! injection.language "markdown_inline")
+  (#set! injection.include-children))
+"#;
+    let highlights = format!("{}\n{TABLES}", tree_sitter_md::HIGHLIGHT_QUERY_BLOCK);
+    HighlightConfiguration::new(tree_sitter_md::LANGUAGE.into(), "markdown", &highlights, INLINE, "").ok()
+}
+
+fn markdown_inline() -> Option<HighlightConfiguration> {
+    build(tree_sitter_md::INLINE_LANGUAGE.into(), "markdown_inline", tree_sitter_md::HIGHLIGHT_QUERY_INLINE, "")
 }
 
 #[cfg(test)]
@@ -255,6 +294,19 @@ mod tests {
     }
 
     #[test]
+    fn markdown_colours_headings_inline_code_links_and_table_pipes() {
+        let md = "## Setup\nRun `make` then read [the guide](docs/guide.md).\n| name | cost |\n|:-----|-----:|\n";
+        let lines = highlight(by_name("Markdown"), md);
+        let line = |i: usize| tokens_of(md.lines().nth(i).unwrap(), &lines[i]);
+        assert!(line(0).contains(&("##", Token::Punctuation)) && line(0).contains(&("Setup", Token::Keyword)), "{:?}", line(0));
+        assert!(line(1).contains(&("make", Token::String)) && line(1).contains(&("the guide", Token::Function)), "{:?}", line(1));
+        assert!(line(1).contains(&("docs/guide.md", Token::Type)), "{:?}", line(1));
+        assert_eq!(line(2).iter().filter(|(text, token)| *text == "|" && *token == Token::Punctuation).count(), 3, "{:?}", line(2));
+        assert_eq!(line(3), [("|:-----|-----:|", Token::Punctuation)]);
+        assert!(is_markdown("docs/README.markdown") && is_markdown("CHANGELOG.MD") && !is_markdown("notes.txt"));
+    }
+
+    #[test]
     fn a_hunk_starting_mid_function_still_colours() {
         let fragment = "    const total = items.reduce((sum, item) => sum + item.price, 0);\n    return total;\n}";
         let lines = highlight(by_name("TypeScript"), fragment);
@@ -274,7 +326,7 @@ mod tests {
 
     #[test]
     fn every_grammar_query_builds() {
-        for language in &LANGUAGES {
+        for language in LANGUAGES.iter().chain([&MARKDOWN_INLINE]) {
             assert!((language.config)().is_some(), "{} query does not build", language.name);
         }
     }

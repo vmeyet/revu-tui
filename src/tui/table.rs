@@ -1,5 +1,6 @@
 //! Markdown tables in note and description bodies: columns as wide as their widest cell, aligned
 //! as the delimiter row says, the widest ones cut with `…` when the pane is narrower.
+//! In the diff, a markdown file's table lines keep their text and only draw their pipes as box lines.
 use super::theme::Theme;
 use super::thread_view::inline;
 use ratatui::style::{Modifier, Style};
@@ -151,6 +152,62 @@ fn cell_width(cell: &Cell) -> usize {
     cell.iter().map(Span::width).sum()
 }
 
+/// A raw markdown table line as the diff shows it, its text untouched: only its drawing changes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum TableLine {
+    Cells,
+    Delimiter,
+}
+
+impl TableLine {
+    pub(super) fn of(text: &str) -> Option<Self> {
+        let text = text.trim();
+        if !text.starts_with('|') {
+            return None;
+        }
+        let delimiter = text.contains('-') && text.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '));
+        Some(if delimiter { Self::Delimiter } else { Self::Cells })
+    }
+}
+
+/// `spans` with the line's pipes, and a delimiter row's dashes, drawn as box lines in the border
+/// colour. Each glyph takes the one cell its character took, so widths and highlights still line up.
+pub(super) fn boxed(spans: Vec<Span<'_>>, line: TableLine, theme: Theme) -> Vec<Span<'_>> {
+    let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
+    let glyphs = glyphs(&text, line);
+    let mut drawn = vec![];
+    let mut at = 0;
+    for span in spans {
+        let mut from = 0;
+        for (i, _) in span.content.char_indices() {
+            if let Ok(found) = glyphs.binary_search_by_key(&(at + i), |(offset, _)| *offset) {
+                drawn.extend((from < i).then(|| Span::styled(span.content[from..i].to_owned(), span.style)));
+                drawn.push(Span::styled(glyphs[found].1, span.style.fg(theme.border)));
+                from = i + 1;
+            }
+        }
+        drawn.extend((from < span.content.len()).then(|| Span::styled(span.content[from..].to_owned(), span.style)));
+        at += span.content.len();
+    }
+    drawn
+}
+
+/// The box glyph of each unescaped pipe and, on a delimiter row, each dash, by byte offset;
+/// a delimiter row crosses its inner pipes and keeps its outer ones straight.
+fn glyphs(text: &str, line: TableLine) -> Vec<(usize, &'static str)> {
+    let first = text.len() - text.trim_start().len();
+    let last = text.trim_end_matches([' ', '·']).len().saturating_sub(1);
+    text.char_indices()
+        .filter_map(|(at, c)| match (c, line) {
+            ('|', _) if text[..at].ends_with('\\') => None,
+            ('|', TableLine::Delimiter) if at != first && at != last => Some((at, "┼")),
+            ('|', _) => Some((at, "│")),
+            ('-', TableLine::Delimiter) => Some((at, "─")),
+            _ => None,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -200,6 +257,45 @@ mod tests {
         assert_eq!(draw(rows, 20).unwrap(), ["name  │ note        ", "──────┼─────────────", "alpha │ a rather lo…"]);
         assert!(draw(rows, 20).unwrap().iter().all(|line| line.width() <= 20));
         assert_eq!(draw(rows, 6), None, "two columns cannot fit in six");
+    }
+
+    fn boxed_text(text: &str) -> Option<String> {
+        let line = TableLine::of(text)?;
+        let spans = boxed(vec![Span::raw(text.to_owned())], line, Theme::default());
+        Some(spans.iter().map(|s| s.content.as_ref()).collect())
+    }
+
+    #[test]
+    fn a_table_row_draws_its_unescaped_pipes_as_box_lines() {
+        assert_eq!(boxed_text("| a | b \\| c |").as_deref(), Some("│ a │ b \\| c │"));
+        assert_eq!(boxed_text("  | a-b |").as_deref(), Some("  │ a-b │"), "dashes in a cell stay");
+    }
+
+    #[test]
+    fn a_delimiter_row_draws_a_rule_crossed_at_its_inner_pipes() {
+        assert_eq!(boxed_text("|:---|---:|").as_deref(), Some("│:───┼───:│"));
+        assert_eq!(boxed_text("| --- | --- |").as_deref(), Some("│ ─── ┼ ─── │"));
+        let marked = boxed(vec![Span::raw("|---|---|··")], TableLine::Delimiter, Theme::default());
+        assert_eq!(marked.iter().map(|s| s.content.as_ref()).collect::<String>(), "│───┼───│··", "trailing space marks are no cell");
+    }
+
+    #[test]
+    fn lines_that_do_not_start_with_a_pipe_are_no_table() {
+        assert_eq!(TableLine::of("a | b"), None);
+        assert_eq!(TableLine::of("---"), None);
+        assert_eq!(TableLine::of(""), None);
+    }
+
+    #[test]
+    fn box_lines_keep_every_width_and_every_style_but_the_glyph_colour() {
+        let theme = Theme::default();
+        let word = Style::default().bg(ratatui::style::Color::Red);
+        let spans = vec![Span::raw("| a "), Span::styled("| b", word), Span::raw(" |")];
+        let drawn = boxed(spans.clone(), TableLine::Cells, theme);
+        let widths = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
+        assert_eq!(widths(&drawn), widths(&spans));
+        let glyph = drawn.iter().find(|s| s.content == "│" && s.style.bg == word.bg).unwrap();
+        assert_eq!(glyph.style.fg, Some(theme.border), "the pipe of a changed word keeps its fill");
     }
 
     #[test]
