@@ -50,6 +50,7 @@ fn read_answer() -> Option<u32> {
 /// `select(2)`, not `poll(2)`: macOS answers `poll` on a tty device at once, whatever is there.
 fn readable(tty: &std::fs::File, within: Duration) -> bool {
     let fd = tty.as_raw_fd();
+    #[allow(clippy::unnecessary_fallible_conversions, reason = "suseconds_t is i64 on Linux but i32 on macOS")]
     let mut timeout = libc::timeval {
         tv_sec: libc::time_t::try_from(within.as_secs()).unwrap_or(libc::time_t::MAX),
         tv_usec: libc::suseconds_t::try_from(within.subsec_micros()).unwrap_or(0),

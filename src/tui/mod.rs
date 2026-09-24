@@ -43,6 +43,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 const TICK: Duration = Duration::from_millis(100);
+/// A screen that stood still for a tick is looked at once a second: ages, toasts, pulses and polls need no more.
+const IDLE_TICK: Duration = Duration::from_secs(1);
 /// How many MRs load ahead at once: enough to fill the cache soon, few enough to leave the network to the reader.
 const AHEAD: usize = 2;
 
@@ -155,7 +157,8 @@ pub async fn run(ctx: Ctx) -> Result<()> {
 async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, app: &mut App, backend: &Backend) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Incoming>();
     let mut keys = Keys::new();
-    let mut ticks = tokio::time::interval(TICK);
+    let mut shown = Shown::default();
+    let mut ticked = Instant::now();
     let mut flushed = Instant::now();
     for action in app.start() {
         spawn(action, backend, tx.clone());
@@ -168,15 +171,19 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Sc
             }
         }
         let frame = terminal.draw(|f| ui::draw(f, app))?;
-        let links = hyperlinks(frame.buffer, &app.links);
-        print_links(&links);
+        let changed = shown.changed(frame.buffer);
+        if changed {
+            print_links(&hyperlinks(frame.buffer, &app.links));
+        }
+        let next_tick = ticked + if changed { TICK } else { IDLE_TICK };
         let actions = tokio::select! {
             Some(event) = keys.next() => match event? {
-                Event::Key(key) if key.kind != KeyEventKind::Release => app.handle_key(key),
+                Event::Key(key) if key.kind != KeyEventKind::Release => { wake(app); app.handle_key(key) }
                 _ => vec![],
             },
-            Some(incoming) = rx.recv() => { app.apply(incoming); app.take_actions() }
-            _ = ticks.tick() => {
+            Some(incoming) = rx.recv() => { wake(app); app.apply(incoming); app.take_actions() }
+            () = tokio::time::sleep_until(next_tick.into()) => {
+                ticked = Instant::now();
                 wake(app);
                 app.rate = backend.forge.rate();
                 app.tick()
@@ -188,12 +195,14 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Sc
                     for follow_up in compose_inline(terminal, screen, &mut keys, app, input, &draft) {
                         spawn(follow_up, backend, tx.clone());
                     }
+                    shown.forget();
                 }
                 other => spawn(other, backend, tx.clone()),
             }
         }
         if let Some(view) = app.take_view() {
             view_inline(terminal, screen, &mut keys, app, view);
+            shown.forget();
         }
     }
     app.tick();
@@ -201,6 +210,26 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Sc
         save_usage(counts).await;
     }
     Ok(())
+}
+
+/// The last frame on the terminal: an unchanged one needs no links printed and no quick tick after it.
+#[derive(Default)]
+struct Shown(Option<ratatui::buffer::Buffer>);
+
+impl Shown {
+    /// Keeps `frame` and says whether the terminal showed something else before it.
+    fn changed(&mut self, frame: &ratatui::buffer::Buffer) -> bool {
+        let changed = self.0.as_ref() != Some(frame);
+        if changed {
+            self.0 = Some(frame.clone());
+        }
+        changed
+    }
+
+    /// Another program drew over the terminal: whatever comes next is new to it.
+    fn forget(&mut self) {
+        self.0 = None;
+    }
 }
 
 /// `[usage]` counts go to the cache now and then, not on every key.
@@ -972,6 +1001,19 @@ mod tests {
         future(notify("title", "body"));
         future(open_url("https://gitlab.com"));
         future(copy("text"));
+    }
+
+    #[test]
+    fn a_frame_is_new_until_the_terminal_shows_it_and_again_once_another_program_drew() {
+        let area = ratatui::layout::Rect::new(0, 0, 4, 1);
+        let (idle, busy) = (ratatui::buffer::Buffer::with_lines(["⠋ ok"]), ratatui::buffer::Buffer::with_lines(["⠙ ok"]));
+        let mut shown = Shown::default();
+        assert!(shown.changed(&idle));
+        assert!(!shown.changed(&idle));
+        assert!(shown.changed(&busy));
+        shown.forget();
+        assert!(shown.changed(&busy));
+        assert!(shown.changed(&ratatui::buffer::Buffer::empty(area)));
     }
 
     #[tokio::test]
