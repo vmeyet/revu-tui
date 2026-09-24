@@ -269,7 +269,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 |---|---|---|
 | `Tab` `S-Tab` | next, previous file | M1 |
 | `]c` `[c` | next, previous change (hunk) | M1 |
-| `]n` `[n` | next, previous thread or draft | M1 |
+| `]n` `[n` | next, previous thread or draft, in every file: a folded file or hunk on the way opens and stays open | M1 |
 | `]f` `[f` | next, previous file with unresolved threads | M1 |
 | `za` | toggle fold under the cursor | M1 |
 | `zc` `zo` | close, open | M1 |

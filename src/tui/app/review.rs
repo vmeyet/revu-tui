@@ -174,7 +174,7 @@ pub(super) fn first_selectable(rows: &[Row]) -> usize {
 }
 
 /// A row still names the same thing once folds changed, even if its `open` flag flipped.
-fn same_place(before: &Row, after: &Row) -> bool {
+pub(super) fn same_place(before: &Row, after: &Row) -> bool {
     match (before, after) {
         (Row::File { index: was, .. }, Row::File { index: is, .. }) => was == is,
         (Row::Hunk { file: file_was, index: was, .. }, Row::Hunk { file: file_is, index: is, .. }) => file_was == file_is && was == is,
@@ -360,7 +360,7 @@ impl App {
     }
 
     /// Shows `next` and saves what the reader chose in it: folds, viewed files, split.
-    fn keep(&mut self, next: Open) -> Vec<Action> {
+    pub(super) fn keep(&mut self, next: Open) -> Vec<Action> {
         let review = &next.review;
         let action = Action::SaveState {
             key: next.key.clone(),

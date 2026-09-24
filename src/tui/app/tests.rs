@@ -3351,3 +3351,75 @@ fn zen_shows_the_quit_prompt() {
     press(&mut app, "zzq");
     assert!(render(&mut app, 160, 45).contains("press q again to quit"));
 }
+
+/// Where `]n` stops, one press at a time, from the top.
+fn thread_stops(app: &mut App, presses: usize) -> Vec<Row> {
+    (0..presses)
+        .map(|_| {
+            press(app, "]n");
+            app.open.as_ref().unwrap().row().cloned().unwrap()
+        })
+        .collect()
+}
+
+fn is_saved_fold(actions: &[Action]) -> bool {
+    actions.iter().any(|a| matches!(a, Action::SaveState { .. }))
+}
+
+#[test]
+fn bracket_n_opens_a_folded_file_and_lands_on_its_thread() {
+    let mut app = with_review();
+    press(&mut app, "zM");
+    assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+    press(&mut app, "g");
+    let actions = press(&mut app, "]n");
+    let open = app.open.as_ref().unwrap();
+    assert!(open.review.fold.file_is_open("src/pay/charge.rs"), "the file opened on the way");
+    assert!(matches!(open.row(), Some(Row::Line { file: 0, .. })), "{:?}", open.row());
+    assert!(marker_here(&app).is_some(), "the cursor sits on the thread's line");
+    assert!(is_saved_fold(&actions), "the unfold is kept like one done by hand");
+}
+
+/// Presses `]n` until the cursor sits on a line, the thread in `charge.rs`.
+fn to_thread_line(app: &mut App) -> Row {
+    for _ in 0..4 {
+        press(app, "]n");
+        if let Some(row @ Row::Line { .. }) = app.open.as_ref().unwrap().row() {
+            return row.clone();
+        }
+    }
+    panic!("no thread on a line")
+}
+
+#[test]
+fn bracket_n_opens_a_folded_hunk_of_an_open_file() {
+    let mut app = with_review();
+    let target = to_thread_line(&mut app);
+    let Row::Line { hunk, .. } = target else { unreachable!() };
+    app.review_jump_to(|r| matches!(r, Row::Hunk { file: 0, index, .. } if *index == hunk));
+    press(&mut app, "za");
+    assert!(!app.open.as_ref().unwrap().review.fold.hunk_is_open("src/pay/charge.rs", hunk));
+    assert_eq!(to_thread_line(&mut app), target, "the hunk opened and the cursor is back on the thread");
+    assert!(app.open.as_ref().unwrap().review.fold.hunk_is_open("src/pay/charge.rs", hunk));
+}
+
+#[test]
+fn bracket_n_order_is_unchanged_when_nothing_is_folded() {
+    let mut open_app = with_review();
+    press(&mut open_app, "zRg");
+    let stops = thread_stops(&mut open_app, 4);
+    let mut folded = with_review();
+    press(&mut folded, "zMg");
+    assert_eq!(thread_stops(&mut folded, 4), stops, "folds change nothing about where ]n stops");
+    assert_eq!(stops[..2], stops[2..], "it wraps around in the same order");
+}
+
+#[test]
+fn bracket_n_backwards_opens_a_fold_too() {
+    let mut app = with_review();
+    press(&mut app, "zMG");
+    let actions = press(&mut app, "[n");
+    assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+    assert!(marker_here(&app).is_some());
+    assert!(is_saved_fold(&actions));
+}
