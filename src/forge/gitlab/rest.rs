@@ -173,6 +173,12 @@ impl Client {
         self.post_json::<Discussion>(&format!("{}/discussions", mr_path(key)), &payload).await.map(forge::Discussion::from)
     }
 
+    /// A public reply at the end of `discussion`.
+    pub async fn reply(&self, key: &MrKey, discussion: &str, body: &str) -> Result<()> {
+        let path = format!("{}/discussions/{discussion}/notes", mr_path(key));
+        self.post_json::<serde_json::Value>(&path, &json!({"body": body})).await.map(|_| ())
+    }
+
     /// Approves, or takes my approval back.
     /// GitLab applies the project's merge method; revu passes the squash and branch choices it
     /// showed, and `sha` so a push made after the reader looked is refused.
@@ -454,8 +460,16 @@ mod tests {
             .respond_with(ResponseTemplate::new(201).set_body_json(&discussion))
             .mount(&server)
             .await;
+        Mock::given(method("POST"))
+            .and(path(format!("{base}/6a9c1750/notes")))
+            .and(body_partial_json(json!({"body": "agreed"})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(&discussion["notes"][0]))
+            .expect(1)
+            .mount(&server)
+            .await;
         let client = client(&server);
         client.resolve(&key(), "6a9c1750", true).await.unwrap();
+        client.reply(&key(), "6a9c1750", "agreed").await.unwrap();
         let position = forge::Position { old_path: "x".into(), new_path: "x".into(), ..at_line(3) };
         assert_eq!(client.comment(&key(), "why?", Some(&position)).await.unwrap().id, discussion["id"]);
     }

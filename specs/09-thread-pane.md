@@ -28,7 +28,7 @@ Slack-tui already solved this shape: the channel on the left, the thread on the 
 │                            ││                                                   ││ ╭─ reply to nina ─────────────────────╮│
 │                            ││                                                   ││ │ And the amount is in cents, so a    ││
 │                            ││                                                   ││ │ retry never double charges.▏        ││
-│                            ││                                                   ││ ╰─ enter save draft · ⌥enter newline ─╯│
+│                            ││                                                   ││ ╰─ enter save · ⌘enter post · ⌥enter─╯│
 └────────────────────────────┘└───────────────────────────────────────────────────┘└───────────────────────────────────────┘
  gitlab.com · vivien · 3 drafts · P to publish                                                              ? help
 ```
@@ -104,7 +104,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 
 - The box shows its target in its top border: `new thread · charge.rs:57`, `new thread · charge.rs:55–57`, `reply to nina`, `edit draft`.
 - It starts one row high and grows with the text up to 8 rows or 40 % of the pane, then scrolls.
-- `enter` saves the draft; `alt-enter`, `shift-enter` (Kitty protocol) or `ctrl-j` insert a newline.
+- `enter` saves the draft; `⌘enter` or `ctrl-s` posts a new thread or a reply publicly at once (the box closes, the text waits under its target until the forge takes it, and a refusal opens the box again with it); in an edit-draft box they save as `enter` does; `alt-enter`, `shift-enter` (Kitty protocol) or `ctrl-j` insert a newline.
 - `E` moves the text to `$EDITOR` (then back into the box, or straight to a draft when the editor exits with content), as today.
 - `s` on a line or a `V` range opens the box prefilled with the suggestion block, and `E` still works on it.
 - `esc` leaves the box without losing the text: each target keeps its unsent text for the session, so going back to the line finds it; an empty box simply closes.

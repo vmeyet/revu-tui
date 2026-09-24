@@ -23,6 +23,6 @@ expression: "render(&mut app, 160, 24)"
 │                                          ││      42   44  }                                  ││ │agreed                                                    │ │
 │                                          ││                                                  ││ │keys are per card                                         │ │
 │                                          ││  ▸ Cargo.lock                      +1 −1  folded ││ │and per amount                                            │ │
-│                                          ││                                                  ││ ╰ enter save · ⌥enter newline ─────────────────────────────╯ │
+│                                          ││                                                  ││ ╰ enter save · ⌘enter post · ⌥enter newline ───────────────╯ │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                                                                                        ? help

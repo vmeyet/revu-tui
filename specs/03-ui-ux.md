@@ -307,7 +307,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?`.
 | `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
 | `x` `esc` `q` | close |
 
-In the compose box: `enter` saves the draft, `⌥enter` adds a line, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
+In the compose box: `enter` saves the draft, `⌘enter` (or `ctrl-s`, where the terminal keeps `⌘enter`) posts a new thread or a reply at once with no draft, `⌥enter` adds a line, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
 
 ### Your own keys (`[keys]`)
 
@@ -382,7 +382,7 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
 
 - Every colour cue has a glyph or a sign next to it.
 - Contrast: every theme's `muted` on `base` clears 4.5:1; check with the `mix()` math, not by eye.
-- Kitty keyboard protocol is pushed when available (as slack-tui) so `S-Tab`, `ctrl-k` and `⌘k` arrive.
+- Kitty keyboard protocol is pushed when available (as slack-tui) so `S-Tab`, `ctrl-k`, `⌘k` and `⌘enter` arrive; `DISAMBIGUATE_ESCAPE_CODES` alone carries `⌘`.
 - Mouse: wheel scrolls the pane under the pointer, click focuses and selects, nothing else. Keyboard remains complete.
 - Minimum size 80×24; below that the queue hides and a one-line notice says so.
 

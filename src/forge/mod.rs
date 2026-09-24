@@ -291,6 +291,14 @@ impl Forge {
             Forge::GitHub(client) => client.comment(key, body, position).await,
         }
     }
+
+    /// A public reply at the end of the thread `discussion`.
+    pub async fn reply(&self, key: &MrKey, discussion: &str, body: &str) -> Result<()> {
+        match self {
+            Forge::GitLab(client) => client.reply(key, discussion, body).await,
+            Forge::GitHub(client) => client.reply(key, discussion, body).await,
+        }
+    }
 }
 
 #[cfg(test)]

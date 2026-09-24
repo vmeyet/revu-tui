@@ -65,7 +65,7 @@ Acceptance:
 - Write three comments on two files, see `3 drafts` in the status line, quit, reopen, the drafts are still there (from GitLab).
 - `P` publishes them as one review, optionally approving; the web UI shows them under one activity entry.
 - Resolve and unresolve a thread; reply in a thread; the web UI agrees within one poll.
-- Nothing is posted publicly without `P` or an explicit `:reply`.
+- Nothing is posted publicly without `P`, an explicit `:reply`, or `⌘enter`/`ctrl-s` in the compose box.
 
 ## Shipped beyond M2 (2026-09-22 → 09-23)
 

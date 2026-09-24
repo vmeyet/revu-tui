@@ -5,6 +5,7 @@ Find your problem in the left column, then apply the fix.
 | Problem | Fix |
 |---|---|
 | `⌘K` does nothing | Use `ctrl-k`, or a terminal that forwards `⌘`: Ghostty, Kitty, WezTerm or iTerm2 |
+| `⌘enter` does not post | Use `ctrl-s`. Terminal.app never sends `⌘`; iTerm2 and Kitty keep `⌘enter` for themselves; in Ghostty add `keybind = super+enter=unbind` |
 | `]n` does nothing on AZERTY | Set `[keys] layout = "azerty"` and use `)n`, or see the Option key row |
 | The Option key types nothing | Let Option type characters: in Ghostty `macos-option-as-alt = false`, in iTerm2 set Left Option to Normal |
 | `revu update` is slow | The first update builds every library; the next ones build only revu |

@@ -682,6 +682,72 @@ fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
     assert!(render(&mut app, 140, 24).contains("you · unsaved ◇"));
 }
 
+fn cmd_enter() -> KeyEvent {
+    KeyEvent::new(KeyCode::Enter, KeyModifiers::SUPER)
+}
+
+#[test]
+fn cmd_enter_posts_a_new_thread_at_once_and_ctrl_s_posts_a_reply() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    press(&mut app, " nit ");
+    let actions = app.handle_key(cmd_enter());
+    let [Action::Post { key, to: Post::Thread(position), body }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((key, position.line.new, body.as_str()), (&mr_key(), Some(12), "nit"));
+    assert!(app.input.is_none(), "the box closes while the forge answers");
+    assert!(app.open.as_ref().unwrap().review.drafts.is_empty(), "no draft on the way");
+    press(&mut app, "]n");
+    app.handle_key(code(KeyCode::Enter));
+    press(&mut app, "r");
+    press(&mut app, "agreed");
+    let actions = app.handle_key(ctrl('s'));
+    assert_eq!(actions, vec![Action::Post { key: mr_key(), to: Post::Reply("c0ffee00c0ffee00".into()), body: "agreed".into() }]);
+}
+
+#[test]
+fn a_posted_comment_clears_its_text_and_refreshes_the_threads() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    press(&mut app, "nit");
+    let actions = app.handle_key(cmd_enter());
+    let [Action::Post { to, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    app.poll.discussions_due = None;
+    app.apply(Incoming::Posted { key: mr_key(), to: to.clone() });
+    assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("posted"));
+    assert_eq!(app.poll.discussions_due, Some(app.now), "the new note shows on the next tick");
+    press(&mut app, "c");
+    assert_eq!(app.buffer.text(), "", "nothing left to send on the line");
+}
+
+#[test]
+fn a_refused_post_opens_the_box_again_with_its_text() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    press(&mut app, "nit");
+    let actions = app.handle_key(cmd_enter());
+    let [Action::Post { key, to, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    app.apply(Incoming::Failed { what: Failure::Post { key: key.clone(), to: to.clone() }, message: "HTTP 403".into() });
+    assert!(app.live_toast().unwrap().danger);
+    assert_eq!((app.input_label().as_str(), app.buffer.text()), ("new thread · charge.rs:12", "nit"));
+}
+
+#[test]
+fn cmd_enter_on_an_empty_box_does_nothing_and_saves_other_boxes_as_enter_does() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    press(&mut app, "  ");
+    assert_eq!(app.handle_key(cmd_enter()), vec![]);
+    assert!(app.input.is_some(), "the box stays open");
+    let mut app = with_saved_draft();
+    press(&mut app, "le");
+    let actions = app.handle_key(ctrl('s'));
+    assert!(matches!(actions.as_slice(), [Action::UpdateDraft { .. }]), "an edited draft stays a draft: {actions:?}");
+}
+
 #[test]
 fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
     let mut app = with_review();
