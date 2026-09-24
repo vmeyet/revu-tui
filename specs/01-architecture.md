@@ -72,12 +72,12 @@ The TUI loop is the one from slack-tui `src/tui/mod.rs`:
 
 ```
 loop {
-  draw(app)
-  wake = select! { terminal event, incoming channel, tick }
+  draw(app); print links only when the frame changed
+  wake = select! { terminal event, incoming channel, tick }   // tick: 100 ms after a changed frame, 1 s after a still one
   match wake {
     Event(key)   => actions = app.handle_key(key)
     Incoming(i)  => app.apply(i)
-    Tick         => app.now = Instant::now(); maybe poll
+    Tick         => maybe poll                                // every wake sets app.now
   }
   for action in actions { spawn(run(action, tx.clone())) }   // except Compose, run inline
 }
