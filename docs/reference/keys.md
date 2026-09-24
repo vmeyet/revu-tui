@@ -73,7 +73,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `R` | resolve, unresolve |
 | `J` `K` | next, previous thread on the line |
 | `e` `d` | edit, delete my draft |
-| `S` | apply the suggestion, after a y |
+| `S` `+` | apply the suggestion, react |
 | `u` | open the first link |
 
 ## Ask claude
@@ -152,6 +152,7 @@ A bound key adds to the default key, it does not replace it.
 | `approve` | `A` |
 | `merge` | `M` |
 | `share` | `Y` |
+| `react` | `+` |
 | `open_browser` | `o` |
 | `copy_link` | `y` |
 | `scope` | `*` |

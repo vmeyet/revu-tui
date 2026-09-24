@@ -21,6 +21,9 @@ impl App {
         if self.confirm.is_some() {
             return self.handle_confirm_key(key);
         }
+        if self.react.is_some() {
+            return self.handle_react_key(key);
+        }
         if self.input.is_some() {
             return self.handle_input_key(key);
         }

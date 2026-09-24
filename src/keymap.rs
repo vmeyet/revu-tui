@@ -46,6 +46,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("approve", "A"),
     ("merge", "M"),
     ("share", "Y"),
+    ("react", "+"),
     ("open_browser", "o"),
     ("copy_link", "y"),
     ("scope", "*"),

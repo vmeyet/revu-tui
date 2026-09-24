@@ -122,9 +122,12 @@ impl Client {
         self.get_all(&format!("{}/diffs", mr_path(key))).await
     }
 
+    /// The threads, each note with its reactions; the threads still come when reactions cannot be read.
     pub async fn discussions(&self, key: &MrKey) -> Result<Vec<forge::Discussion>> {
-        let discussions: Vec<Discussion> = self.get_all(&format!("{}/discussions", mr_path(key))).await?;
-        Ok(discussions.into_iter().map(forge::Discussion::from).collect())
+        let path = format!("{}/discussions", mr_path(key));
+        let (discussions, awards) = tokio::join!(self.get_all::<Discussion>(&path), self.awards(key));
+        let awards = awards.unwrap_or_default();
+        Ok(discussions?.into_iter().map(|d| with_awards(forge::Discussion::from(d), &awards)).collect())
     }
 
     pub async fn drafts(&self, key: &MrKey) -> Result<Vec<forge::Draft>> {
@@ -186,6 +189,18 @@ impl Client {
         let verb = if approve { "approve" } else { "unapprove" };
         self.send_empty(Method::POST, &format!("{}/{verb}", mr_path(key)), None).await.map_err(cannot_approve)
     }
+}
+
+fn with_awards(discussion: forge::Discussion, awards: &super::award::Awards) -> forge::Discussion {
+    let notes = discussion
+        .notes
+        .into_iter()
+        .map(|note| match awards.get(&note.id) {
+            Some((node, reactions)) => forge::Note { node: Some(node.clone()), reactions: reactions.clone(), ..note },
+            None => note,
+        })
+        .collect();
+    forge::Discussion { notes, ..discussion }
 }
 
 /// The answers GitLab gives a merge it will not do, in words the reader can act on.

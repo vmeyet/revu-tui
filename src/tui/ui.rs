@@ -213,6 +213,17 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(Paragraph::new(line), area);
         return;
     }
+    if let Some(choices) = app.react_prompt() {
+        let mut spans = vec![Span::styled(" react ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))];
+        for (text, mine, selected) in choices {
+            let colour = if mine { theme.accent } else { theme.muted };
+            let style = if selected { Style::default().fg(colour).add_modifier(Modifier::REVERSED) } else { Style::default().fg(colour) };
+            spans.extend([Span::raw(" "), Span::styled(format!(" {text} "), style)]);
+        }
+        spans.push(Span::styled("  1-8 or h l enter · esc", muted));
+        f.render_widget(Paragraph::new(Line::from(spans)), area);
+        return;
+    }
     if app.pending == Some('\'') {
         let line = Line::from(Span::styled(format!(" ' {}", app.views_hint()), Style::default().fg(theme.accent)));
         f.render_widget(Paragraph::new(line), area);

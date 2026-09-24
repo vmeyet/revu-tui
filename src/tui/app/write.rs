@@ -361,6 +361,7 @@ impl App {
             Failure::Checks => self.checks_failed(message),
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),
+            Failure::React { thread, index, emoji, on } => self.react_failed(&thread, index, emoji, on, &message),
             Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage | Failure::Ready => self.warn(message),
         }
     }

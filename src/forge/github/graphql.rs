@@ -75,6 +75,7 @@ query Threads($owner: String!, $name: String!, $number: Int!) {
 }
 fragment comment on Comment {
   id body createdAt updatedAt author { login ... on User { name databaseId } }
+  ... on Reactable { reactionGroups { content viewerHasReacted reactors { totalCount } } }
   ... on PullRequestReviewComment { fullDatabaseId }
   ... on PullRequestReview { fullDatabaseId }
   ... on IssueComment { fullDatabaseId }
@@ -301,6 +302,23 @@ struct Comment {
     author: Option<Actor>,
     #[serde(default)]
     state: Option<String>,
+    #[serde(default)]
+    reaction_groups: Vec<ReactionGroup>,
+}
+
+/// GitHub's count of one reaction on a comment, and whether I am among them.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReactionGroup {
+    content: String,
+    viewer_has_reacted: bool,
+    reactors: Total,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Total {
+    total_count: u32,
 }
 
 impl Comment {
@@ -324,6 +342,16 @@ impl Comment {
             resolved,
             position,
             suggestions: vec![],
+            reactions: self
+                .reaction_groups
+                .iter()
+                .filter(|g| g.reactors.total_count > 0)
+                .filter_map(|g| {
+                    let emoji = forge::Emoji::named(&g.content)?;
+                    Some(forge::Reaction { emoji, count: g.reactors.total_count, mine: g.viewer_has_reacted })
+                })
+                .collect(),
+            node: Some(self.id.clone()),
         }
     }
 }
@@ -466,6 +494,15 @@ impl Client {
         let plan = repository.merge_plan();
         let pr = repository.pull_request.with_context(|| format!("{}#{} not found", key.project, key.number))?;
         Ok(forge::Mr { merge: plan, ..pr.into_model(&key.project, &data.viewer.login) })
+    }
+
+    /// Adds my `emoji` to the comment `node`, or takes it off; GitHub needs no reaction id for either.
+    pub async fn react(&self, node: &str, emoji: forge::Emoji, on: bool) -> Result<()> {
+        let mutation = if on { "addReaction" } else { "removeReaction" };
+        let query = format!(
+            "mutation($id: ID!, $content: ReactionContent!) {{ {mutation}(input: {{subjectId: $id, content: $content}}) {{ clientMutationId }} }}"
+        );
+        self.graphql::<serde_json::Value>(&query, json!({"id": node, "content": emoji.github()})).await.map(|_| ())
     }
 
     pub(super) async fn threads(&self, key: &MrKey) -> Result<PrThreads> {
@@ -634,6 +671,43 @@ mod tests {
         mrs.iter().map(|m| m.number).collect()
     }
 
+    #[test]
+    fn a_comment_brings_its_node_id_and_the_shared_reactions_only() {
+        let comment: Comment = serde_json::from_value(json!({
+            "id": "PRRC_kw1", "fullDatabaseId": "77", "body": "nice", "createdAt": "2026-09-22T10:00:00Z",
+            "updatedAt": "2026-09-22T10:00:00Z", "author": {"login": "lea"},
+            "reactionGroups": [
+                {"content": "THUMBS_UP", "viewerHasReacted": true, "reactors": {"totalCount": 2}},
+                {"content": "ROCKET", "viewerHasReacted": false, "reactors": {"totalCount": 0}}
+            ]
+        }))
+        .unwrap();
+        let note = comment.note(false, false, None);
+        assert_eq!((note.id, note.node.as_deref()), (77, Some("PRRC_kw1")));
+        assert_eq!(note.reactions, [forge::Reaction { emoji: forge::Emoji::ThumbsUp, count: 2, mine: true }], "empty groups are left out");
+    }
+
+    #[tokio::test]
+    async fn react_adds_or_removes_by_node_id_and_content() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("addReaction"))
+            .and(body_string_contains("\"content\":\"HOORAY\""))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"addReaction": {"clientMutationId": null}}})))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("removeReaction"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"errors": [{"message": "Could not resolve to a node"}]})))
+            .mount(&server)
+            .await;
+        let client = client(&server);
+        client.react("PRRC_kw1", forge::Emoji::Hooray, true).await.unwrap();
+        let err = client.react("PRRC_kw1", forge::Emoji::Hooray, false).await.unwrap_err().to_string();
+        assert!(err.contains("Could not resolve"), "{err}");
+    }
     #[test]
     fn the_merge_method_prefers_squash_then_a_merge_commit_then_rebase() {
         let repo = |squash, merge, rebase, delete| MrRepository {

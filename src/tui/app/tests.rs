@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
 use crate::forge::gitlab::fixture;
-use crate::forge::{DiffFile, Discussion, Kind, Mr};
+use crate::forge::{DiffFile, Discussion, Emoji, Kind, Mr};
 use crate::review::{Place, Row};
 use crate::tui::theme::Theme;
 use crate::tui::ui;
@@ -54,6 +54,7 @@ fn settings() -> Settings {
         views: vec![],
         share: vec![],
         prefetch: 0,
+        ascii: false,
     }
 }
 
@@ -3137,4 +3138,77 @@ fn colon_merge_asks_like_big_m() {
     press(&mut app, ":merge");
     app.handle_key(code(KeyCode::Enter));
     assert!(matches!(app.confirm, Some(Confirm::Merge { .. })));
+}
+
+/// A thread open in the pane whose one note already has `👍 2`, one of them mine.
+fn with_reactions() -> App {
+    let mut app = with_suggestion("Nice", json!([]));
+    let mut all = discussions();
+    let mut note: serde_json::Value = serde_json::from_str(include_str!("../../forge/gitlab/fixtures/diff_note.json")).unwrap();
+    note["id"] = json!("5ugg");
+    note["notes"][0]["body"] = json!("Nice");
+    note["notes"][0]["position"]["new_line"] = json!(13);
+    let mut thread = fixture::discussion(&note.to_string());
+    thread.notes[0].node = Some("gid://gitlab/DiffNote/1".into());
+    thread.notes[0].reactions = vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }];
+    all.push(thread);
+    app.apply(Incoming::Discussions { key: mr_key(), discussions: all });
+    app
+}
+
+fn reactions_of(app: &App) -> Vec<crate::forge::Reaction> {
+    app.open.as_ref().unwrap().review.thread("5ugg").unwrap().notes[0].reactions.clone()
+}
+
+#[test]
+fn plus_opens_the_picker_and_a_digit_toggles_my_reaction_at_once() {
+    let mut app = with_reactions();
+    let screen = render(&mut app, 150, 24);
+    assert!(screen.contains("👍") && screen.contains(" 2"), "the count shows under the note:\n{screen}");
+    assert_eq!(press(&mut app, "+"), vec![]);
+    assert!(render(&mut app, 150, 24).contains("react"), "the picker takes the status line");
+    let actions = press(&mut app, "7");
+    let [Action::React { emoji, on, note, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((*emoji, *on, note.node.as_deref()), (Emoji::Rocket, true, Some("gid://gitlab/DiffNote/1")));
+    assert!(reactions_of(&app).contains(&crate::forge::Reaction { emoji: Emoji::Rocket, count: 1, mine: true }));
+    assert!(app.react.is_none(), "one pick closes the picker");
+    press(&mut app, "+");
+    assert!(app.react.is_some(), "the picker opens again");
+    let actions = app.handle_key(code(KeyCode::Enter));
+    let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((*emoji, *on), (Emoji::ThumbsUp, false), "enter on my own reaction takes it off");
+    assert_eq!(reactions_of(&app)[0], crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 1, mine: false });
+}
+
+#[test]
+fn the_picker_moves_with_h_and_l_and_esc_closes_it_without_a_change() {
+    let mut app = with_reactions();
+    press(&mut app, "+");
+    press(&mut app, "lll");
+    assert_eq!(app.react.as_ref().unwrap().selected, 3);
+    assert_eq!(app.handle_key(code(KeyCode::Esc)), vec![]);
+    assert!(app.react.is_none());
+    assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);
+}
+
+#[test]
+fn a_refused_reaction_puts_the_count_back() {
+    let mut app = with_reactions();
+    press(&mut app, "+");
+    press(&mut app, "6");
+    assert_eq!(reactions_of(&app).len(), 2);
+    app.apply(Incoming::Failed {
+        what: crate::tui::app::react_failure("5ugg".into(), 0, Emoji::Hooray, true),
+        message: "GitLab refused the reaction".into(),
+    });
+    assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);
+    assert!(app.live_toast().unwrap().text.starts_with("no reaction:"));
+}
+
+#[test]
+fn ascii_draws_reactions_in_plain_words() {
+    let mut app = with_reactions();
+    app.ascii = true;
+    let screen = render(&mut app, 150, 24);
+    assert!(screen.contains("+1 2") && !screen.contains("👍"), "{screen}");
 }

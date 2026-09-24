@@ -16,6 +16,7 @@ mod pins;
 mod pipeline;
 pub mod prefetch;
 mod queue;
+mod react;
 mod review;
 mod share;
 mod stack;
@@ -39,6 +40,7 @@ pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_p
 pub use pipeline::{Pipeline, Run};
 pub use prefetch::Ahead;
 pub use queue::{Badge, QueueRow};
+pub use react::{Pick, failure as react_failure};
 pub use review::Open;
 pub use share::{Sharing, Stage as ShareStage};
 pub use state::{App, Settings};
@@ -148,6 +150,15 @@ pub enum Action {
         title: String,
         body: String,
     },
+    /// My reaction `emoji` on `note` (index `index` of `thread`), added when `on`, else taken off.
+    React {
+        key: MrKey,
+        thread: String,
+        index: usize,
+        note: Box<crate::forge::Note>,
+        emoji: crate::forge::Emoji,
+        on: bool,
+    },
     /// Merge the MR as `plan` says while its head is `head`; asked only after the reader said yes.
     Merge {
         key: MrKey,
@@ -241,6 +252,13 @@ pub enum Failure {
     Apply,
     /// The forge did not merge the MR.
     Merge,
+    /// The reaction did not reach the forge; its count goes back.
+    React {
+        thread: String,
+        index: usize,
+        emoji: crate::forge::Emoji,
+        on: bool,
+    },
     /// The ready command failed; Ready keeps its last answer.
     Ready,
 }

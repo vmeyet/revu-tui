@@ -290,6 +290,24 @@ impl Review {
         Self { threads, ..self.clone() }
     }
 
+    /// My reaction `emoji` on note `index` of thread `id` added or taken off, ahead of the forge's answer.
+    pub fn with_reaction(&self, id: &str, index: usize, emoji: crate::forge::Emoji, on: bool) -> Self {
+        let react =
+            |note: &crate::forge::Note| crate::forge::Note { reactions: crate::forge::toggled(&note.reactions, emoji, on), ..note.clone() };
+        let threads = self
+            .threads
+            .iter()
+            .map(|t| {
+                if t.id != id {
+                    return t.clone();
+                }
+                let notes = t.notes.iter().enumerate().map(|(i, n)| if i == index { react(n) } else { n.clone() }).collect();
+                Thread { notes, ..t.clone() }
+            })
+            .collect();
+        Self { threads, ..self.clone() }
+    }
+
     /// The MR marked approved by me or not, ahead of the forge's answer.
     pub fn with_approved(&self, approved: bool) -> Self {
         let approvals = crate::forge::Approvals { user_has_approved: approved, ..self.mr.approvals.clone() };
