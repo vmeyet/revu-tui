@@ -366,6 +366,10 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.forge_of(&key).file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
             }
+            Action::Merge { key, head, plan } => {
+                let outcome = backend.forge_of(&key).merge(&key, &head, plan).await;
+                send(outcome.map_or_else(|e| failed(Failure::Merge, &e), |()| Incoming::Merged { key }));
+            }
             Action::Apply { key, branch, suggestion } => {
                 let outcome = backend.forge_of(&key).apply(&key, &branch, &suggestion).await;
                 send(outcome.map_or_else(|e| failed(Failure::Apply, &e), |()| Incoming::Applied { key, branch }));

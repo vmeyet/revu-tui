@@ -8,6 +8,7 @@ mod inbox;
 mod incoming;
 mod input;
 mod keys;
+mod merge;
 mod notify;
 mod order;
 mod pane;
@@ -147,6 +148,12 @@ pub enum Action {
         title: String,
         body: String,
     },
+    /// Merge the MR as `plan` says while its head is `head`; asked only after the reader said yes.
+    Merge {
+        key: MrKey,
+        head: String,
+        plan: crate::forge::MergePlan,
+    },
     /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
     Apply {
         key: MrKey,
@@ -232,6 +239,8 @@ pub enum Failure {
     Checks,
     /// The suggestion was not committed.
     Apply,
+    /// The forge did not merge the MR.
+    Merge,
     /// The ready command failed; Ready keeps its last answer.
     Ready,
 }
@@ -294,6 +303,10 @@ pub enum Incoming {
     Approved {
         key: MrKey,
         approve: bool,
+    },
+    /// The forge merged the MR.
+    Merged {
+        key: MrKey,
     },
     /// The suggestion is a commit on `branch` now.
     Applied {

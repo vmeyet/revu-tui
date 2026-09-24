@@ -61,6 +61,10 @@ impl App {
                     self.composed.extend(follow);
                 }
             }
+            Incoming::Merged { key } => {
+                let follow = self.merged(&key);
+                self.composed.extend(follow);
+            }
             Incoming::Approved { key, approve } => {
                 self.set_approved(&key, approve);
                 self.toast(if approve { "approved" } else { "approval removed" });

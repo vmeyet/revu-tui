@@ -62,7 +62,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `⌥enter` `^o` | in the box: new line, $EDITOR |
 | `esc` | drop the selection, leave the box |
 | `P` | publish every draft |
-| `A` | approve, unapprove |
+| `A` `M` | approve or unapprove, merge mine |
 | `Y` | share the MR, after a preview |
 
 ## Thread pane
@@ -150,6 +150,7 @@ A bound key adds to the default key, it does not replace it.
 | `resolve` | `R` |
 | `publish` | `P` |
 | `approve` | `A` |
+| `merge` | `M` |
 | `share` | `Y` |
 | `open_browser` | `o` |
 | `copy_link` | `y` |

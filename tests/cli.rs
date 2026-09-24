@@ -107,3 +107,8 @@ fn ai_ask_says_claude_is_off_before_touching_the_network() {
         .failure()
         .stderr(predicate::str::contains("[ai.anthropic] enabled = true"));
 }
+
+#[test]
+fn merge_help_mentions_yes() {
+    revu().args(["merge", "--help"]).assert().success().stdout(predicate::str::contains("--yes"));
+}

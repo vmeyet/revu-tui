@@ -60,6 +60,16 @@ A line with a conversation has a mark left of its numbers.
 
 `A` approves or unapproves without publishing.
 
+## Merge
+
+`M` merges your own MR once it is approved.
+revu asks first, and names the method: `merge !42 into main (squash)?`.
+`y` merges, any other key cancels.
+revu refuses, and says why, when the MR is not yours, is a draft, has conflicts, has a failed pipeline, or needs more approvals.
+The method follows the project: squash when it squashes, a merge commit otherwise.
+If someone pushes after you looked, the forge refuses the merge: press `r` and look at the new commits.
+`revu merge !42` does the same from the shell, and `--yes` skips the question.
+
 ## See also
 
 - [Review mode](review-mode.md), to go through every MR that needs you.

@@ -122,6 +122,7 @@ impl App {
             Command::Go(reference) => self.go(&reference),
             Command::Open => self.open_in_browser(),
             Command::Approve => self.toggle_approval(),
+            Command::Merge => self.merge_here(),
             Command::Publish => {
                 self.open_publish();
                 vec![]

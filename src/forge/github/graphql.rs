@@ -44,6 +44,7 @@ const MR: &str = r"
 query Mr($owner: String!, $name: String!, $number: Int!) {
   viewer { login }
   repository(owner: $owner, name: $name) {
+    squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed deleteBranchOnMerge
     pullRequest(number: $number) {
       number title body state isDraft url updatedAt baseRefName headRefName baseRefOid headRefOid changedFiles mergeable
       author { login ... on User { name databaseId } }
@@ -145,6 +146,26 @@ struct MrData {
 #[serde(rename_all = "camelCase")]
 struct MrRepository {
     pull_request: Option<Pr>,
+    #[serde(default)]
+    squash_merge_allowed: bool,
+    #[serde(default)]
+    merge_commit_allowed: bool,
+    #[serde(default)]
+    rebase_merge_allowed: bool,
+    #[serde(default)]
+    delete_branch_on_merge: bool,
+}
+
+impl MrRepository {
+    /// Squash when the repo allows it, else a merge commit, else rebase: the tidiest history on offer.
+    fn merge_plan(&self) -> forge::MergePlan {
+        let method = match (self.squash_merge_allowed, self.merge_commit_allowed, self.rebase_merge_allowed) {
+            (true, _, _) => forge::MergeMethod::Squash,
+            (false, true, _) | (false, false, false) => forge::MergeMethod::Merge,
+            (false, false, true) => forge::MergeMethod::Rebase,
+        };
+        forge::MergePlan { method, remove_branch: self.delete_branch_on_merge }
+    }
 }
 
 #[derive(Deserialize)]
@@ -215,6 +236,7 @@ impl Pr {
             }
             .to_owned(),
             draft: self.is_draft,
+            mine: author.username == me,
             author,
             source_branch: self.head_ref_name,
             target_branch: self.base_ref_name,
@@ -227,6 +249,7 @@ impl Pr {
             reviewers,
             labels: self.labels.nodes.into_iter().map(|l| l.name).collect(),
             approvals,
+            merge: forge::MergePlan::default(),
         }
     }
 }
@@ -439,8 +462,10 @@ impl Client {
     pub async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
         let (owner, name) = owner_and_name(&key.project)?;
         let data: MrData = self.graphql(MR, json!({"owner": owner, "name": name, "number": key.number})).await?;
-        let pr = data.repository.and_then(|r| r.pull_request).with_context(|| format!("{}#{} not found", key.project, key.number))?;
-        Ok(pr.into_model(&key.project, &data.viewer.login))
+        let repository = data.repository.with_context(|| format!("{} not found", key.project))?;
+        let plan = repository.merge_plan();
+        let pr = repository.pull_request.with_context(|| format!("{}#{} not found", key.project, key.number))?;
+        Ok(forge::Mr { merge: plan, ..pr.into_model(&key.project, &data.viewer.login) })
     }
 
     pub(super) async fn threads(&self, key: &MrKey) -> Result<PrThreads> {
@@ -609,6 +634,21 @@ mod tests {
         mrs.iter().map(|m| m.number).collect()
     }
 
+    #[test]
+    fn the_merge_method_prefers_squash_then_a_merge_commit_then_rebase() {
+        let repo = |squash, merge, rebase, delete| MrRepository {
+            pull_request: None,
+            squash_merge_allowed: squash,
+            merge_commit_allowed: merge,
+            rebase_merge_allowed: rebase,
+            delete_branch_on_merge: delete,
+        };
+        let method = |r: MrRepository| r.merge_plan().method;
+        assert_eq!(method(repo(true, true, true, false)), forge::MergeMethod::Squash);
+        assert_eq!(method(repo(false, true, true, false)), forge::MergeMethod::Merge);
+        assert_eq!(method(repo(false, false, true, false)), forge::MergeMethod::Rebase);
+        assert!(repo(true, false, false, true).merge_plan().remove_branch);
+    }
     #[test]
     fn the_queue_sorts_searches_into_sections_and_skips_non_prs() {
         let queue = queue_from_json(include_str!("fixtures/queue.json"), None).unwrap();

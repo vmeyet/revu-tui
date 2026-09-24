@@ -87,12 +87,15 @@ impl Client {
         Ok(found.first().map(|m| m.iid))
     }
 
-    /// The MR with its approvals folded in; the two requests run together.
+    /// The MR with its approvals folded in; the requests run together.
+    /// Who I am only decides `mine`: when `/user` fails, the MR still loads and merge is not offered.
     pub async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
         let path = mr_path(key);
         let approvals_path = format!("{path}/approvals");
-        let (mr, approvals) = tokio::try_join!(self.get::<wire::Mr>(&path), self.get::<Approvals>(&approvals_path))?;
-        Ok(wire::Mr { approvals, ..mr }.into_model(&key.project))
+        let (mr, approvals, me) = tokio::join!(self.get::<wire::Mr>(&path), self.get::<Approvals>(&approvals_path), self.my_name());
+        let mr = wire::Mr { approvals: approvals?, ..mr? }.into_model(&key.project);
+        let mine = me.is_ok_and(|me| mr.author.username == me);
+        Ok(forge::Mr { mine, ..mr })
     }
 
     /// The whole file at `sha`, to show the lines around a hunk.
@@ -168,9 +171,33 @@ impl Client {
     }
 
     /// Approves, or takes my approval back.
+    /// GitLab applies the project's merge method; revu passes the squash and branch choices it
+    /// showed, and `sha` so a push made after the reader looked is refused.
+    pub async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
+        let body = json!({
+            "sha": head,
+            "squash": plan.method == forge::MergeMethod::Squash,
+            "should_remove_source_branch": plan.remove_branch,
+        });
+        self.put_json::<serde_json::Value>(&format!("{}/merge", mr_path(key)), &body).await.map(|_| ()).map_err(merge_refused)
+    }
+
     pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
         let verb = if approve { "approve" } else { "unapprove" };
         self.send_empty(Method::POST, &format!("{}/{verb}", mr_path(key)), None).await.map_err(cannot_approve)
+    }
+}
+
+/// The answers GitLab gives a merge it will not do, in words the reader can act on.
+fn merge_refused(err: anyhow::Error) -> anyhow::Error {
+    let text = err.to_string();
+    match () {
+        () if text.contains("HTTP 409") => anyhow!("the branch moved since you read it: refresh with r and look at the new commits"),
+        () if text.contains("HTTP 405") || text.contains("HTTP 406") => {
+            anyhow!("GitLab will not merge it yet: {}", text.rsplit_once(": HTTP ").map_or(text.as_str(), |(_, rest)| rest))
+        }
+        () if text.contains("HTTP 401") || text.contains("HTTP 403") => anyhow!("you are not allowed to merge into this branch"),
+        () => err,
     }
 }
 
@@ -240,6 +267,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn merge_sends_the_head_and_the_choices_shown_and_words_the_refusals() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/merge"))
+            .and(body_partial_json(json!({"sha": "bbbb", "squash": true, "should_remove_source_branch": true})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"iid": 42, "state": "merged"})))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/43/merge"))
+            .respond_with(ResponseTemplate::new(409).set_body_json(json!({"message": "SHA does not match HEAD of source branch"})))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/44/merge"))
+            .respond_with(ResponseTemplate::new(405).set_body_json(json!({"message": "405 Method Not Allowed"})))
+            .mount(&server)
+            .await;
+        let client = client(&server);
+        let plan = forge::MergePlan { method: forge::MergeMethod::Squash, remove_branch: true };
+        client.merge(&key(), "bbbb", plan).await.unwrap();
+        let moved = client.merge(&MrKey::new("acme/widgets", 43), "bbbb", plan).await.unwrap_err().to_string();
+        assert!(moved.contains("the branch moved"), "{moved}");
+        let early = client.merge(&MrKey::new("acme/widgets", 44), "bbbb", plan).await.unwrap_err().to_string();
+        assert!(early.starts_with("GitLab will not merge it yet"), "{early}");
+    }
+
+    #[test]
+    fn the_squash_and_branch_settings_become_the_merge_plan() {
+        let mut mr = mr_json();
+        mr["squash_on_merge"] = json!(true);
+        mr["force_remove_source_branch"] = json!(true);
+        let plan = parse::<wire::Mr>(&mr.to_string()).into_model("acme/widgets").merge;
+        assert_eq!(plan, forge::MergePlan { method: forge::MergeMethod::Squash, remove_branch: true });
+        let plain = parse::<wire::Mr>(&mr_json().to_string()).into_model("acme/widgets").merge;
+        assert_eq!(plain, forge::MergePlan::default());
+    }
+
+    #[tokio::test]
+    async fn an_mr_still_loads_when_who_i_am_cannot_be_asked() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mr_json()))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/approvals"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"approved": false, "approvals_left": 1})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET")).and(path("/api/v4/user")).respond_with(ResponseTemplate::new(500)).mount(&server).await;
+        let mr = client(&server).mr(&key()).await.unwrap();
+        assert!(!mr.mine, "unknown owner: merge is simply not offered");
+    }
+
+    #[tokio::test]
     async fn mr_folds_the_approvals_in() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
@@ -255,8 +339,17 @@ mod tests {
             })))
             .mount(&server)
             .await;
-        let mr = client(&server).mr(&key()).await.unwrap();
+        Mock::given(method("GET"))
+            .and(path("/api/v4/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": 9, "username": "vivien", "name": "Vivien"})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = client(&server);
+        let mr = client.mr(&key()).await.unwrap();
+        client.mr(&key()).await.unwrap();
         assert_eq!((mr.project.as_str(), mr.number), ("acme/widgets", 42));
+        assert!(!mr.mine, "omar wrote it, not vivien; /user is asked once for both reads");
         assert_eq!((mr.changes_count.as_deref(), mr.labels.as_slice()), (Some("9"), &["payments".to_owned()][..]));
         assert_eq!(mr.pipeline.as_ref().map(|p| p.status.as_str()), Some("success"));
         assert_eq!(mr.refs, Refs { base: "aaaa".into(), start: "aaaa".into(), head: "bbbb".into() });

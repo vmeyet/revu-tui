@@ -1,19 +1,29 @@
-//! `S` in the thread pane: commit the suggestion of the note under the cursor, after a `y`.
+//! `S` in the thread pane and `M` in the review: a commit that waits for the reader's `y`.
 use super::{Action, App, EntryKind, Open};
-use crate::forge::{Note, Side, Suggestion};
+use crate::forge::{MergePlan, MrKey, Note, Side, Suggestion};
 use crate::review::suggestion;
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// A commit waiting for the reader's yes: nothing reaches the branch before it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Confirm {
-    pub suggestion: Suggestion,
-    pub branch: String,
+pub enum Confirm {
+    /// The suggestion of a note, on the MR's branch.
+    Apply { suggestion: Suggestion, branch: String },
+    /// The MR `name` (`!42`) into `into`, only while its head is still `head`.
+    Merge { key: MrKey, name: String, head: String, into: String, plan: MergePlan },
 }
 
 impl Confirm {
     pub fn question(&self) -> String {
-        format!("commit this suggestion to {} on {}? y commits · any other key cancels", self.suggestion.path, self.branch)
+        match self {
+            Confirm::Apply { suggestion, branch } => {
+                format!("commit this suggestion to {} on {branch}? y commits · any other key cancels", suggestion.path)
+            }
+            Confirm::Merge { name, into, plan, .. } => {
+                let branch = if plan.remove_branch { ", delete the branch" } else { "" };
+                format!("merge {name} into {into} ({}{branch})? y merges · any other key cancels", plan.method.word())
+            }
+        }
     }
 }
 
@@ -22,7 +32,7 @@ impl App {
     pub(super) fn apply_here(&mut self) {
         let Some(open) = &self.open else { return };
         match suggestion_here(open) {
-            Ok(suggestion) => self.confirm = Some(Confirm { suggestion, branch: open.review.mr.source_branch.clone() }),
+            Ok(suggestion) => self.confirm = Some(Confirm::Apply { suggestion, branch: open.review.mr.source_branch.clone() }),
             Err(reason) => self.toast(reason),
         }
     }
@@ -30,11 +40,17 @@ impl App {
     pub(super) fn handle_confirm_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(confirm) = self.confirm.take() else { return vec![] };
         let Some(open) = &self.open else { return vec![] };
-        if key.code != KeyCode::Char('y') {
-            self.toast("not applied");
-            return vec![];
+        let yes = key.code == KeyCode::Char('y');
+        match confirm {
+            Confirm::Apply { .. } | Confirm::Merge { .. } if !yes => {
+                self.toast(if matches!(confirm, Confirm::Apply { .. }) { "not applied" } else { "not merged" });
+                vec![]
+            }
+            Confirm::Apply { suggestion, branch } => {
+                vec![Action::Apply { key: open.key.clone(), branch, suggestion: Box::new(suggestion) }]
+            }
+            Confirm::Merge { key, head, plan, .. } => vec![Action::Merge { key, head, plan }],
         }
-        vec![Action::Apply { key: open.key.clone(), branch: confirm.branch, suggestion: Box::new(confirm.suggestion) }]
     }
 
     /// The branch moved: say so, and read the MR again so the diff shows the new commit.

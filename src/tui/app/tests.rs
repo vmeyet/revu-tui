@@ -2014,8 +2014,8 @@ fn big_s_asks_first_and_commits_only_on_y() {
     let body = "Nit:\n```suggestion:-0+0\n    let client = Client::default();\n```";
     let mut app = with_suggestion(body, json!([{"id": 77, "applied": false, "appliable": true}]));
     assert_eq!(press(&mut app, "S"), vec![]);
-    let asked = app.confirm.clone().expect("a question waits");
-    assert_eq!((asked.suggestion.id, asked.suggestion.path.as_str(), asked.suggestion.line), (Some(77), "src/pay/charge.rs", 13));
+    let Some(Confirm::Apply { suggestion: asked, .. }) = app.confirm.clone() else { panic!("a question waits") };
+    assert_eq!((asked.id, asked.path.as_str(), asked.line), (Some(77), "src/pay/charge.rs", 13));
     assert!(render(&mut app, 150, 20).contains("commit this suggestion to src/pay/charge.rs on feat/checkout?"));
     assert_eq!(press(&mut app, "n"), vec![], "any other key cancels");
     assert!(app.confirm.is_none());
@@ -2041,7 +2041,8 @@ fn big_s_says_why_when_there_is_nothing_to_apply() {
     assert_eq!(done.live_toast().unwrap().text, "this suggestion is already applied");
     let mut github = with_suggestion(body, json!([]));
     press(&mut github, "S");
-    assert_eq!(github.confirm.as_ref().map(|c| c.suggestion.id), Some(None), "GitHub lists no id: revu builds the commit");
+    let Some(Confirm::Apply { suggestion, .. }) = &github.confirm else { panic!("a question waits") };
+    assert_eq!(suggestion.id, None, "GitHub lists no id: revu builds the commit");
 }
 
 fn announce(app: &mut App, sections: crate::forge::Sections) -> Vec<Action> {
@@ -3078,4 +3079,62 @@ fn progress_shows_in_the_header_and_on_the_queue_row() {
     assert!(screen.contains("viewed 1/2"), "{screen}");
     assert!(screen.contains("!41 · 1/1") || screen.contains("#41 · 1/1") || screen.contains("41 · 1/1"), "{screen}");
     insta::assert_snapshot!("review_progress", screen);
+}
+
+/// The open review, its MR changed by `change`: mine, approved, and so on.
+fn with_mr(change: impl FnOnce(Mr) -> Mr) -> App {
+    let mut app = with_review();
+    let review = Review::new(change(mr()), &diffs(), discussions(), &["*.lock".into()]);
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
+    app
+}
+
+fn approved_and_mine(mr: Mr) -> Mr {
+    let approvals = crate::forge::Approvals { approved: true, approvals_left: 0, ..mr.approvals.clone() };
+    Mr { mine: true, approvals, merge: crate::forge::MergePlan { method: crate::forge::MergeMethod::Squash, remove_branch: true }, ..mr }
+}
+
+#[test]
+fn big_m_asks_first_names_the_method_and_merges_only_on_y() {
+    let mut app = with_mr(approved_and_mine);
+    assert_eq!(press(&mut app, "M"), vec![]);
+    assert!(render(&mut app, 150, 20).contains("merge !42 into main (squash, delete the branch)? y merges"));
+    assert_eq!(press(&mut app, "n"), vec![], "any other key cancels");
+    assert_eq!(app.live_toast().unwrap().text, "not merged");
+    press(&mut app, "M");
+    let actions = press(&mut app, "y");
+    let [Action::Merge { key, head, plan }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((key, head.as_str(), plan.method), (&mr_key(), "bbbb", crate::forge::MergeMethod::Squash));
+    app.apply(Incoming::Merged { key: mr_key() });
+    let follow = app.take_actions();
+    assert!(follow.contains(&Action::RefreshMr(mr_key())), "{follow:?}");
+    assert!(follow.iter().any(|a| matches!(a, Action::LoadQueue { .. })), "the queue reads again so the MR leaves Mine: {follow:?}");
+    assert!(app.live_toast().unwrap().text.contains("merged !42"));
+}
+
+#[test]
+fn big_m_says_why_it_will_not_merge() {
+    type Change = fn(Mr) -> Mr;
+    let cases: [(Change, &str); 3] = [
+        (|mr| mr, "cannot merge: only your own MRs merge from revu"),
+        (|mr| Mr { mine: true, ..mr }, "cannot merge: it needs 1 more approval"),
+        (
+            |mr| Mr { pipeline: Some(crate::forge::Pipeline { status: "failed".into(), web_url: None }), ..approved_and_mine(mr) },
+            "cannot merge: its pipeline failed",
+        ),
+    ];
+    for (change, reason) in cases {
+        let mut app = with_mr(change);
+        assert_eq!(press(&mut app, "M"), vec![]);
+        assert!(app.confirm.is_none());
+        assert_eq!(app.live_toast().unwrap().text, reason);
+    }
+}
+
+#[test]
+fn colon_merge_asks_like_big_m() {
+    let mut app = with_mr(approved_and_mine);
+    press(&mut app, ":merge");
+    app.handle_key(code(KeyCode::Enter));
+    assert!(matches!(app.confirm, Some(Confirm::Merge { .. })));
 }

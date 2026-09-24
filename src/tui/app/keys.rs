@@ -159,7 +159,7 @@ impl App {
         vec![]
     }
 
-    fn refresh_queue(&mut self) -> Vec<Action> {
+    pub(super) fn refresh_queue(&mut self) -> Vec<Action> {
         if self.queue_loading {
             return vec![];
         }
