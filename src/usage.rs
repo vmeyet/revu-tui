@@ -200,6 +200,9 @@ fn single(key: KeyEvent, place: Place) -> Option<&'static str> {
     if matches!(key.code, KeyCode::Char('k' | 'K')) && (ctrl || command) {
         return Some("jump");
     }
+    if ctrl && key.code == KeyCode::Char('v') && place != Place::Queue {
+        return Some("view_file");
+    }
     if let Some(moved) = movement(key.code, ctrl) {
         return Some(moved);
     }
@@ -272,7 +275,6 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::BackTab => "prev_file",
         KeyCode::Char('r') => "refresh",
         KeyCode::Char('i') => "description",
-        KeyCode::Char('v') => "view_file",
         KeyCode::Char('o') => "open_browser",
         KeyCode::Char('y') => "copy_link",
         KeyCode::Char('x') => "close_pane",
@@ -289,7 +291,6 @@ fn pane_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('u') => "open_link",
         KeyCode::Char('o') => "open_browser",
         KeyCode::Char('y') => "copy_link",
-        KeyCode::Char('v') => "view_file",
         KeyCode::Char('r') => "reply",
         KeyCode::Char('R') => "resolve",
         KeyCode::Char('S') => "apply_suggestion",

@@ -1,7 +1,7 @@
 # 08 · Open the file
 
 A diff shows what changed; sometimes the reviewer needs the whole file around it.
-`v` hands the file, as it is after the change, to the reviewer's own terminal program, at the line under the cursor.
+`^v` hands the file, as it is after the change, to the reviewer's own terminal program, at the line under the cursor.
 Quitting that program comes straight back to the review, exactly where it was.
 
 The user's own setup is the reference case: Helix for everything, Glow for Markdown.
@@ -18,14 +18,14 @@ default = "hx"
 
 | Key | Where | Opens |
 |---|---|---|
-| `v` | review pane, thread pane, file tree | the file after the change (head), at the cursor's line |
+| `^v` | review pane, thread pane, file tree | the file after the change (head), at the cursor's line |
 | `:view old` | command line | the file before the change (base), at the matching old line |
 | `:view <path>[:<line>]` | command line | any file of the MR, head version |
 
-`v` is free in every pane, reads as "view", and sits next to `V` (select lines), which already means "look at these lines".
+`^v` is free in every pane and reads as "view"; a plain `v` sat one key after `z`, so a `zv` typed a little slowly opened the editor instead of marking the file viewed.
 The base version is rare enough for the command line; a second key would cost more to learn than it saves.
-On a deleted file there is no head, so `v` opens the base version and says so in the status line.
-`?` and the README list `v`; `03-ui-ux.md` gains one row per table when this lands.
+On a deleted file there is no head, so `^v` opens the base version and says so in the status line.
+`?` and the README list `^v`; `03-ui-ux.md` gains one row per table when this lands.
 
 ### Which line
 
@@ -48,7 +48,7 @@ The file tree uses line 1.
 
 The TUI gives the whole terminal to the program and takes it back on exit, the way `E` already hands a comment to `$EDITOR` (`compose_inline` in `src/tui/mod.rs`).
 
-1. `v` returns `Action::View { key, path, side, line }` from the pure `App`.
+1. `^v` returns `Action::View { key, path, side, line }` from the pure `App`.
 2. The content is resolved off the loop (see below); a spinner toast says `fetching charge.rs…` when it takes more than 150 ms.
 3. `Incoming::ViewReady { file, line }` arrives; the loop suspends the TUI (`ratatui::restore`, keyboard enhancement flags popped), runs the program with inherited stdin, stdout and stderr, and waits.
 4. On exit the loop re-inits the terminal, clears it and redraws.
@@ -64,14 +64,14 @@ The panic hook `ratatui::init` installs already restores the terminal; the hand-
 The real file wins when it is the right file.
 Otherwise the forge serves the file at the MR's head commit.
 
-1. **Checkout.** When the command runs inside a checkout of the MR's project (`mrref::checkout_project`) and `git rev-parse HEAD` equals the MR's head sha, `v` opens `<checkout>/<path>` itself.
+1. **Checkout.** When the command runs inside a checkout of the MR's project (`mrref::checkout_project`) and `git rev-parse HEAD` equals the MR's head sha, `^v` opens `<checkout>/<path>` itself.
    The status line says `your checkout · edits are real`, because they are.
    Uncommitted local changes are the user's business: the file opens as it is on disk.
 2. **Forge.** Otherwise `Forge::file(key, path, sha) -> Result<Vec<u8>>` fetches the bytes:
    - GitLab: `GET /projects/:project/repository/files/:path/raw?ref=:sha` with the path URL-encoded.
    - GitHub: `GET /repos/:owner/:repo/contents/:path?ref=:sha` with `Accept: application/vnd.github.raw+json`.
    The bytes go to a private temp file, then to the program.
-   Fetched files are kept in memory for the session, keyed by `(project, sha, path)`, so a second `v` is instant.
+   Fetched files are kept in memory for the session, keyed by `(project, sha, path)`, so a second `^v` is instant.
 
 ### The temp file
 
@@ -133,11 +133,11 @@ Config errors surface at startup like every other `revu` config error: the file,
 | Deleted file | Opens the base version, status line says `deleted in this MR · showing the old file` |
 | Renamed file | Opens the new path at head; `:view old` opens the old path at base |
 | Larger than 10 MB | Toast `too large to open here (24 MB) · o opens it in the browser` |
-| Forge answers 404 | Toast with the path and the sha, retry key `v` |
+| Forge answers 404 | Toast with the path and the sha, retry key `^v` |
 | Program not found | Toast `hx not found · set [open] default in config`, naming the program that failed |
 | Program exits non-zero | Toast `hx exited with 1`; the review comes back as usual |
 | Program killed by a signal | Same, with the signal name |
-| Not a terminal (piped run) | `v` is not offered; `:view` says it needs a terminal |
+| Not a terminal (piped run) | `^v` is not offered; `:view` says it needs a terminal |
 
 ## Security
 
@@ -146,7 +146,7 @@ Config errors surface at startup like every other `revu` config error: the file,
 - **No shell.** The command is split into argv and run with `std::process::Command`; the path and the line are arguments, never text inside a shell string.
 - **Temp hygiene** as above: private directory, 0400 file, removed on every exit path, basename only (the forge path's directories are not recreated under the temp dir).
 - **Tokens stay home.** The program inherits the user's environment as it is; revu adds no variable to it, and the forge token is never written to the temp file or its directory.
-- **Checkout detection trusts git only** (`git rev-parse HEAD`, `git remote get-url origin`), never a path from the forge, so a crafted path cannot redirect `v` into a different file of the checkout.
+- **Checkout detection trusts git only** (`git rev-parse HEAD`, `git remote get-url origin`), never a path from the forge, so a crafted path cannot redirect `^v` into a different file of the checkout.
 
 ## Considered
 
@@ -169,7 +169,7 @@ In the order to write them, failing first:
 5. `Forge::file` for GitLab and GitHub with wiremock: path encoding, the raw accept header, 404, size over the limit.
 6. `Source::pick(checkout, head_sha, git_head)`: checkout at head, checkout elsewhere, no checkout.
 7. Temp file: 0700 directory, 0400 file, basename kept, removed after a run of `true` and after a run of `false`.
-8. `App`: `v` on each pane emits `Action::View` with the right line; a late `ViewReady` for another MR is dropped; the toasts for binary, deleted, too large and missing program.
+8. `App`: `^v` on each pane emits `Action::View` with the right line; a late `ViewReady` for another MR is dropped; the toasts for binary, deleted, too large and missing program.
 9. The hand-off itself with a fake program (a test binary that records its argv and exits), run through the same function the loop uses, without a real terminal.
 
 ## Build order

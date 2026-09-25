@@ -247,7 +247,7 @@ impl App {
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),
             KeyCode::Char('i') => self.open_brief_from_review(),
-            KeyCode::Char('v') => return self.view_here(crate::review::Side::New),
+            KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => return self.view_here(crate::review::Side::New),
             KeyCode::Char('o') => {
                 return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }

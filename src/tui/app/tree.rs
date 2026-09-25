@@ -55,7 +55,7 @@ impl App {
             KeyCode::Char('g') => moved(0),
             KeyCode::Char('G') => moved(last),
             KeyCode::Esc | KeyCode::Char('t') => None,
-            KeyCode::Char('v') => match rows.get(tree.selected) {
+            KeyCode::Char('v') if ctrl => match rows.get(tree.selected) {
                 Some(TreeRow::File { index, .. }) => return self.view_file(*index),
                 _ => Some(tree.clone()),
             },

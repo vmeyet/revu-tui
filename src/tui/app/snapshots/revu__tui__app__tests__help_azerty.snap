@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 2495
 expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -38,7 +39,7 @@ expression: "render(&mut app, 160, 45)"
 │                       │         zz  zen: the diff alone, quiet                     SEARCH & APP                                      │                       │
 │                       │        w W  wrap long lines, hide whitespace changes              ^k  MRs · / files · > commands             │                       │
 │                       │          +  more lines; on a thread, react                         :  commands: :go !42, :set theme=nord     │                       │
-│                       │          v  the file in your own program                         o y  open in the browser, copy the link     │                       │
+│                       │         ^v  the file in your own program                         o y  open in the browser, copy the link     │                       │
 │                       │   za zc zo  toggle, close, open the fold                           r  refresh                                │                       │
 │                       │      zM zR  fold, unfold every file                                ?  this help                              │                       │
 │                       │                                                                                                              │                       │

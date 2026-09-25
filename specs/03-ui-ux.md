@@ -317,7 +317,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `+` | more context around the hunk | M3 |
 | `c` | comment on the line (draft) | M2 |
 | `V` | select lines | M2 |
-| `v` | the file after the change in the reader's program, at the cursor's line (`08-open-file.md`) | M3b |
+| `^v` | the file after the change in the reader's program, at the cursor's line (`08-open-file.md`) | M3b |
 | `E` | comment in `$EDITOR` | M2 |
 | `s` | suggestion: editor prefilled with the lines | M2 |
 | `d` | delete the draft under the cursor | M2 |
@@ -336,7 +336,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `R` | resolve, unresolve (also on a marked line in the diff) |
 | `S` | commit the note's suggestion on the MR branch, after a `y` (M5): GitLab applies it by its id; on GitHub, which has no API for it, revu commits the change itself through the contents API, only on the PR's own branch and with push access, else `o` opens it on the web |
 | `e` `d` `E` | edit, delete my draft; edit it in `$EDITOR` |
-| `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
+| `u` `o` `y` `^v` | first link; the thread in the browser; copy its link; the file in your program |
 | `x` `esc` `q` | close |
 
 In the compose box: `enter` saves the draft, `⌘enter` (or `ctrl-s`, where the terminal keeps `⌘enter`) posts a new thread or a reply at once with no draft, `⌥enter` adds a line, `↑`/`↓` go to the line above or below at the same column, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
@@ -418,7 +418,7 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
 - Every colour cue has a glyph or a sign next to it.
 - Contrast: every theme's `muted` on `base` clears 4.5:1; check with the `mix()` math, not by eye.
 - Kitty keyboard protocol is pushed when available (as slack-tui) so `S-Tab`, `ctrl-k`, `⌘k` and `⌘enter` arrive; `DISAMBIGUATE_ESCAPE_CODES` alone carries `⌘`.
-- Mouse: the wheel scrolls the pane under the pointer (three diff rows, one queue MR or note a notch) and leaves the focus where it is; clicks do nothing. Only clicks and the wheel are asked of the terminal, never pointer moves. Capturing the mouse takes plain drag-select away: shift-drag (Ghostty, Kitty, `WezTerm`) or ⌥-drag (iTerm2, Terminal.app) still selects. The mouse is let go on exit, on a panic and while `$EDITOR` or `v` owns the terminal. Keyboard remains complete.
+- Mouse: the wheel scrolls the pane under the pointer (three diff rows, one queue MR or note a notch) and leaves the focus where it is; clicks do nothing. Only clicks and the wheel are asked of the terminal, never pointer moves. Capturing the mouse takes plain drag-select away: shift-drag (Ghostty, Kitty, `WezTerm`) or ⌥-drag (iTerm2, Terminal.app) still selects. The mouse is let go on exit, on a panic and while `$EDITOR` or `^v` owns the terminal. Keyboard remains complete.
 - Minimum size 80×24; below that the queue hides and a one-line notice says so.
 
 ## DX for the person running it

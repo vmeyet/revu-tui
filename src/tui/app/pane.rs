@@ -243,7 +243,7 @@ impl App {
             }
             KeyCode::Char('o') => return self.thread_url().map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
             KeyCode::Char('y') => return self.thread_url().map(|u| vec![Action::Yank(u)]).unwrap_or_default(),
-            KeyCode::Char('v') => return self.view_thread(),
+            KeyCode::Char('v') if ctrl => return self.view_thread(),
             KeyCode::Char('r') => self.reply_here(),
             KeyCode::Char('R') => return self.toggle_resolved(),
             KeyCode::Char('S') => self.apply_here(),
