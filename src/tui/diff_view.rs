@@ -234,14 +234,15 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
         second.push(dot());
         second.push(Span::styled("conflicts", Style::default().fg(theme.danger)));
     }
-    let (viewed, files) = (open.review.viewed.len(), open.review.files.len());
-    if viewed > 0 {
+    let progress = open.review.progress();
+    if progress.viewed > 0 {
         if second.len() > 1 {
             second.push(dot());
         }
-        let (done, left) = super::app::progress_bar(viewed, files, PROGRESS_W);
-        second.push(Span::styled(format!("viewed {viewed}/{files} "), muted));
-        second.push(Span::styled(done, Style::default().fg(if viewed == files { theme.success } else { theme.accent })));
+        let (done, left) = super::app::progress_bar(progress.viewed, progress.files, PROGRESS_W);
+        let folded = if progress.folded > 0 { format!(" · {} folded", progress.folded) } else { String::new() };
+        second.push(Span::styled(format!("viewed {}/{}{folded} ", progress.viewed, progress.files), muted));
+        second.push(Span::styled(done, Style::default().fg(if progress.done() { theme.success } else { theme.accent })));
         second.push(Span::styled(left, Style::default().fg(theme.faded)));
     }
     if second.len() == 1 {

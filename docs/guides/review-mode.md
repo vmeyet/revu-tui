@@ -18,6 +18,7 @@ MRs you already approved are skipped.
 
 `zv` marks a file viewed.
 The review header shows `viewed 7/12` with a small bar.
+Files that open folded (lock files, huge or binary files) wait apart as `· 3 folded` until you mark them viewed.
 The queue shows the same count on the row of each MR you started.
 
 ## Pick up where you stopped

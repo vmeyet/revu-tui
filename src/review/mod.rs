@@ -22,6 +22,25 @@ use std::sync::Arc;
 /// Above this many lines a file starts folded, whatever the forge says.
 const TOO_LARGE_LINES: usize = 2000;
 
+/// How far a review went: a file that opens folded counts only once marked viewed, the rest wait apart as `folded`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Progress {
+    pub viewed: usize,
+    pub files: usize,
+    pub folded: usize,
+}
+
+impl Progress {
+    pub fn new(files: usize, viewed: &BTreeSet<String>, auto_folded: &BTreeSet<String>) -> Self {
+        let folded = auto_folded.difference(viewed).count();
+        Self { viewed: viewed.len(), files: files.saturating_sub(folded), folded }
+    }
+
+    pub fn done(self) -> bool {
+        self.viewed == self.files
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileKind {
     Added,
@@ -194,6 +213,8 @@ pub struct Review {
     pub mr: Arc<Mr>,
     pub files: Arc<[File]>,
     pub threads: Arc<[Thread]>,
+    /// The files that open folded (configured globs, too large, binary): they only count once viewed.
+    pub auto_folded: Arc<BTreeSet<String>>,
     pub drafts: Vec<Draft>,
     pub viewed: BTreeSet<String>,
     pub fold: FoldState,
@@ -226,6 +247,7 @@ impl Review {
             mr: Arc::new(mr),
             files: files.into(),
             threads: threads.into(),
+            auto_folded: Arc::new(fold.files.keys().cloned().collect()),
             drafts: vec![],
             viewed: BTreeSet::new(),
             fold,
@@ -268,6 +290,10 @@ impl Review {
     /// The saved viewed files that still show the change the reader saw: one pushed to since is to read again.
     pub fn still_viewed(&self, saved: &std::collections::BTreeMap<String, String>) -> BTreeSet<String> {
         self.files.iter().filter(|f| saved.get(&f.new_path) == Some(&f.fingerprint())).map(|f| f.new_path.clone()).collect()
+    }
+
+    pub fn progress(&self) -> Progress {
+        Progress::new(self.files.len(), &self.viewed, &self.auto_folded)
     }
 
     pub fn with_drafts(&self, drafts: Vec<Draft>) -> Self {
@@ -658,6 +684,21 @@ pub(crate) mod tests {
         assert_eq!(review.still_viewed(&saved), BTreeSet::from([path.clone()]));
         let moved = std::collections::BTreeMap::from([(path, "an older change".to_owned())]);
         assert!(review.still_viewed(&moved).is_empty(), "a file pushed to since is to read again");
+    }
+
+    #[test]
+    fn progress_leaves_auto_folded_files_apart_until_viewed() {
+        let review = review();
+        let (charge, lock) = (BTreeSet::from(["src/pay/charge.rs".to_owned()]), BTreeSet::from(["Cargo.lock".to_owned()]));
+        assert_eq!(review.progress(), Progress { viewed: 0, files: 1, folded: 1 }, "the lock file waits apart");
+        let read = review.with_viewed(charge).progress();
+        assert_eq!(read, Progress { viewed: 1, files: 1, folded: 1 });
+        assert!(read.done(), "every file to read is viewed");
+        assert_eq!(review.with_viewed(lock).progress(), Progress { viewed: 1, files: 2, folded: 0 }, "a viewed lock file joins the count");
+        let by_hand = review.with_fold(review.fold.toggle_file("src/pay/charge.rs"));
+        assert_eq!(by_hand.progress().files, 1, "a file folded by hand still counts");
+        let unfolded = review.with_fold(review.fold.toggle_file("Cargo.lock"));
+        assert_eq!(unfolded.progress().folded, 1, "unfolding the lock file does not make it count");
     }
 
     #[test]

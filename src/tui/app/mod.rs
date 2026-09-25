@@ -56,7 +56,8 @@ pub use crate::forge::MrKey;
 use crate::forge::{Discussion, Position, QueueMr, Sections};
 use crate::review::{Draft, Review};
 use chrono::{DateTime, Utc};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -91,6 +92,8 @@ pub enum Action {
         fold: FoldState,
         /// Viewed files with the fingerprint of the change seen.
         viewed: BTreeMap<String, String>,
+        /// Kept so the queue counts the MR's progress without its diff.
+        auto_folded: Arc<BTreeSet<String>>,
         split: bool,
         /// Where the cursor rests, so the MR opens there next time; `None` keeps what is saved.
         spot: Option<Spot>,
@@ -318,8 +321,8 @@ pub enum Incoming {
         key: MrKey,
         spot: Spot,
     },
-    /// How many files of each started MR I marked viewed, for the queue.
-    Progress(HashMap<MrKey, usize>),
+    /// How far each started MR went, for the queue.
+    Progress(HashMap<MrKey, crate::review::Progress>),
     Discussions {
         key: MrKey,
         discussions: Vec<Discussion>,

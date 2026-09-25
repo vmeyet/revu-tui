@@ -142,6 +142,9 @@ Loading: the sections render with three skeleton rows of `▁▁▁▁▁` in `f
 
 Row 1: author, `source → target`, age, `+adds −dels`, file count, pipeline glyph and word.
 Row 2: approvals `n of m`, thread counts, drafts count. Anything at zero is omitted.
+Then, once a file is viewed, `viewed 3/8 · 3 folded ━━━───`: the bar turns `success` when every counted file is viewed.
+Files that open folded (a `[review] fold` glob, too large, binary) count only once marked viewed; the others show apart as `· n folded`, `muted`.
+A file folded by hand still counts; the tree title and the queue row (`· 3/8`) count the same way.
 When folded: `nina · +412 −38 · ✓ · 2 drafts`.
 
 ### Files

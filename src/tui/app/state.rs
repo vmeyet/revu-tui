@@ -121,8 +121,8 @@ pub struct App {
     pub prefetch_due: bool,
     /// The next MR that needs me, offered in the status line after a publish.
     pub offer: Option<MrKey>,
-    /// Viewed files per started MR: the queue shows how far each review went.
-    pub viewed_counts: HashMap<MrKey, usize>,
+    /// Per started MR: the queue shows how far each review went.
+    pub progress: HashMap<MrKey, crate::review::Progress>,
     /// The cursor's place as last saved, so a resting cursor is written once.
     pub spot_saved: Option<(MrKey, super::Spot)>,
     /// Where the cursor rests and since when: it is saved once it rested a moment.
@@ -237,7 +237,7 @@ impl App {
             prefetch_limit: settings.prefetch,
             prefetch_due: false,
             offer: None,
-            viewed_counts: HashMap::new(),
+            progress: HashMap::new(),
             spot_saved: None,
             spot_pending: None,
             queue_loading: true,

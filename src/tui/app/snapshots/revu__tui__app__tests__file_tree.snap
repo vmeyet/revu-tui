@@ -2,9 +2,9 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 120, 20)"
 ---
-╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────╮╭ Files · 1/2 viewed ──────────────────────────╮
+╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────╮╭ Files · 1/1 viewed ──────────────────────────╮
 │  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success      ││  ▾ src/                                      │
-│   1 of 2 approvals · 3 threads, 1 unresolved · viewed 1/2 ━━━━━───── ││    ▾ pay/                                    │
+│   1 of 2 approvals · 3 threads, 1 unresolved · viewed 1/1 · 1 folded ││    ▾ pay/                                    │
 │  ◆ 1 on the MR  enter opens                                          ││ ▎      charge.rs                  +4 −2 ◆1 ✓ │
 │                                                                      ││    Cargo.lock                          +1 −1 │
 │ ▎▸ src/pay/charge.rs                  +4 −2  ✓1 · 1 outdated  viewed ││                                              │

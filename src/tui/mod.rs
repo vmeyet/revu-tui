@@ -32,14 +32,14 @@ use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
 use crate::ready::Source as ReadySource;
-use crate::review::{Draft, Review};
+use crate::review::{Draft, Progress, Review};
 use anyhow::{Context as _, Result};
 use app::{Action, Ahead, App, Failure, Incoming, Input, Part, Post, QueueView, Settings};
 use chrono::{DateTime, Utc};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
@@ -57,6 +57,8 @@ struct MrState {
     /// Viewed files by path, with the fingerprint of the change seen.
     #[serde(default)]
     viewed_files: BTreeMap<String, String>,
+    #[serde(default)]
+    auto_folded: BTreeSet<String>,
     #[serde(default)]
     opened_at: Option<DateTime<Utc>>,
     #[serde(default)]
@@ -373,8 +375,9 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::SaveState { key, fold, viewed, split, spot } => {
-                if let Err(e) = backend.off(move |b| b.save_state(&key, fold, viewed, split, spot)).await.and_then(|saved| saved) {
+            Action::SaveState { key, fold, viewed, auto_folded, split, spot } => {
+                let save = move |b: &Backend| b.save_state(&key, fold, viewed, &auto_folded, split, spot);
+                if let Err(e) = backend.off(save).await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -933,11 +936,12 @@ impl Backend {
         key: &MrKey,
         fold: FoldState,
         viewed_files: BTreeMap<String, String>,
+        auto_folded: &BTreeSet<String>,
         split: bool,
         spot: Option<app::Spot>,
     ) -> Result<()> {
         let before = self.state(key);
-        let state = MrState { fold, viewed_files, split, spot: spot.or(before.spot.clone()), ..before };
+        let state = MrState { fold, viewed_files, auto_folded: auto_folded.clone(), split, spot: spot.or(before.spot.clone()), ..before };
         self.cache_of(key).write(&keys::state(key), &state)
     }
 
@@ -949,14 +953,15 @@ impl Backend {
         }
     }
 
-    /// Viewed files per MR of the queue that I started, read from each MR's saved state.
-    fn progress(&self, sections: &Sections) -> HashMap<MrKey, usize> {
+    /// How far I went in each MR of the queue that I started, read from its saved state.
+    fn progress(&self, sections: &Sections) -> HashMap<MrKey, Progress> {
         sections
             .all()
             .filter_map(|mr| {
                 let key = mr.key();
                 let state: MrState = self.cache_of(&key).read(&keys::state(&key))?;
-                (!state.viewed_files.is_empty()).then_some((key, state.viewed_files.len()))
+                let viewed: BTreeSet<String> = state.viewed_files.into_keys().collect();
+                (!viewed.is_empty()).then(|| (key, Progress::new(mr.files as usize, &viewed, &state.auto_folded)))
             })
             .collect()
     }
@@ -1088,9 +1093,18 @@ mod tests {
         };
         let spot = app::Spot { path: "a.rs".into(), old: None, new: Some(3) };
         backend
-            .save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true, Some(spot.clone()))
+            .save_state(
+                &key(),
+                FoldState::default(),
+                BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]),
+                &BTreeSet::new(),
+                true,
+                Some(spot.clone()),
+            )
             .unwrap();
-        backend.save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true, None).unwrap();
+        backend
+            .save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), &BTreeSet::new(), true, None)
+            .unwrap();
         let state = backend.state(&key());
         assert_eq!(
             (state.viewed_files, state.split),

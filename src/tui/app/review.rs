@@ -369,6 +369,7 @@ impl App {
             key: next.key.clone(),
             fold: review.fold.clone(),
             viewed: review.viewed_fingerprints(),
+            auto_folded: review.auto_folded.clone(),
             split: review.split,
             spot: None,
         };
