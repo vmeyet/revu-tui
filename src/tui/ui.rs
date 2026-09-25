@@ -26,7 +26,7 @@ const SIDE_PCT: u16 = 40;
 /// Zen's column, unless `[tui] zen_width` fixes it: this share of the screen, never under `ZEN_MIN_W`.
 const ZEN_PCT: u32 = 70;
 /// A comfortable line of code with both gutters and the sign.
-const ZEN_MIN_W: u16 = 100;
+const ZEN_MIN_W: u16 = 120;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
@@ -431,7 +431,8 @@ mod columns_tests {
     #[test]
     fn zen_takes_70_percent_of_the_screen_unless_the_config_fixes_it() {
         assert_eq!(zen_width(None, 200), 140);
-        assert_eq!(zen_width(None, 120), 100, "never under 100");
+        assert_eq!(zen_width(None, 138), 120, "never under 120");
+        assert_eq!(zen_width(None, 120), 120, "the whole screen up to 120");
         assert_eq!(zen_width(None, 80), 80, "never wider than the screen");
         assert_eq!(zen_width(Some(90), 200), 90, "the config wins");
         assert_eq!(zen_width(Some(120), 100), 100);
