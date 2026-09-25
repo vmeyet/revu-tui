@@ -37,7 +37,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("wrap", "w"),
     ("whitespace", "W"),
     ("more_context", "+"),
-    ("view_file", "v"),
+    ("view_file", "ctrl-v"),
     ("description", "i"),
     ("comment", "c"),
     ("comment_old", "C"),
@@ -65,7 +65,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
 ];
 
 /// Every key revu reads outside a text box, in some pane: a user key may not take one of them.
-const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtTpWw+xvcCVsEPAMmedJKRSuY?'123456789";
+const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtTpWw+xcCVsEPAMmedJKRSuY?'123456789";
 
 /// The second keys each built-in prefix already reads.
 const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "ersta")];
@@ -278,7 +278,7 @@ impl Keymap {
                     Some(c) => TAKEN.contains(c),
                     None => {
                         matches!(first.code, Code::Enter | Code::Esc | Code::Tab | Code::BackTab)
-                            || (first.ctrl && matches!(first.code, Code::Char('c' | 'd' | 'u' | 'k')))
+                            || (first.ctrl && matches!(first.code, Code::Char('c' | 'd' | 'u' | 'k' | 'v')))
                     }
                 };
                 taken.then(|| {

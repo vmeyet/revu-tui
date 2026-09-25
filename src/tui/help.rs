@@ -68,7 +68,7 @@ pub const GROUPS: [Group; 7] = [
             ("zz", "zen: the diff alone, quiet"),
             ("w W", "wrap long lines, hide whitespace changes"),
             ("+", "more lines; on a thread, react"),
-            ("v", "the file in your own program"),
+            ("^v", "the file in your own program"),
             ("za zc zo", "toggle, close, open the fold"),
             ("zM zR", "fold, unfold every file"),
             ("zh", "fold the MR header"),

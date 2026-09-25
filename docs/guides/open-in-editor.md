@@ -1,11 +1,11 @@
 # Open a file in your editor
 
-`v` opens the file under the cursor, as it is after the change, in the program you choose.
+`^v` opens the file under the cursor, as it is after the change, in the program you choose.
 
 ## Use it
 
 1. Put the cursor on a line of the diff.
-2. Press `v`.
+2. Press `^v`.
 3. Quit your program to come back to revu.
 
 The program opens at the cursor's line.

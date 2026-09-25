@@ -46,7 +46,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `+` | more lines; on a thread, react |
-| `v` | the file in your own program |
+| `^v` | the file in your own program |
 | `za` `zc` `zo` | toggle, close, open the fold |
 | `zM` `zR` | fold, unfold every file |
 | `zh` | fold the MR header |
@@ -151,7 +151,7 @@ A bound key adds to the default key, it does not replace it.
 | `wrap` | `w` |
 | `whitespace` | `W` |
 | `more_context` | `+` |
-| `view_file` | `v` |
+| `view_file` | `ctrl-v` |
 | `description` | `i` |
 | `comment` | `c` |
 | `comment_old` | `C` |

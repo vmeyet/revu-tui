@@ -1820,13 +1820,20 @@ fn view(path: &str, sha: &str, line: u32, note: Option<&str>) -> Action {
 }
 
 #[test]
-fn v_hands_the_head_file_at_the_cursors_line() {
+fn ctrl_v_hands_the_head_file_at_the_cursors_line() {
     let mut app = with_review();
     on_line(&mut app);
-    assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 12, None)]);
+    assert_eq!(app.handle_key(ctrl('v')), vec![view("src/pay/charge.rs", "bbbb", 12, None)]);
     assert!(app.live_toast().unwrap().text.contains("opening charge.rs"));
     press(&mut app, "j");
-    assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "a removed line opens the next head line");
+    assert_eq!(app.handle_key(ctrl('v')), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "a removed line opens the next head line");
+}
+
+#[test]
+fn a_plain_v_opens_nothing() {
+    let mut app = with_review();
+    on_line(&mut app);
+    assert_eq!(press(&mut app, "v"), vec![]);
 }
 
 #[test]
@@ -1846,15 +1853,15 @@ fn type_palette(app: &mut App, line: &str) -> Vec<Action> {
 }
 
 #[test]
-fn v_in_the_thread_pane_and_the_tree_uses_their_file() {
+fn ctrl_v_in_the_thread_pane_and_the_tree_uses_their_file() {
     let mut app = with_review();
     press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
-    assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "the old line 13 opens at head line 13");
+    assert_eq!(app.handle_key(ctrl('v')), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "the old line 13 opens at head line 13");
     app.close_pane();
     press(&mut app, "t");
-    assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 1, None)], "the tree opens on the cursor's file");
+    assert_eq!(app.handle_key(ctrl('v')), vec![view("src/pay/charge.rs", "bbbb", 1, None)], "the tree opens on the cursor's file");
 }
 
 #[test]
@@ -1871,9 +1878,9 @@ fn deleted_and_binary_files_say_what_they_can() {
     let review = Review::new(mr(), &[deleted, binary], vec![], &[]);
     app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
     app.review_jump_to(|row| matches!(row, Row::Line { file: 0, .. }));
-    assert_eq!(press(&mut app, "v"), vec![view("src/gone.rs", "aaaa", 1, Some("deleted in this MR · showing the old file"))]);
+    assert_eq!(app.handle_key(ctrl('v')), vec![view("src/gone.rs", "aaaa", 1, Some("deleted in this MR · showing the old file"))]);
     app.review_jump_to(|row| matches!(row, Row::File { index: 1, .. }));
-    assert_eq!(press(&mut app, "v"), vec![]);
+    assert_eq!(app.handle_key(ctrl('v')), vec![]);
     assert!(app.live_toast().unwrap().text.starts_with("binary file"));
 }
 
