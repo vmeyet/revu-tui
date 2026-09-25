@@ -92,6 +92,18 @@ pub const VERBS: [(&str, &str); 14] = [
     ("quit", "leave"),
 ];
 
+/// The commands the list shows for what is typed: all of them on an empty line, else ranked by
+/// how well their verb matches, at most `MAX_SHOWN`.
+pub fn verbs_for(input: &str) -> Vec<(&'static str, &'static str)> {
+    let verb = input.split_whitespace().next().unwrap_or("");
+    let ranked: Vec<(&str, &str)> = if verb.is_empty() {
+        VERBS.to_vec()
+    } else {
+        fuzzy::rank(verb, VERBS.iter().map(|(v, what)| ((*v).to_owned(), (*v, *what)))).into_iter().map(|(_, pair)| pair).collect()
+    };
+    ranked.into_iter().take(MAX_SHOWN).collect()
+}
+
 pub fn parse(line: &str) -> Result<Command, String> {
     let line = line.trim().trim_start_matches(':').trim();
     let (verb, rest) = line.split_once(char::is_whitespace).map_or((line, ""), |(v, r)| (v, r.trim()));
@@ -205,6 +217,11 @@ impl Palette {
         let stepped = self.mode != Mode::Mrs;
         self.mode = Mode::Mrs;
         stepped
+    }
+
+    /// Still on the command's name: `↑ ↓` walk the list of commands, not the arguments.
+    pub fn naming_command(&self) -> bool {
+        self.mode == Mode::Commands && !self.input.contains(char::is_whitespace)
     }
 
     /// Moves the highlight in a list of `len` rows, staying inside it.
@@ -373,6 +390,14 @@ mod tests {
         assert_eq!(p.selected, 0);
         p.move_by(1, 0);
         assert_eq!(p.selected, 0);
+    }
+
+    #[test]
+    fn the_command_list_follows_the_typed_verb() {
+        assert_eq!(verbs_for("").len(), VERBS.len().min(MAX_SHOWN));
+        assert_eq!(verbs_for("pub").first().map(|(v, _)| *v), Some("publish"));
+        assert_eq!(verbs_for("go !42").first().map(|(v, _)| *v), Some("go"));
+        assert!(typed("pu").naming_command() && !typed("go !4").naming_command());
     }
 
     #[test]

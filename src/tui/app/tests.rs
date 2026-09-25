@@ -1521,8 +1521,28 @@ fn tab_completes_verbs_mrs_and_themes_and_up_recalls() {
     run_line(&mut app, "help");
     assert_eq!(app.help, Some(Help::default()));
     press(&mut app, "x:");
+    app.handle_key(ctrl('p'));
+    assert_eq!(app.palette.as_ref().unwrap().input, "help", "^p recalls, as in a shell");
+}
+
+#[test]
+fn arrows_pick_a_command_from_the_list_and_enter_runs_it_or_waits_for_its_argument() {
+    let mut app = with_queue();
+    press(&mut app, ":");
+    for _ in 0..crate::tui::palette::VERBS.iter().position(|(v, _)| *v == "all").unwrap() {
+        app.handle_key(code(KeyCode::Down));
+    }
     app.handle_key(code(KeyCode::Up));
-    assert_eq!(app.palette.as_ref().unwrap().input, "help");
+    app.handle_key(code(KeyCode::Down));
+    assert!(render(&mut app, 120, 30).contains("▸ all"), "the picked command stands out");
+    app.handle_key(code(KeyCode::Enter));
+    assert!(app.palette.is_none() && app.everywhere, "all runs at once");
+    press(&mut app, ":g");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.palette.as_ref().map(|p| p.input.as_str()), Some("go "), "go needs an MR: the line waits for it");
+    press(&mut app, "4");
+    app.handle_key(code(KeyCode::Down));
+    assert_eq!(app.palette.as_ref().unwrap().input, "go !42 ", "past the verb, ↓ walks the argument's options");
 }
 
 fn ctrl_k() -> KeyEvent {
