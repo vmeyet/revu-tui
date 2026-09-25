@@ -1,6 +1,8 @@
 //! The mouse wheel scrolls the pane under the pointer, as its arrow keys would, and leaves the focus where it is.
+//! A drag with the left button selects the text of the pane it starts in and copies it on release.
 use super::{Action, App, Focus};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crate::tui::drag::Drag;
+use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
 
 /// Rows of the diff one notch of the wheel moves; the queue and the right pane move one item.
@@ -15,8 +17,7 @@ pub struct Areas {
 }
 
 impl Areas {
-    fn under(self, column: u16, row: u16) -> Option<Focus> {
-        let at = Position::new(column, row);
+    fn under(self, at: Position) -> Option<Focus> {
         [(self.queue, Focus::Queue), (self.review, Focus::Review), (self.side, Focus::Side)]
             .into_iter()
             .find_map(|(area, pane)| area.contains(at).then_some(pane))
@@ -24,20 +25,44 @@ impl Areas {
 }
 
 impl App {
-    /// Anything but the wheel, and the wheel over an overlay or a prompt, does nothing.
+    /// The wheel and a left drag; nothing works over an overlay or a prompt.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
-        let arrow = match mouse.kind {
-            MouseEventKind::ScrollDown => KeyCode::Down,
-            MouseEventKind::ScrollUp => KeyCode::Up,
-            _ => return vec![],
-        };
         if self.modal() || self.confirm.is_some() || self.react.is_some() {
             return vec![];
         }
-        let Some(pane) = self.areas.under(mouse.column, mouse.row) else { return vec![] };
+        let at = Position::new(mouse.column, mouse.row);
+        match mouse.kind {
+            MouseEventKind::ScrollDown => self.wheel(at, KeyCode::Down),
+            MouseEventKind::ScrollUp => self.wheel(at, KeyCode::Up),
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.drag = Drag::start(&self.text_rows, at);
+                vec![]
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                self.drag = self.drag.map(|drag| drag.moved_to(&self.text_rows, at));
+                vec![]
+            }
+            MouseEventKind::Up(MouseButton::Left) => self.copy_drag(),
+            _ => vec![],
+        }
+    }
+
+    fn wheel(&mut self, at: Position, arrow: KeyCode) -> Vec<Action> {
+        self.drag = None;
+        let Some(pane) = self.areas.under(at) else { return vec![] };
         self.repeat = None;
         let times = if pane == Focus::Review { DIFF_ROWS } else { 1 };
         (0..times).flat_map(|_| self.scroll(pane, KeyEvent::from(arrow))).collect()
+    }
+
+    /// A release ends the drag: the text goes to the clipboard, the highlight stays until the next key or click.
+    fn copy_drag(&mut self) -> Vec<Action> {
+        self.drag = self.drag.filter(|drag| !drag.is_click());
+        let Some(text) = self.drag.map(|drag| drag.text(&self.text_rows)).filter(|text| !text.is_empty()) else {
+            return vec![];
+        };
+        let lines = text.lines().count();
+        vec![Action::Copy { text, done: format!("copied {lines} line{}", if lines == 1 { "" } else { "s" }) }]
     }
 
     fn scroll(&mut self, pane: Focus, arrow: KeyEvent) -> Vec<Action> {

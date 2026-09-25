@@ -4195,3 +4195,83 @@ fn snapshot_every_thread() {
     press(&mut app, "T");
     insta::assert_snapshot!("every_thread_zen", render(&mut app, 160, 30));
 }
+
+fn mouse(app: &mut App, kind: crossterm::event::MouseEventKind, (column, row): (u16, u16)) -> Vec<Action> {
+    app.handle_mouse(crossterm::event::MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE })
+}
+
+/// Presses the left button at `from`, drags to `to` and lets go, drawing between each step as the loop does.
+fn drag(app: &mut App, from: (u16, u16), to: (u16, u16), width: u16, height: u16) -> Vec<Action> {
+    use crossterm::event::{MouseButton, MouseEventKind};
+    mouse(app, MouseEventKind::Down(MouseButton::Left), from);
+    render(app, width, height);
+    mouse(app, MouseEventKind::Drag(MouseButton::Left), to);
+    render(app, width, height);
+    mouse(app, MouseEventKind::Up(MouseButton::Left), to)
+}
+
+/// The cell `text` starts at on screen.
+fn spot(app: &mut App, text: &str, width: u16, height: u16) -> (u16, u16) {
+    let screen = render(app, width, height);
+    let found = screen.lines().enumerate().find_map(|(y, row)| row.find(text).map(|i| (row[..i].chars().count(), y)));
+    let (x, y) = found.unwrap_or_else(|| panic!("{text} is on screen:\n{screen}"));
+    (x as u16, y as u16)
+}
+
+/// The screen with each run of reversed cells between `⟦` and `⟧`.
+fn render_selected(app: &mut App, width: u16, height: u16) -> String {
+    let buffer = cells(app, width, height);
+    let reversed = |x: u16, y: u16| x < width && buffer[(x, y)].modifier.contains(ratatui::style::Modifier::REVERSED);
+    let row = |y: u16| {
+        let mut row = String::new();
+        for x in 0..width {
+            if reversed(x, y) && (x == 0 || !reversed(x - 1, y)) {
+                row.push('⟦');
+            }
+            row.push_str(buffer[(x, y)].symbol());
+            if reversed(x, y) && !reversed(x + 1, y) {
+                row.push('⟧');
+            }
+        }
+        row.trim_end().to_owned()
+    };
+    (0..height).map(row).collect::<Vec<_>>().join("\n")
+}
+
+#[test]
+fn a_drag_in_the_diff_copies_only_the_code_text_and_lights_it() {
+    let mut app = with_review();
+    let (x, y) = spot(&mut app, "let client = Client::new()", 120, 24);
+    let actions = drag(&mut app, (x, y), (x + 9, y + 1), 120, 24);
+    let text = "let client = Client::new();\n    let client".to_owned();
+    assert_eq!(actions, vec![Action::Copy { text, done: "copied 2 lines".into() }]);
+    insta::assert_snapshot!("diff_selection", render_selected(&mut app, 120, 24));
+    press(&mut app, "j");
+    assert!(!render_selected(&mut app, 120, 24).contains('⟦'), "the next key clears the highlight");
+}
+
+#[test]
+fn a_click_without_a_drag_or_from_the_gutter_copies_nothing() {
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let mut app = with_review();
+    let at = spot(&mut app, "let client = Client::new()", 120, 24);
+    mouse(&mut app, MouseEventKind::Down(MouseButton::Left), at);
+    assert_eq!(mouse(&mut app, MouseEventKind::Up(MouseButton::Left), at), vec![]);
+    assert!(app.drag.is_none());
+    let gutter = (at.0 - 8, at.1);
+    assert_eq!(drag(&mut app, gutter, (at.0 + 5, at.1), 120, 24), vec![]);
+}
+
+#[test]
+fn a_drag_side_by_side_stays_in_the_half_it_started_in() {
+    let mut app = with_review();
+    app.focus = Focus::Review;
+    press(&mut app, "D");
+    let old = spot(&mut app, "let client = Client::new()", 320, 24);
+    let new = spot(&mut app, "let client = Client::with_key", 320, 24);
+    assert_eq!(old.1, new.1, "both halves on one row");
+    let actions = drag(&mut app, (old.0, old.1 - 1), (new.0 + 3, new.1), 320, 24);
+    let Some(Action::Copy { text, .. }) = actions.first() else { panic!("a copy: {actions:?}") };
+    assert!(text.ends_with("\n    let client = Client::new();"), "{text}");
+    assert!(!text.contains("with_key"), "{text}");
+}

@@ -1,4 +1,4 @@
-//! The terminal as revu holds it: raw mode on the alternate screen, the mouse wheel, and ⌘
+//! The terminal as revu holds it: raw mode on the alternate screen, the mouse wheel and drags, and ⌘
 //! reported where the terminal speaks the kitty keyboard protocol (Ghostty, Kitty, `WezTerm`,
 //! iTerm2 with the option on), so ⌘K reaches the palette like ctrl-k does.
 use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
@@ -6,10 +6,10 @@ use crossterm::terminal::{EnterAlternateScreen, enable_raw_mode};
 use ratatui::DefaultTerminal;
 use std::io::Write;
 
-/// Clicks and the wheel, in the SGR encoding. Not crossterm's `EnableMouseCapture`: it also
-/// asks for every pointer move, which would wake the loop for nothing.
-const MOUSE_ON: &[u8] = b"\x1b[?1000h\x1b[?1006h";
-const MOUSE_OFF: &[u8] = b"\x1b[?1006l\x1b[?1000l";
+/// Clicks, drags and the wheel, in the SGR encoding. Not crossterm's `EnableMouseCapture`: it also
+/// asks for every pointer move without a button down, which would wake the loop for nothing.
+const MOUSE_ON: &[u8] = b"\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+const MOUSE_OFF: &[u8] = b"\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 
 /// What revu asked of the terminal, so it can take it back exactly.
 pub struct Screen {

@@ -5,6 +5,7 @@ mod brief_view;
 mod complete;
 mod compose;
 mod diff_view;
+mod drag;
 mod field;
 mod ground;
 pub(crate) mod help;
@@ -400,6 +401,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
             Action::Yank(url) => send(copy(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
+            Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
             Action::SaveDraft { key, index, draft } => {
                 send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
             }

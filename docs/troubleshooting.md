@@ -8,7 +8,7 @@ Find your problem in the left column, then apply the fix.
 | `⌘enter` does not post | Use `ctrl-s`. Terminal.app never sends `⌘`; iTerm2 and Kitty keep `⌘enter` for themselves; in Ghostty add `keybind = super+enter=unbind` |
 | `]n` does nothing on AZERTY | Set `[keys] layout = "azerty"` and use `)n`, or see the Option key row |
 | The Option key types nothing | Let Option type characters: in Ghostty `macos-option-as-alt = false`, in iTerm2 set Left Option to Normal |
-| Dragging the mouse selects nothing | revu reads the wheel, so hold shift while dragging (Ghostty, Kitty, WezTerm) or ⌥ (iTerm2, Terminal.app) |
+| Dragging the mouse copies only the code | That is revu's own selection; hold shift while dragging (Ghostty, Kitty, WezTerm) or ⌥ (iTerm2, Terminal.app) to select whole screen rows |
 | `revu update` is slow | The first update builds every library; the next ones build only revu |
 | Pictures in comments do not show | Use a terminal that draws pictures, and check `[tui] images` is not `false` |
 | `no token for gitlab.com` | Run `revu login --from-glab`, or set `GITLAB_TOKEN` |

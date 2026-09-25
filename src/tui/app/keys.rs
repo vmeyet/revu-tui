@@ -9,6 +9,7 @@ const HALF_PAGE: isize = 10;
 impl App {
     /// Any key but the one finishing a quit calls the pending quit off, then does its own job.
     pub fn handle_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        self.drag = None;
         let pending = self.quitting;
         let actions = self.route_key(key);
         if self.quitting == pending {
