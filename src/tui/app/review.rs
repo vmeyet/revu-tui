@@ -26,6 +26,8 @@ pub struct Open {
     pub pipeline: Option<super::Pipeline>,
     /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
     pub pinned_file: Option<usize>,
+    /// Where the branch was deployed; `None` until the forge was asked.
+    pub deployments: Option<Vec<crate::forge::Deployment>>,
 }
 
 impl Open {
@@ -45,6 +47,7 @@ impl Open {
             answer: None,
             pipeline: None,
             pinned_file: None,
+            deployments: None,
         }
     }
 

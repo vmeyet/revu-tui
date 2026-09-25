@@ -55,6 +55,11 @@ impl App {
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
+            Incoming::Deployments { key, deployments } => {
+                if let Some(open) = self.open.clone().filter(|o| o.key == key) {
+                    self.open = Some(Open { deployments: Some(deployments), ..open });
+                }
+            }
             Incoming::Image { url, image } => self.thumbs.arrived(&url, image),
             Incoming::Applied { key, branch } => {
                 if self.open.as_ref().is_some_and(|o| o.key == key) {
@@ -106,9 +111,13 @@ impl App {
         };
         self.count_viewed(&key, &next.review);
         let fresh_open = self.open.as_ref().is_none_or(|o| o.key != key);
+        let pushed = self.open.as_ref().is_some_and(|o| o.key == key && o.review.mr.refs.head != next.review.mr.refs.head);
         self.open = Some(Open { cached: cached.map(|age| (self.now, age)), ..next });
         if fresh_open {
             self.spot_saved = self.spot().map(|spot| (key.clone(), spot));
+        }
+        if cached.is_none() && (pushed || self.open.as_ref().is_some_and(|o| o.deployments.is_none())) {
+            self.ask_deployments();
         }
         if cached.is_none() {
             self.opening = None;

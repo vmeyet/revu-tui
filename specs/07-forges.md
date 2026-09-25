@@ -86,6 +86,7 @@ async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) ->
 | Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked | `submitPullRequestReview` with `COMMENT` or `APPROVE`, in one call |
 | Resolve | `PUT …/discussions/:id resolved=` | GraphQL `resolveReviewThread` / `unresolveReviewThread` |
 | Approve | `POST …/approve`, `…/unapprove` | `POST pulls/:n/reviews` with `APPROVE`; there is no unapprove for the reviewer, the error says to request changes or dismiss from the web |
+| Review apps | `GET projects/:path/deployments?ref=<branch>&status=success`, newest first; the first of each environment with an `external_url` | `GET repos/…/deployments?ref=<branch>`, the first of each environment, then its newest status: kept when `success` with an `environment_url` |
 | Draft or ready | GraphQL `mergeRequestSetDraft(projectPath, iid, draft)`; a no-op when already there | GraphQL `pullRequest { id isDraft }`, then `convertPullRequestToDraft` or `markPullRequestReadyForReview` by node id, skipped when already there |
 | Suggestions | ```` ```suggestion:-0+0 ```` fence | ```` ```suggestion ```` fence over the commented lines; the range comes from `start`/`line` |
 | Line URL | `web_url/diffs#sha1(path)_old_new` | `web_url/files#diff-sha256(path)R<new>` or `L<old>` |

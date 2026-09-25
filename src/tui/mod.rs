@@ -453,6 +453,11 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.forge_of(&key).checks(&key, &head).await;
                 send(outcome.map_or_else(|e| failed(Failure::Checks, &e), |checks| Incoming::Checks { key, checks }));
             }
+            Action::LoadDeployments { key, branch } => {
+                if let Ok(deployments) = backend.forge_of(&key).deployments(&key, &branch).await {
+                    send(Incoming::Deployments { key, deployments });
+                }
+            }
             Action::Approve { key, approve } => {
                 let outcome = backend.forge_of(&key).approve(&key, approve).await;
                 send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));

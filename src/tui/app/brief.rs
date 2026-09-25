@@ -30,6 +30,8 @@ pub struct Brief {
     pub review: ReviewLine,
     /// The open threads; `None` from the queue, which only counts them.
     pub threads: Option<Vec<ThreadRow>>,
+    /// Where the branch was deployed; known only from an open MR.
+    pub deployments: Vec<crate::forge::Deployment>,
     /// Open threads as the queue counts them, shown when `threads` is `None`.
     pub unresolved: usize,
     /// The thread the cursor is on; `None` while reading above them, after `g` or `k` past the first.
@@ -94,6 +96,7 @@ impl Brief {
                 i_review: mr.reviewers.iter().any(|r| r.username == me),
             },
             threads: None,
+            deployments: vec![],
             unresolved: mr.unresolved as usize,
             selected: None,
             scroll: 0,
@@ -131,6 +134,7 @@ impl Brief {
             selected: (!threads.is_empty()).then_some(0),
             unresolved: threads.len(),
             threads: Some(threads),
+            deployments: vec![],
             scroll: 0,
             follow: false,
         }
@@ -204,7 +208,8 @@ impl App {
             _ => None,
         });
         let sigil = self.hosts.kind_of(&open.key).sigil();
-        self.brief = Some(Brief::of_review(open.key.clone(), &open.review, sigil, &self.me, checks));
+        let brief = Brief::of_review(open.key.clone(), &open.review, sigil, &self.me, checks);
+        self.brief = Some(Brief { deployments: open.deployments.clone().unwrap_or_default(), ..brief });
     }
 
     pub(super) fn handle_brief_key(&mut self, key: KeyEvent) -> Vec<Action> {

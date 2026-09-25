@@ -198,6 +198,11 @@ pub enum Action {
         key: MrKey,
         head: String,
     },
+    /// Where the MR's branch `branch` was deployed: its review apps.
+    LoadDeployments {
+        key: MrKey,
+        branch: String,
+    },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
     /// Ask Claude; `id` names the answer the stream belongs to, `fresh` skips the cached answer.
@@ -380,6 +385,11 @@ pub enum Incoming {
     Checks {
         key: MrKey,
         checks: Option<crate::forge::checks::Checks>,
+    },
+    /// The open MR's review apps, newest deployment of each environment.
+    Deployments {
+        key: MrKey,
+        deployments: Vec<crate::forge::Deployment>,
     },
     /// A file ready for the reader's program; the loop hands it the terminal.
     ViewReady {

@@ -1,7 +1,7 @@
 //! The pipeline pane: the run's state and counts, then each stage and its jobs, failures first.
-use super::app::{App, Focus, Run};
+use super::app::{App, Focus, Open, Run};
 use super::theme::Theme;
-use super::ui::{draw_empty, settle_scroll, side_pane, spinner, truncate};
+use super::ui::{DEPLOYED, draw_empty, settle_scroll, side_pane, spinner, truncate};
 use crate::forge::checks::{Checks, Job, JobState};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -28,12 +28,36 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         Run::Failed(message) => return draw_empty(f, theme, inner, &["pipeline unreadable", message, "", "r to retry"]),
         Run::Ready(checks) => checks,
     };
-    let lines = lines(checks, pipeline.selected, inner.width as usize, theme, tick);
+    let deployed = deployment_lines(open, inner.width as usize, theme);
+    let lines: Vec<(Option<usize>, Line)> =
+        deployed.into_iter().map(|line| (None, line)).chain(lines(checks, pipeline.selected, inner.width as usize, theme, tick)).collect();
     let height = inner.height as usize;
     let cursor = lines.iter().position(|(job, _)| *job == Some(pipeline.selected)).unwrap_or(0);
     let scroll = settle_scroll(0, cursor, height);
     let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|(_, line)| line).collect();
     f.render_widget(Paragraph::new(shown), inner);
+}
+
+/// The review apps above the jobs, each with its address so the terminal can open it; a blank
+/// row closes the block. Nothing when the branch went nowhere.
+fn deployment_lines<'a>(open: &Open, width: usize, theme: Theme) -> Vec<Line<'a>> {
+    let Some(deployments) = open.deployments.as_deref().filter(|d| !d.is_empty()) else { return vec![] };
+    let mut lines = vec![Line::from(Span::styled(" REVIEW APPS", Style::default().fg(theme.faded)))];
+    for deployment in deployments {
+        let behind = deployment.sha != open.review.mr.refs.head;
+        let name = format!(" {DEPLOYED}{}", deployment.environment);
+        let note = if behind { " · older commit" } else { "" };
+        lines.push(Line::from(vec![
+            Span::styled(name, if behind { Style::default().fg(theme.muted) } else { Style::default() }),
+            Span::styled(note, Style::default().fg(theme.faded)),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("   {}", truncate(&deployment.url, width.saturating_sub(4))),
+            Style::default().fg(theme.link),
+        )));
+    }
+    lines.push(Line::default());
+    lines
 }
 
 /// Every row of the pane, each with the index of the job it shows, if any.

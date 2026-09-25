@@ -128,6 +128,28 @@ pub struct Pipeline {
     pub web_url: Option<String>,
 }
 
+/// Where the MR's branch was deployed and can be tried: a review app, a preview, a storybook.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Deployment {
+    pub environment: String,
+    pub url: String,
+    /// The commit deployed, which may be older than the MR's head.
+    pub sha: String,
+}
+
+impl Deployment {
+    /// The first of each environment, from deployments listed newest first.
+    pub fn newest_each(deployments: impl IntoIterator<Item = Deployment>) -> Vec<Deployment> {
+        let mut kept: Vec<Deployment> = vec![];
+        for deployment in deployments {
+            if kept.iter().all(|k| k.environment != deployment.environment) {
+                kept.push(deployment);
+            }
+        }
+        kept
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Approvals {
     pub approved: bool,

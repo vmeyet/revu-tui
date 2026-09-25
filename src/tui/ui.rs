@@ -9,6 +9,9 @@ use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
+/// What marks a review app: where the MR's branch runs.
+pub const DEPLOYED: &str = "⧉ ";
+
 const QUEUE_W: u16 = 34;
 /// The queue on a wide terminal: ten more columns show about twice the title.
 const WIDE_QUEUE_W: u16 = 44;

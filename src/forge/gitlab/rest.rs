@@ -27,6 +27,19 @@ fn mr_path(key: &MrKey) -> String {
     format!("{}/merge_requests/{}", project_path(&key.project), key.number)
 }
 
+#[derive(Deserialize)]
+struct DeploymentWire {
+    sha: String,
+    environment: EnvironmentWire,
+}
+
+#[derive(Deserialize)]
+struct EnvironmentWire {
+    name: String,
+    #[serde(default)]
+    external_url: Option<String>,
+}
+
 /// The newest pipeline of an MR, as `merge_requests/:iid/pipelines` lists it (newest first).
 #[derive(Deserialize)]
 struct PipelineRef {
@@ -116,6 +129,15 @@ impl Client {
         let Some(newest) = pipelines.into_iter().next() else { return Ok(None) };
         let jobs: Vec<JobWire> = self.get_all(&format!("{}/pipelines/{}/jobs", project_path(&key.project), newest.id)).await?;
         Ok(Some(Checks::from_jobs(newest.web_url, jobs.into_iter().map(Found::from).collect())))
+    }
+
+    pub async fn deployments(&self, key: &MrKey, branch: &str) -> Result<Vec<forge::Deployment>> {
+        let query = format!("ref={}&status=success&order_by=created_at&sort=desc&per_page=50", url_encode(branch));
+        let found: Vec<DeploymentWire> = self.get(&format!("{}/deployments?{query}", project_path(&key.project))).await?;
+        let usable = found
+            .into_iter()
+            .filter_map(|d| Some(forge::Deployment { url: d.environment.external_url?, environment: d.environment.name, sha: d.sha }));
+        Ok(forge::Deployment::newest_each(usable))
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
@@ -541,6 +563,26 @@ mod tests {
             .flat_map(|s| s.jobs.iter().map(move |j| format!("{} {} {:?} {:?}", s.name, j.name, j.state, j.seconds)))
             .collect();
         assert_eq!(jobs, ["check lint Passed Some(7)", "test flaky Failed Some(7)", "test unit Passed Some(12)"]);
+    }
+
+    #[tokio::test]
+    async fn deployments_keep_the_newest_of_each_environment_with_an_address() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/deployments"))
+            .and(query_param("ref", "feat/checkout"))
+            .and(query_param("status", "success"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                {"sha": "b2", "environment": {"name": "review/feat-checkout", "external_url": "https://feat-checkout.review.acme.test"}},
+                {"sha": "b1", "environment": {"name": "review/feat-checkout", "external_url": "https://feat-checkout.review.acme.test"}},
+                {"sha": "b1", "environment": {"name": "storybook/feat-checkout", "external_url": "https://sb.acme.test/feat-checkout"}},
+                {"sha": "b1", "environment": {"name": "migrations", "external_url": null}}
+            ])))
+            .mount(&server)
+            .await;
+        let found = client(&server).deployments(&key(), "feat/checkout").await.unwrap();
+        let seen: Vec<(&str, &str)> = found.iter().map(|d| (d.environment.as_str(), d.sha.as_str())).collect();
+        assert_eq!(seen, [("review/feat-checkout", "b2"), ("storybook/feat-checkout", "b1")]);
     }
 
     #[tokio::test]

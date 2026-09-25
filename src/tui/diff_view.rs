@@ -2,10 +2,10 @@
 use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
 use super::table::{self, TableLine};
 use super::theme::Theme;
-use super::ui::{draw_empty, pane, settle_scroll, short_age, spinner, truncate};
+use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
-use crate::forge::Kind;
+use crate::forge::{Deployment, Kind};
 use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
 use crate::syntax::{self, Token};
 use chrono::{DateTime, Utc};
@@ -19,6 +19,8 @@ use unicode_width::UnicodeWidthStr;
 
 /// Cells of the viewed-files bar in the review header.
 const PROGRESS_W: usize = 10;
+/// Room for a review app's environment name in the header before it is cut.
+const ENVIRONMENT_W: usize = 32;
 const GUTTER_W: usize = 4;
 /// The glyph and count column before the line numbers.
 const ANCHOR_W: usize = 2;
@@ -100,9 +102,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         .chain((open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height - pinned.count()))
         .collect();
     let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
+    let deployment = if folded || zen { None } else { deployment_link(open, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
-    app.links.extend(pipeline);
+    app.links.extend(pipeline.into_iter().chain(deployment));
 }
 
 /// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
@@ -249,10 +252,42 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
         second.push(Span::styled(done, Style::default().fg(if progress.done() { theme.success } else { theme.accent })));
         second.push(Span::styled(left, Style::default().fg(theme.faded)));
     }
+    if let Some(deployment) = open.deployments.as_deref().and_then(<[_]>::first) {
+        if second.len() > 1 {
+            second.push(dot());
+        }
+        second.extend(deployment_spans(open, deployment, theme));
+    }
     if second.len() == 1 {
         return vec![first];
     }
     vec![first, Line::from(second)]
+}
+
+/// The first review app, `+n` for the others the pipeline pane lists, and a word when it runs an older commit.
+fn deployment_spans<'a>(open: &Open, deployment: &Deployment, theme: Theme) -> Vec<Span<'a>> {
+    let behind = deployment.sha != open.review.mr.refs.head;
+    let colour = if behind { theme.muted } else { theme.link };
+    let mut spans =
+        vec![Span::styled(format!("{DEPLOYED}{}", truncate(&deployment.environment, ENVIRONMENT_W)), Style::default().fg(colour))];
+    let others = open.deployments.as_ref().map_or(0, |all| all.len().saturating_sub(1));
+    if others > 0 {
+        spans.push(Span::styled(format!(" +{others}"), Style::default().fg(theme.muted)));
+    }
+    if behind {
+        spans.push(Span::styled(" · older commit", Style::default().fg(theme.faded)));
+    }
+    spans
+}
+
+/// The review app on the header's second row links to where it runs.
+fn deployment_link(open: &Open, header: &[Line], area: Rect) -> Option<super::ui::Link> {
+    let url = open.deployments.as_deref()?.first()?.url.clone();
+    let spans = &header.get(1)?.spans;
+    let at = spans.iter().position(|s| s.content.starts_with(DEPLOYED))?;
+    let x = area.x + u16::try_from(spans[..at].iter().map(Span::width).sum::<usize>()).ok()?;
+    let text = spans[at].content.to_string();
+    (x + u16::try_from(text.width()).ok()? <= area.right()).then(|| super::ui::Link { x, y: area.y + 1, text, url })
 }
 
 /// Zen's one line on top: which MR, whose, its size, its pipeline and its unresolved threads, all quiet.
