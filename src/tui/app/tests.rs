@@ -4272,6 +4272,20 @@ fn a_click_without_a_drag_or_from_the_gutter_copies_nothing() {
 }
 
 #[test]
+fn a_click_on_a_link_opens_it_and_a_drag_over_it_does_not() {
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let mut app = with_review();
+    render(&mut app, 160, 30);
+    let title = app.links.iter().find(|link| link.text == "acme/widgets!42").expect("the diff's title links to the MR").clone();
+    let at = (title.x + 3, title.y);
+    mouse(&mut app, MouseEventKind::Down(MouseButton::Left), at);
+    assert_eq!(mouse(&mut app, MouseEventKind::Up(MouseButton::Left), at), vec![Action::OpenUrl(title.url)]);
+    let code = spot(&mut app, "let client = Client::new()", 160, 30);
+    let dragged = drag(&mut app, code, at, 160, 30);
+    assert!(dragged.iter().all(|action| !matches!(action, Action::OpenUrl(_))), "{dragged:?}");
+}
+
+#[test]
 fn a_drag_side_by_side_stays_in_the_half_it_started_in() {
     let mut app = with_review();
     app.focus = Focus::Review;
