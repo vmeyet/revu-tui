@@ -104,7 +104,8 @@ impl App {
     /// The open MR's review apps asked of the forge; what was known stays shown until the answer.
     pub(super) fn ask_deployments(&mut self) {
         let Some(open) = self.open.clone() else { return };
-        self.composed.push(Action::LoadDeployments { key: open.key.clone(), branch: open.review.mr.source_branch.clone() });
+        let mr = &open.review.mr;
+        self.composed.push(Action::LoadDeployments { key: open.key.clone(), branch: mr.source_branch.clone(), head: mr.refs.head.clone() });
         self.open = Some(Open { deployments: Some(open.deployments.unwrap_or_default()), ..open });
     }
 

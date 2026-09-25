@@ -44,9 +44,9 @@ fn deployment_lines<'a>(open: &Open, width: usize, theme: Theme) -> Vec<Line<'a>
     let Some(deployments) = open.deployments.as_deref().filter(|d| !d.is_empty()) else { return vec![] };
     let mut lines = vec![Line::from(Span::styled(" REVIEW APPS", Style::default().fg(theme.faded)))];
     for deployment in deployments {
-        let behind = deployment.sha != open.review.mr.refs.head;
+        let behind = !deployment.current;
         let name = format!(" {DEPLOYED}{}", deployment.environment);
-        let note = if behind { " · older commit" } else { "" };
+        let note = if behind { " · older push" } else { "" };
         lines.push(Line::from(vec![
             Span::styled(name, if behind { Style::default().fg(theme.muted) } else { Style::default() }),
             Span::styled(note, Style::default().fg(theme.faded)),

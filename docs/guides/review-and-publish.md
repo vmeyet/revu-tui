@@ -11,9 +11,9 @@ Each thread reads its comment first, then its file name and line.
 `enter` goes there in the diff.
 `k` above the first thread, or `g`, takes you back to the top.
 `p` opens the pipeline, `esc` closes the cover.
-When the branch was deployed, the cover and the top of the pipeline pane list its review apps.
-The MR header ends with the first one, `⧉ review/…`, which you can click.
-A review app running an older commit than the MR's head says `older commit`.
+When the branch was deployed, the top of the pipeline pane lists its review apps.
+The MR header and the cover show the one to try, `⧉ review/…`, which you can click.
+A review app deployed before the last push says `older push`.
 The file tree, `t`, lists the files, with `◆n` for the unresolved threads in each.
 
 ## Comment

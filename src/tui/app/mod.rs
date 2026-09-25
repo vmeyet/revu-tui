@@ -198,10 +198,11 @@ pub enum Action {
         key: MrKey,
         head: String,
     },
-    /// Where the MR's branch `branch` was deployed: its review apps.
+    /// The review apps of the MR of `branch`, `head` telling which run it as it is now.
     LoadDeployments {
         key: MrKey,
         branch: String,
+        head: String,
     },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),

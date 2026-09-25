@@ -27,17 +27,58 @@ fn mr_path(key: &MrKey) -> String {
     format!("{}/merge_requests/{}", project_path(&key.project), key.number)
 }
 
+/// An environment as the search lists it; its last deployment needs a read of its own.
 #[derive(Deserialize)]
-struct DeploymentWire {
-    sha: String,
-    environment: EnvironmentWire,
+struct EnvironmentRef {
+    id: u64,
 }
 
 #[derive(Deserialize)]
-struct EnvironmentWire {
+struct Environment {
     name: String,
     #[serde(default)]
     external_url: Option<String>,
+    #[serde(default)]
+    last_deployment: Option<LastDeployment>,
+}
+
+#[derive(Deserialize)]
+struct LastDeployment {
+    #[serde(rename = "ref")]
+    git_ref: String,
+    sha: String,
+    status: String,
+    #[serde(default)]
+    deployable: Option<Deployable>,
+}
+
+#[derive(Deserialize)]
+struct Deployable {
+    #[serde(default)]
+    pipeline: Option<PipelineId>,
+}
+
+#[derive(Deserialize)]
+struct PipelineId {
+    id: u64,
+}
+
+impl Environment {
+    /// The review app it runs for MR `key` of `branch`, when its last deployment is one: from the
+    /// branch, or from the MR's own ref, which merge request pipelines deploy from.
+    fn review_app(self, key: &MrKey, branch: &str, head: &str, newest_pipeline: Option<u64>) -> Option<forge::Deployment> {
+        let mr_ref = format!("refs/merge-requests/{}/", key.number);
+        let last = self.last_deployment.filter(|d| d.status == "success" && (d.git_ref == branch || d.git_ref.starts_with(&mr_ref)))?;
+        let pipeline = last.deployable.and_then(|d| d.pipeline).map(|p| p.id);
+        let current = last.sha == head || (pipeline.is_some() && pipeline == newest_pipeline);
+        Some(forge::Deployment { environment: self.name, url: self.external_url.filter(|u| !u.is_empty())?, current })
+    }
+}
+
+/// GitLab's `CI_COMMIT_REF_SLUG`: what environment names built from a branch carry.
+fn ref_slug(branch: &str) -> String {
+    let slug: String = branch.to_lowercase().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).take(63).collect();
+    slug.trim_matches('-').to_owned()
 }
 
 /// The newest pipeline of an MR, as `merge_requests/:iid/pipelines` lists it (newest first).
@@ -131,13 +172,17 @@ impl Client {
         Ok(Some(Checks::from_jobs(newest.web_url, jobs.into_iter().map(Found::from).collect())))
     }
 
-    pub async fn deployments(&self, key: &MrKey, branch: &str) -> Result<Vec<forge::Deployment>> {
-        let query = format!("ref={}&status=success&order_by=created_at&sort=desc&per_page=50", url_encode(branch));
-        let found: Vec<DeploymentWire> = self.get(&format!("{}/deployments?{query}", project_path(&key.project))).await?;
-        let usable = found
-            .into_iter()
-            .filter_map(|d| Some(forge::Deployment { url: d.environment.external_url?, environment: d.environment.name, sha: d.sha }));
-        Ok(forge::Deployment::newest_each(usable))
+    /// The review apps still up for the MR: environments named after its branch whose last
+    /// deployment came from it; the deployments list itself cannot be filtered by branch.
+    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
+        let project = project_path(&key.project);
+        let search = format!("{project}/environments?states=available&search={}&per_page=20", url_encode(&ref_slug(branch)));
+        let pipelines = format!("{}/pipelines?per_page=1", mr_path(key));
+        let (found, pipelines) = tokio::try_join!(self.get::<Vec<EnvironmentRef>>(&search), self.get::<Vec<PipelineRef>>(&pipelines))?;
+        let newest = pipelines.first().map(|p| p.id);
+        let paths: Vec<String> = found.iter().map(|e| format!("{project}/environments/{}", e.id)).collect();
+        let environments = futures_util::future::try_join_all(paths.iter().map(|p| self.get::<Environment>(p))).await?;
+        Ok(environments.into_iter().filter_map(|e| e.review_app(key, branch, head, newest)).collect())
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
@@ -566,23 +611,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deployments_keep_the_newest_of_each_environment_with_an_address() {
+    async fn review_apps_are_the_environments_the_branch_or_the_mr_last_deployed() {
         let server = MockServer::start().await;
+        let environment = |id: u64, name: &str, git_ref: &str, sha: &str, pipeline: u64| {
+            let url = format!("https://{}.acme.test", name.replace('/', "-"));
+            json!({"id": id, "name": name, "external_url": url, "last_deployment": {
+                "ref": git_ref, "sha": sha, "status": "success", "deployable": {"pipeline": {"id": pipeline}}
+            }})
+        };
         Mock::given(method("GET"))
-            .and(path("/api/v4/projects/acme%2Fwidgets/deployments"))
-            .and(query_param("ref", "feat/checkout"))
-            .and(query_param("status", "success"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
-                {"sha": "b2", "environment": {"name": "review/feat-checkout", "external_url": "https://feat-checkout.review.acme.test"}},
-                {"sha": "b1", "environment": {"name": "review/feat-checkout", "external_url": "https://feat-checkout.review.acme.test"}},
-                {"sha": "b1", "environment": {"name": "storybook/feat-checkout", "external_url": "https://sb.acme.test/feat-checkout"}},
-                {"sha": "b1", "environment": {"name": "migrations", "external_url": null}}
-            ])))
+            .and(path("/api/v4/projects/acme%2Fwidgets/environments"))
+            .and(query_param("search", "feat-checkout"))
+            .and(query_param("states", "available"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{"id": 1}, {"id": 2}, {"id": 3}])))
             .mount(&server)
             .await;
-        let found = client(&server).deployments(&key(), "feat/checkout").await.unwrap();
-        let seen: Vec<(&str, &str)> = found.iter().map(|d| (d.environment.as_str(), d.sha.as_str())).collect();
-        assert_eq!(seen, [("review/feat-checkout", "b2"), ("storybook/feat-checkout", "b1")]);
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/pipelines"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{"id": 900}])))
+            .mount(&server)
+            .await;
+        let answers = [
+            (1, environment(1, "review/feat-checkout", "refs/merge-requests/42/merge", "m1", 900)),
+            (2, environment(2, "storybook/feat-checkout", "feat/checkout", "b1", 850)),
+            (3, environment(3, "review/feat-checkout-v2", "feat/checkout-v2", "c1", 700)),
+        ];
+        for (id, body) in answers {
+            Mock::given(method("GET"))
+                .and(path(format!("/api/v4/projects/acme%2Fwidgets/environments/{id}")))
+                .respond_with(ResponseTemplate::new(200).set_body_json(body))
+                .mount(&server)
+                .await;
+        }
+        let found = client(&server).deployments(&key(), "feat/checkout", "b2").await.unwrap();
+        let seen: Vec<(&str, bool)> = found.iter().map(|d| (d.environment.as_str(), d.current)).collect();
+        assert_eq!(seen, [("review/feat-checkout", true), ("storybook/feat-checkout", false)], "another branch's app is left out");
+        assert_eq!(ref_slug("Feat/Checkout_2--"), "feat-checkout-2");
     }
 
     #[tokio::test]
