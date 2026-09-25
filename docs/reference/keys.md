@@ -11,7 +11,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 |---|---|
 | `j` `k` | move |
 | `g` `G` | first, last |
-| `^d` `^u` | half a page |
+| `^d` `^u` | half a page; PgDn PgUp space too |
 | `h` `l` | pane to the left, to the right |
 | `enter` | open, or toggle the fold |
 | `esc` `x` | close the pane, back to the queue |

@@ -5,7 +5,7 @@ expression: "render(&mut app, 80, 24)"
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────╮
 │   ── TO R╭ keys ─────────────────────────────────────────────────╮           │
 │ ▎ feat ch│                                                       │           │
-│ ▎ omar · │      ^d ^u  half a page                               │           │
+│ ▎ omar · │      ^d ^u  half a page; PgDn PgUp space too          │           │
 │          │        h l  pane to the left, to the right            │           │
 │   ── MINE│      enter  open, or toggle the fold                  │           │
 │   fix fla│      esc x  close the pane, back to the queue         │           │

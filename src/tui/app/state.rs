@@ -133,6 +133,8 @@ pub struct App {
     /// First half of `z`, `[` or `]`.
     /// The first key of a two-key binding of the user's, waiting for its second.
     pub held: Option<crossterm::event::KeyEvent>,
+    /// The key pressed over and over right now, as a held key repeats.
+    pub repeat: Option<super::repeat::Repeat>,
     /// A quit key pressed once, and when: the same key again inside the window quits.
     pub quitting: Option<(super::quit::QuitKey, Instant)>,
     pub quit_confirm: bool,
@@ -158,6 +160,8 @@ pub struct App {
     pub brief: Option<Brief>,
     /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
     pub links: Vec<crate::tui::ui::Link>,
+    /// Where the panes were drawn this frame, so the wheel scrolls the one under the pointer.
+    pub areas: super::Areas,
     /// Pictures of the comments the right pane shows, each fetched once.
     pub thumbs: crate::tui::images::Thumbs,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
@@ -244,6 +248,7 @@ impl App {
             open: None,
             opening: None,
             held: None,
+            repeat: None,
             quitting: None,
             quit_confirm: settings.quit_confirm,
             usage: settings.usage.then(crate::usage::Tally::default),
@@ -259,6 +264,7 @@ impl App {
             publish: None,
             brief: None,
             links: vec![],
+            areas: super::Areas::default(),
             thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
             viewing: None,
             composed: vec![],

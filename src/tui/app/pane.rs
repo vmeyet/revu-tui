@@ -128,8 +128,12 @@ impl App {
         self.focus = Focus::Review;
     }
 
-    /// The pane follows the cursor onto another marked line; an unmarked line keeps what it shows.
+    /// The pane follows the cursor onto another marked line; an unmarked line, or a comment
+    /// being written in the pane, keeps what it shows.
     pub(super) fn follow_cursor(&mut self) {
+        if self.input.is_some() {
+            return;
+        }
         let Some(open) = &self.open else { return };
         let Some(pane) = &open.pane else { return };
         let Some(row) = open.row().filter(|row| open.is_marked(row)) else { return };

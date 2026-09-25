@@ -26,7 +26,7 @@ revu
 
 | You see | You do |
 |---|---|
-| The queue: MRs that wait on you, yours, and the rest of the repo | `j` `k` to move, `enter` to open one, `]m` for the next one |
+| The queue: MRs that wait on you, yours, and the rest of the repo | `j` `k` or the wheel to move, `space` to page, `enter` to open one, `]m` for the next one |
 | The diff of that MR, with folds and syntax colours | `]c` next change, `za` fold, `c` comment on a line |
 | Your comments, kept as drafts | `P` publishes them all as one review, `M` merges your approved MR, `H` marks yours draft or ready |
 | Anything else | `⌘K` or `ctrl-k` to search, `?` for the keys where you are, `?` again for every key |

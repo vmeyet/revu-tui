@@ -29,7 +29,7 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 The comment box sits at the bottom of the right pane.
 `enter` saves the draft.
 `⌘enter` posts a new comment or a reply at once, with no draft; `ctrl-s` does the same where the terminal keeps `⌘enter` for itself.
-`⌥enter` adds a new line.
+`⌥enter` adds a new line, `↑` and `↓` move between lines.
 `⌥←` and `⌥→` jump a word, `⌥⌫` deletes the word before the cursor.
 `ctrl-o` moves the text to `$EDITOR`.
 `esc` leaves the box and keeps the text for later.

@@ -257,9 +257,9 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 
 | Key | Action | |
 |---|---|---|
-| `j` `k` `↓` `↑` | move | M1 |
+| `j` `k` `↓` `↑` | move; held down, each move grows to 2 then 4 rows | M1 |
 | `g` `G` | first, last | M1 |
-| `ctrl-d` `ctrl-u` | half page | M1 |
+| `ctrl-d` `ctrl-u` `PgDn` `PgUp` `space` | half page (`space` down) | M1 |
 | `h` `l` | focus left, right pane | M1 |
 | `enter` | open the thing under the cursor | M1 |
 | `esc` | close overlay, drop selection, go back | M1 |
@@ -316,7 +316,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `u` `o` `y` `v` | first link; the thread in the browser; copy its link; the file in your program |
 | `x` `esc` `q` | close |
 
-In the compose box: `enter` saves the draft, `⌘enter` (or `ctrl-s`, where the terminal keeps `⌘enter`) posts a new thread or a reply at once with no draft, `⌥enter` adds a line, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
+In the compose box: `enter` saves the draft, `⌘enter` (or `ctrl-s`, where the terminal keeps `⌘enter`) posts a new thread or a reply at once with no draft, `⌥enter` adds a line, `↑`/`↓` go to the line above or below at the same column, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
 
 ### Your own keys (`[keys]`)
 
@@ -395,7 +395,7 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
 - Every colour cue has a glyph or a sign next to it.
 - Contrast: every theme's `muted` on `base` clears 4.5:1; check with the `mix()` math, not by eye.
 - Kitty keyboard protocol is pushed when available (as slack-tui) so `S-Tab`, `ctrl-k`, `⌘k` and `⌘enter` arrive; `DISAMBIGUATE_ESCAPE_CODES` alone carries `⌘`.
-- Mouse: wheel scrolls the pane under the pointer, click focuses and selects, nothing else. Keyboard remains complete.
+- Mouse: the wheel scrolls the pane under the pointer (three diff rows, one queue MR or note a notch) and leaves the focus where it is; clicks do nothing. Only clicks and the wheel are asked of the terminal, never pointer moves. Capturing the mouse takes plain drag-select away: shift-drag (Ghostty, Kitty, `WezTerm`) or ⌥-drag (iTerm2, Terminal.app) still selects. The mouse is let go on exit, on a panic and while `$EDITOR` or `v` owns the terminal. Keyboard remains complete.
 - Minimum size 80×24; below that the queue hides and a one-line notice says so.
 
 ## DX for the person running it

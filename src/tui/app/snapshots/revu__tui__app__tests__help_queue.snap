@@ -19,7 +19,7 @@ expression: "render(&mut app, 160, 45)"
 │                              │  MOVE                                              QUEUE                                      │                               │
 │                              │        j k  move                                       /  filter: words @author !42 ~label    │                               │
 │                              │        g G  first, last                            ' 1-9  a saved view, by letter or rank     │                               │
-│                              │      ^d ^u  half a page                                *  this repo, or every project         │                               │
+│                              │      ^d ^u  half a page; PgDn PgUp space too           *  this repo, or every project         │                               │
 │                              │        h l  pane to the left, to the right             s  next sort order                     │                               │
 │                              │      enter  open, or toggle the fold                   S  group by author                     │                               │
 │                              │      esc x  close the pane, back to the queue      zo zc  open, fold the section or stack     │                               │

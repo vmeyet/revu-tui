@@ -1,4 +1,4 @@
-//! The one-row input: its text and where the cursor sits, in one value so the two cannot drift.
+//! The input box: its text and where the cursor sits, in one value so the two cannot drift.
 //! The cursor is a byte offset kept on a character boundary, so an accent or an emoji never splits.
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -85,6 +85,41 @@ impl Field {
 
     pub fn end(&mut self) {
         self.cursor = self.text.len();
+    }
+
+    /// To the line above, at the same column or the end of a shorter line; nothing on the first line.
+    pub fn up(&mut self) {
+        let start = self.line_start(self.cursor);
+        if start > 0 {
+            self.cursor = self.at_column(self.line_start(start - 1), self.column());
+        }
+    }
+
+    /// To the line below, at the same column or the end of a shorter line; nothing on the last line.
+    pub fn down(&mut self) {
+        let end = self.line_end(self.cursor);
+        if end < self.text.len() {
+            self.cursor = self.at_column(end + 1, self.column());
+        }
+    }
+
+    fn line_start(&self, at: usize) -> usize {
+        self.text[..at].rfind('\n').map_or(0, |newline| newline + 1)
+    }
+
+    fn line_end(&self, at: usize) -> usize {
+        self.text[at..].find('\n').map_or(self.text.len(), |newline| at + newline)
+    }
+
+    /// How many characters sit between the start of the cursor's line and the cursor.
+    fn column(&self) -> usize {
+        self.text[self.line_start(self.cursor)..self.cursor].chars().count()
+    }
+
+    /// The offset `column` characters into the line starting at `start`, or that line's end.
+    fn at_column(&self, start: usize, column: usize) -> usize {
+        let end = self.line_end(start);
+        self.text[start..end].char_indices().nth(column).map_or(end, |(offset, _)| start + offset)
     }
 
     fn prev(&self) -> Option<usize> {
@@ -190,6 +225,33 @@ mod tests {
         assert_eq!(shown(&field), "|hey");
         field.end();
         assert_eq!(shown(&field), "hey|");
+    }
+
+    #[test]
+    fn up_and_down_keep_the_column_and_stop_at_the_first_and_last_line() {
+        let mut field = typed("first line\nab\nthird line");
+        field.up();
+        assert_eq!(shown(&field), "first line\nab|\nthird line", "a shorter line takes the cursor to its end");
+        field.up();
+        assert_eq!(shown(&field), "fi|rst line\nab\nthird line", "the column comes from the line left");
+        field.up();
+        assert_eq!(shown(&field), "fi|rst line\nab\nthird line");
+        field.down();
+        field.down();
+        assert_eq!(shown(&field), "first line\nab\nth|ird line");
+        field.down();
+        assert_eq!(shown(&field), "first line\nab\nth|ird line");
+    }
+
+    #[test]
+    fn up_and_down_count_the_column_in_characters() {
+        let mut field = typed("été\nabcd");
+        field.left();
+        field.up();
+        assert_eq!(shown(&field), "été|\nabcd");
+        field.left();
+        field.down();
+        assert_eq!(shown(&field), "été\nab|cd");
     }
 
     #[test]
