@@ -1,9 +1,8 @@
 //! The palette popup: the prompt with its mode, then MRs or files to pick, or the commands that
 //! match what is typed.
 use super::app::App;
-use super::palette::{Mode, Palette, Target, VERBS};
+use super::palette::{Mode, Palette, Target};
 use super::ui::{pane, truncate};
-use crate::fuzzy;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -88,20 +87,17 @@ fn list_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
 /// The verbs that match the first word typed, each with what it does.
 fn command_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
     let theme = app.theme;
-    let verb = palette.input.split_whitespace().next().unwrap_or("");
-    let shown: Vec<(&str, &str)> = if verb.is_empty() {
-        VERBS.to_vec()
-    } else {
-        fuzzy::rank(verb, VERBS.iter().map(|(v, what)| ((*v).to_owned(), (*v, *what)))).into_iter().map(|(_, pair)| pair).collect()
-    };
-    shown
+    let naming = palette.naming_command();
+    super::palette::verbs_for(&palette.input)
         .into_iter()
-        .take(super::palette::MAX_SHOWN)
-        .map(|(verb, what)| {
-            Line::from(vec![
-                Span::styled(format!("  {verb:<9}"), Style::default().fg(theme.accent)),
+        .enumerate()
+        .map(|(i, (verb, what))| {
+            let here = naming && i == palette.selected;
+            let line = Line::from(vec![
+                Span::styled(format!("{}{verb:<9}", if here { "▸ " } else { "  " }), Style::default().fg(theme.accent)),
                 Span::styled(truncate(what, room.saturating_sub(11)), Style::default().fg(theme.muted)),
-            ])
+            ]);
+            if here { line.style(Style::default().bg(theme.highlight.unwrap_or(theme.base))) } else { line }
         })
         .collect()
 }
@@ -110,6 +106,6 @@ fn footer(mode: Mode) -> &'static str {
     match mode {
         Mode::Mrs => "  ↑↓ pick · enter opens · > commands · / files · esc",
         Mode::Files => "  ↑↓ pick · enter jumps · ⌫ back to MRs · esc",
-        Mode::Commands => "  tab completes · enter runs · ⌫ back to MRs · esc",
+        Mode::Commands => "  ↑↓ pick · tab completes · ^p history · esc",
     }
 }

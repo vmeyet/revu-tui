@@ -348,7 +348,7 @@ While `'` waits, the status line lists the views. Views are checked when the con
 ### Command line (`>` in the search)
 
 Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:help`, `:quit`.
-Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `↑` `↓` walk the history.
+While the verb is typed, `↑` `↓` move a cursor through the command list and `enter` runs the command under it, or writes it and waits when it needs an argument (`go `, `set `). Past the verb, `↑` `↓` walk the argument's completions as Tab does. Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `ctrl-p` `ctrl-n` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:ai off`, `:ai on`, `:ask <text>`, `:cache clear`.
 
 

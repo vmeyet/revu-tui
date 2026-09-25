@@ -15,6 +15,9 @@ The first character picks what you search.
 | `>publish` | Commands |
 
 `:` opens the search on commands directly.
+`↑` `↓` pick a command from the list, and `enter` runs it.
+A command that needs more, like `go`, waits for you to finish the line.
+`ctrl-p` and `ctrl-n` bring back the commands you ran before.
 `⌫` on an empty line goes back to MRs, then closes.
 
 ## Filter the queue

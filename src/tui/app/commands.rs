@@ -23,6 +23,8 @@ impl App {
             KeyCode::Backspace if !palette.backspace() => return vec![],
             KeyCode::Backspace => {}
             KeyCode::Enter => return self.palette_enter(palette),
+            KeyCode::Char('p') if ctrl && palette.mode == Mode::Commands => palette.history_up(),
+            KeyCode::Char('n') if ctrl && palette.mode == Mode::Commands => palette.history_down(),
             KeyCode::Char('n') if ctrl => palette.move_by(1, self.palette_candidates(&palette).len()),
             KeyCode::Char('p') if ctrl => palette.move_by(-1, self.palette_candidates(&palette).len()),
             KeyCode::Char(c) if !ctrl => palette.type_char(c),
@@ -35,19 +37,32 @@ impl App {
         vec![]
     }
 
-    /// Tab completes, → takes the ghost, ↑ ↓ walk the history: a shell's command line.
+    /// ↑ ↓ pick a command from the list, then walk the options of its argument as tab does;
+    /// → takes the ghost; ^p ^n walk the history, as in a shell.
     fn command_key(&self, palette: &mut Palette, code: KeyCode) {
         let candidates = self.completions_for(&palette.input);
+        let listed = palette::verbs_for(&palette.input).len();
         match code {
+            KeyCode::Up | KeyCode::Down if palette.naming_command() => palette.move_by(if code == KeyCode::Up { -1 } else { 1 }, listed),
+            KeyCode::Up | KeyCode::Down => palette.complete(&candidates, code == KeyCode::Up),
             KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, code == KeyCode::BackTab),
             KeyCode::Right | KeyCode::End => palette.accept(&candidates),
-            KeyCode::Up => palette.history_up(),
-            KeyCode::Down => palette.history_down(),
             _ => {}
         }
     }
 
     fn palette_enter(&mut self, mut palette: Palette) -> Vec<Action> {
+        if palette.naming_command() {
+            let picked = palette::verbs_for(&palette.input).get(palette.selected).map(|(verb, _)| (*verb).to_owned());
+            if let Some(verb) = picked {
+                palette.input.clone_from(&verb);
+                if palette::parse(&verb).is_err() {
+                    palette.input.push(' ');
+                    self.palette = Some(palette);
+                    return vec![];
+                }
+            }
+        }
         if palette.mode == Mode::Commands {
             let line = palette.submit();
             self.palette_history.clone_from(&palette.history);
