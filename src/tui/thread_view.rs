@@ -1,5 +1,5 @@
 //! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
-use super::app::{App, Entry, EntryKind, Focus, Open};
+use super::app::{App, Entry, EntryKind, Focus, Open, Pane};
 use super::drag::{self, TextRow};
 use super::field::Field;
 use super::images::Thumbs;
@@ -65,7 +65,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
     let Some(pane) = open.pane.clone() else { return vec![] };
     let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&host), &open.key.project, url);
     let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
-    let block = side_pane(theme, &title(&open.review, &pane.place, conversations.len(), here), focused, zen);
+    let block = side_pane(theme, &title(&open.review, &pane, conversations.len(), here), focused, zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let inner = match &compose {
@@ -84,6 +84,12 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
         }
         let look = Look { theme, today, me: &me, ascii, width };
         lines.extend(conversation_lines(open, conversation, index, &entries, look));
+    }
+    if conversations.is_empty() && pane.only_with.is_some() {
+        lines.push((
+            None,
+            Piece::Text(Line::from(Span::styled("you take part in no thread · m shows them all", Style::default().fg(theme.faded)))),
+        ));
     }
     let more = open.review.others_in_file(&pane.place);
     if more > 0 {
@@ -236,15 +242,22 @@ fn settle(scroll: usize, first: usize, last: usize, height: usize) -> usize {
     scroll
 }
 
-/// `charge.rs:57 · 2 threads`, `charge.rs:-13` for the old side, `on the MR`, `charge.rs · outdated`;
-/// `↑ line 57` when the cursor moved to a line without conversations.
-fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
+/// `charge.rs:57 · 2 threads`, `charge.rs:-13` for the old side, `on the MR`, `charge.rs · outdated`,
+/// `the whole MR · mine · 3 of 12 threads`; `↑ line 57` when the cursor moved to a line without conversations.
+fn title(review: &Review, pane: &Pane, count: usize, here: bool) -> String {
     let name = |file: usize| {
         let path = &review.files[file].new_path;
         path.rsplit('/').next().unwrap_or(path).to_owned()
     };
-    let threads = format!("{count} thread{}", if count == 1 { "" } else { "s" });
-    let (head, line) = match place {
+    let plural = |n: usize| if n == 1 { "thread" } else { "threads" };
+    let threads = match pane.only_with {
+        Some(_) => {
+            let every = review.conversations(&pane.place).len();
+            format!("mine · {count} of {every} {}", plural(every))
+        }
+        None => format!("{count} {}", plural(count)),
+    };
+    let (head, line) = match &pane.place {
         Place::Line { file, new: Some(n), .. } => (format!("{}:{n}", name(*file)), Some(n.to_string())),
         Place::Line { file, old: Some(o), .. } => (format!("{}:-{o}", name(*file)), Some(format!("-{o}"))),
         Place::Line { file, .. } => (name(*file), None),
@@ -252,7 +265,7 @@ fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
         Place::Outdated { file } => (format!("{} · outdated", name(*file)), None),
         Place::All => ("the whole MR".to_owned(), None),
     };
-    let head = if count == 0 { head } else { format!("{head} · {threads}") };
+    let head = if count == 0 && pane.only_with.is_none() { head } else { format!("{head} · {threads}") };
     match (here, line) {
         (false, Some(line)) => format!("{head} · ↑ line {line}"),
         _ => head,
@@ -615,10 +628,19 @@ mod tests {
     #[test]
     fn the_title_names_the_line_and_marks_the_old_side() {
         let review = crate::review::tests::review();
-        let old = Place::Line { file: 0, new: None, old: Some(13) };
+        let old = Pane::at(Place::Line { file: 0, new: None, old: Some(13) });
         assert_eq!(title(&review, &old, 1, true), "charge.rs:-13 · 1 thread");
         assert_eq!(title(&review, &old, 2, false), "charge.rs:-13 · 2 threads · ↑ line -13");
-        assert_eq!(title(&review, &Place::Mr, 1, true), "on the MR · 1 thread");
+        assert_eq!(title(&review, &Pane::at(Place::Mr), 1, true), "on the MR · 1 thread");
+    }
+
+    #[test]
+    fn the_title_of_my_threads_counts_them_among_every_thread() {
+        let review = crate::review::tests::review();
+        let mine = Pane { only_with: Some("nina".into()), ..Pane::at(Place::All) };
+        assert_eq!(title(&review, &Pane::at(Place::All), 3, true), "the whole MR · 3 threads");
+        assert_eq!(title(&review, &mine, 1, true), "the whole MR · mine · 1 of 3 threads");
+        assert_eq!(title(&review, &mine, 0, true), "the whole MR · mine · 0 of 3 threads", "an empty filter still says so");
     }
 
     #[test]

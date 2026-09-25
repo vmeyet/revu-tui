@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 2495
 expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -27,21 +26,21 @@ expression: "render(&mut app, 160, 45)"
 │                       │      ' 1-9  a saved view, by letter or rank                        R  resolve, unresolve                     │                       │
 │                       │          *  this repo, or every project                          J K  next, previous thread                  │                       │
 │                       │          s  next sort order                                        T  every thread; enter goes to it         │                       │
-│                       │          S  group by author                                      e d  edit, delete my draft                  │                       │
-│                       │      zo zc  open, fold the section or stack                      S +  apply the suggestion, react            │                       │
-│                       │                                                                    u  open the first link                    │                       │
-│                       │  VIEW                                                                                                        │                       │
-│                       │          i  the MR cover page                              ASK CLAUDE                                        │                       │
-│                       │          D  inline diff, or side by side                     a e r s  explain, risks, summary                │                       │
-│                       │          t  file tree                                        a t c a  thread, comment, anything              │                       │
-│                       │          T  every thread of the MR                           c ⏎ R y  answer: draft, follow up, again, copy  │                       │
-│                       │          p  pipeline                                                                                         │                       │
-│                       │         zz  zen: the diff alone, quiet                     SEARCH & APP                                      │                       │
-│                       │        w W  wrap long lines, hide whitespace changes              ^k  MRs · / files · > commands             │                       │
-│                       │          +  more lines; on a thread, react                         :  commands: :go !42, :set theme=nord     │                       │
-│                       │         ^v  the file in your own program                         o y  open in the browser, copy the link     │                       │
-│                       │   za zc zo  toggle, close, open the fold                           r  refresh                                │                       │
-│                       │      zM zR  fold, unfold every file                                ?  this help                              │                       │
+│                       │          S  group by author                                        m  every thread: only mine, or all        │                       │
+│                       │      zo zc  open, fold the section or stack                      e d  edit, delete my draft                  │                       │
+│                       │                                                                  S +  apply the suggestion, react            │                       │
+│                       │  VIEW                                                              u  open the first link                    │                       │
+│                       │          i  the MR cover page                                                                                │                       │
+│                       │          D  inline diff, or side by side                   ASK CLAUDE                                        │                       │
+│                       │          t  file tree                                        a e r s  explain, risks, summary                │                       │
+│                       │          T  every thread of the MR                           a t c a  thread, comment, anything              │                       │
+│                       │          p  pipeline                                         c ⏎ R y  answer: draft, follow up, again, copy  │                       │
+│                       │         zz  zen: the diff alone, quiet                                                                       │                       │
+│                       │        w W  wrap long lines, hide whitespace changes       SEARCH & APP                                      │                       │
+│                       │          +  more lines; on a thread, react                        ^k  MRs · / files · > commands             │                       │
+│                       │         ^v  the file in your own program                           :  commands: :go !42, :set theme=nord     │                       │
+│                       │   za zc zo  toggle, close, open the fold                         o y  open in the browser, copy the link     │                       │
+│                       │      zM zR  fold, unfold every file                                r  refresh                                │                       │
 │                       │                                                                                                              │                       │
 │                       ╰───────────────────────────────────────────────────────────────────────── 1–35 of 37 · j k scroll · esc close ╯                       │
 │                                          ││                                                                                                                  │

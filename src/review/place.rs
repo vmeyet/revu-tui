@@ -144,6 +144,12 @@ impl Review {
         sorted
     }
 
+    /// Whether `user` wrote a note of the conversation; a draft counts too, since every draft is mine.
+    pub fn takes_part(&self, conversation: &Conversation, user: &str) -> bool {
+        let thread = conversation.thread.as_deref().and_then(|id| self.thread(id));
+        !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.author.username == user))
+    }
+
     /// Where a conversation hangs: its thread's anchor, or its new draft's.
     pub fn spot(&self, conversation: &Conversation) -> Spot<'_> {
         let thread = conversation.thread.as_deref().and_then(|id| self.thread(id));
@@ -351,6 +357,18 @@ mod tests {
         assert_eq!(listed, expected, "the MR, then charge.rs's line, then its outdated thread; the lock file last");
         let resolved = review.with_resolved("c0ffee00c0ffee00", true).conversations(&Place::All);
         assert_eq!(resolved.last(), Some(&thread("c0ffee00c0ffee00", vec![1])), "a resolved thread goes last");
+    }
+
+    #[test]
+    fn i_take_part_in_a_thread_i_wrote_in_or_answered_and_in_my_new_draft() {
+        let review = review().with_drafts(vec![Draft::reply("9f2c0aa1d4e5b6c7", "agreed"), Draft::new(None, "one more thing")]);
+        let mine: Vec<Conversation> = review.conversations(&Place::All).into_iter().filter(|c| review.takes_part(c, "nina")).collect();
+        let thread = |id: &str, drafts: Vec<usize>| Conversation { thread: Some(id.into()), drafts };
+        let expected =
+            [thread("9f2c0aa1d4e5b6c7", vec![0]), Conversation { thread: None, drafts: vec![1] }, thread("c0ffee00c0ffee00", vec![])];
+        assert_eq!(mine, expected, "my reply, my new draft, the thread I started; not lea's comment on the MR");
+        assert!(review.takes_part(&thread("6a9c1750b2d6e4f0", vec![]), "lea"));
+        assert!(!review.takes_part(&thread("c0ffee00c0ffee00", vec![]), "omar"));
     }
 
     #[test]

@@ -26,6 +26,7 @@ A line on top says which MR you are on, for example `3/12`.
 
 `zz`, `esc`, `h` or `←` bring the queue back.
 The thread pane still opens with `enter` or `→` on a marked line, or with `T` on every thread; `q`, `x` or `esc` close it.
+In the list of every thread, `enter` shows the diff at that thread's line; `l`, `→` or `T` bring the list back.
 
 ## Change the width
 

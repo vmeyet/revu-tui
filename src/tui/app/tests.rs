@@ -4295,3 +4295,62 @@ fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
     assert_eq!(actions, vec![Action::Copy { text, done: "copied 2 lines".into() }]);
     insta::assert_snapshot!("thread_selection", render_selected(&mut app, 120, 24));
 }
+
+#[test]
+fn in_zen_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_the_list_back() {
+    let mut app = with_review();
+    press(&mut app, "zzT");
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
+    let list = render(&mut app, 138, 40);
+    assert!(list.contains("the whole MR · 3 threads") && !list.contains("@@ -12,4"), "the list takes the diff's column:\n{list}");
+    press(&mut app, "JJ");
+    app.handle_key(code(KeyCode::Enter));
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
+    assert_eq!((listed_place(&app), app.focus, app.zen), (Some(Place::All), Focus::Review, true), "the diff shows the line, in zen");
+    assert!(render(&mut app, 138, 40).contains("▎✓   13      -    let client = Client::new();"));
+    press(&mut app, "l");
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "l on the marked line goes back to the list");
+    assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "on the thread it left");
+    insta::assert_snapshot!("every_thread_zen_back", render(&mut app, 138, 40));
+    press(&mut app, "hT");
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "T from the diff shows the hidden list");
+    press(&mut app, "T");
+    assert_eq!((listed_place(&app), app.focus, app.zen), (None, Focus::Review, true), "T on the list closes it");
+}
+
+#[test]
+fn m_in_every_thread_keeps_mine_until_the_list_closes_and_the_keys_act_on_them() {
+    let mut app = with_review();
+    press(&mut app, "Tm");
+    assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "nina started the resolved thread only");
+    press(&mut app, "J");
+    assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "nothing after it");
+    assert_eq!(press(&mut app, "R"), vec![Action::Resolve { key: mr_key(), thread: "c0ffee00c0ffee00".into(), resolved: false }]);
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }));
+    press(&mut app, "hl");
+    assert_eq!(app.open.as_ref().unwrap().pane.as_ref().unwrap().only_with.as_deref(), Some("nina"), "kept while the list is open");
+    let mut actions = press(&mut app, "r");
+    actions.extend(type_text(&mut app, "agreed"));
+    let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"));
+    press(&mut app, "m");
+    assert_eq!(focused_thread(&app).as_deref(), Some("6a9c1750b2d6e4f0"), "m again lists every thread");
+    press(&mut app, "mTT");
+    assert_eq!(app.open.as_ref().unwrap().pane.as_ref().unwrap().only_with, None, "a new list shows every thread");
+}
+
+#[test]
+fn snapshot_every_thread_mine() {
+    let mut app = with_review();
+    press(&mut app, "zzTm");
+    let mine = render(&mut app, 200, 50);
+    assert!(mine.contains("the whole MR · mine · 1 of 3 threads") && !mine.contains("on the MR"), "{mine}");
+    insta::assert_snapshot!("every_thread_zen_mine", mine);
+    app.me = "omar".into();
+    press(&mut app, "mm");
+    let none = render(&mut app, 100, 12);
+    assert!(none.contains("the whole MR · mine · 0 of 3 threads") && none.contains("you take part in no thread · m shows them all"));
+    insta::assert_snapshot!("every_thread_mine_empty", none);
+}

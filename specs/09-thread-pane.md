@@ -101,12 +101,14 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 
 - Order: unresolved threads, then my drafts that start a thread, then resolved threads, folded as elsewhere; inside a group, the MR's own conversations first, then files in diff order, lines in order, a file's outdated threads after its lines.
 - Title: `the whole MR · 5 threads`; no footer, nothing else exists.
+- `m` keeps only the conversations I take part in: I wrote one of its notes, started it, or have a draft or a draft reply in it; `m` again lists them all. The title says so, `the whole MR · mine · 3 of 12 threads`, and an empty result reads `you take part in no thread · m shows them all`. The choice lasts while the list is open; `J` `K` `r` `R` `enter` work on what it shows.
 - Each conversation opens on where it hangs, in `muted`: `src/pay/charge.rs:57` (`:-13` for the old side), `src/pay/charge.rs:57 · outdated`, or `on the MR`; under a line in the diff, its code, trimmed, in `faded`, so the reader keeps the context.
 - `J` `K` move between conversations; `r`, `R`, `+`, `e`, `d`, `S` act on the one under the cursor as in the pane of one line, and the list stays.
-- `enter` takes the diff's cursor to the conversation's line, opening its file and hunk as `]n` does, and folds or unfolds a resolved thread; the MR's own conversations go to the header, outdated ones to their file row. The list stays and keeps the focus: in zen or under 120 columns, `h` shows the diff there.
+- `enter` takes the diff's cursor to the conversation's line, opening its file and hunk as `]n` does, and folds or unfolds a resolved thread; the MR's own conversations go to the header, outdated ones to their file row. The list stays; it keeps the focus, except in zen, where the diff shows at the line. Under 120 columns, `h` shows the diff there.
+- From the diff, `l` goes back to the list, on the conversation it left, even on a marked line; `enter` on a marked line swaps the list for that line's threads.
 - It does not follow the cursor: moving in the diff keeps the list.
 - `T` again, `esc`, `x` or `q` close it; `c` on a line switches the pane to that line, as it would from any place.
-- In zen it opens the narrow way, like the pane of one line.
+- In zen it opens the narrow way, like the pane of one line: zen's column is at least 120 columns, so the list beside it would squeeze the code, and a screen of 138 has no room for both. While the diff shows, `T` brings the list back instead of closing it.
 
 ### Moving inside it
 
@@ -130,7 +132,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 
 | Key | Where | Action | Today |
 |---|---|---|---|
-| `enter`, `l` | diff, marked line | open the pane on the line's threads, focused | `enter` on a thread row |
+| `enter`, `l` | diff, marked line | open the pane on the line's threads, focused; `l` goes back to the list of every thread when it is open | `enter` on a thread row |
 | `c` | diff | open the pane with a new thread on the line or the `V` range | input row |
 | `C` | diff, inline pair | same, on the old side | input row |
 | `s` | diff | new thread prefilled with a suggestion | editor only |
@@ -142,6 +144,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `J` `K` | pane | next, previous thread | none |
 | `T` | diff or pane | every thread of the MR in the pane, or close it | none |
 | `enter` | pane, every thread | go to the conversation's line in the diff | none |
+| `m` | pane, every thread | only the conversations I take part in, or all | none |
 | `]n` `[n` | diff | next, previous line with an unresolved thread or my draft, across files; the pane follows when open | next thread row |
 | `]N` `[N` | diff | the same, resolved-only lines too | next thread row |
 | `x`, `esc`, `q` | diff or pane | close the pane | `esc` |
