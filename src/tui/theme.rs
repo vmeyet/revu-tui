@@ -14,7 +14,11 @@ pub struct Theme {
     /// Fill of the selected row. None by default: the `▎` bar alone marks it, which stays
     /// invisible-proof on terminals whose background the theme cannot see.
     pub highlight: Option<Color>,
+    /// Frames of the panes that do not have the keys: close to the ground, so the content leads.
     pub border: Color,
+    /// Frames of the pane that has the keys, of a modal and of the compose box: one step up from `border`,
+    /// the title's accent tells focus apart.
+    pub border_focus: Color,
     /// Tertiary text: section headers, muted channels, receded panes.
     pub faded: Color,
     /// Secondary text: times, hints, counts.
@@ -103,6 +107,8 @@ const fn mix(from: u32, to: u32, pct: u32) -> Color {
 }
 
 const SURFACE_PCT: u32 = 3;
+/// How far an unfocused frame sits from the ground toward the palette's own border colour.
+const BORDER_PCT: u32 = 55;
 /// Green and red a fill walks toward when the palette's own are ANSI names with no RGB value.
 const DIFF_GREEN: u32 = 0x3fb950;
 const DIFF_RED: u32 = 0xf85149;
@@ -169,7 +175,8 @@ const DEFAULT: Theme = Theme {
     base: Color::Black,
     surface: Color::Indexed(234),
     highlight: None,
-    border: Color::Indexed(238),
+    border: Color::Indexed(236),
+    border_focus: Color::Indexed(238),
     faded: Color::Indexed(240),
     muted: Color::Indexed(245),
     accent: Color::Cyan,
@@ -203,7 +210,8 @@ const DRACULA: Theme = Theme {
     base: rgb(0x282a36),
     surface: mix(0x282a36, 0xf8f8f2, SURFACE_PCT),
     highlight: None,
-    border: rgb(0x44475a),
+    border: mix(0x282a36, 0x44475a, BORDER_PCT),
+    border_focus: rgb(0x44475a),
     faded: rgb(0x6272a4),
     muted: rgb(0x9098bd),
     accent: rgb(0x8be9fd),
@@ -228,7 +236,8 @@ const CATPPUCCIN: Theme = Theme {
     base: rgb(0x1e1e2e),
     surface: mix(0x1e1e2e, 0xcdd6f4, SURFACE_PCT),
     highlight: None,
-    border: rgb(0x45475a),
+    border: mix(0x1e1e2e, 0x45475a, BORDER_PCT),
+    border_focus: rgb(0x45475a),
     faded: rgb(0x6c7086),
     muted: rgb(0xa6adc8),
     accent: rgb(0x89dceb),
@@ -253,7 +262,8 @@ const CATPPUCCIN_LATTE: Theme = Theme {
     base: rgb(0xeff1f5),
     surface: mix(0xeff1f5, 0x4c4f69, SURFACE_PCT),
     highlight: None,
-    border: rgb(0xbcc0cc),
+    border: mix(0xeff1f5, 0xbcc0cc, BORDER_PCT),
+    border_focus: rgb(0xbcc0cc),
     faded: rgb(0x9ca0b0),
     muted: rgb(0x6c6f85),
     accent: rgb(0x04a5e5),
@@ -278,7 +288,8 @@ const ROSEPINE: Theme = Theme {
     base: rgb(0x191724),
     surface: mix(0x191724, 0xe0def4, SURFACE_PCT),
     highlight: None,
-    border: rgb(0x403d52),
+    border: mix(0x191724, 0x403d52, BORDER_PCT),
+    border_focus: rgb(0x403d52),
     faded: rgb(0x6e6a86),
     muted: rgb(0x908caa),
     accent: rgb(0x9ccfd8),
@@ -303,7 +314,8 @@ const ROSEPINE_DAWN: Theme = Theme {
     base: rgb(0xfaf4ed),
     surface: mix(0xfaf4ed, 0x575279, SURFACE_PCT),
     highlight: None,
-    border: rgb(0xdfdad9),
+    border: mix(0xfaf4ed, 0xdfdad9, BORDER_PCT),
+    border_focus: rgb(0xdfdad9),
     faded: rgb(0x9893a5),
     muted: rgb(0x797593),
     accent: rgb(0x56949f),
@@ -328,7 +340,8 @@ const NORD: Theme = Theme {
     base: rgb(0x2e3440),
     surface: mix(0x2e3440, 0xd8dee9, SURFACE_PCT),
     highlight: None,
-    border: rgb(0x434c5e),
+    border: mix(0x2e3440, 0x434c5e, BORDER_PCT),
+    border_focus: rgb(0x434c5e),
     faded: rgb(0x4c566a),
     muted: rgb(0x7b88a1),
     accent: rgb(0x88c0d0),
@@ -353,7 +366,8 @@ const TOKYONIGHT: Theme = Theme {
     base: rgb(0x1a1b26),
     surface: mix(0x1a1b26, 0xc0caf5, SURFACE_PCT),
     highlight: None,
-    border: rgb(0x3b4261),
+    border: mix(0x1a1b26, 0x3b4261, BORDER_PCT),
+    border_focus: rgb(0x3b4261),
     faded: rgb(0x565f89),
     muted: rgb(0x737aa2),
     accent: rgb(0x7dcfff),
@@ -378,7 +392,8 @@ const MONOKAI: Theme = Theme {
     base: rgb(0x272822),
     surface: mix(0x272822, 0xf8f8f2, SURFACE_PCT),
     highlight: None,
-    border: rgb(0x49483e),
+    border: mix(0x272822, 0x49483e, BORDER_PCT),
+    border_focus: rgb(0x49483e),
     faded: rgb(0x75715e),
     muted: rgb(0xa59f85),
     accent: rgb(0x66d9ef),
@@ -439,6 +454,23 @@ mod tests {
         let dracula = Theme::named("dracula").unwrap();
         assert_ne!(dracula.added_fill, dracula.removed_fill);
         assert_ne!(dracula.added_fill, Some(dracula.base));
+    }
+
+    #[test]
+    fn every_frame_sits_nearer_the_ground_than_the_focused_one_and_never_in_the_accent() {
+        let distance = |a: Color, b: Color| match (a, b) {
+            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
+                u32::from(r1.abs_diff(r2)) + u32::from(g1.abs_diff(g2)) + u32::from(b1.abs_diff(b2))
+            }
+            _ => 0,
+        };
+        for name in Theme::NAMES {
+            let theme = Theme::named(name).unwrap();
+            assert_ne!(theme.border_focus, theme.accent, "{name}");
+            if matches!(theme.base, Color::Rgb(..)) {
+                assert!(distance(theme.border, theme.base) < distance(theme.border_focus, theme.base), "{name}");
+            }
+        }
     }
 
     #[test]

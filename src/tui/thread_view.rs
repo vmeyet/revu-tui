@@ -197,7 +197,7 @@ pub(super) fn box_height(field: &Field, pane: Rect) -> u16 {
 pub(super) fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Field, area: Rect) {
     let block = ratatui::widgets::Block::bordered()
         .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(Style::default().fg(theme.accent))
+        .border_style(Style::default().fg(theme.border_focus))
         .title(Span::styled(format!(" {label} "), Style::default().fg(theme.accent)))
         .title_bottom(Span::styled(" enter save · ⌘enter post · ⌥enter newline ", Style::default().fg(theme.faded)));
     let inner = block.inner(area);

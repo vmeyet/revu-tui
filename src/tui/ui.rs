@@ -200,7 +200,7 @@ pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
         if focused { Style::default().fg(theme.accent).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme.faded) };
     Block::bordered()
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(if focused { theme.accent } else { theme.border }))
+        .border_style(Style::default().fg(if focused { theme.border_focus } else { theme.border }))
         .title(Span::styled(format!(" {title} "), title_style))
         .padding(Padding::horizontal(1))
 }
