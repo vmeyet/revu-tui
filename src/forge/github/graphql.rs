@@ -370,7 +370,7 @@ impl Comment {
                 .iter()
                 .filter(|g| g.reactors.total_count > 0)
                 .filter_map(|g| {
-                    let emoji = forge::Emoji::named(&g.content)?;
+                    let emoji = forge::Emoji::from_github(&g.content)?;
                     Some(forge::Reaction { emoji, count: g.reactors.total_count, mine: g.viewer_has_reacted })
                 })
                 .collect(),
@@ -521,11 +521,12 @@ impl Client {
 
     /// Adds my `emoji` to the comment `node`, or takes it off; GitHub needs no reaction id for either.
     pub async fn react(&self, node: &str, emoji: forge::Emoji, on: bool) -> Result<()> {
+        let Some(content) = emoji.github() else { bail!("GitHub reacts with eight emoji only") };
         let mutation = if on { "addReaction" } else { "removeReaction" };
         let query = format!(
             "mutation($id: ID!, $content: ReactionContent!) {{ {mutation}(input: {{subjectId: $id, content: $content}}) {{ clientMutationId }} }}"
         );
-        self.graphql::<serde_json::Value>(&query, json!({"id": node, "content": emoji.github()})).await.map(|_| ())
+        self.graphql::<serde_json::Value>(&query, json!({"id": node, "content": content})).await.map(|_| ())
     }
 
     /// Marks the PR a draft, or ready for review; asked first, so a PR already there is left alone.
@@ -751,6 +752,8 @@ mod tests {
             .await;
         let client = client(&server);
         client.react("PRRC_kw1", forge::Emoji::Hooray, true).await.unwrap();
+        let other = client.react("PRRC_kw1", forge::Emoji::from_gitlab("100").unwrap(), true).await.unwrap_err().to_string();
+        assert!(other.contains("eight"), "GitHub is not asked: {other}");
         let err = client.react("PRRC_kw1", forge::Emoji::Hooray, false).await.unwrap_err().to_string();
         assert!(err.contains("Could not resolve"), "{err}");
     }

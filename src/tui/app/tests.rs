@@ -3555,6 +3555,38 @@ fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_shows_more_lines
 }
 
 #[test]
+fn on_gitlab_slash_searches_every_emoji_by_name() {
+    let mut app = with_reactions();
+    press(&mut app, "+");
+    assert!(render(&mut app, 150, 24).contains("/ any emoji"), "the picker says it can search");
+    press(&mut app, "/100");
+    let screen = render(&mut app, 150, 24);
+    assert!(screen.contains("/100▏") && screen.contains("💯"), "{screen}");
+    let actions = app.handle_key(code(KeyCode::Enter));
+    let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!((emoji.gitlab(), *on), ("100", true));
+    assert!(reactions_of(&app).iter().any(|r| r.emoji.glyph() == "💯" && r.mine), "the count moves at once");
+    press(&mut app, "+");
+    press(&mut app, "/r");
+    app.handle_key(code(KeyCode::Backspace));
+    assert_eq!(app.react.as_ref().unwrap().search.as_ref().map(|s| s.query.as_str()), Some(""));
+    app.handle_key(code(KeyCode::Backspace));
+    assert_eq!(app.react.as_ref().unwrap().search, None, "an empty search goes back to the eight");
+    press(&mut app, "zzz");
+    assert!(app.react.is_none(), "outside a search, other keys close the picker");
+}
+
+#[test]
+fn on_github_the_picker_keeps_the_eight() {
+    let mut app = with_reactions();
+    app.hosts = crate::forge::Hosts::one("gitlab.com", Kind::GitHub);
+    press(&mut app, "+");
+    assert!(!render(&mut app, 150, 24).contains("any emoji"));
+    press(&mut app, "/");
+    assert!(app.react.is_none(), "no search: the key closes the picker");
+}
+
+#[test]
 fn the_picker_moves_with_h_and_l_and_esc_closes_it_without_a_change() {
     let mut app = with_reactions();
     press(&mut app, "+");

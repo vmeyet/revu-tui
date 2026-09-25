@@ -59,6 +59,8 @@ A line with a conversation has a mark left of its numbers.
 
 `+` opens the eight reactions both forges share: 👍 👎 😄 😕 💖 🎉 🚀 👀.
 Press `1` to `8`, or move with `h` `l` and press `enter`.
+On GitLab, `/` searches every emoji by name: type part of it (`100`, `party`), move with `←` `→`, and press `enter`.
+GitHub has only the eight.
 Your reaction shows at once, and a second pick takes it off.
 Reactions show under each note, yours in the accent colour.
 Set `[tui] ascii = true` when your terminal draws emoji at the wrong width.
