@@ -9,7 +9,7 @@ expression: "render(&mut app, 160, 45)"
 │                       │  MOVE                                                     COMMENT & PUBLISH                                 │                        │
 │   ── MINE · 1 ────────│        j k  move                                                  c  comment on the line                    │                        │
 │   fix flaky cache test│        g G  first, last                                           C  comment on the old side                │                        │
-│   nina · !41 · +3 −1  │      ^d ^u  half a page                                           V  select lines                           │                        │
+│   nina · !41 · +3 −1  │      ^d ^u  half a page; PgDn PgUp space too                      V  select lines                           │                        │
 │                       │        h l  pane to the left, to the right                        s  suggest a change                       │                        │
 │   ── WATCHING · 1 ────│      enter  open, or toggle the fold                              E  write in $EDITOR                       │                        │
 │   infra: new runner   │      esc x  close the pane, back to the queue             ⌘enter ^s  in the box: post now, no draft         │                        │

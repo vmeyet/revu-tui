@@ -182,6 +182,7 @@ async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Sc
         let actions = tokio::select! {
             Some(event) = keys.next() => match event? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => { wake(app); app.handle_key(key) }
+                Event::Mouse(mouse) => { wake(app); app.handle_mouse(mouse) }
                 _ => vec![],
             },
             Some(incoming) = rx.recv() => { wake(app); app.apply(incoming); app.take_actions() }

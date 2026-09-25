@@ -22,7 +22,7 @@ impl App {
             return self.quit_key(super::quit::QuitKey::CtrlC);
         }
         if let Some(open) = self.help {
-            self.help = self.help_key(open, key);
+            self.help = self.help_key(open, paged(key));
             return vec![];
         }
         if let Some(answered) = self.answer_offer(key) {
@@ -47,7 +47,7 @@ impl App {
             return self.handle_publish_key(key);
         }
         if self.brief.is_some() {
-            return self.handle_brief_key(key);
+            return self.handle_brief_key(paged(key));
         }
         if self.filtering {
             return self.handle_filter_key(key);
@@ -57,13 +57,14 @@ impl App {
                 self.held = Some(first);
                 vec![]
             }
-            crate::keymap::Feed::Keys(keys) => keys.into_iter().flat_map(|key| self.dispatch(key)).collect(),
+            crate::keymap::Feed::Keys(keys) => keys.into_iter().flat_map(|key| self.dispatch(paged(key))).collect(),
         }
     }
 
     /// A key after the user's bindings turned it into revu's own, counted when `[usage]` is on.
     fn dispatch(&mut self, key: KeyEvent) -> Vec<Action> {
         let named = self.usage_name(key);
+        self.repeat = Some(super::repeat::Repeat::after(self.repeat, key.code, self.now));
         let was_zen = self.zen;
         let actions = self.dispatch_key(key);
         self.count_key(named, was_zen);
@@ -149,10 +150,10 @@ impl App {
         vec![]
     }
 
-    fn handle_queue_key(&mut self, key: KeyEvent) -> Vec<Action> {
+    pub(super) fn handle_queue_key(&mut self, key: KeyEvent) -> Vec<Action> {
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.queue_move(1),
-            KeyCode::Char('k') | KeyCode::Up => self.queue_move(-1),
+            KeyCode::Char('j') | KeyCode::Down => self.queue_move(self.step()),
+            KeyCode::Char('k') | KeyCode::Up => self.queue_move(-self.step()),
             KeyCode::Char('g') => self.queue_first(),
             KeyCode::Char('G') => self.queue_last(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(HALF_PAGE),
@@ -200,7 +201,7 @@ impl App {
         vec![Action::LoadQueue { scope: self.scope(), from_cache: true }]
     }
 
-    fn handle_review_key(&mut self, key: KeyEvent) -> Vec<Action> {
+    pub(super) fn handle_review_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if self.open.is_none() {
             if key.code == KeyCode::Esc {
                 self.focus = Focus::Queue;
@@ -219,8 +220,8 @@ impl App {
 
     fn move_in_review(&mut self, key: KeyEvent) -> Vec<Action> {
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.review_move(1),
-            KeyCode::Char('k') | KeyCode::Up => self.review_move(-1),
+            KeyCode::Char('j') | KeyCode::Down => self.review_move(self.step()),
+            KeyCode::Char('k') | KeyCode::Up => self.review_move(-self.step()),
             KeyCode::Char('g') => self.review_first(),
             KeyCode::Char('G') => self.review_last(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
@@ -316,7 +317,7 @@ impl App {
         self.open.as_ref().is_some_and(|o| o.tree.is_some())
     }
 
-    fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
+    pub(super) fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if self.answer_open() {
             return self.handle_answer_key(key);
         }
@@ -362,6 +363,15 @@ fn help_scroll(scroll: usize, last: usize, key: KeyEvent) -> Option<usize> {
         KeyCode::Char('g') => Some(0),
         KeyCode::Char('G') => Some(last),
         _ => None,
+    }
+}
+
+/// `PageDown` and space page down as `ctrl-d` does, `PageUp` up as `ctrl-u`, wherever no text is typed.
+fn paged(key: KeyEvent) -> KeyEvent {
+    match (key.code, key.modifiers) {
+        (KeyCode::PageDown, _) | (KeyCode::Char(' '), KeyModifiers::NONE) => KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+        (KeyCode::PageUp, _) => KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+        _ => key,
     }
 }
 

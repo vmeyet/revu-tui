@@ -3909,3 +3909,98 @@ fn a_bare_number_in_the_search_is_a_hint_and_commands_are_counted() {
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.take_usage().unwrap().actions.get(":help"), Some(&1));
 }
+
+fn wheel(app: &mut App, down: bool, column: u16, row: u16) -> Vec<Action> {
+    let kind = if down { crossterm::event::MouseEventKind::ScrollDown } else { crossterm::event::MouseEventKind::ScrollUp };
+    app.handle_mouse(crossterm::event::MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE })
+}
+
+#[test]
+fn the_wheel_scrolls_the_pane_under_the_pointer_and_leaves_the_focus() {
+    let mut app = with_long_review();
+    let mut walked = with_long_review();
+    render(&mut app, 160, 30);
+    wheel(&mut app, true, 80, 10);
+    press(&mut walked, "jjj");
+    assert_eq!(app.open.as_ref().unwrap().selected, walked.open.as_ref().unwrap().selected, "a notch is three rows of the diff");
+    let queue_row = app.queue_selected;
+    wheel(&mut app, true, 5, 5);
+    assert_ne!(app.queue_selected, queue_row, "the queue moves under the pointer");
+    assert_eq!(app.focus, Focus::Review, "the keys stay in the diff");
+    wheel(&mut app, false, 5, 5);
+    assert_eq!(app.queue_selected, queue_row);
+}
+
+#[test]
+fn the_wheel_does_nothing_under_an_overlay() {
+    let mut app = with_long_review();
+    render(&mut app, 160, 30);
+    let before = app.open.as_ref().unwrap().selected;
+    press(&mut app, "?");
+    wheel(&mut app, true, 80, 10);
+    assert_eq!(app.open.as_ref().unwrap().selected, before);
+}
+
+#[test]
+fn page_down_and_space_page_like_ctrl_d_and_count_as_page_down() {
+    let mut paged = counting();
+    let mut spaced = with_long_review();
+    let mut ctrl_d = with_long_review();
+    paged.handle_key(code(KeyCode::PageDown));
+    press(&mut spaced, " ");
+    ctrl_d.handle_key(ctrl('d'));
+    let selected = |app: &App| app.open.as_ref().unwrap().selected;
+    assert_eq!((selected(&paged), selected(&spaced)), (selected(&ctrl_d), selected(&ctrl_d)));
+    paged.handle_key(code(KeyCode::PageUp));
+    assert_eq!(selected(&paged), selected(&with_long_review()));
+    let counts = paged.take_usage().unwrap();
+    assert_eq!((counts.actions.get("page_down"), counts.actions.get("page_up")), (Some(&1), Some(&1)));
+}
+
+#[test]
+fn a_held_j_moves_further_the_longer_it_is_held_and_a_pause_starts_over() {
+    let mut held = with_long_review();
+    let mut walked = with_long_review();
+    let start = held.now;
+    for ms in (0..=300).step_by(30) {
+        held.now = start + Duration::from_millis(ms);
+        press(&mut held, "j");
+    }
+    press(&mut walked, &"j".repeat(12));
+    let selected = |app: &App| app.open.as_ref().unwrap().selected;
+    assert_eq!(selected(&held), selected(&walked), "the eleventh repeat moves two rows");
+    held.now = start + Duration::from_millis(800);
+    press(&mut held, "j");
+    press(&mut walked, "j");
+    assert_eq!(selected(&held), selected(&walked), "after a pause one row again");
+}
+
+#[test]
+fn up_and_down_in_the_compose_box_move_between_its_lines() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "cab");
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+    press(&mut app, "cd");
+    app.handle_key(code(KeyCode::Up));
+    press(&mut app, "x");
+    app.handle_key(code(KeyCode::Down));
+    press(&mut app, "y");
+    assert_eq!(app.buffer.text(), "abx\ncdy");
+}
+
+#[test]
+fn the_pane_keeps_its_thread_while_a_reply_is_written() {
+    let mut app = with_review();
+    press(&mut app, "]nlr");
+    assert!(app.input.is_some());
+    let open = app.open.clone().unwrap();
+    let shown = open.pane.clone().unwrap().place;
+    let other = open.rows.iter().position(|row| open.is_marked(row) && open.review.place_of(row).is_some_and(|p| p != shown)).unwrap();
+    app.open = Some(Open { selected: other, ..open });
+    app.follow_cursor();
+    assert_eq!(app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place), Some(&shown));
+    app.handle_key(code(KeyCode::Esc));
+    app.follow_cursor();
+    assert_ne!(app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place), Some(&shown), "without the box it follows again");
+}

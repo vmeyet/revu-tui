@@ -54,6 +54,8 @@ impl App {
             KeyCode::Backspace if alt => self.buffer.delete_word(),
             KeyCode::Left => self.buffer.left(),
             KeyCode::Right => self.buffer.right(),
+            KeyCode::Up => self.buffer.up(),
+            KeyCode::Down => self.buffer.down(),
             KeyCode::Home => self.buffer.start(),
             KeyCode::End => self.buffer.end(),
             KeyCode::Char('a') if ctrl => self.buffer.start(),

@@ -66,7 +66,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 
 ### While it is open
 
-- It **follows the cursor**: moving onto another marked line swaps the pane to that line's threads without moving focus.
+- It **follows the cursor**: moving onto another marked line, with keys or the wheel, swaps the pane to that line's threads without moving focus; not while a comment is being written in it.
 - On an unmarked line it keeps showing the last threads, with its title in `faded` and a `↑ line 57` hint, so reading the code around a thread keeps the thread in view.
 - `esc`, `x` or `q` from the diff or the pane closes it; `esc` in the diff with the pane closed goes back to the queue, as today.
 
@@ -95,7 +95,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 ### Moving inside it
 
 - `h` / `l` move focus between the diff and the pane, as between slack-tui's channel and thread.
-- `j` / `k` move the cursor bar note by note; `J` / `K` jump to the next or previous thread; `ctrl-d` / `ctrl-u` scroll half a page; `g` / `G` first and last note.
+- `j` / `k` move the cursor bar note by note; `J` / `K` jump to the next or previous thread; `ctrl-d` / `ctrl-u` (`PgDn` `space` / `PgUp`) scroll half a page; `g` / `G` first and last note.
 - The focused thread is the one under the cursor bar; `r`, `R`, `e`, `d`, `o`, `y` act on it.
 
 ## Composing

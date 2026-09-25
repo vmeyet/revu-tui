@@ -57,6 +57,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         (review, side)
     };
     let side_open = side_open && shown.side > 0;
+    let hidden = Rect::default();
+    app.areas = super::app::Areas {
+        queue: if shown.queue > 0 { queue } else { hidden },
+        review: if shown.diff { review } else { hidden },
+        side: if side_open { side } else { hidden },
+    };
     if shown.queue > 0 {
         super::queue_view::draw(f, app, queue);
     }
@@ -79,7 +85,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if status_rows > 0 {
         draw_status(f, app, status);
     }
-    let modal = app.help.is_some() || app.publish.is_some() || app.brief.is_some() || app.palette.is_some() || app.sharing.is_some();
+    let modal = app.modal();
     if modal {
         app.links.clear();
     }
