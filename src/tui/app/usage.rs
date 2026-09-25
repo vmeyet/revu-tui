@@ -53,6 +53,7 @@ impl App {
             Command::Ready => ":ready",
             Command::Approve => ":approve",
             Command::Publish => ":publish",
+            Command::Threads => ":threads",
             Command::All => ":all",
             Command::Set { .. } => ":set",
             Command::View(_) => ":view",

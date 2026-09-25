@@ -22,6 +22,7 @@ impl App {
         let place = match input {
             Input::Comment { position } => place_of_position(review, position),
             Input::Reply { .. } if open.pane.is_some() => None,
+            Input::EditDraft { .. } if open.lists_every_thread() => None,
             Input::Reply { thread } => Some(place_of_thread(review, thread)),
             Input::Ask { .. } | Input::FollowUp => None,
             Input::EditDraft { index } => review.drafts.get(*index).map(|draft| match (&draft.position, &draft.reply_to) {

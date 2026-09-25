@@ -1,0 +1,22 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 160, 30)"
+---
+
+                     the whole MR · 3 threads
+
+                     ▎on the MR
+                     ▎· comment
+                     ▎lea · 2h
+                     ▎Looks good overall, one question inline.
+                      ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                      src/pay/charge.rs:57 · outdated
+                      ◆ outdated
+                      lea · 1h
+                      Should this retry on timeout?
+                      ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                      src/pay/charge.rs:-13
+                      let client = Client::new();
+                      ✓ resolved
+                      you · 2h
+                      Why drop the plain client?

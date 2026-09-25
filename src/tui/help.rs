@@ -63,6 +63,7 @@ pub const GROUPS: [Group; 7] = [
             ("i", "the MR cover page"),
             ("D", "inline diff, or side by side"),
             ("t", "file tree"),
+            ("T", "every thread of the MR"),
             ("p", "pipeline"),
             ("zz", "zen: the diff alone, quiet"),
             ("w W", "wrap long lines, hide whitespace changes"),
@@ -99,7 +100,8 @@ pub const GROUPS: [Group; 7] = [
         keys: &[
             ("r", "reply, as a draft"),
             ("R", "resolve, unresolve"),
-            ("J K", "next, previous thread on the line"),
+            ("J K", "next, previous thread"),
+            ("T", "every thread; enter goes to it"),
             ("e d", "edit, delete my draft"),
             ("S +", "apply the suggestion, react"),
             ("u", "open the first link"),

@@ -1,6 +1,7 @@
-//! The right pane: the conversations of one place, opened from a marked line and following the cursor.
+//! The right pane: the conversations of one place, opened from a marked line and following the cursor,
+//! or every conversation of the MR, opened with `T`.
 use super::{Action, App, Focus, Open};
-use crate::review::{Conversation, Mark, Markers, Place, Review, Row};
+use crate::review::{Conversation, Mark, Markers, Place, Review, Row, Spot};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeSet;
 
@@ -90,6 +91,11 @@ impl Open {
         }
     }
 
+    /// The pane lists every conversation of the MR, not those of one place.
+    pub fn lists_every_thread(&self) -> bool {
+        self.pane.as_ref().is_some_and(|pane| pane.place == Place::All)
+    }
+
     fn with_pane(&self, pane: Option<Pane>) -> Self {
         Self { pane, ..self.clone() }
     }
@@ -135,6 +141,18 @@ impl App {
         true
     }
 
+    /// `T`: every conversation of the MR, or the pane closed when it already lists them.
+    pub(super) fn toggle_every_thread(&mut self) {
+        let Some(open) = &self.open else { return };
+        if open.lists_every_thread() {
+            self.close_pane();
+        } else if open.review.conversations(&Place::All).is_empty() {
+            self.toast("no thread on this MR yet");
+        } else {
+            self.open_pane(Place::All);
+        }
+    }
+
     pub(super) fn close_pane(&mut self) {
         if let Some(open) = &self.open {
             self.open = Some(open.with_pane(None));
@@ -142,13 +160,13 @@ impl App {
         self.focus = Focus::Review;
     }
 
-    /// The pane follows the cursor onto another marked line; an unmarked line, or a comment
-    /// being written in the pane, keeps what it shows.
+    /// The pane follows the cursor onto another marked line; an unmarked line, a comment being
+    /// written in the pane, or the list of every conversation keeps what it shows.
     pub(super) fn follow_cursor(&mut self) {
         if self.input.is_some() {
             return;
         }
-        let Some(open) = &self.open else { return };
+        let Some(open) = self.open.as_ref().filter(|open| !open.lists_every_thread()) else { return };
         let Some(pane) = &open.pane else { return };
         let Some(row) = open.row().filter(|row| open.is_marked(row)) else { return };
         let Some(place) = open.review.place_of(row).filter(|place| *place != pane.place) else { return };
@@ -167,10 +185,27 @@ impl App {
             self.toast(text);
             return vec![];
         };
-        let fold = unfolded_for(open, &target);
+        self.jump_to_row(&target)
+    }
+
+    /// `enter` in the list of every conversation: the diff's cursor onto the focused one's line.
+    fn jump_to_focused(&mut self) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let Some((conversations, _, Some(focused))) = open.pane_view() else { return vec![] };
+        let Some(target) = row_of(&open.review, open.review.spot(&conversations[focused.conversation])) else {
+            self.toast("its line is not in the diff");
+            return vec![];
+        };
+        self.jump_to_row(&target)
+    }
+
+    /// The cursor on `target`; its folded file or hunk opens, and stays open like one opened by hand.
+    fn jump_to_row(&mut self, target: &Row) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
+        let fold = unfolded_for(open, target);
         let changed = fold != open.review.fold;
         let laid = if changed { open.relaid(open.review.with_fold(fold)) } else { open.clone() };
-        let index = laid.rows.iter().position(|row| super::review::same_place(row, &target)).unwrap_or(laid.selected);
+        let index = laid.rows.iter().position(|row| super::review::same_place(row, target)).unwrap_or(laid.selected);
         let next = laid.move_to(index);
         let actions = if changed {
             self.keep(next)
@@ -193,7 +228,12 @@ impl App {
             KeyCode::Char('G') => self.pane_move(isize::MAX / 2),
             KeyCode::Char('J') => self.pane_jump(true),
             KeyCode::Char('K') => self.pane_jump(false),
+            KeyCode::Enter if self.open.as_ref().is_some_and(Open::lists_every_thread) => {
+                self.unfold_focused();
+                return self.jump_to_focused();
+            }
             KeyCode::Enter => self.unfold_focused(),
+            KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('u') => {
                 let Some(url) = self.thread_link() else {
                     self.toast("no link in this thread");
@@ -294,6 +334,18 @@ fn next_marked(open: &Open, forward: bool, threads: Threads) -> Option<Row> {
         .map(|k| if forward { (here + k) % len } else { (here + len - k % len) % len })
         .find(|&i| i != here && open.mark_in(&markers, &every[i]).is_some_and(|mark| threads.stops_at(mark)))
         .map(|i| every[i].clone())
+}
+
+/// The row showing where a conversation hangs, among the rows the review shows with every fold open:
+/// the header for the MR, the file row for an outdated line.
+fn row_of(review: &Review, spot: Spot) -> Option<Row> {
+    match spot {
+        Spot::Mr => Some(Row::Header),
+        Spot::Outdated(anchor) => review.file_of(anchor).map(|index| Row::File { index, open: true }),
+        Spot::Line(anchor) => {
+            review.with_fold(crate::diff::fold::FoldState::default()).rows().into_iter().find(|row| review.row_holds(row, anchor))
+        }
+    }
 }
 
 /// The fold state with the target's file and hunk open; the rest as the reader left it.

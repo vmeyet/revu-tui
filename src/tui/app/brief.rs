@@ -4,7 +4,7 @@
 use super::{Action, App, Focus};
 use crate::forge::checks::JobState;
 use crate::forge::{MrKey, QueueMr, ReviewState};
-use crate::review::{Place, Review, Row, Side};
+use crate::review::{Place, Review, Row};
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -271,12 +271,7 @@ impl App {
             self.open_pane(Place::Mr);
             return vec![];
         };
-        let Some(file) = open.review.files.iter().position(|f| match anchor.side {
-            Side::New => f.new_path == anchor.path,
-            Side::Old => f.old_path == anchor.path,
-        }) else {
-            return vec![];
-        };
+        let Some(file) = open.review.file_of(&anchor) else { return vec![] };
         if thread.outdated {
             self.review_jump_to(|row| matches!(row, Row::File { index, .. } if *index == file));
             self.open_pane(Place::Outdated { file });
@@ -285,17 +280,8 @@ impl App {
         let path = open.review.files[file].new_path.clone();
         let actions = if open.review.fold.file_is_open(&path) { vec![] } else { self.set_file_fold(&path, crate::diff::fold::Fold::Open) };
         let Some(open) = &self.open else { return actions };
-        let on_anchor = |place: &Place| match place {
-            Place::Line { file: f, new, old } => {
-                *f == file
-                    && match anchor.side {
-                        Side::New => *new == Some(anchor.line),
-                        Side::Old => *old == Some(anchor.line),
-                    }
-            }
-            _ => false,
-        };
-        let found = open.rows.iter().enumerate().find_map(|(i, row)| open.review.place_of(row).filter(on_anchor).map(|p| (i, p)));
+        let found = open.rows.iter().enumerate().find(|(_, row)| open.review.row_holds(row, &anchor));
+        let found = found.and_then(|(i, row)| open.review.place_of(row).map(|p| (i, p)));
         if let Some((index, place)) = found {
             self.open = Some(open.move_to(index));
             self.open_pane(place);

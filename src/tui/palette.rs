@@ -55,6 +55,8 @@ pub enum Command {
     Ready,
     Approve,
     Publish,
+    /// `:threads`: every conversation of the MR in the right pane, as `T` does.
+    Threads,
     /// This repo only, or every project.
     All,
     Set {
@@ -75,13 +77,14 @@ pub enum Command {
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 14] = [
+pub const VERBS: [(&str, &str); 15] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
     ("merge", "merge my approved MR, after a yes"),
     ("ready", "mark my MR ready for review, or a draft again"),
     ("publish", "publish every draft, in the publish modal"),
+    ("threads", "every thread of the MR in the right pane"),
     ("all", "the queue: this repo only, or every project"),
     ("set", "change and save a setting: :set theme=nord"),
     ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
@@ -116,6 +119,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "merge" => Ok(Command::Merge),
         "ready" => Ok(Command::Ready),
         "publish" | "p" => Ok(Command::Publish),
+        "threads" => Ok(Command::Threads),
         "all" | "*" => Ok(Command::All),
         "set" => {
             let Some((key, value)) = rest.split_once('=') else { return Err(":set needs key=value, e.g. theme=nord".into()) };
@@ -326,6 +330,7 @@ mod tests {
         assert_eq!(parse("g acme/widgets!42"), Ok(Command::Go("acme/widgets!42".into())));
         assert_eq!(parse("set theme=nord"), Ok(Command::Set { key: "theme".into(), value: "nord".into() }));
         assert_eq!(parse("*"), Ok(Command::All));
+        assert_eq!(parse(":threads"), Ok(Command::Threads));
         assert_eq!(parse("q"), Ok(Command::Quit));
         assert_eq!(parse("view old"), Ok(Command::View("old".into())));
         assert_eq!(parse("v src/a.rs:42"), Ok(Command::View("src/a.rs:42".into())));

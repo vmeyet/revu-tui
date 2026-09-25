@@ -154,6 +154,10 @@ impl App {
                 self.open_publish();
                 vec![]
             }
+            Command::Threads => {
+                self.toggle_every_thread();
+                vec![]
+            }
             Command::All => self.toggle_scope(),
             Command::Set { key, value } => self.set(&key, &value),
             Command::View(argument) => self.view_command(&argument),

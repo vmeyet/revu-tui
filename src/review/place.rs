@@ -1,6 +1,6 @@
 //! Where conversations live: the anchor column's marks per line, and what the right pane lists
-//! for one place (a line, the MR itself, or a file's outdated threads).
-use super::{Draft, Review, Row, Side, Thread};
+//! for one place (a line, the MR itself, a file's outdated threads, or all of them).
+use super::{Anchor, Draft, Review, Row, Side, Thread};
 use std::collections::BTreeMap;
 
 /// The most pressing thing on a line, in rising order: an unresolved thread outranks my draft,
@@ -31,12 +31,22 @@ impl Marker {
 /// Markers by `(path, side, line)`, built once per review.
 pub type Markers = BTreeMap<(String, Side, u32), Marker>;
 
-/// Where the pane looks: a line of a file (both numbers of a context line), the MR, or a file's outdated threads.
+/// Where the pane looks: a line of a file (both numbers of a context line), the MR, a file's outdated
+/// threads, or every conversation of the MR.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Place {
     Line { file: usize, new: Option<u32>, old: Option<u32> },
     Mr,
     Outdated { file: usize },
+    All,
+}
+
+/// Where one conversation hangs: on the MR, on a line of the diff, or on a line the diff no longer has.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spot<'a> {
+    Mr,
+    Line(&'a Anchor),
+    Outdated(&'a Anchor),
 }
 
 /// One entry of the pane: a thread with my replies to it, or a draft that starts a new thread.
@@ -110,14 +120,65 @@ impl Review {
     }
 
     /// What the pane lists at `place`: unresolved threads, then my new drafts, then resolved
-    /// threads; oldest first inside each group.
+    /// threads; oldest first inside each group, or in diff order when the pane lists them all.
     pub fn conversations(&self, place: &Place) -> Vec<Conversation> {
         let threads = self.threads_in(place);
         let (resolved, open): (Vec<&Thread>, Vec<&Thread>) = threads.into_iter().partition(|t| t.resolved);
         let with_replies =
             |t: &Thread| Conversation { thread: Some(t.id.clone()), drafts: self.replies_to(&t.id).map(|(i, _)| i).collect() };
-        let new_drafts = self.new_drafts_in(place).into_iter().map(|index| Conversation { thread: None, drafts: vec![index] });
-        open.into_iter().map(with_replies).chain(new_drafts).chain(resolved.into_iter().map(with_replies)).collect()
+        let new_drafts = self.new_drafts_in(place).into_iter().map(|index| Conversation { thread: None, drafts: vec![index] }).collect();
+        let groups = [open.into_iter().map(with_replies).collect(), new_drafts, resolved.into_iter().map(with_replies).collect()];
+        groups.into_iter().flat_map(|group| if *place == Place::All { self.in_diff_order(group) } else { group }).collect()
+    }
+
+    /// The MR's own conversations first, then files as the diff lists them, lines in order, a
+    /// file's outdated threads after its lines.
+    fn in_diff_order(&self, group: Vec<Conversation>) -> Vec<Conversation> {
+        let rank = |anchor: &Anchor| self.file_of(anchor).map_or(usize::MAX, |file| file + 1);
+        let mut sorted = group;
+        sorted.sort_by_cached_key(|conversation| match self.spot(conversation) {
+            Spot::Mr => (0, false, 0),
+            Spot::Line(anchor) => (rank(anchor), false, anchor.line),
+            Spot::Outdated(anchor) => (rank(anchor), true, anchor.line),
+        });
+        sorted
+    }
+
+    /// Where a conversation hangs: its thread's anchor, or its new draft's.
+    pub fn spot(&self, conversation: &Conversation) -> Spot<'_> {
+        let thread = conversation.thread.as_deref().and_then(|id| self.thread(id));
+        let anchor = match thread {
+            Some(thread) => thread.anchor.as_ref(),
+            None => conversation.drafts.first().and_then(|&index| self.drafts.get(index)?.anchor.as_ref()),
+        };
+        match anchor {
+            None => Spot::Mr,
+            Some(anchor) if thread.is_some_and(|t| t.outdated) => Spot::Outdated(anchor),
+            Some(anchor) => Spot::Line(anchor),
+        }
+    }
+
+    /// The file whose side of the change the anchor names.
+    pub fn file_of(&self, anchor: &Anchor) -> Option<usize> {
+        self.files.iter().position(|file| match anchor.side {
+            Side::New => file.new_path == anchor.path,
+            Side::Old => file.old_path == anchor.path,
+        })
+    }
+
+    /// The code on the anchor's line, when the diff shows it.
+    pub fn line_text(&self, anchor: &Anchor) -> Option<&str> {
+        self.files.iter().find_map(|file| file.line_at(anchor)).map(|line| line.text.as_str())
+    }
+
+    /// Whether the row shows the anchor's line.
+    pub fn row_holds(&self, row: &Row, anchor: &Anchor) -> bool {
+        let Some(Place::Line { file, new, old }) = self.place_of(row) else { return false };
+        let number = match anchor.side {
+            Side::New => new,
+            Side::Old => old,
+        };
+        self.file_of(anchor) == Some(file) && number == Some(anchor.line)
     }
 
     /// Threads anchored in the diff that `place` does not show: the footer's "n more in this file".
@@ -166,6 +227,7 @@ impl Review {
             }
             Place::Mr => self.threads.iter().filter(|t| t.anchor.is_none()).collect(),
             Place::Outdated { file } => self.outdated(&self.files[*file].new_path),
+            Place::All => self.threads.iter().collect(),
         }
     }
 
@@ -180,6 +242,7 @@ impl Review {
             Place::Mr => {
                 self.drafts.iter().enumerate().filter(|(_, d)| d.anchor.is_none() && d.reply_to.is_none()).map(|(i, _)| i).collect()
             }
+            Place::All => self.drafts.iter().enumerate().filter(|(_, d)| d.reply_to.is_none()).map(|(i, _)| i).collect(),
             Place::Outdated { .. } => vec![],
         }
     }
@@ -262,6 +325,45 @@ mod tests {
         );
         let resolved = review.with_resolved("c0ffee00c0ffee00", true);
         assert_eq!(resolved.conversations(&place)[0].thread, None, "a resolved thread goes last");
+    }
+
+    #[test]
+    fn every_conversation_lists_unresolved_then_new_drafts_then_resolved_each_in_diff_order() {
+        let lock = Anchor { path: "Cargo.lock".into(), side: Side::New, line: 1 };
+        let drafts = vec![
+            Draft::new(Some(lock), "why a lock bump?"),
+            Draft::reply("c0ffee00c0ffee00", "agreed"),
+            Draft::new(Some(old_13()), "why drop the default client?"),
+            Draft::new(None, "one more thing"),
+        ];
+        let review = review().with_resolved("c0ffee00c0ffee00", false).with_drafts(drafts);
+        let listed = review.conversations(&Place::All);
+        let thread = |id: &str, drafts: Vec<usize>| Conversation { thread: Some(id.into()), drafts };
+        let draft = |index: usize| Conversation { thread: None, drafts: vec![index] };
+        let expected = [
+            thread("6a9c1750b2d6e4f0", vec![]),
+            thread("c0ffee00c0ffee00", vec![1]),
+            thread("9f2c0aa1d4e5b6c7", vec![]),
+            draft(3),
+            draft(2),
+            draft(0),
+        ];
+        assert_eq!(listed, expected, "the MR, then charge.rs's line, then its outdated thread; the lock file last");
+        let resolved = review.with_resolved("c0ffee00c0ffee00", true).conversations(&Place::All);
+        assert_eq!(resolved.last(), Some(&thread("c0ffee00c0ffee00", vec![1])), "a resolved thread goes last");
+    }
+
+    #[test]
+    fn a_conversation_hangs_on_the_mr_a_line_or_an_outdated_line() {
+        let review = review().with_drafts(vec![Draft::new(Some(old_13()), "nit")]);
+        let on = |id: &str| review.spot(&Conversation { thread: Some(id.into()), drafts: vec![] });
+        assert_eq!(on("6a9c1750b2d6e4f0"), Spot::Mr);
+        assert_eq!(on("c0ffee00c0ffee00"), Spot::Line(&old_13()));
+        assert!(matches!(on("9f2c0aa1d4e5b6c7"), Spot::Outdated(anchor) if anchor.line == 57));
+        assert_eq!(review.spot(&Conversation { thread: None, drafts: vec![0] }), Spot::Line(&old_13()), "a new draft hangs on its line");
+        assert_eq!(review.line_text(&old_13()), Some("    let client = Client::new();"));
+        assert!(review.row_holds(&removed_line(), &old_13()));
+        assert!(!review.row_holds(&Row::Line { file: 0, hunk: 0, index: 0 }, &old_13()));
     }
 
     #[test]

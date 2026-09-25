@@ -4092,3 +4092,99 @@ fn the_pane_keeps_its_thread_while_a_reply_is_written() {
     app.follow_cursor();
     assert_ne!(app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place), Some(&shown), "without the box it follows again");
 }
+
+fn listed_place(app: &App) -> Option<Place> {
+    app.open.as_ref().unwrap().pane.as_ref().map(|p| p.place.clone())
+}
+
+fn focused_thread(app: &App) -> Option<String> {
+    app.open.as_ref().unwrap().focused_thread()
+}
+
+#[test]
+fn t_lists_every_thread_and_t_esc_or_q_close_it() {
+    let mut app = with_review();
+    press(&mut app, "T");
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
+    assert_eq!(focused_thread(&app).as_deref(), Some("6a9c1750b2d6e4f0"), "the MR's own thread comes first");
+    press(&mut app, "T");
+    assert_eq!((listed_place(&app), app.focus), (None, Focus::Review));
+    for close in [code(KeyCode::Esc), key('q')] {
+        press(&mut app, "T");
+        app.handle_key(close);
+        assert_eq!(listed_place(&app), None);
+    }
+    press(&mut app, ":threads");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(listed_place(&app), Some(Place::All), "the palette opens it too");
+}
+
+#[test]
+fn capital_j_k_walk_every_thread_and_r_and_capital_r_act_on_the_one_under_the_cursor() {
+    let mut app = with_review();
+    press(&mut app, "TJ");
+    assert_eq!(focused_thread(&app).as_deref(), Some("9f2c0aa1d4e5b6c7"), "the outdated thread, still open");
+    press(&mut app, "J");
+    assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "the resolved one last");
+    press(&mut app, "K");
+    assert_eq!(press(&mut app, "R"), vec![Action::Resolve { key: mr_key(), thread: "9f2c0aa1d4e5b6c7".into(), resolved: true }]);
+    press(&mut app, "gJ");
+    let mut actions = press(&mut app, "r");
+    actions.extend(type_text(&mut app, "agreed"));
+    let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"), "resolving moved the outdated thread down");
+    assert_eq!(listed_place(&app), Some(Place::All));
+}
+
+#[test]
+fn e_and_d_in_every_thread_act_on_my_draft_and_keep_the_list() {
+    let mut app = with_saved_draft();
+    press(&mut app, "TJJ");
+    assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
+    press(&mut app, "e");
+    assert_eq!((app.input_label(), listed_place(&app)), ("edit draft".to_owned(), Some(Place::All)));
+    app.handle_key(code(KeyCode::Esc));
+    assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
+}
+
+#[test]
+fn enter_in_every_thread_takes_the_diff_to_the_line_and_opens_its_fold() {
+    let mut app = with_review();
+    press(&mut app, "zMTJJ");
+    assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+    app.handle_key(code(KeyCode::Enter));
+    let open = app.open.as_ref().unwrap();
+    assert!(open.review.fold.file_is_open("src/pay/charge.rs"));
+    assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
+    assert!(open.pane.as_ref().unwrap().unfolded.contains("c0ffee00c0ffee00"), "a resolved thread unfolds as well");
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
+    press(&mut app, "K");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::File { index: 0, open: true }), "an outdated thread goes to its file");
+    press(&mut app, "g");
+    app.handle_key(code(KeyCode::Enter));
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "the MR's own thread goes to the header");
+}
+
+#[test]
+fn moving_in_the_diff_leaves_every_thread_in_the_pane() {
+    let mut app = with_review();
+    press(&mut app, "Th]N");
+    assert_eq!(app.focus, Focus::Review);
+    let open = app.open.as_ref().unwrap();
+    assert!(open.is_marked(open.row().unwrap()), "on a marked line");
+    press(&mut app, "jk");
+    assert_eq!(listed_place(&app), Some(Place::All));
+}
+
+#[test]
+fn snapshot_every_thread() {
+    let mut app = with_review();
+    press(&mut app, "T");
+    let wide = render(&mut app, 160, 30);
+    assert!(wide.contains("src/pay/charge.rs:-13") && wide.contains("let client = Client::new();"), "{wide}");
+    insta::assert_snapshot!("every_thread_wide", wide);
+    press(&mut app, "Tzz");
+    press(&mut app, "T");
+    insta::assert_snapshot!("every_thread_zen", render(&mut app, 160, 30));
+}

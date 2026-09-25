@@ -63,10 +63,11 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - `enter` or `l` on a marked line opens it on that line's threads, focused.
 - `c` on any line opens it with the compose box ready for a new thread (see Composing).
 - `enter` on the MR header opens the MR-level threads; `enter` on a file row with outdated threads opens those.
+- `T` (or `:threads`) opens every conversation of the MR at once; see Every thread.
 
 ### While it is open
 
-- It **follows the cursor**: moving onto another marked line, with keys or the wheel, swaps the pane to that line's threads without moving focus; not while a comment is being written in it.
+- It **follows the cursor**: moving onto another marked line, with keys or the wheel, swaps the pane to that line's threads without moving focus; not while a comment is being written in it, nor while it lists every thread.
 - On an unmarked line it keeps showing the last threads, with its title in `faded` and a `↑ line 57` hint, so reading the code around a thread keeps the thread in view.
 - `esc`, `x` or `q` from the diff or the pane closes it; `esc` in the diff with the pane closed goes back to the queue, as today.
 
@@ -91,6 +92,19 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - Resolved threads fold to their status line and first note; `enter` on one unfolds it.
 - A thin `─` rule in `border` separates threads.
 - The footer of the list says what else exists in the file: `3 more threads in this file · ]n`.
+
+### Every thread
+
+`T` from the diff or the pane, or `:threads`, lists every conversation of the MR in the pane (`Place::All`), for the reader who wants the whole discussion before the code.
+
+- Order: unresolved threads, then my drafts that start a thread, then resolved threads, folded as elsewhere; inside a group, the MR's own conversations first, then files in diff order, lines in order, a file's outdated threads after its lines.
+- Title: `the whole MR · 5 threads`; no footer, nothing else exists.
+- Each conversation opens on where it hangs, in `muted`: `src/pay/charge.rs:57` (`:-13` for the old side), `src/pay/charge.rs:57 · outdated`, or `on the MR`; under a line in the diff, its code, trimmed, in `faded`, so the reader keeps the context.
+- `J` `K` move between conversations; `r`, `R`, `+`, `e`, `d`, `S` act on the one under the cursor as in the pane of one line, and the list stays.
+- `enter` takes the diff's cursor to the conversation's line, opening its file and hunk as `]n` does, and folds or unfolds a resolved thread; the MR's own conversations go to the header, outdated ones to their file row. The list stays and keeps the focus: in zen or under 120 columns, `h` shows the diff there.
+- It does not follow the cursor: moving in the diff keeps the list.
+- `T` again, `esc`, `x` or `q` close it; `c` on a line switches the pane to that line, as it would from any place.
+- In zen it opens the narrow way, like the pane of one line.
 
 ### Moving inside it
 
@@ -123,7 +137,9 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `R` | pane, or diff on a marked line | resolve, unresolve the focused thread | pane only |
 | `e` | pane | edit my draft (or my note, M3) | `enter` on a draft row |
 | `d` | pane | delete my draft | `d` on a draft row |
-| `J` `K` | pane | next, previous thread on the line | none |
+| `J` `K` | pane | next, previous thread | none |
+| `T` | diff or pane | every thread of the MR in the pane, or close it | none |
+| `enter` | pane, every thread | go to the conversation's line in the diff | none |
 | `]n` `[n` | diff | next, previous line with an unresolved thread or my draft, across files; the pane follows when open | next thread row |
 | `]N` `[N` | diff | the same, resolved-only lines too | next thread row |
 | `x`, `esc`, `q` | diff or pane | close the pane | `esc` |
@@ -157,6 +173,5 @@ Delete the tests of the removed rows rather than keeping them alive with shims.
 
 - **Keep threads inline and add the pane**: the code would still read like a chat log; the point is that the diff shows code.
 - **Open the pane automatically when the cursor lands on a marked line**: scrolling would resize the diff every few lines.
-- **List every thread of the file or the MR in the pane**: it loses the line the reader is looking at; `]N` already walks them all, and the file row counts give the overview.
 - **A tooltip under the line**: too small for a conversation and nowhere to type.
 - **Keep the one-row input for replies**: one line of text, far from the thread it answers.

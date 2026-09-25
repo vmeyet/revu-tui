@@ -54,6 +54,7 @@ const INTERNAL: &[&str] = &[
     ":approve",
     ":merge",
     ":publish",
+    ":threads",
     ":all",
     ":set",
     ":view",
@@ -115,13 +116,27 @@ const GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "thread pane",
-        &["reply", "react", "apply_suggestion", "edit_draft", "delete_draft", "close_pane", "next_in_line", "prev_in_line", "open_link"],
+        &[
+            "every_thread",
+            "reply",
+            "react",
+            "apply_suggestion",
+            "edit_draft",
+            "delete_draft",
+            "close_pane",
+            "next_in_line",
+            "prev_in_line",
+            "open_link",
+        ],
     ),
     ("ask claude", &["ask_explain", "ask_risks", "ask_summary", "ask_thread", "ask_comment", "ask_free"]),
     ("search & app", &["palette", "jump", "palette_mr", "palette_file", "open_browser", "copy_link", "help", "quit"]),
     (
         "commands",
-        &[":go", ":open", ":approve", ":merge", ":ready", ":publish", ":all", ":set", ":view", ":ai", ":ask", ":share", ":help", ":quit"],
+        &[
+            ":go", ":open", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":set", ":view", ":ai", ":ask", ":share",
+            ":help", ":quit",
+        ],
     ),
 ];
 
@@ -248,6 +263,7 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('P') => "publish",
         KeyCode::Char('D') => "side_by_side",
         KeyCode::Char('t') => "tree",
+        KeyCode::Char('T') => "every_thread",
         KeyCode::Char('p') => "pipeline",
         KeyCode::Char('W') => "whitespace",
         KeyCode::Char('w') => "wrap",
@@ -269,6 +285,7 @@ fn pane_key(code: KeyCode) -> Option<&'static str> {
     Some(match code {
         KeyCode::Char('J') => "next_in_line",
         KeyCode::Char('K') => "prev_in_line",
+        KeyCode::Char('T') => "every_thread",
         KeyCode::Char('u') => "open_link",
         KeyCode::Char('o') => "open_browser",
         KeyCode::Char('y') => "copy_link",
