@@ -4,7 +4,7 @@ use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;
 use super::thread_view::body_lines;
-use super::ui::{pane, short_age, truncate};
+use super::ui::{DEPLOYED, pane, short_age, truncate};
 use crate::forge::ReviewState;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -72,6 +72,10 @@ fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) ->
     }
     section(&mut lines, "checks", "", theme);
     lines.push(checks_line(brief, theme, width));
+    if !brief.deployments.is_empty() {
+        section(&mut lines, "review apps", "", theme);
+        lines.extend(brief.deployments.iter().map(|d| deployment_line(d, theme, width)));
+    }
     section(&mut lines, "review", "", theme);
     lines.extend(review_lines(brief, theme, width));
     let mut targets = vec![];
@@ -111,6 +115,13 @@ fn section(lines: &mut Vec<Line<'_>>, title: &str, detail: &str, theme: Theme) {
         spans.push(Span::styled(format!("  {detail}"), Style::default().fg(theme.faded)));
     }
     lines.push(Line::from(spans));
+}
+
+/// A review app: its environment, then its address for the terminal to open.
+fn deployment_line<'a>(deployment: &crate::forge::Deployment, theme: Theme, width: usize) -> Line<'a> {
+    let name = format!("{DEPLOYED}{}  ", deployment.environment);
+    let url = truncate(&deployment.url, width.saturating_sub(name.width()));
+    Line::from(vec![Span::styled(name, Style::default().fg(theme.muted)), Span::styled(url, Style::default().fg(theme.link))])
 }
 
 fn checks_line<'a>(brief: &Brief, theme: Theme, width: usize) -> Line<'a> {

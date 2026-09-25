@@ -16,6 +16,20 @@ struct Repo {
 }
 
 #[derive(Deserialize)]
+struct DeploymentWire {
+    id: u64,
+    sha: String,
+    environment: String,
+}
+
+#[derive(Deserialize)]
+struct DeploymentStatus {
+    state: String,
+    #[serde(default)]
+    environment_url: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct PrNumber {
     number: u64,
 }
@@ -225,6 +239,31 @@ impl Client {
         let found = runs.check_runs.into_iter().map(|run| run.found(&workflows.workflow_runs)).collect();
         let web_url = format!("https://{}/{}/pull/{}/checks", self.host(), key.project, key.number);
         Ok(Some(Checks::from_jobs(Some(web_url), found)))
+    }
+
+    /// The newest deployment of each environment the branch went to, once its last status is a
+    /// success with an address; GitHub keeps the address on the status, not the deployment.
+    pub async fn deployments(&self, key: &MrKey, branch: &str) -> Result<Vec<forge::Deployment>> {
+        let repo = repo_path(&key.project);
+        let branch: String = url::form_urlencoded::byte_serialize(branch.as_bytes()).collect();
+        let listed: Vec<DeploymentWire> = self.get(&format!("{repo}/deployments?ref={branch}&per_page=30")).await?;
+        let mut newest: Vec<DeploymentWire> = vec![];
+        for deployment in listed {
+            if newest.iter().all(|n| n.environment != deployment.environment) {
+                newest.push(deployment);
+            }
+        }
+        let paths: Vec<String> = newest.iter().map(|d| format!("{repo}/deployments/{}/statuses?per_page=1", d.id)).collect();
+        let statuses = futures_util::future::try_join_all(paths.iter().map(|p| self.get::<Vec<DeploymentStatus>>(p))).await?;
+        Ok(newest
+            .into_iter()
+            .zip(statuses)
+            .filter_map(|(d, status)| {
+                let last = status.into_iter().next().filter(|s| s.state == "success")?;
+                let url = last.environment_url.filter(|u| !u.is_empty())?;
+                Some(forge::Deployment { environment: d.environment, url, sha: d.sha })
+            })
+            .collect())
     }
 
     pub async fn me(&self) -> Result<forge::User> {
@@ -471,6 +510,37 @@ mod tests {
             .await;
         assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
     }
+    #[tokio::test]
+    async fn deployments_take_the_address_from_the_newest_successful_status() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/deployments"))
+            .and(query_param("ref", "feat/checkout"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                {"id": 3, "sha": "b2", "environment": "preview"},
+                {"id": 2, "sha": "b1", "environment": "preview"},
+                {"id": 1, "sha": "b1", "environment": "docs"}
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/deployments/3/statuses"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!([{"state": "success", "environment_url": "https://preview.acme.test"}])),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/deployments/1/statuses"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!([{"state": "failure", "environment_url": "https://docs.acme.test"}])),
+            )
+            .mount(&server)
+            .await;
+        let found = client(&server).deployments(&MrKey::new("acme/widgets", 7), "feat/checkout").await.unwrap();
+        assert_eq!(found, [forge::Deployment { environment: "preview".into(), url: "https://preview.acme.test".into(), sha: "b2".into() }]);
+    }
+
     #[tokio::test]
     async fn checks_group_check_runs_by_their_workflow() {
         let server = MockServer::start().await;

@@ -101,6 +101,13 @@ impl App {
         vec![]
     }
 
+    /// The open MR's review apps asked of the forge; what was known stays shown until the answer.
+    pub(super) fn ask_deployments(&mut self) {
+        let Some(open) = self.open.clone() else { return };
+        self.composed.push(Action::LoadDeployments { key: open.key.clone(), branch: open.review.mr.source_branch.clone() });
+        self.open = Some(Open { deployments: Some(open.deployments.unwrap_or_default()), ..open });
+    }
+
     /// The run arrived; a run still going is asked again in a while, as long as the pane shows it.
     pub(super) fn apply_checks(&mut self, key: &super::MrKey, checks: Option<Checks>) {
         let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
@@ -117,7 +124,11 @@ impl App {
             (_, Run::Ready(checks)) => Pipeline::first_failure(checks),
             _ => 0,
         };
+        let finished = matches!(&run, Run::Ready(checks) if checks.state() != JobState::Running);
         self.open = Some(open.with_pipeline(Some(Pipeline { run, selected, due })));
+        if finished {
+            self.ask_deployments();
+        }
     }
 
     pub(super) fn checks_failed(&mut self, message: String) {
