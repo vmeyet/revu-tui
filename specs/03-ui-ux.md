@@ -10,7 +10,7 @@ The terminal has no pixels to spare, so the design is typographic: alignment, rh
 3. **Alignment before colour.** Every column has a fixed width; numbers are right aligned; names are padded, never truncated mid-glyph. A misaligned gutter is a bug.
 4. **Whitespace is a feature.** One empty row between files, one between hunks, a `Padding::horizontal(1)` in every pane. Cramped is not dense.
 5. **Colour means one thing.** `success` = passing or approved, `warn` = pending or draft, `danger` = failing, conflicting or removed. Added is `success`, removed is `danger`, and both keep their `+`/`-` sign so colour is never the only cue.
-6. **Unfocused panes fade** (`fade()` from slack-tui) so the eye finds focus without a border colour change.
+6. **Unfocused panes fade** (`fade()` from slack-tui) so the eye finds focus without a loud frame: every frame sits close to the ground (`border`), the focused one, a modal and the compose box one step up (`border_focus`), and focus shows in the title's accent.
 7. **The terminal keeps its background.** Themes set foregrounds and two surfaces only, exactly as in slack-tui, so the app matches any terminal.
 8. **Glyphs have fallbacks.** `[tui] ascii = true` swaps `▎ ◆ ◇ ● ▸ ▾ ✓ ✗ ⠋` for `| * o * > v + x -`. Nerd Font icons are not used.
 9. **Motion is calm.** Spinners at 80 ms, the `●` pulse at 1 s, nothing else moves. No sliding, no blinking text.
