@@ -244,14 +244,23 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(Paragraph::new(line), area);
         return;
     }
-    if let Some(choices) = app.react_prompt() {
+    if let Some(prompt) = app.react_prompt() {
         let mut spans = vec![Span::styled(" react ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))];
-        for (text, mine, selected) in choices {
+        if let Some(query) = &prompt.search {
+            spans.push(Span::styled(format!("/{query}▏"), Style::default().fg(theme.accent)));
+        }
+        let hint = match (&prompt.search, prompt.more) {
+            (Some(_), _) if prompt.choices.is_empty() => "  no emoji by that name · esc",
+            (Some(_), _) => "  ← → enter · esc",
+            (None, true) => "  1-8 or h l enter · / any emoji · esc",
+            (None, false) => "  1-8 or h l enter · esc",
+        };
+        for (text, mine, selected) in prompt.choices {
             let colour = if mine { theme.accent } else { theme.muted };
             let style = if selected { Style::default().fg(colour).add_modifier(Modifier::REVERSED) } else { Style::default().fg(colour) };
             spans.extend([Span::raw(" "), Span::styled(format!(" {text} "), style)]);
         }
-        spans.push(Span::styled("  1-8 or h l enter · esc", muted));
+        spans.push(Span::styled(hint, muted));
         f.render_widget(Paragraph::new(Line::from(spans)), area);
         return;
     }

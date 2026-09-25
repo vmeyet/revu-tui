@@ -45,6 +45,14 @@ impl Kind {
         }
     }
 
+    /// Whether a note takes any emoji, or only the eight both forges share.
+    pub fn any_emoji(self) -> bool {
+        match self {
+            Kind::GitLab => true,
+            Kind::GitHub => false,
+        }
+    }
+
     /// The web page of one diff line: the MR's page, scrolled to the line.
     pub fn line_url(self, web_url: &str, path: &str, line: LineRef) -> String {
         match self {

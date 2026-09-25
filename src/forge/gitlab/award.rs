@@ -104,7 +104,7 @@ impl NoteAwards {
 
     fn reactions(&self, me: &str) -> Vec<Reaction> {
         tally(self.award_emoji.nodes.iter().filter_map(|a| {
-            let emoji = Emoji::named(&a.name)?;
+            let emoji = Emoji::from_gitlab(&a.name)?;
             Some((emoji, a.user.as_ref().is_some_and(|u| u.username == me)))
         }))
     }
@@ -187,7 +187,8 @@ mod tests {
         let first = json!([{"id": "gid://gitlab/DiffNote/11", "awardEmoji": {"nodes": [
             {"name": "thumbsup", "user": {"username": "nina"}},
             {"name": "thumbsup", "user": {"username": "lea"}},
-            {"name": "100", "user": {"username": "lea"}}
+            {"name": "100", "user": {"username": "lea"}},
+            {"name": "my_team_logo", "user": {"username": "lea"}}
         ]}}]);
         let second = json!([{"id": "gid://gitlab/Note/12", "awardEmoji": {"nodes": [{"name": "tada", "user": {"username": "lea"}}]}}]);
         Mock::given(method("POST"))
@@ -202,7 +203,9 @@ mod tests {
             .mount(&server)
             .await;
         let awards = client(&server).awards(&MrKey::new("acme/widgets", 42)).await.unwrap();
-        assert_eq!(awards[&11], ("gid://gitlab/DiffNote/11".into(), vec![Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]));
+        let hundred = Emoji::from_gitlab("100").unwrap();
+        let expected = vec![Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }, Reaction { emoji: hundred, count: 1, mine: false }];
+        assert_eq!(awards[&11], ("gid://gitlab/DiffNote/11".into(), expected), "any emoji but a custom one");
         assert_eq!(awards[&12].1, vec![Reaction { emoji: Emoji::Hooray, count: 1, mine: false }]);
     }
 
@@ -223,8 +226,16 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"awardEmojiRemove": {"errors": ["Not allowed"]}}})))
             .mount(&server)
             .await;
+        Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .and(body_string_contains("awardEmojiAdd"))
+            .and(body_string_contains("\"name\":\"100\""))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"awardEmojiAdd": {"errors": []}}})))
+            .mount(&server)
+            .await;
         let client = client(&server);
         client.react("gid://gitlab/DiffNote/11", Emoji::Rocket, true).await.unwrap();
+        client.react("gid://gitlab/DiffNote/11", Emoji::from_gitlab("100").unwrap(), true).await.unwrap();
         let err = client.react("gid://gitlab/DiffNote/11", Emoji::Rocket, false).await.unwrap_err().to_string();
         assert!(err.contains("Not allowed"), "{err}");
     }

@@ -215,8 +215,9 @@ pub struct Note {
     pub node: Option<String>,
 }
 
-/// The reactions both forges share: GitHub's eight, which GitLab has under other names.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+/// A reaction: one of the eight both forges share (GitHub's, which GitLab has under other names),
+/// or any other emoji, which only GitLab takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Emoji {
     ThumbsUp,
     ThumbsDown,
@@ -226,6 +227,7 @@ pub enum Emoji {
     Hooray,
     Rocket,
     Eyes,
+    Other(&'static emojis::Emoji),
 }
 
 impl Emoji {
@@ -243,6 +245,7 @@ impl Emoji {
             Emoji::Hooray => "🎉",
             Emoji::Rocket => "🚀",
             Emoji::Eyes => "👀",
+            Emoji::Other(emoji) => emoji.as_str(),
         }
     }
 
@@ -257,6 +260,7 @@ impl Emoji {
             Emoji::Hooray => "\\o/",
             Emoji::Rocket => "rocket",
             Emoji::Eyes => "eyes",
+            Emoji::Other(emoji) => emoji.shortcode().unwrap_or(emoji.name()),
         }
     }
 
@@ -271,12 +275,13 @@ impl Emoji {
             Emoji::Hooray => "tada",
             Emoji::Rocket => "rocket",
             Emoji::Eyes => "eyes",
+            Emoji::Other(emoji) => emoji.shortcode().unwrap_or(emoji.name()),
         }
     }
 
-    /// GitHub's reaction content, as GraphQL spells it.
-    pub fn github(self) -> &'static str {
-        match self {
+    /// GitHub's reaction content, as GraphQL spells it; GitHub has none for the others.
+    pub fn github(self) -> Option<&'static str> {
+        Some(match self {
             Emoji::ThumbsUp => "THUMBS_UP",
             Emoji::ThumbsDown => "THUMBS_DOWN",
             Emoji::Laugh => "LAUGH",
@@ -285,12 +290,48 @@ impl Emoji {
             Emoji::Hooray => "HOORAY",
             Emoji::Rocket => "ROCKET",
             Emoji::Eyes => "EYES",
-        }
+            Emoji::Other(_) => return None,
+        })
     }
 
-    /// The emoji a GitLab award name or a GitHub content stands for; others (GitLab has hundreds) are left out.
-    pub fn named(name: &str) -> Option<Emoji> {
-        Emoji::ALL.into_iter().find(|e| e.gitlab() == name || e.github() == name)
+    /// The emoji a GitHub content stands for, one of the eight.
+    pub fn from_github(content: &str) -> Option<Emoji> {
+        Emoji::ALL.into_iter().find(|e| e.github() == Some(content))
+    }
+
+    /// The emoji a GitLab award name stands for: one of the eight by its GitLab name, else any
+    /// emoji by its short code; GitLab's custom emoji are left out.
+    pub fn from_gitlab(name: &str) -> Option<Emoji> {
+        Emoji::ALL.into_iter().find(|e| e.gitlab() == name).or_else(|| emojis::get_by_shortcode(name).map(Emoji::Other))
+    }
+
+    /// Every emoji outside the eight, for a forge that takes any.
+    pub fn others() -> impl Iterator<Item = Emoji> {
+        emojis::iter().filter(|e| e.skin_tone().is_none_or(|t| t == emojis::SkinTone::Default)).map(Emoji::Other).filter(|e| {
+            let name = e.gitlab();
+            Emoji::ALL.iter().all(|known| known.gitlab() != name)
+        })
+    }
+}
+
+/// Stored by name, the eight as before and the others by their picture, so a cached reaction reads back.
+impl Serialize for Emoji {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Emoji::Other(emoji) => serializer.serialize_str(emoji.as_str()),
+            known => serializer.serialize_str(&format!("{known:?}")),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Emoji {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Emoji::ALL
+            .into_iter()
+            .find(|known| format!("{known:?}") == text)
+            .or_else(|| emojis::get(&text).map(Emoji::Other))
+            .ok_or_else(|| serde::de::Error::custom(format!("`{text}` is not an emoji")))
     }
 }
 
@@ -424,6 +465,7 @@ pub struct NewDraft {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]
@@ -437,12 +479,24 @@ mod tests {
     }
 
     #[test]
+    fn any_gitlab_award_reads_as_an_emoji_that_github_cannot_take_and_caches_by_picture() {
+        let hundred = Emoji::from_gitlab("100").unwrap();
+        assert_eq!((hundred.glyph(), hundred.gitlab(), hundred.github()), ("💯", "100", None));
+        assert_eq!(Emoji::from_gitlab("my_team_logo"), None, "a custom emoji has no picture");
+        assert_eq!(Emoji::from_github("100"), None);
+        assert!(Emoji::others().all(|e| !Emoji::ALL.contains(&e)), "the eight come once");
+        assert!(!Emoji::others().any(|e| e.gitlab() == "tada"), "tada is Hooray");
+        let saved = serde_json::to_string(&[Emoji::Rocket, hundred]).unwrap();
+        assert_eq!(saved, r#"["Rocket","💯"]"#);
+        assert_eq!(serde_json::from_str::<Vec<Emoji>>(&saved).unwrap(), [Emoji::Rocket, hundred]);
+    }
+
+    #[test]
     fn the_eight_reactions_have_a_name_on_each_forge_and_toggle_their_count() {
         for emoji in Emoji::ALL {
-            assert_eq!(Emoji::named(emoji.gitlab()), Some(emoji));
-            assert_eq!(Emoji::named(emoji.github()), Some(emoji));
+            assert_eq!(Emoji::from_gitlab(emoji.gitlab()), Some(emoji));
+            assert_eq!(emoji.github().and_then(Emoji::from_github), Some(emoji));
         }
-        assert_eq!(Emoji::named("100"), None, "GitLab's other awards are left out");
         let now = tally([(Emoji::Rocket, false), (Emoji::ThumbsUp, true), (Emoji::ThumbsUp, false)]);
         assert_eq!(
             now,
