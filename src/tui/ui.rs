@@ -40,6 +40,7 @@ pub struct Link {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
+    app.text_rows.clear();
     let input_rows = u16::from(app.filtering);
     let status_rows =
         u16::from(!app.zen || app.confirm.is_some() || app.pending == Some('\'') || app.quit_prompt().is_some() || app.react.is_some());
@@ -101,6 +102,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if !modal {
         draw_pictures(f, app, &pictures);
+    }
+    if let Some(drag) = app.drag {
+        drag.paint(&app.text_rows, f.buffer_mut());
     }
     if app.zen {
         draw_zen_overlays(f, app, main);

@@ -103,6 +103,11 @@ pub enum Action {
     },
     OpenUrl(String),
     Yank(String),
+    /// Put `text` on the clipboard; `done` is the toast when it worked.
+    Copy {
+        text: String,
+        done: String,
+    },
     /// Pipe `message` to the share target's command; `done` is the toast when it worked.
     Share {
         target: Box<crate::share::Target>,

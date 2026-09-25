@@ -162,6 +162,10 @@ pub struct App {
     pub links: Vec<crate::tui::ui::Link>,
     /// Where the panes were drawn this frame, so the wheel scrolls the one under the pointer.
     pub areas: super::Areas,
+    /// The rows of text a drag can select, as this frame drew them.
+    pub text_rows: Vec<crate::tui::drag::TextRow>,
+    /// The text a drag covers; it stays lit after the copy until the next key or click.
+    pub drag: Option<crate::tui::drag::Drag>,
     /// Pictures of the comments the right pane shows, each fetched once.
     pub thumbs: crate::tui::images::Thumbs,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
@@ -265,6 +269,8 @@ impl App {
             brief: None,
             links: vec![],
             areas: super::Areas::default(),
+            text_rows: vec![],
+            drag: None,
             thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
             viewing: None,
             composed: vec![],

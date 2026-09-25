@@ -1,5 +1,6 @@
 //! The review pane: rows from `Review::rows()` turned into styled lines, only for the visible window.
 use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
+use super::drag::{self, TextRow};
 use super::table::{self, TableLine};
 use super::theme::Theme;
 use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate};
@@ -10,7 +11,7 @@ use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, S
 use crate::syntax::{self, Token};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Padding, Paragraph};
@@ -104,15 +105,104 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         .flatten()
         .map(|i| pinned_line(&open.review, &anchors, &open.rows[i], width, theme))
         .collect();
-    let lines: Vec<Line> = pinned_lines
-        .into_iter()
-        .chain((open.scroll..open.rows.len()).flat_map(|i| render(open, i)).take(height - pinned.count()))
-        .collect();
+    let mut lines: Vec<Line> = pinned_lines;
+    let mut selectable = vec![];
+    for i in open.scroll..open.rows.len() {
+        if lines.len() >= height {
+            break;
+        }
+        let top = body.y + lines.len() as u16;
+        selectable.extend(text_rows(&open.review, &open.rows[i], i, Rect { y: top, ..body }, wrap));
+        lines.extend(render(open, i));
+    }
+    lines.truncate(height);
+    selectable.retain(|row| row.at.y < body.bottom());
     let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
     let deployment = if folded || zen { None } else { deployment_link(open, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
     app.links.extend(pipeline.into_iter().chain(deployment));
+    app.text_rows.extend(selectable);
+}
+
+/// The rows of text a drag can select in diff row `index`, drawn from the top of `area`.
+fn text_rows(review: &Review, row: &Row, index: usize, area: Rect, wrap: bool) -> Vec<TextRow> {
+    text_columns(review, row, usize::from(area.width)).into_iter().flat_map(|column| column.rows(area, index, wrap)).collect()
+}
+
+/// One column of text in a diff row: how far past the row's start its text is drawn, the cells it has, what it shows.
+struct Column {
+    x: usize,
+    room: usize,
+    text: String,
+    cells: Vec<Range<usize>>,
+}
+
+impl Column {
+    /// Its screen rows from the top of `area`, cut or wrapped as the row is.
+    fn rows(self, area: Rect, line: usize, wrap: bool) -> Vec<TextRow> {
+        let (x, width) = (area.x + self.x as u16, self.room as u16);
+        let rows = screen_rows(&self.cells, self.room, wrap).into_iter().zip(area.y..);
+        rows.map(|(cells, y)| TextRow { at: Position::new(x, y), width, line, text: self.text.clone(), cells: cells.to_vec() }).collect()
+    }
+}
+
+/// The inline text of a diff row, or each half side by side.
+fn text_columns(review: &Review, row: &Row, width: usize) -> Vec<Column> {
+    let Some(halves) = halves(review, row).filter(|_| review.shows_side_by_side()) else {
+        let column = |(text, cells)| Column { x: WRAP_INDENT, room: width.saturating_sub(WRAP_INDENT), text, cells };
+        return inline_text(review, row).map(column).into_iter().collect();
+    };
+    let (old_w, new_w) = half_widths(width);
+    let spans = [(1, old_w), (1 + old_w, new_w)];
+    let column = |half: Option<Half>, (x, w): (usize, usize)| {
+        let text = half?.line.text;
+        Some(Column { x: x + HALF_INDENT, room: w.saturating_sub(HALF_INDENT), cells: drag::cells_of(&text, TAB.width()), text })
+    };
+    halves.into_iter().zip(spans).filter_map(|(half, span)| column(half, span)).collect()
+}
+
+/// The raw text of an inline diff row, and the bytes under each cell of its text column.
+fn inline_text(review: &Review, row: &Row) -> Option<(String, Vec<Range<usize>>)> {
+    let text = match row {
+        Row::Line { file, hunk, index } => review.files[*file].hunks[*hunk].lines[*index].text.clone(),
+        Row::Pair { file, hunk, removed, added } => {
+            let lines = &review.files[*file].hunks[*hunk].lines;
+            let (old, new) = (&lines[*removed].text, &lines[*added].text);
+            if !(review.quiet_whitespace && same_but_whitespace(old, new)) {
+                return Some((new.clone(), pair_cells(old, new)));
+            }
+            new.clone()
+        }
+        Row::Context { file, old, new, .. } => context_line(review, *file, *old, *new).text,
+        Row::Header | Row::File { .. } | Row::Hunk { .. } | Row::Gap => return None,
+    };
+    let cells = drag::cells_of(&text, TAB.width());
+    Some((text, cells))
+}
+
+/// A removed line and its added twin on one row copy as the added line: the struck old words stand for nothing.
+fn pair_cells(old: &str, new: &str) -> Vec<Range<usize>> {
+    let mut cells = vec![];
+    let mut at = 0;
+    for part in segments(old, new) {
+        match part {
+            Segment::Same(text) | Segment::New(text) => {
+                cells.extend(drag::cells_of(&text, TAB.width()).into_iter().map(|bytes| bytes.start + at..bytes.end + at));
+                at += text.len();
+            }
+            Segment::Old(text) => cells.extend(drag::cells_of(&text, TAB.width()).into_iter().map(|_| at..at)),
+        }
+    }
+    cells
+}
+
+/// `cells` as the screen rows they take: cut to `room`, or wrapped every `room` cells.
+fn screen_rows(cells: &[Range<usize>], room: usize, wrap: bool) -> Vec<&[Range<usize>]> {
+    if !wrap || cells.len() <= room {
+        return vec![&cells[..cells.len().min(room)]];
+    }
+    cells.chunks(room.max(1)).collect()
 }
 
 /// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
@@ -468,8 +558,7 @@ fn side_by_side_lines(
 ) -> Option<Vec<Line<'static>>> {
     let [old, new] = halves(review, row)?;
     let (Overflow::Cut(width) | Overflow::Wrap(width)) = overflow;
-    let body = width.saturating_sub(1);
-    let (old_w, new_w) = (body / 2, body - body / 2);
+    let (old_w, new_w) = half_widths(width);
     let draw = |half: Option<Half>, width: usize| -> Vec<Line<'static>> {
         let Some(half) = half else { return vec![] };
         match overflow {
@@ -486,6 +575,12 @@ fn side_by_side_lines(
         Line::from([vec![first], old_half.spans, spans_at(&new, i)].concat())
     });
     Some(rows.collect())
+}
+
+/// The columns of the old half and the new half, past the cursor bar.
+fn half_widths(width: usize) -> (usize, usize) {
+    let body = width.saturating_sub(1);
+    (body / 2, body - body / 2)
 }
 
 /// One half: its anchor column, its side's number, the sign, the text in its side's syntax colours.
@@ -1125,6 +1220,21 @@ mod tests {
         assert_eq!(open, "   ▾ @@ -12,4 +12,5 @@ pub async fn charge");
         let closed = spans_text(&hunk_spans(&file, 0, false, 80, Theme::default()));
         assert!(closed.ends_with("(1 lines)"), "{closed}");
+    }
+
+    #[test]
+    fn an_inline_pair_selects_as_the_added_line_its_struck_words_standing_for_nothing() {
+        let cells = pair_cells("const total = 1;", "const total = 2;");
+        assert_eq!(cells.len(), "const total = 1;2;".len());
+        assert_eq!(cells[14..], [14..14, 14..14, 14..15, 15..16]);
+    }
+
+    #[test]
+    fn a_text_column_is_cut_to_its_room_or_wrapped_every_room_cells() {
+        let cells = drag::cells_of("abcde", 4);
+        assert_eq!(screen_rows(&cells, 3, false), [&cells[..3]]);
+        assert_eq!(screen_rows(&cells, 3, true), [&cells[..3], &cells[3..]]);
+        assert_eq!(screen_rows(&[], 3, true).len(), 1, "an empty line still takes its row");
     }
 
     #[test]
