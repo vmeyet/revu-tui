@@ -35,7 +35,7 @@ expression: "render(&mut app, 160, 45)"
 │                       │          p  pipeline                                        c ⏎ R y  answer: draft, follow up, again, copy  │                        │
 │                       │         zz  zen: the diff alone, quiet                                                                      │                        │
 │                       │        w W  wrap long lines, hide whitespace changes      SEARCH & APP                                      │                        │
-│                       │          +  more lines around the hunk                           ^k  MRs · / files · > commands             │                        │
+│                       │          +  more lines; on a thread, react                       ^k  MRs · / files · > commands             │                        │
 │                       │          v  the file in your own program                          :  commands: :go !42, :set theme=nord     │                        │
 │                       │   za zc zo  toggle, close, open the fold                        o y  open in the browser, copy the link     │                        │
 │                       │      zM zR  fold, unfold every file                               r  refresh                                │                        │

@@ -3508,6 +3508,29 @@ fn plus_opens_the_picker_and_a_digit_toggles_my_reaction_at_once() {
 }
 
 #[test]
+fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_shows_more_lines() {
+    let mut app = with_reactions();
+    app.close_pane();
+    app.zen = true;
+    let mut open = app.open.clone().unwrap();
+    let place = Place::Line { file: 0, new: Some(13), old: None };
+    open.selected = open.rows.iter().position(|r| open.review.place_of(r).as_ref() == Some(&place)).unwrap();
+    app.open = Some(open);
+    assert_eq!(press(&mut app, "+"), vec![]);
+    assert_eq!(app.react.as_ref().map(|p| (p.thread.as_str(), p.note)), Some(("5ugg", 0)), "the line's first note");
+    assert_eq!(app.focus, Focus::Review, "the diff keeps the focus");
+    assert!(render(&mut app, 150, 24).contains("react"), "zen shows the picker");
+    let actions = press(&mut app, "7");
+    assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Rocket, on: true, .. }]), "{actions:?}");
+    let mut open = app.open.clone().unwrap();
+    open.selected = open.rows.iter().position(|r| matches!(r, Row::Line { .. }) && !open.is_marked(r)).unwrap();
+    app.open = Some(open);
+    let actions = press(&mut app, "+");
+    assert!(app.react.is_none(), "a line without a thread");
+    assert!(matches!(actions.as_slice(), [Action::LoadFile { .. }]), "{actions:?}");
+}
+
+#[test]
 fn the_picker_moves_with_h_and_l_and_esc_closes_it_without_a_change() {
     let mut app = with_reactions();
     press(&mut app, "+");

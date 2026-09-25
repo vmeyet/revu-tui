@@ -50,7 +50,7 @@ A line with a conversation has a mark left of its numbers.
 | `q`, `x` or `esc` | Close the pane |
 | `e` `d` | Edit, delete your draft |
 | `S` | Apply the suggestion under the cursor, after a `y` |
-| `+` | React to the note under the cursor |
+| `+` | React to the note under the cursor; in the diff, to the first note of the line's thread |
 
 ## React
 

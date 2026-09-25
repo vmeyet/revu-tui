@@ -229,6 +229,7 @@ impl App {
             KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Char('p') => return self.toggle_pipeline(),
             KeyCode::Char('W') => self.toggle_whitespace(),
+            KeyCode::Char('+') if self.open_react_here() => {}
             KeyCode::Char('+') => return self.expand_context(),
             KeyCode::Char('w') => {
                 self.wrap = !self.wrap;
