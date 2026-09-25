@@ -3,47 +3,47 @@ source: src/tui/app/tests.rs
 expression: screen
 ---
 
-                         !42 feat: charge cards at checkout · omar · +61 −1 ✓
+                     !42 feat: charge cards at checkout · omar · +61 −1 ✓
 
-                          ▾ src/pay/charge.rs                                                                                    +60 −0
-                                   17 +    let step_17 = 17;
-                                   18 +    let step_18 = 18;
-                                   19 +    let step_19 = 19;
-                                   20 +    let step_20 = 20;
-                                   21 +    let step_21 = 21;
-                                   22 +    let step_22 = 22;
-                                   23 +    let step_23 = 23;
-                                   24 +    let step_24 = 24;
-                                   25 +    let step_25 = 25;
-                                   26 +    let step_26 = 26;
-                                   27 +    let step_27 = 27;
-                                   28 +    let step_28 = 28;
-                                   29 +    let step_29 = 29;
-                                   30 +    let step_30 = 30;
-                             ▾ @@ -40,0 +71,30 @@ fn refund
-                                   71 +    let step_71 = 71;
-                                   72 +    let step_72 = 72;
-                                   73 +    let step_73 = 73;
-                                   74 +    let step_74 = 74;
-                                   75 +    let step_75 = 75;
-                                   76 +    let step_76 = 76;
-                                   77 +    let step_77 = 77;
-                                   78 +    let step_78 = 78;
-                                   79 +    let step_79 = 79;
-                                   80 +    let step_80 = 80;
-                                   81 +    let step_81 = 81;
-                                   82 +    let step_82 = 82;
-                                   83 +    let step_83 = 83;
-                                   84 +    let step_84 = 84;
-                                   85 +    let step_85 = 85;
-                                   86 +    let step_86 = 86;
-                                   87 +    let step_87 = 87;
-                                   88 +    let step_88 = 88;
-                                   89 +    let step_89 = 89;
-                                   90 +    let step_90 = 90;
-                                   91 +    let step_91 = 91;
-                                   92 +    let step_92 = 92;
-                                   93 +    let step_93 = 93;
-                                   94 +    let step_94 = 94;
-                                   95 +    let step_95 = 95;
-                         ▎         96 +    let step_96 = 96;
+                      ▾ src/pay/charge.rs                                                                                            +60 −0
+                               17 +    let step_17 = 17;
+                               18 +    let step_18 = 18;
+                               19 +    let step_19 = 19;
+                               20 +    let step_20 = 20;
+                               21 +    let step_21 = 21;
+                               22 +    let step_22 = 22;
+                               23 +    let step_23 = 23;
+                               24 +    let step_24 = 24;
+                               25 +    let step_25 = 25;
+                               26 +    let step_26 = 26;
+                               27 +    let step_27 = 27;
+                               28 +    let step_28 = 28;
+                               29 +    let step_29 = 29;
+                               30 +    let step_30 = 30;
+                         ▾ @@ -40,0 +71,30 @@ fn refund
+                               71 +    let step_71 = 71;
+                               72 +    let step_72 = 72;
+                               73 +    let step_73 = 73;
+                               74 +    let step_74 = 74;
+                               75 +    let step_75 = 75;
+                               76 +    let step_76 = 76;
+                               77 +    let step_77 = 77;
+                               78 +    let step_78 = 78;
+                               79 +    let step_79 = 79;
+                               80 +    let step_80 = 80;
+                               81 +    let step_81 = 81;
+                               82 +    let step_82 = 82;
+                               83 +    let step_83 = 83;
+                               84 +    let step_84 = 84;
+                               85 +    let step_85 = 85;
+                               86 +    let step_86 = 86;
+                               87 +    let step_87 = 87;
+                               88 +    let step_88 = 88;
+                               89 +    let step_89 = 89;
+                               90 +    let step_90 = 90;
+                               91 +    let step_91 = 91;
+                               92 +    let step_92 = 92;
+                               93 +    let step_93 = 93;
+                               94 +    let step_94 = 94;
+                               95 +    let step_95 = 95;
+                     ▎         96 +    let step_96 = 96;

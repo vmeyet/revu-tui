@@ -3057,7 +3057,7 @@ fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
     let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
     assert!(first.trim_start().starts_with("!42 feat: charge cards at checkout"), "{first}");
     let indent = first.len() - first.trim_start().len();
-    assert_eq!(indent, (160 - 112) / 2 + 1, "70 % of the screen in the middle, then its padding");
+    assert_eq!(indent, (160 - 120) / 2 + 1, "120 columns at least in the middle, then its padding");
     insta::assert_snapshot!("zen_wide", screen);
     insta::assert_snapshot!("zen_medium", render(&mut app, 100, 30));
 }
@@ -3170,7 +3170,7 @@ fn zen_pins_the_file_and_hunk_inside_its_column() {
     assert!(app.open.as_ref().unwrap().pinned_file.is_some(), "{screen}");
     let pinned = screen.lines().find(|l| l.contains("src/pay/charge.rs")).expect(&screen);
     let indent = pinned.len() - pinned.trim_start().len();
-    assert!(indent >= (160 - 112) / 2, "inside the centred column:\n{screen}");
+    assert!(indent >= (160 - 120) / 2, "inside the centred column:\n{screen}");
     assert!(screen.contains("fn refund"), "the cursor's hunk too:\n{screen}");
     insta::assert_snapshot!("zen_pinned", screen);
     let _ = render(&mut app, 160, 18);
