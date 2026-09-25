@@ -110,7 +110,6 @@ pub struct App {
     pub hosts: crate::forge::Hosts,
     /// What To review held at the last fresh answer, so only newcomers are announced.
     pub seen: Option<super::notify::Seen>,
-    pub closed_sections: std::collections::BTreeSet<&'static str>,
     /// How rows sit inside the sections: `s` sorts, `S` groups by author.
     pub queue_view: super::QueueView,
     pub queue_layout: crate::config::QueueLayout,
@@ -239,7 +238,6 @@ impl App {
             notify: settings.notify,
             hosts: settings.hosts,
             seen: None,
-            closed_sections: std::collections::BTreeSet::from(["DONE", "DRAFTS", "OTHER"]),
             queue_view: super::QueueView::default(),
             queue_layout: settings.queue_layout,
             prefetch_limit: settings.prefetch,
