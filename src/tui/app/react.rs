@@ -1,4 +1,4 @@
-//! `+` in the thread pane: react to the note under the cursor with one of the eight reactions
+//! `+` in the thread pane, or on a diff line with a thread: react to a note with one of the eight reactions
 //! both forges share. The count moves at once; a refusal puts it back.
 use super::{Action, App, EntryKind, Failure};
 use crate::forge::{Emoji, Note};
@@ -26,6 +26,18 @@ impl App {
         };
         let Some(thread) = conversations.get(focused.conversation).and_then(|c| c.thread.clone()) else { return };
         self.react = Some(Pick { thread, note, selected: 0 });
+    }
+
+    /// `+` on a diff line with a thread: the picker on its first note, as the pane would open it,
+    /// with the diff keeping the focus so zen stays on it.
+    pub(super) fn open_react_here(&mut self) -> bool {
+        let Some(open) = &self.open else { return false };
+        let place = open.row().filter(|row| open.is_marked(row)).and_then(|row| open.review.place_of(row));
+        let Some(thread) = place.and_then(|place| open.review.conversations(&place).into_iter().find_map(|c| c.thread)) else {
+            return false;
+        };
+        self.react = Some(Pick { thread, note: 0, selected: 0 });
+        true
     }
 
     pub(super) fn handle_react_key(&mut self, key: KeyEvent) -> Vec<Action> {
