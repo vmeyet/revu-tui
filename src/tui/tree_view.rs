@@ -16,8 +16,8 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let Some(open) = &app.open else { return };
     let Some(tree) = &open.tree else { return };
     let rows = open.tree_rows();
-    let viewed = open.review.files.iter().filter(|f| open.review.viewed.contains(&f.new_path)).count();
-    let title = format!("Files · {viewed}/{} viewed", open.review.files.len());
+    let progress = open.review.progress();
+    let title = format!("Files · {}/{} viewed", progress.viewed, progress.files);
     let block = side_pane(theme, &title, app.focus == Focus::Side, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);

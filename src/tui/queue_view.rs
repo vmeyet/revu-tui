@@ -178,7 +178,7 @@ fn meta(app: &App, mr: &QueueMr, room: usize) -> (Vec<Span<'static>>, usize) {
     let age = short_age((app.today - mr.updated_at).to_std().unwrap_or_default());
     let host = app.host_tag(mr).map(|h| format!(" · {h}")).unwrap_or_default();
     let size = format!(" · +{} −{}", mr.additions, mr.deletions);
-    let started = app.viewed_count(&mr.key()).filter(|_| mr.files > 0).map(|n| format!(" · {n}/{}", mr.files)).unwrap_or_default();
+    let started = app.progress_of(&mr.key()).filter(|_| mr.files > 0).map(|p| format!(" · {}/{}", p.viewed, p.files)).unwrap_or_default();
     let number = format!("{number}{started}");
     let base = number.width() + 3 + 1 + age.width();
     let who = truncate(who, room.saturating_sub(base).max(1));

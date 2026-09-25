@@ -2,7 +2,7 @@
 //! publish offers the next one, the cursor comes back where the reader left each MR, and the queue
 //! shows how far each review went.
 use super::{Action, App, MrKey, Open};
-use crate::review::{Review, Row};
+use crate::review::{Progress, Review, Row};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -141,6 +141,7 @@ impl App {
             key: open.key.clone(),
             fold: open.review.fold.clone(),
             viewed: open.review.viewed_fingerprints(),
+            auto_folded: open.review.auto_folded.clone(),
             split: open.review.split,
             spot: Some(spot),
         };
@@ -162,14 +163,14 @@ impl App {
         }
     }
 
-    /// How many files of the MR `key` I marked viewed, when I started it.
-    pub fn viewed_count(&self, key: &MrKey) -> Option<usize> {
-        self.viewed_counts.get(key).copied().filter(|n| *n > 0)
+    /// How far I went in the MR `key`, when I started it.
+    pub fn progress_of(&self, key: &MrKey) -> Option<Progress> {
+        self.progress.get(key).copied().filter(|p| p.viewed > 0)
     }
 
     /// Keeps the queue's count for the open MR in step with its viewed files.
     pub(super) fn count_viewed(&mut self, key: &MrKey, review: &Review) {
-        self.viewed_counts.insert(key.clone(), review.viewed.len());
+        self.progress.insert(key.clone(), review.progress());
     }
 }
 

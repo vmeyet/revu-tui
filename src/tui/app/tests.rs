@@ -3363,13 +3363,23 @@ fn switching_mr_saves_where_i_stood_first() {
 #[test]
 fn progress_shows_in_the_header_and_on_the_queue_row() {
     let mut app = with_review();
-    app.apply(Incoming::Progress(HashMap::from([(MrKey::new("acme/widgets", 41), 1)])));
+    let started = crate::review::Progress { viewed: 1, files: 3, folded: 0 };
+    app.apply(Incoming::Progress(HashMap::from([(MrKey::new("acme/widgets", 41), started)])));
     press(&mut app, "zv");
-    assert_eq!(app.viewed_counts.get(&mr_key()), Some(&1), "the open MR counts what I just marked");
+    assert_eq!(app.progress_of(&mr_key()).map(|p| p.viewed), Some(1), "the open MR counts what I just marked");
     let screen = render(&mut app, 160, 24);
-    assert!(screen.contains("viewed 1/2"), "{screen}");
-    assert!(screen.contains("!41 · 1/1") || screen.contains("#41 · 1/1") || screen.contains("41 · 1/1"), "{screen}");
+    assert!(screen.contains("viewed 1/1 · 1 folded ━"), "the lock file waits apart: {screen}");
+    assert!(screen.contains("41 · 1/3"), "{screen}");
     insta::assert_snapshot!("review_progress", screen);
+}
+
+#[test]
+fn a_viewed_auto_folded_file_joins_the_count() {
+    let mut app = with_review();
+    press(&mut app, "zvjzv");
+    let screen = render(&mut app, 160, 24);
+    assert!(screen.contains("viewed 2/2 ━"), "{screen}");
+    assert!(!screen.contains("folded ━"), "{screen}");
 }
 
 /// The open review, its MR changed by `change`: mine, approved, and so on.

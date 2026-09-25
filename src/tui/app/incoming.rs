@@ -35,9 +35,9 @@ impl App {
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
             Incoming::Resume { key, spot } => self.resume(&key, &spot),
             Incoming::Progress(counts) => {
-                let open = self.open.as_ref().map(|o| (o.key.clone(), o.review.viewed.len()));
-                self.viewed_counts = counts;
-                self.viewed_counts.extend(open);
+                let open = self.open.as_ref().map(|o| (o.key.clone(), o.review.progress()));
+                self.progress = counts;
+                self.progress.extend(open);
             }
             Incoming::Discussions { key, discussions } => {
                 if let Some(open) = self.open.as_ref().filter(|o| o.key == key) {
