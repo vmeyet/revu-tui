@@ -289,8 +289,7 @@ impl App {
             if let Some(actions) = self.fold_stack(open) {
                 return actions;
             }
-            self.fold_section(open);
-            return vec![];
+            return self.fold_section(open);
         }
         if prefix == 'a' {
             return self.ask_key(c);

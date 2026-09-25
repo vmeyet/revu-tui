@@ -55,7 +55,7 @@ impl App {
         ];
         let mut rows = Vec::new();
         for (name, mrs) in groups {
-            let open = !self.closed_sections.contains(name);
+            let open = !self.queue_view.closed_sections.contains(name);
             let matching = self.in_order(name, mrs.iter().filter(|mr| self.matches_filter(mr)).collect());
             let only_when_filled = matches!(name, "READY" | "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
             if only_when_filled || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
@@ -257,18 +257,19 @@ impl App {
 
     /// `zo`, `zc`, `za` and `enter` on a header: open, close or flip the section under the cursor,
     /// and keep the cursor on its header when the section closes over it.
-    pub(super) fn fold_section(&mut self, open: Option<bool>) {
-        let Some(name) = self.section_here() else { return };
-        let now_open = open.unwrap_or_else(|| self.closed_sections.contains(name));
+    pub(super) fn fold_section(&mut self, open: Option<bool>) -> Vec<Action> {
+        let Some(name) = self.section_here() else { return vec![] };
+        let now_open = open.unwrap_or_else(|| self.queue_view.closed_sections.contains(name));
         if now_open {
-            self.closed_sections.remove(name);
+            self.queue_view.closed_sections.remove(name);
         } else {
-            self.closed_sections.insert(name);
+            self.queue_view.closed_sections.insert(name.to_owned());
         }
         if let Some(header) = self.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: n, .. } if *n == name)) {
             self.queue_selected = header;
         }
         self.queue_move(0);
+        self.save_queue_view()
     }
 
     /// The stack under the cursor: its row, or the row of the stack an unfolded MR belongs to.
@@ -300,8 +301,7 @@ impl App {
 
     pub(super) fn open_selected(&mut self) -> Vec<Action> {
         if matches!(self.queue_rows().get(self.queue_selected), Some(QueueRow::Section { .. })) {
-            self.fold_section(None);
-            return vec![];
+            return self.fold_section(None);
         }
         if matches!(self.queue_rows().get(self.queue_selected), Some(QueueRow::Stack { .. })) {
             return self.fold_stack(None).unwrap_or_default();

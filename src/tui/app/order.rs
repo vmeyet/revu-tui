@@ -40,8 +40,8 @@ impl Order {
     }
 }
 
-/// What `s` and `S` chose for one scope, and which stacks are unfolded.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What `s` and `S` chose for one scope, which stacks are unfolded and which sections folded.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueView {
     #[serde(default)]
     pub order: Order,
@@ -51,6 +51,25 @@ pub struct QueueView {
     /// Stacks shown MR by MR, by their base MR's key; every other stack is one folded row.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
     pub open_stacks: std::collections::BTreeSet<String>,
+    /// Sections shown as their header alone, by name.
+    #[serde(default = "folded_at_first")]
+    pub closed_sections: std::collections::BTreeSet<String>,
+}
+
+impl Default for QueueView {
+    fn default() -> Self {
+        Self {
+            order: Order::default(),
+            by_author: false,
+            open_stacks: std::collections::BTreeSet::new(),
+            closed_sections: folded_at_first(),
+        }
+    }
+}
+
+/// What the reader rarely needs, until they fold or open a section themselves.
+fn folded_at_first() -> std::collections::BTreeSet<String> {
+    ["DONE", "DRAFTS", "OTHER"].map(str::to_owned).into()
 }
 
 /// `rows` in `order`; `urgency` scores an MR when Jev ranked it. Sorts are stable, so rows that

@@ -184,18 +184,39 @@ fn zo_and_zc_fold_the_section_under_the_cursor() {
     press(&mut app, "G");
     assert!(app.selected_mr().is_none(), "the folded Done header takes the cursor");
     press(&mut app, "zo");
-    assert!(!app.closed_sections.contains("DONE"));
+    assert!(!app.queue_view.closed_sections.contains("DONE"));
     press(&mut app, "G");
     assert_eq!(app.selected_mr().map(|m| m.number), Some(40));
     press(&mut app, "zc");
-    assert!(app.closed_sections.contains("DONE"));
+    assert!(app.queue_view.closed_sections.contains("DONE"));
     assert!(matches!(app.queue_rows()[app.queue_selected], QueueRow::Section { name: "DONE", .. }), "the cursor stays on its header");
     press(&mut app, "g");
     press(&mut app, "zc");
-    assert!(app.closed_sections.contains("TO REVIEW"), "any section folds, not only Done");
+    assert!(app.queue_view.closed_sections.contains("TO REVIEW"), "any section folds, not only Done");
     assert!(matches!(app.queue_rows()[app.queue_selected], QueueRow::Section { name: "TO REVIEW", .. }));
     app.handle_key(code(KeyCode::Enter));
-    assert!(!app.closed_sections.contains("TO REVIEW"), "enter on a folded header opens it");
+    assert!(!app.queue_view.closed_sections.contains("TO REVIEW"), "enter on a folded header opens it");
+}
+
+#[test]
+fn a_folded_section_is_saved_and_comes_back_folded() {
+    let mut app = with_queue();
+    let actions = press(&mut app, "gzc");
+    let [Action::SaveQueueView { view, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert!(view.closed_sections.contains("TO REVIEW"));
+    let mut next = with_queue();
+    next.apply(Incoming::QueueView { scope: next.scope(), view: view.clone() });
+    assert!(
+        next.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "TO REVIEW", open: false, .. })),
+        "folded after a restart"
+    );
+}
+
+#[test]
+fn a_view_saved_before_folds_were_kept_folds_done_drafts_and_other() {
+    let old: QueueView = serde_json::from_str(r#"{"order":"updated","by_author":true}"#).unwrap();
+    assert_eq!(old.closed_sections, QueueView::default().closed_sections);
+    assert!(old.closed_sections.contains("DONE") && !old.closed_sections.contains("OPEN"));
 }
 
 #[test]
