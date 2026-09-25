@@ -30,7 +30,7 @@ pub struct Brief {
     pub review: ReviewLine,
     /// The open threads; `None` from the queue, which only counts them.
     pub threads: Option<Vec<ThreadRow>>,
-    /// Where the branch was deployed; known only from an open MR.
+    /// The review app to try; known only from an open MR.
     pub deployments: Vec<crate::forge::Deployment>,
     /// Open threads as the queue counts them, shown when `threads` is `None`.
     pub unresolved: usize,
@@ -209,7 +209,8 @@ impl App {
         });
         let sigil = self.hosts.kind_of(&open.key).sigil();
         let brief = Brief::of_review(open.key.clone(), &open.review, sigil, &self.me, checks);
-        self.brief = Some(Brief { deployments: open.deployments.clone().unwrap_or_default(), ..brief });
+        let to_try = open.deployments.as_deref().and_then(crate::forge::Deployment::to_try).cloned();
+        self.brief = Some(Brief { deployments: to_try.into_iter().collect(), ..brief });
     }
 
     pub(super) fn handle_brief_key(&mut self, key: KeyEvent) -> Vec<Action> {

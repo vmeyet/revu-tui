@@ -252,7 +252,7 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
         second.push(Span::styled(done, Style::default().fg(if progress.done() { theme.success } else { theme.accent })));
         second.push(Span::styled(left, Style::default().fg(theme.faded)));
     }
-    if let Some(deployment) = open.deployments.as_deref().and_then(<[_]>::first) {
+    if let Some(deployment) = open.deployments.as_deref().and_then(Deployment::to_try) {
         if second.len() > 1 {
             second.push(dot());
         }
@@ -264,9 +264,9 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     vec![first, Line::from(second)]
 }
 
-/// The first review app, `+n` for the others the pipeline pane lists, and a word when it runs an older commit.
+/// The review app to try, `+n` for the others the pipeline pane lists, and a word when it runs an older push.
 fn deployment_spans<'a>(open: &Open, deployment: &Deployment, theme: Theme) -> Vec<Span<'a>> {
-    let behind = deployment.sha != open.review.mr.refs.head;
+    let behind = !deployment.current;
     let colour = if behind { theme.muted } else { theme.link };
     let mut spans =
         vec![Span::styled(format!("{DEPLOYED}{}", truncate(&deployment.environment, ENVIRONMENT_W)), Style::default().fg(colour))];
@@ -275,14 +275,14 @@ fn deployment_spans<'a>(open: &Open, deployment: &Deployment, theme: Theme) -> V
         spans.push(Span::styled(format!(" +{others}"), Style::default().fg(theme.muted)));
     }
     if behind {
-        spans.push(Span::styled(" · older commit", Style::default().fg(theme.faded)));
+        spans.push(Span::styled(" · older push", Style::default().fg(theme.faded)));
     }
     spans
 }
 
 /// The review app on the header's second row links to where it runs.
 fn deployment_link(open: &Open, header: &[Line], area: Rect) -> Option<super::ui::Link> {
-    let url = open.deployments.as_deref()?.first()?.url.clone();
+    let url = Deployment::to_try(open.deployments.as_deref()?)?.url.clone();
     let spans = &header.get(1)?.spans;
     let at = spans.iter().position(|s| s.content.starts_with(DEPLOYED))?;
     let x = area.x + u16::try_from(spans[..at].iter().map(Span::width).sum::<usize>()).ok()?;

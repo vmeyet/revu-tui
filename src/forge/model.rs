@@ -133,20 +133,14 @@ pub struct Pipeline {
 pub struct Deployment {
     pub environment: String,
     pub url: String,
-    /// The commit deployed, which may be older than the MR's head.
-    pub sha: String,
+    /// Whether it runs the MR as it is now, not an older push.
+    pub current: bool,
 }
 
 impl Deployment {
-    /// The first of each environment, from deployments listed newest first.
-    pub fn newest_each(deployments: impl IntoIterator<Item = Deployment>) -> Vec<Deployment> {
-        let mut kept: Vec<Deployment> = vec![];
-        for deployment in deployments {
-            if kept.iter().all(|k| k.environment != deployment.environment) {
-                kept.push(deployment);
-            }
-        }
-        kept
+    /// The one to try first: a `review/` app, else the first listed.
+    pub fn to_try(all: &[Deployment]) -> Option<&Deployment> {
+        all.iter().find(|d| d.environment.starts_with("review/")).or_else(|| all.first())
     }
 }
 

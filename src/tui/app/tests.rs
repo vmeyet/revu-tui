@@ -133,7 +133,7 @@ fn with_review() -> App {
     assert_eq!(actions, vec![Action::Open(mr_key())]);
     app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
     let asked = app.take_actions();
-    assert!(asked.contains(&Action::LoadDeployments { key: mr_key(), branch: "feat/checkout".into() }), "{asked:?}");
+    assert!(asked.iter().any(|a| matches!(a, Action::LoadDeployments { branch, .. } if branch == "feat/checkout")), "{asked:?}");
     app
 }
 
@@ -2185,22 +2185,22 @@ fn with_pipeline() -> App {
 fn review_apps_show_in_the_header_the_pipeline_and_the_cover_and_reload_once_a_run_ends() {
     use crate::forge::Deployment;
     let mut app = with_pipeline();
-    assert!(app.take_actions().contains(&Action::LoadDeployments { key: mr_key(), branch: "feat/checkout".into() }), "a finished run");
-    let head = app.open.as_ref().unwrap().review.mr.refs.head.clone();
+    assert!(app.take_actions().iter().any(|a| matches!(a, Action::LoadDeployments { .. })), "a finished run");
     let deployments = vec![
-        Deployment { environment: "review/feat-checkout".into(), url: "https://feat-checkout.review.acme.test".into(), sha: head },
-        Deployment { environment: "storybook/feat-checkout".into(), url: "https://sb.acme.test/feat-checkout".into(), sha: "old1".into() },
+        Deployment { environment: "storybook/feat-checkout".into(), url: "https://sb.acme.test/feat-checkout".into(), current: false },
+        Deployment { environment: "review/feat-checkout".into(), url: "https://feat-checkout.review.acme.test".into(), current: true },
     ];
     app.apply(Incoming::Deployments { key: mr_key(), deployments });
     let screen = render(&mut app, 200, 30);
-    assert!(screen.contains("⧉ review/feat-checkout +1"), "{screen}");
+    assert!(screen.contains("⧉ review/feat-checkout +1"), "the review app comes first in the header:\n{screen}");
     assert!(screen.contains("REVIEW APPS") && screen.contains("https://sb.acme.test/feat-checkout"), "{screen}");
-    assert!(screen.contains("⧉ storybook/feat-checkout · older commit"), "{screen}");
+    assert!(screen.contains("⧉ storybook/feat-checkout · older push"), "{screen}");
     assert!(app.links.iter().any(|l| l.text == "⧉ review/feat-checkout" && l.url == "https://feat-checkout.review.acme.test"));
     press(&mut app, "p");
     press(&mut app, "i");
     let cover = render(&mut app, 200, 50);
     assert!(cover.contains("REVIEW APPS") && cover.contains("https://feat-checkout.review.acme.test"), "{cover}");
+    assert!(!cover.contains("https://sb.acme.test"), "the cover shows the one to try");
 }
 
 #[test]

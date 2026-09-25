@@ -200,11 +200,11 @@ impl Forge {
         }
     }
 
-    /// The newest successful deployment of each environment the MR's `branch` went to.
-    pub async fn deployments(&self, key: &MrKey, branch: &str) -> Result<Vec<Deployment>> {
+    /// The review apps up for the MR of `branch`, each saying whether it runs `head`.
+    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<Deployment>> {
         match self {
-            Forge::GitLab(client) => client.deployments(key, branch).await,
-            Forge::GitHub(client) => client.deployments(key, branch).await,
+            Forge::GitLab(client) => client.deployments(key, branch, head).await,
+            Forge::GitHub(client) => client.deployments(key, branch, head).await,
         }
     }
 

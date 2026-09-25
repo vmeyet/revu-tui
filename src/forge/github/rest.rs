@@ -243,7 +243,7 @@ impl Client {
 
     /// The newest deployment of each environment the branch went to, once its last status is a
     /// success with an address; GitHub keeps the address on the status, not the deployment.
-    pub async fn deployments(&self, key: &MrKey, branch: &str) -> Result<Vec<forge::Deployment>> {
+    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
         let repo = repo_path(&key.project);
         let branch: String = url::form_urlencoded::byte_serialize(branch.as_bytes()).collect();
         let listed: Vec<DeploymentWire> = self.get(&format!("{repo}/deployments?ref={branch}&per_page=30")).await?;
@@ -261,7 +261,7 @@ impl Client {
             .filter_map(|(d, status)| {
                 let last = status.into_iter().next().filter(|s| s.state == "success")?;
                 let url = last.environment_url.filter(|u| !u.is_empty())?;
-                Some(forge::Deployment { environment: d.environment, url, sha: d.sha })
+                Some(forge::Deployment { environment: d.environment, url, current: d.sha == head })
             })
             .collect())
     }
@@ -537,8 +537,8 @@ mod tests {
             )
             .mount(&server)
             .await;
-        let found = client(&server).deployments(&MrKey::new("acme/widgets", 7), "feat/checkout").await.unwrap();
-        assert_eq!(found, [forge::Deployment { environment: "preview".into(), url: "https://preview.acme.test".into(), sha: "b2".into() }]);
+        let found = client(&server).deployments(&MrKey::new("acme/widgets", 7), "feat/checkout", "b2").await.unwrap();
+        assert_eq!(found, [forge::Deployment { environment: "preview".into(), url: "https://preview.acme.test".into(), current: true }]);
     }
 
     #[tokio::test]
