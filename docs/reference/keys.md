@@ -39,7 +39,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | Keys | Does |
 |---|---|
 | `i` | the MR cover page |
-| `D` | changed words inline, or split |
+| `D` | inline diff, or side by side |
 | `t` | file tree |
 | `p` | pipeline |
 | `zz` | zen: the diff alone, quiet |
@@ -142,7 +142,7 @@ A bound key adds to the default key, it does not replace it.
 | `zen` | `zz` |
 | `prev_mr` | `[m` |
 | `next_mr` | `]m` |
-| `split` | `D` |
+| `side_by_side` | `D` |
 | `tree` | `t` |
 | `pipeline` | `p` |
 | `wrap` | `w` |

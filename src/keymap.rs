@@ -30,7 +30,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("zen", "zz"),
     ("prev_mr", "[m"),
     ("next_mr", "]m"),
-    ("split", "D"),
+    ("side_by_side", "D"),
     ("tree", "t"),
     ("pipeline", "p"),
     ("wrap", "w"),
@@ -232,7 +232,7 @@ impl Keymap {
             map.aliases.insert(vec![Key::char(')')], vec![Key::char(']')]);
         }
         for (action, texts) in &keys.bind {
-            let Some((_, default)) = ACTIONS.iter().find(|(name, _)| name == action) else {
+            let Some((_, default)) = ACTIONS.iter().find(|(name, _)| *name == current(action)) else {
                 bail!("`[keys.bind] {action}` is not an action; the actions are {}", names());
             };
             let target = parse(default)?;
@@ -356,6 +356,14 @@ fn label(keys: &[Key]) -> String {
     keys.iter().map(|k| k.label()).collect()
 }
 
+/// Actions renamed since a config or a usage file could name them, old name first.
+const RENAMED: &[(&str, &str)] = &[("split", "side_by_side")];
+
+/// The name `action` goes by today: an old name reads as its new one.
+pub fn current(action: &str) -> &str {
+    RENAMED.iter().find(|(old, _)| *old == action).map_or(action, |(_, new)| new)
+}
+
 fn names() -> String {
     ACTIONS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
 }
@@ -467,6 +475,14 @@ mod tests {
     fn an_unknown_action_fails_and_lists_the_real_ones() {
         let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thred", &["n"])])).unwrap_err().to_string();
         assert!(err.contains("next_thred") && err.contains("next_thread"), "{err}");
+    }
+
+    #[test]
+    fn a_renamed_action_still_binds_under_its_old_name() {
+        let map = Keymap::new(&keys(Layout::Qwerty, &[("split", &["zx"])])).unwrap();
+        assert_eq!(chars(&map.feed(Some(press('z')), press('x'))), "D", "`split` is `side_by_side` now");
+        assert_eq!(current("split"), "side_by_side");
+        assert_eq!(current("zen"), "zen");
     }
 
     #[test]

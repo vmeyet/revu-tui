@@ -58,6 +58,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let folded = app.header_folded;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
     let wrap = app.wrap;
+    app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let Some(open) = app.open.as_mut() else { return };
     let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
     let header = match (zen, folded) {
@@ -71,8 +72,14 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let render = |open: &Open, i: usize| -> Vec<Line<'static>> {
         let row = &open.rows[i];
         let (selected, in_range) = (i == open.selected, open.is_selected(i));
+        let overflow = if wrap { Overflow::Wrap(width) } else { Overflow::Cut(width) };
+        if open.review.shows_side_by_side()
+            && let Some(lines) = side_by_side_lines(&open.review, &anchors, row, selected || in_range, overflow, theme)
+        {
+            return lines;
+        }
         if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-            wrap_row(row_line(&open.review, &anchors, row, selected, in_range, Overflow::Wrap(width), theme), width, WRAP_INDENT)
+            wrap_row(row_line(&open.review, &anchors, row, selected, in_range, overflow, theme), width, WRAP_INDENT)
         } else {
             vec![row_line(&open.review, &anchors, row, selected, in_range, Overflow::Cut(width), theme)]
         }
@@ -132,6 +139,11 @@ fn pipeline_link(review: &Review, header: &[Line], area: Rect) -> Option<super::
 const UNCUT: usize = 4_096;
 /// Continuation rows start under the text: past the cursor bar, both gutters and the sign.
 const WRAP_INDENT: usize = 1 + ANCHOR_W + GUTTER_W * 2 + 3;
+/// A side by side half before its text: the anchor column, its one number and the sign.
+const HALF_INDENT: usize = ANCHOR_W + GUTTER_W + 2;
+/// Columns of code each half shows at least; narrower, side by side falls back to inline.
+const HALF_MIN_CODE: usize = 50;
+const SIDE_BY_SIDE_MIN_W: usize = 1 + 2 * (HALF_INDENT + HALF_MIN_CODE);
 
 /// One long line as several screen rows of `width`: continuation rows indented under the text,
 /// every row padded with the line's fill so a changed line stays one coloured block.
@@ -392,13 +404,103 @@ fn row_line<'a>(
             spans.extend(with_table_lines(drawn, file, &new.text, overflow, theme));
         }
         Row::Context { file, old, new, .. } => {
+            let line = context_line(review, *file, *old, *new);
             let file = &review.files[*file];
-            let text = review.context.texts.get(&file.new_path).and_then(|t| t.get(*new as usize - 1)).cloned().unwrap_or_default();
-            let line = DiffLine { kind: LineKind::Context, old: Some(*old), new: Some(*new), text, words: vec![], no_newline: false };
             spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, overflow, theme));
         }
     }
     Line::from(spans)
+}
+
+/// Line `new` of a file read whole, `old` on the old side.
+fn context_line(review: &Review, file: usize, old: u32, new: u32) -> DiffLine {
+    let path = &review.files[file].new_path;
+    let text = review.context.texts.get(path).and_then(|t| t.get(new as usize - 1)).cloned().unwrap_or_default();
+    DiffLine { kind: LineKind::Context, old: Some(old), new: Some(new), text, words: vec![], no_newline: false }
+}
+
+/// One side of a side by side row: a line of that side, drawn as context when it changed only in whitespace under `W`.
+struct Half<'r> {
+    file: usize,
+    side: Side,
+    line: DiffLine,
+    code: &'r [(Range<usize>, Token)],
+    quiet: bool,
+}
+
+/// What the old side and the new side of a diff row show; nothing on a side beside a longer run of the other.
+fn halves<'r>(review: &'r Review, row: &Row) -> Option<[Option<Half<'r>>; 2]> {
+    let file = row.file()?;
+    let shown = &review.files[file];
+    let half = |side, line: &DiffLine, code, quiet| {
+        Some(Half { file, side, line: if quiet { self::quiet(line) } else { line.clone() }, code, quiet })
+    };
+    match row {
+        Row::Line { hunk, index, .. } => {
+            let (line, code) = (&shown.hunks[*hunk].lines[*index], shown.spans(*hunk, *index));
+            Some(match line.kind {
+                LineKind::Context => [half(Side::Old, line, code, false), half(Side::New, line, code, false)],
+                LineKind::Removed => [half(Side::Old, line, code, false), None],
+                LineKind::Added => [None, half(Side::New, line, code, false)],
+            })
+        }
+        Row::Pair { hunk, removed, added, .. } => {
+            let (old, new) = (&shown.hunks[*hunk].lines[*removed], &shown.hunks[*hunk].lines[*added]);
+            let quiet = review.quiet_whitespace && same_but_whitespace(&old.text, &new.text);
+            Some([half(Side::Old, old, shown.spans(*hunk, *removed), quiet), half(Side::New, new, shown.spans(*hunk, *added), quiet)])
+        }
+        Row::Context { old, new, .. } => {
+            let line = context_line(review, file, *old, *new);
+            Some([half(Side::Old, &line, &[], false), half(Side::New, &line, &[], false)])
+        }
+        Row::Header | Row::File { .. } | Row::Hunk { .. } | Row::Gap => None,
+    }
+}
+
+/// A diff row as the old side beside the new one, each half cut, or wrapped under its own text.
+fn side_by_side_lines(
+    review: &Review,
+    anchors: &Anchors,
+    row: &Row,
+    marked: bool,
+    overflow: Overflow,
+    theme: Theme,
+) -> Option<Vec<Line<'static>>> {
+    let [old, new] = halves(review, row)?;
+    let (Overflow::Cut(width) | Overflow::Wrap(width)) = overflow;
+    let body = width.saturating_sub(1);
+    let (old_w, new_w) = (body / 2, body - body / 2);
+    let draw = |half: Option<Half>, width: usize| -> Vec<Line<'static>> {
+        let Some(half) = half else { return vec![] };
+        match overflow {
+            Overflow::Cut(_) => vec![half_line(review, anchors, &half, marked, width, theme)],
+            Overflow::Wrap(_) => wrap_row(half_line(review, anchors, &half, marked, UNCUT, theme), width, HALF_INDENT),
+        }
+    };
+    let (old, new) = (draw(old, old_w), draw(new, new_w));
+    let bar = Span::styled(if marked { "▎" } else { " " }, Style::default().fg(theme.accent));
+    let spans_at = |half: &[Line<'static>], i: usize| half.get(i).map(|l| l.spans.clone()).unwrap_or_default();
+    let rows = (0..old.len().max(new.len())).map(|i| {
+        let first = if i == 0 { bar.clone() } else { Span::raw(" ") };
+        let old_half = padded(spans_at(&old, i), old_w, Some(Style::default()));
+        Line::from([vec![first], old_half.spans, spans_at(&new, i)].concat())
+    });
+    Some(rows.collect())
+}
+
+/// One half: its anchor column, its side's number, the sign, the text in its side's syntax colours.
+fn half_line(review: &Review, anchors: &Anchors, half: &Half, marked: bool, width: usize, theme: Theme) -> Line<'static> {
+    let file = &review.files[half.file];
+    let (path, number_here) = match half.side {
+        Side::Old => (&file.old_path, half.line.old),
+        Side::New => (&file.new_path, half.line.new),
+    };
+    let marker = number_here.and_then(|n| anchors.markers.get(&(path.clone(), half.side, n)).copied());
+    let stretched = marker.is_none() && number_here.is_some_and(|n| anchors.stretch.is_some_and(|s| s.holds(half.file, half.side, n)));
+    let anchor = if stretched { range_spans(theme) } else { anchor_spans(marker, theme) };
+    let drawn = numbered_spans(format!("{} ", number(number_here)), &half.line, half.code, marked, width.saturating_sub(ANCHOR_W), theme);
+    let drawn = if half.quiet { with_quiet_sign(drawn, theme) } else { drawn };
+    Line::from([anchor, with_table_lines(drawn, file, &half.line.text, Overflow::Cut(width), theme)].concat())
 }
 
 /// A drawn diff line, its table pipes as box lines when `text` is a table line of a markdown file,
@@ -440,7 +542,11 @@ impl Stretch {
     fn covers(self, review: &Review, row: &Row) -> bool {
         let Some(Place::Line { file, new, old }) = review.place_of(row) else { return false };
         let number = if self.side == Side::New { new } else { old };
-        file == self.file && number.is_some_and(|n| (self.first..self.last).contains(&n))
+        number.is_some_and(|n| self.holds(file, self.side, n))
+    }
+
+    fn holds(self, file: usize, side: Side, number: u32) -> bool {
+        file == self.file && side == self.side && (self.first..self.last).contains(&number)
     }
 }
 
@@ -602,11 +708,26 @@ fn paint(kind: LineKind, theme: Theme) -> Option<Paint> {
     }
 }
 
+fn number(n: Option<u32>) -> String {
+    n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"))
+}
+
 /// A changed line is filled edge to edge; without a fill, the text itself carries the colour
 /// and changed words go bold, so every theme reads on every terminal.
 fn line_spans<'a>(line: &DiffLine, code: &[(Range<usize>, Token)], selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
+    numbered_spans(format!("{} {} ", number(line.old), number(line.new)), line, code, selected, width, theme)
+}
+
+/// A line drawn after `gutter`, its numbers: both of them inline, the one of its side side by side.
+fn numbered_spans<'a>(
+    gutter: String,
+    line: &DiffLine,
+    code: &[(Range<usize>, Token)],
+    selected: bool,
+    width: usize,
+    theme: Theme,
+) -> Vec<Span<'a>> {
     let gutter_colour = if selected { theme.muted } else { theme.faded };
-    let number = |n: Option<u32>| n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"));
     let paint = paint(line.kind, theme);
     let base = match &paint {
         Some(p) => p.fill.map_or(Style::default().fg(p.text), |fill| Style::default().fg(p.text).bg(fill)),
@@ -617,8 +738,8 @@ fn line_spans<'a>(line: &DiffLine, code: &[(Range<usize>, Token)], selected: boo
         Some(fill) => base.fg(p.accent).bg(fill),
         None => base.add_modifier(Modifier::BOLD),
     });
-    let mut spans = vec![Span::styled(format!("{} {} ", number(line.old), number(line.new)), base.fg(gutter_colour)), sign];
-    let room = width.saturating_sub(GUTTER_W * 2 + 3);
+    let room = width.saturating_sub(gutter.width() + 1);
+    let mut spans = vec![Span::styled(gutter, base.fg(gutter_colour)), sign];
     let text = text_spans(line, code, room, base, word, theme);
     let used: usize = text.iter().map(Span::width).sum();
     spans.extend(text);
@@ -677,7 +798,6 @@ fn pair_spans<'a>(
     theme: Theme,
 ) -> Vec<Span<'a>> {
     let gutter = Style::default().fg(if selected { theme.muted } else { theme.faded });
-    let number = |n: Option<u32>| n.map_or_else(|| " ".repeat(GUTTER_W), |n| format!("{n:>GUTTER_W$}"));
     let with_fill = |style: Style, fill: Option<Color>| fill.map_or(style, |f| style.bg(f));
     let dropped = with_fill(Style::default().fg(theme.danger).add_modifier(Modifier::CROSSED_OUT), theme.removed_word);
     let added = with_fill(Style::default().fg(theme.success), theme.added_word);
@@ -723,8 +843,16 @@ fn quiet_spans<'a>(
     width: usize,
     theme: Theme,
 ) -> Vec<Span<'a>> {
-    let context = DiffLine { kind: LineKind::Context, old: old.old, words: vec![], ..new.clone() };
-    let mut spans = line_spans(&context, code, selected, width, theme);
+    let context = DiffLine { old: old.old, ..quiet(new) };
+    with_quiet_sign(line_spans(&context, code, selected, width, theme), theme)
+}
+
+/// A line that changed only in whitespace, drawn as context.
+fn quiet(line: &DiffLine) -> DiffLine {
+    DiffLine { kind: LineKind::Context, words: vec![], ..line.clone() }
+}
+
+fn with_quiet_sign(mut spans: Vec<Span<'_>>, theme: Theme) -> Vec<Span<'_>> {
     if let Some(sign) = spans.get_mut(1) {
         *sign = Span::styled("≈", Style::default().fg(theme.faded));
     }
@@ -893,13 +1021,68 @@ mod tests {
             new_path: "docs/plans.md".into(),
             ..Default::default()
         };
-        let review = Review::new((*crate::review::tests::review().mr).clone(), &[diff], vec![], &[]).with_split(true);
+        let review = Review::new((*crate::review::tests::review().mr).clone(), &[diff], vec![], &[]);
         let anchors = Anchors { markers: review.markers(), stretch: None };
         let rows = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. } | Row::Context { .. }));
         let drawn = rows.flat_map(|row| {
             wrap_row(row_line(&review, &anchors, &row, false, false, Overflow::Wrap(44), Theme::default()), 44, WRAP_INDENT)
         });
         insta::assert_snapshot!("wrapped_markdown_table", drawn.map(|line| spans_text(&line.spans)).collect::<Vec<_>>().join("\n"));
+    }
+
+    fn side_by_side_of(diff: &str, path: &str) -> Review {
+        let diff = crate::forge::DiffFile { diff: diff.into(), old_path: path.into(), new_path: path.into(), ..Default::default() };
+        Review::new((*crate::review::tests::review().mr).clone(), &[diff], vec![], &[]).with_side_by_side(true)
+    }
+
+    /// Every screen row of the diff lines as its old half and its new half, trimmed, halves 20 columns wide.
+    fn halves_of(review: &Review, overflow: Overflow) -> Vec<(String, String)> {
+        let anchors = Anchors { markers: review.markers(), stretch: None };
+        let rows = review.rows();
+        let lines = rows.iter().filter_map(|row| side_by_side_lines(review, &anchors, row, false, overflow, Theme::default()));
+        let split = |line: Line| {
+            let text: Vec<char> = spans_text(&line.spans).chars().collect();
+            let half = |range: Range<usize>| text.get(range).unwrap_or_default().iter().collect::<String>().trim_end().to_owned();
+            (half(1..21), half(21..text.len()))
+        };
+        lines.flatten().map(split).collect()
+    }
+
+    #[test]
+    fn side_by_side_numbers_each_side_and_leaves_a_blank_beside_the_longer_run() {
+        let review = side_by_side_of("@@ -1,3 +1,2 @@\n a\n-b\n-c\n+B\n", "a.txt");
+        let rows = halves_of(&review, Overflow::Cut(41));
+        let expected = [("     1  a", "     1  a"), ("     2 -b", "     2 +B"), ("     3 -c", "")];
+        assert_eq!(rows, expected.map(|(old, new)| (old.to_owned(), new.to_owned())));
+    }
+
+    #[test]
+    fn side_by_side_wraps_each_half_under_its_own_text() {
+        let review = side_by_side_of(&format!("@@ -1 +1 @@\n-{}\n+short\n", "x".repeat(30)), "a.txt");
+        let rows = halves_of(&review, Overflow::Wrap(41));
+        let x = |n: usize| "x".repeat(n);
+        let expected = [(format!("     1 -{}", x(12)), "     1 +short".to_owned()), (format!("        {}", x(12)), String::new())];
+        assert_eq!(rows[..2], expected);
+        assert_eq!(rows[2].0, format!("        {}", x(6)));
+    }
+
+    #[test]
+    fn side_by_side_reads_a_whitespace_only_change_as_quiet_on_both_sides_under_w() {
+        let review = side_by_side_of("@@ -1 +1 @@\n-  one();\n+    one();\n", "a.txt").with_quiet_whitespace(true);
+        let rows = halves_of(&review, Overflow::Cut(41));
+        assert_eq!(rows, [("     1 ≈  one();".to_owned(), "     1 ≈    one();".to_owned())]);
+    }
+
+    #[test]
+    fn side_by_side_colours_each_side_with_its_own_syntax() {
+        let diff = include_str!("../review/fixtures/cart.ts.diff");
+        let review = side_by_side_of(diff, "src/cart.ts");
+        let theme = Theme::named("tokyonight").unwrap();
+        let anchors = Anchors { markers: review.markers(), stretch: None };
+        let pair = Row::Pair { file: 0, hunk: 0, removed: 1, added: 2 };
+        let line = &side_by_side_lines(&review, &anchors, &pair, false, Overflow::Cut(200), theme).unwrap()[0];
+        let keywords = line.spans.iter().filter(|s| s.content == "const" && s.style.fg == Some(theme.syntax.keyword)).count();
+        assert_eq!(keywords, 2, "both sides colour their own `const`");
     }
 
     #[test]

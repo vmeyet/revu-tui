@@ -97,7 +97,7 @@ pub enum Action {
         viewed: BTreeMap<String, String>,
         /// Kept so the queue counts the MR's progress without its diff.
         auto_folded: Arc<BTreeSet<String>>,
-        split: bool,
+        side_by_side: bool,
         /// Where the cursor rests, so the MR opens there next time; `None` keeps what is saved.
         spot: Option<Spot>,
     },

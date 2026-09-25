@@ -22,7 +22,7 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 |---|---|
 | `c` | Comment on the line under the cursor |
 | `V`, then `j` `k`, then `c` | Comment on a range of lines |
-| `C` | Comment on the old side of a line shown inline |
+| `C` | Comment on the old side of a line shown inline or side by side |
 | `s` | Suggest a change: the box starts with the lines to edit |
 | `E` | Write the comment in `$EDITOR` |
 

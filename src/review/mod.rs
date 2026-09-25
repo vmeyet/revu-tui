@@ -220,8 +220,10 @@ pub struct Review {
     pub fold: FoldState,
     /// Which changed pairs read as one row.
     pub inline: InlineRule,
-    /// Every changed line on its own row, `D` in the TUI.
-    pub split: bool,
+    /// The old file beside the new one, `D` in the TUI; the reader's choice, kept even while the diff is too narrow.
+    pub side_by_side: bool,
+    /// The diff area holds two sides of code; below, side by side falls back to inline.
+    pub wide: bool,
     /// Lines that changed only in whitespace read as one quiet row, `W` in the TUI.
     pub quiet_whitespace: bool,
     /// Unchanged lines shown around hunks, `+` in the TUI.
@@ -252,7 +254,8 @@ impl Review {
             viewed: BTreeSet::new(),
             fold,
             inline: InlineRule::default(),
-            split: false,
+            side_by_side: false,
+            wide: true,
             quiet_whitespace: false,
             context: Context::default(),
         }
@@ -262,8 +265,17 @@ impl Review {
         Self { inline, ..self.clone() }
     }
 
-    pub fn with_split(&self, split: bool) -> Self {
-        Self { split, ..self.clone() }
+    pub fn with_side_by_side(&self, side_by_side: bool) -> Self {
+        Self { side_by_side, ..self.clone() }
+    }
+
+    pub fn with_wide(&self, wide: bool) -> Self {
+        Self { wide, ..self.clone() }
+    }
+
+    /// Side by side was chosen and the diff is wide enough for it.
+    pub fn shows_side_by_side(&self) -> bool {
+        self.side_by_side && self.wide
     }
 
     pub fn with_context(&self, context: Context) -> Self {
@@ -403,7 +415,8 @@ impl Review {
                 let offset = i64::from(hunk.old_start) - i64::from(hunk.new_start);
                 rows.extend((from..hunk.new_start).map(|new| context_row(index, hunk_index, offset, new)));
             }
-            let mut pairs = if self.split { vec![] } else { words::inline_pairs(hunk, self.inline) };
+            let mut pairs =
+                if self.shows_side_by_side() { words::side_by_side_pairs(hunk) } else { words::inline_pairs(hunk, self.inline) };
             if self.quiet_whitespace {
                 let quiet: Vec<(usize, usize)> = words::whitespace_pairs(hunk).into_iter().filter(|pair| !pairs.contains(pair)).collect();
                 pairs.extend(quiet);
@@ -701,19 +714,43 @@ pub(crate) mod tests {
         assert_eq!(unfolded.progress().folded, 1, "unfolding the lock file does not make it count");
     }
 
-    #[test]
-    fn quiet_whitespace_pairs_a_reindented_line_even_when_split() {
-        let diff = crate::forge::DiffFile {
-            diff: "@@ -1 +1 @@\n-\tone();\n+    one();\n".into(),
-            new_path: "a.rs".into(),
-            old_path: "a.rs".into(),
-            ..Default::default()
+    fn review_of_one(diff: &str) -> Review {
+        let diff = DiffFile { diff: diff.into(), new_path: "a.rs".into(), old_path: "a.rs".into(), ..DiffFile::default() };
+        Review::new(mr(), &[diff], vec![], &[])
+    }
+
+    /// The diff rows of the first hunk as `(removed, added)` for pairs and `(index, index)` for lines.
+    fn line_rows(review: &Review) -> Vec<(usize, usize)> {
+        let pick = |r: &Row| match r {
+            Row::Line { index, .. } => Some((*index, *index)),
+            Row::Pair { removed, added, .. } => Some((*removed, *added)),
+            _ => None,
         };
-        let review = Review::new((*review().mr).clone(), &[diff], vec![], &[]).with_split(true);
-        let lines = review.rows().iter().filter(|r| matches!(r, Row::Line { .. })).count();
-        assert_eq!(lines, 2, "split shows both lines");
-        let quiet = review.with_quiet_whitespace(true);
-        assert!(quiet.rows().iter().any(|r| matches!(r, Row::Pair { .. })), "W reads them as one row");
+        review.rows().iter().filter_map(pick).collect()
+    }
+
+    #[test]
+    fn quiet_whitespace_pairs_a_reindented_line_the_inline_rule_leaves_apart() {
+        let review = review_of_one("@@ -1 +1 @@\n-\t\t\tone();\n+            one();\n");
+        assert_eq!(line_rows(&review), [(0, 0), (1, 1)], "too much changed to read inline");
+        assert_eq!(line_rows(&review.with_quiet_whitespace(true)), [(0, 1)], "W reads them as one row");
+    }
+
+    #[test]
+    fn side_by_side_sets_each_removed_line_beside_an_added_one_and_the_longer_run_alone() {
+        let review = review_of_one("@@ -1,7 +1,6 @@\n a\n-b\n-c\n-d\n+B\n e\n-f\n+F\n+G\n+H\n").with_side_by_side(true);
+        assert_eq!(line_rows(&review), [(0, 0), (1, 4), (2, 2), (3, 3), (5, 5), (6, 7), (8, 8), (9, 9)]);
+        let folded = review.with_fold(review.fold.toggle_hunk("a.rs", 0));
+        assert!(line_rows(&folded).is_empty(), "a folded hunk hides its rows side by side too");
+    }
+
+    #[test]
+    fn side_by_side_falls_back_to_the_inline_rows_while_the_diff_is_narrow() {
+        let review = review_of_one("@@ -1,2 +1,1 @@\n-let b = 2;\n-gone\n+let b = 20;\n");
+        let narrow = review.with_side_by_side(true).with_wide(false);
+        assert!(narrow.side_by_side && !narrow.shows_side_by_side(), "the choice stays");
+        assert_eq!(line_rows(&narrow), line_rows(&review));
+        assert_eq!(line_rows(&narrow.with_wide(true)), [(0, 2), (1, 1)]);
     }
 
     fn contexts(review: &Review) -> Vec<(usize, u32, u32)> {
@@ -730,7 +767,7 @@ pub(crate) mod tests {
         let path = review.files[0].new_path.clone();
         let text: Vec<String> = (1..=60).map(|n| format!("line {n}")).collect();
         let context = Context { texts: BTreeMap::from([(path, Arc::new(text))]), around: BTreeMap::from([((0, 0), 10), ((0, 1), 20)]) };
-        let rows = contexts(&review.with_context(context));
+        let rows = contexts(&review.with_context(context.clone()));
         let above_first: Vec<u32> = rows.iter().filter(|(h, _, n)| *h == 0 && *n < 12).map(|(_, _, n)| *n).collect();
         assert_eq!(above_first, (2..12).collect::<Vec<_>>(), "ten lines above the first hunk");
         assert!(rows.iter().any(|&(h, o, n)| h == 0 && n == 17 && o == 16), "below the first hunk, old numbers follow its offset");
@@ -738,6 +775,8 @@ pub(crate) mod tests {
         assert_eq!(second_above.first(), Some(&27), "the second hunk starts after what the first one showed");
         assert!(rows.iter().any(|&(h, o, n)| h == 1 && n == 40 && o == 39), "the second hunk's offset: old is one less");
         assert!(rows.iter().all(|(_, _, n)| *n <= 60), "never past the end of the file");
+        let side_by_side = review.with_side_by_side(true).with_context(context);
+        assert_eq!(contexts(&side_by_side), rows, "side by side shows the same lines around its hunks");
     }
 
     #[test]

@@ -99,7 +99,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "fold_header",
             "viewed",
             "zen",
-            "split",
+            "side_by_side",
             "tree",
             "pipeline",
             "wrap",
@@ -246,7 +246,7 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('M') => "merge",
         KeyCode::Char('H') => "ready",
         KeyCode::Char('P') => "publish",
-        KeyCode::Char('D') => "split",
+        KeyCode::Char('D') => "side_by_side",
         KeyCode::Char('t') => "tree",
         KeyCode::Char('p') => "pipeline",
         KeyCode::Char('W') => "whitespace",
@@ -374,9 +374,10 @@ pub fn merge(text: &str, date: NaiveDate, counts: &Counts) -> Result<String> {
     Ok(out)
 }
 
+/// A renamed action counts under its new name.
 fn add(into: &mut BTreeMap<String, u64>, from: &BTreeMap<String, u64>) {
     for (name, count) in from {
-        *into.entry(name.clone()).or_default() += count;
+        *into.entry(crate::keymap::current(name).to_owned()).or_default() += count;
     }
 }
 
@@ -604,6 +605,14 @@ mod tests {
         assert_eq!(report.screens[0], ("diff".to_owned(), 3600));
         assert_eq!(report.hints[0].0, "long_walk");
         assert_eq!(super::report(&fixture(), date("2026-09-24"), None).days, 3);
+    }
+
+    #[test]
+    fn a_renamed_action_counts_under_its_new_name() {
+        let day = |name: &str| Day { date: date("2026-09-24"), actions: BTreeMap::from([(name.to_owned(), 1)]), ..Day::default() };
+        let report = report(&[day("split"), day("side_by_side")], date("2026-09-24"), None);
+        assert!(report.rarely.contains(&("side_by_side".to_owned(), 2)), "{:?}", report.rarely);
+        assert!(!report.most.iter().any(|(name, _)| name == "split"));
     }
 
     #[test]

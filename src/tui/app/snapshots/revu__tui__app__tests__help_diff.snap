@@ -22,7 +22,7 @@ expression: "render(&mut app, 100, 30)"
 │                    │                                                        │ew                  │
 │                    │  VIEW                                                  │                    │
 │                    │          i  the MR cover page                          │                    │
-│                    │          D  changed words inline, or split             │      +1 −1  folded │
+│                    │          D  inline diff, or side by side               │      +1 −1  folded │
 │                    │          t  file tree                                  │                    │
 │                    │          p  pipeline                                   │                    │
 │                    │         zz  zen: the diff alone, quiet                 │                    │

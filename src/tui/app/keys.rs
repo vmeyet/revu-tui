@@ -227,7 +227,7 @@ impl App {
             KeyCode::Char('G') => self.review_last(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
-            KeyCode::Char('D') => return self.toggle_split(),
+            KeyCode::Char('D') => return self.toggle_side_by_side(),
             KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Char('p') => return self.toggle_pipeline(),
             KeyCode::Char('W') => self.toggle_whitespace(),

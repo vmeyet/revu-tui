@@ -10,7 +10,7 @@
 | The status line | Hidden; a toast shows for two seconds at the bottom |
 | The MR header | One faded line on top; `◆3` counts the unresolved threads |
 | File and hunk headers | Pinned at the top of the column while you scroll |
-| The diff | A centred column, 70 % of the screen and 120 columns at least |
+| The diff | A centred column, 70 % of the screen and 120 columns at least; the whole screen when `D` shows it side by side |
 | The thread pane | The same column, with one faded title line and no frame |
 | Notifications | Held until you leave zen |
 
@@ -30,6 +30,7 @@ The thread pane still opens with `enter` or `→` on a marked line; `q`, `x` or 
 ## Change the width
 
 A fixed width stops the column from growing with the screen.
+Side by side ignores it and takes the whole screen, so a window of about 120 columns shows both sides.
 
 ```toml
 [tui]

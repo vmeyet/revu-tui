@@ -61,7 +61,7 @@ pub const GROUPS: [Group; 7] = [
         title: "view",
         keys: &[
             ("i", "the MR cover page"),
-            ("D", "changed words inline, or split"),
+            ("D", "inline diff, or side by side"),
             ("t", "file tree"),
             ("p", "pipeline"),
             ("zz", "zen: the diff alone, quiet"),

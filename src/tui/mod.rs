@@ -61,8 +61,9 @@ struct MrState {
     auto_folded: BTreeSet<String>,
     #[serde(default)]
     opened_at: Option<DateTime<Utc>>,
-    #[serde(default)]
-    split: bool,
+    /// Saved as `split` before side by side replaced the split diff under `D`.
+    #[serde(default, alias = "split")]
+    side_by_side: bool,
     /// Where the cursor rested last: the MR opens there next time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     spot: Option<app::Spot>,
@@ -376,8 +377,8 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::SaveState { key, fold, viewed, auto_folded, split, spot } => {
-                let save = move |b: &Backend| b.save_state(&key, fold, viewed, &auto_folded, split, spot);
+            Action::SaveState { key, fold, viewed, auto_folded, side_by_side, spot } => {
+                let save = move |b: &Backend| b.save_state(&key, fold, viewed, &auto_folded, side_by_side, spot);
                 if let Err(e) = backend.off(save).await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
@@ -932,7 +933,7 @@ impl Backend {
             .with_fold(fold)
             .with_viewed(review.still_viewed(&state.viewed_files))
             .with_inline(self.inline)
-            .with_split(state.split)
+            .with_side_by_side(state.side_by_side)
             .with_drafts(drafts.iter().map(Draft::held).collect())
     }
 
@@ -943,11 +944,12 @@ impl Backend {
         fold: FoldState,
         viewed_files: BTreeMap<String, String>,
         auto_folded: &BTreeSet<String>,
-        split: bool,
+        side_by_side: bool,
         spot: Option<app::Spot>,
     ) -> Result<()> {
         let before = self.state(key);
-        let state = MrState { fold, viewed_files, auto_folded: auto_folded.clone(), split, spot: spot.or(before.spot.clone()), ..before };
+        let state =
+            MrState { fold, viewed_files, auto_folded: auto_folded.clone(), side_by_side, spot: spot.or(before.spot.clone()), ..before };
         self.cache_of(key).write(&keys::state(key), &state)
     }
 
@@ -1080,6 +1082,8 @@ mod tests {
     fn state_round_trips_and_tolerates_an_empty_file() {
         let state: MrState = serde_json::from_str("{}").unwrap();
         assert_eq!(state, MrState::default());
+        let before: MrState = serde_json::from_str(r#"{"split": true}"#).unwrap();
+        assert!(before.side_by_side, "the split choice saved before reads as side by side");
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
         let backend = Backend {
@@ -1113,9 +1117,9 @@ mod tests {
             .unwrap();
         let state = backend.state(&key());
         assert_eq!(
-            (state.viewed_files, state.split),
+            (state.viewed_files, state.side_by_side),
             (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true),
-            "the split choice is remembered per MR"
+            "the side by side choice is remembered per MR"
         );
         assert_eq!(state.spot, Some(spot), "a save without a place keeps the one saved before");
     }
