@@ -92,13 +92,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         app.links.clear();
     }
     if app.focus != Focus::Queue || modal {
-        fade(f, queue, app.theme.faded);
+        fade(f, queue, app.theme, app.theme.faded);
     }
     if app.focus != Focus::Review || modal {
-        fade(f, review, if modal { app.theme.faded } else { app.theme.muted });
+        fade(f, review, app.theme, if modal { app.theme.faded } else { app.theme.muted });
     }
     if side_open && (app.focus != Focus::Side || modal) {
-        fade(f, side, app.theme.faded);
+        fade(f, side, app.theme, app.theme.faded);
     }
     if !modal {
         draw_pictures(f, app, &pictures);
@@ -348,13 +348,15 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(right).alignment(Alignment::Right), r);
 }
 
-/// Everything in `area` takes one colour, so the eye finds the focused pane without a border change.
-pub fn fade(f: &mut Frame, area: Rect, color: Color) {
+/// The text in `area` takes one colour and its frames the quiet `border`: `color` is brighter than any
+/// frame, so fading a frame would light the unfocused pane's box above the focused one's.
+pub fn fade(f: &mut Frame, area: Rect, theme: Theme, color: Color) {
     let buf = f.buffer_mut();
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_fg(color);
+                let frame = cell.fg == theme.border || cell.fg == theme.border_focus;
+                cell.set_fg(if frame { theme.border } else { color });
                 cell.modifier.remove(Modifier::BOLD);
             }
         }

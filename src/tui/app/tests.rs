@@ -1041,6 +1041,15 @@ fn removed_line_cells(app: &mut App) -> (ratatui::buffer::Cell, ratatui::buffer:
 }
 
 #[test]
+fn an_unfocused_box_stays_quieter_than_the_focused_one() {
+    let mut app = with_review();
+    app.theme = Theme::named("catppuccin").unwrap();
+    let buffer = cells(&mut app, 160, 30);
+    let corners: Vec<Color> = (0..160).filter(|&x| buffer[(x, 0)].symbol() == "╭").map(|x| buffer[(x, 0)].fg).collect();
+    assert_eq!(corners, vec![app.theme.border, app.theme.border_focus], "the queue's box, then the diff's");
+}
+
+#[test]
 fn removed_lines_read_on_every_theme_and_fill_the_row_where_the_theme_knows_its_ground() {
     let mut app = with_review();
     press(&mut app, "]cj");
