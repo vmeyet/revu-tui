@@ -3,32 +3,32 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 30)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   ── TO REVIEW · 1 ╭ keys ─────────────────────────────────────────────────╮· 2 files · ✓ succes │
-│ ▎ feat charge cards│                                                       │ed                   │
-│ ▎ omar · !42 · +412│  MOVE                                                 │                     │
-│                    │        j k  move                                      │                     │
-│   ── MINE · 1 ─────│        g G  first, last                               │ −2  ✓1 · 1 outdated │
-│   fix flaky cache t│      ^d ^u  half a page; PgDn PgUp space too          │e                    │
-│   nina · !41 · +3 −│        h l  pane to the left, to the right            │ard, amount: Money)… │
-│                    │      enter  open, or toggle the fold                  │();                  │
-│   ── WATCHING · 1 ─│      esc x  close the pane, back to the queue         │h_key(idempotency_k… │
-│   infra: new runner│  tab S-tab  next, previous file                       │irst();              │
-│   omar · !35 · +0 −│      ]c [c  next, previous hunk                       │arge(amount).await?; │
-│                    │      ]n [n  next, previous conversation               │;                    │
-│   ── ▸ DONE · 1 ───│      ]f [f  next, previous file with a thread         │                     │
-│                    │      ]r [r  next, previous MR that needs you          │rd) -> Key {         │
-│                    │      ]m [m  next, previous MR in the queue            │                     │
-│                    │                                                       │, card.expiry()))    │
-│                    │  VIEW                                                 │new                  │
-│                    │          i  the MR cover page                         │                     │
-│                    │          D  changed words inline, or split            │                     │
-│                    │          t  file tree                                 │       +1 −1  folded │
-│                    │          p  pipeline                                  │                     │
-│                    │         zz  zen: the diff alone, quiet                │                     │
-│                    │        w W  wrap long lines, hide whitespace changes  │                     │
-│                    │          +  more lines; on a thread, react            │                     │
-│                    │                                                       │                     │
-│                    ╰──── 1–22 of 55 · j k scroll · ? every key · esc close ╯                     │
+│   ── TO REVIEW · 1 ╭ keys ──────────────────────────────────────────────────╮ 2 files · ✓ succes │
+│ ▎ feat charge cards│                                                        │d                   │
+│ ▎ omar · !42 · +412│  MOVE                                                  │                    │
+│                    │        j k  move                                       │                    │
+│   ── MINE · 1 ─────│        g G  first, last                                │−2  ✓1 · 1 outdated │
+│   fix flaky cache t│      ^d ^u  half a page; PgDn PgUp space too           │                    │
+│   nina · !41 · +3 −│        h l  pane to the left, to the right             │rd, amount: Money)… │
+│                    │      enter  open, or toggle the fold                   │);                  │
+│   ── WATCHING · 1 ─│      esc x  close the pane, back to the queue          │_key(idempotency_k… │
+│   infra: new runner│  tab S-tab  next, previous file                        │rst();              │
+│   omar · !35 · +0 −│      ]c [c  next, previous hunk                        │rge(amount).await?; │
+│                    │      ]n [n  next, previous open conversation           │                    │
+│   ── ▸ DONE · 1 ───│      ]N [N  next, previous conversation, resolved too  │                    │
+│                    │      ]f [f  next, previous file with a thread          │d) -> Key {         │
+│                    │      ]r [r  next, previous MR that needs you           │                    │
+│                    │      ]m [m  next, previous MR in the queue             │ card.expiry()))    │
+│                    │                                                        │ew                  │
+│                    │  VIEW                                                  │                    │
+│                    │          i  the MR cover page                          │                    │
+│                    │          D  changed words inline, or split             │      +1 −1  folded │
+│                    │          t  file tree                                  │                    │
+│                    │          p  pipeline                                   │                    │
+│                    │         zz  zen: the diff alone, quiet                 │                    │
+│                    │        w W  wrap long lines, hide whitespace changes   │                    │
+│                    │                                                        │                    │
+│                    ╰───── 1–22 of 56 · j k scroll · ? every key · esc close ╯                    │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

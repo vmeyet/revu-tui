@@ -109,7 +109,7 @@ Decisions taken while building them:
 
 - `v` pauses revu's key reader while the program owns the terminal (its reader thread used to swallow keys typed into `$EDITOR` too).
 - `enter` on a file row keeps folding it; `l` opens its outdated threads.
-- `]n` also stops on the header row when the MR itself has threads.
+- `]n` also stops on the header row when the MR itself has an unresolved thread or my draft; `]N` when it has any.
 - `E` in the compose box would type an E, so the box hands its text to `$EDITOR` with `ctrl-o`.
 - After saving or leaving the box, the keys go back where it was opened from: the diff for `c`, the pane for `r`.
 - `e` in the publish modal closes the modal and edits in the pane.

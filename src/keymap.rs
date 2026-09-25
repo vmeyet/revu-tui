@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 pub const ACTIONS: &[(&str, &str)] = &[
     ("next_thread", "]n"),
     ("prev_thread", "[n"),
+    ("next_any_thread", "]N"),
+    ("prev_any_thread", "[N"),
     ("next_hunk", "]c"),
     ("prev_hunk", "[c"),
     ("next_file_unresolved", "]f"),
@@ -65,7 +67,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
 const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtpWw+xvcCVsEPAMmedJKRSuY?'123456789";
 
 /// The second keys each built-in prefix already reads.
-const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnfrm"), (']', "cnfrm"), ('a', "ersta")];
+const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "ersta")];
 
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

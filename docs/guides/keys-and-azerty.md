@@ -17,6 +17,7 @@ Now `(` and `)` work like `[` and `]`.
 | Default | With AZERTY |
 |---|---|
 | `]n` `[n` | `)n` `(n` |
+| `]N` `[N` | `)N` `(N` |
 | `]c` `[c` | `)c` `(c` |
 | `]f` `[f` | `)f` `(f` |
 | `]m` `[m` | `)m` `(m` |

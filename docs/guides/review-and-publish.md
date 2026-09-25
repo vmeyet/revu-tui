@@ -47,7 +47,8 @@ A line with a conversation has a mark left of its numbers.
 | Key | Does |
 |---|---|
 | `enter` or `l` on a marked line | Open its threads in the right pane |
-| `]n` `[n` | Next, previous line with a conversation; a folded file or hunk on the way opens |
+| `]n` `[n` | Next, previous line with an open thread or your draft; a folded file or hunk on the way opens |
+| `]N` `[N` | The same, resolved threads too |
 | `r` | Reply, as a draft |
 | `R` | Resolve or unresolve |
 | `q`, `x` or `esc` | Close the pane |
