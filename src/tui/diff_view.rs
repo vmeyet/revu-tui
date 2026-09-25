@@ -70,9 +70,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         let row = &open.rows[i];
         let (selected, in_range) = (i == open.selected, open.is_selected(i));
         if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-            wrap_row(row_line(&open.review, &anchors, row, selected, in_range, UNCUT, theme), width, WRAP_INDENT)
+            wrap_row(row_line(&open.review, &anchors, row, selected, in_range, Overflow::Wrap(width), theme), width, WRAP_INDENT)
         } else {
-            vec![row_line(&open.review, &anchors, row, selected, in_range, width, theme)]
+            vec![row_line(&open.review, &anchors, row, selected, in_range, Overflow::Cut(width), theme)]
         }
     };
     let pinning = height >= PIN_MIN_HEIGHT;
@@ -108,7 +108,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 /// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
 /// reads as a bar the diff scrolls under.
 fn pinned_line<'a>(review: &Review, anchors: &Anchors, row: &Row, width: usize, theme: Theme) -> Line<'a> {
-    let line = row_line(review, anchors, row, false, false, width, theme);
+    let line = row_line(review, anchors, row, false, false, Overflow::Cut(width), theme);
     let used: usize = line.spans.iter().map(Span::width).sum();
     let mut spans = line.spans;
     spans.push(Span::raw(" ".repeat(width.saturating_sub(used))));
@@ -158,10 +158,14 @@ fn wrap_row(line: Line<'static>, width: usize, indent: usize) -> Vec<Line<'stati
 
 /// Drops the blank padding a changed line ends with, and gives back its style to pad each row again.
 fn trailing_fill(spans: &mut Vec<Span<'static>>) -> Option<Style> {
-    let last = spans.last().filter(|s| !s.content.is_empty() && s.content.chars().all(|c| c == ' '))?;
+    let last = spans.last().filter(|s| is_blank(s))?;
     let style = last.style;
     spans.pop();
     Some(style)
+}
+
+fn is_blank(span: &Span) -> bool {
+    !span.content.is_empty() && span.content.chars().all(|c| c == ' ')
 }
 
 fn padded(mut row: Vec<Span<'static>>, width: usize, fill: Option<Style>) -> Line<'static> {
@@ -300,7 +304,26 @@ pub(super) fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratat
     }
 }
 
-fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, selected: bool, in_range: bool, width: usize, theme: Theme) -> Line<'a> {
+/// What a line wider than the pane does: cut at `width` with `…`, or drawn whole for `wrap_row` to wrap at `width`.
+#[derive(Clone, Copy)]
+enum Overflow {
+    Cut(usize),
+    Wrap(usize),
+}
+
+fn row_line<'a>(
+    review: &Review,
+    anchors: &Anchors,
+    row: &Row,
+    selected: bool,
+    in_range: bool,
+    overflow: Overflow,
+    theme: Theme,
+) -> Line<'a> {
+    let width = match overflow {
+        Overflow::Cut(width) => width,
+        Overflow::Wrap(_) => UNCUT,
+    };
     let bar = Span::styled(if selected || in_range { "▎" } else { " " }, Style::default().fg(theme.accent));
     let mut spans = vec![bar];
     let body = width.saturating_sub(1);
@@ -319,7 +342,7 @@ fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, selected: bool, i
             let file = &review.files[*file];
             let line = &file.hunks[*hunk].lines[*index];
             let drawn = line_spans(line, file.spans(*hunk, *index), selected || in_range, body, theme);
-            spans.extend(with_table_lines(drawn, file, &line.text, theme));
+            spans.extend(with_table_lines(drawn, file, &line.text, overflow, theme));
         }
         Row::Pair { file, hunk, removed, added } => {
             let file = &review.files[*file];
@@ -330,24 +353,35 @@ fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, selected: bool, i
             } else {
                 pair_spans(old, new, code, selected || in_range, body, theme)
             };
-            spans.extend(with_table_lines(drawn, file, &new.text, theme));
+            spans.extend(with_table_lines(drawn, file, &new.text, overflow, theme));
         }
         Row::Context { file, old, new, .. } => {
             let file = &review.files[*file];
             let text = review.context.texts.get(&file.new_path).and_then(|t| t.get(*new as usize - 1)).cloned().unwrap_or_default();
             let line = DiffLine { kind: LineKind::Context, old: Some(*old), new: Some(*new), text, words: vec![], no_newline: false };
-            spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, theme));
+            spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, overflow, theme));
         }
     }
     Line::from(spans)
 }
 
-/// A drawn diff line, its table pipes as box lines when `text` is a table line of a markdown file;
-/// the gutter and the sign before the text stay as they are.
-fn with_table_lines<'a>(mut spans: Vec<Span<'a>>, file: &File, text: &str, theme: Theme) -> Vec<Span<'a>> {
+/// A drawn diff line, its table pipes as box lines when `text` is a table line of a markdown file,
+/// its cells wrapped in their columns when it wraps; the gutter and the sign before the text stay as they are.
+fn with_table_lines<'a>(mut spans: Vec<Span<'a>>, file: &File, text: &str, overflow: Overflow, theme: Theme) -> Vec<Span<'a>> {
     let Some(line) = TableLine::of(text).filter(|_| syntax::is_markdown(&file.new_path)) else { return spans };
     let text_spans = spans.split_off(2.min(spans.len()));
-    spans.extend(table::boxed(text_spans, line, theme));
+    let pad = text_spans.last().filter(|span| is_blank(span)).cloned();
+    let rows = match overflow {
+        Overflow::Wrap(width) => {
+            table::wrapped(&text_spans, line, width.saturating_sub(WRAP_INDENT), pad.as_ref().map(|s| s.style).unwrap_or_default(), theme)
+        }
+        Overflow::Cut(_) => None,
+    };
+    match rows {
+        // Each row is exactly as wide as the text column, so `wrap_row` cuts the line at their joins.
+        Some(rows) => spans.extend(rows.into_iter().flatten().chain(pad)),
+        None => spans.extend(table::boxed(text_spans, line, theme)),
+    }
     spans
 }
 
@@ -799,7 +833,7 @@ mod tests {
         let lines = &file.hunks[0].lines;
         let each = lines.iter().enumerate().map(|(i, line)| (line_spans(line, file.spans(0, i), false, 60, theme), &line.text));
         let pair = (pair_spans(&lines[2], &lines[3], file.spans(0, 3), false, 60, theme), &lines[3].text);
-        each.chain([pair]).map(|(spans, text)| with_table_lines(spans, file, text, theme)).collect()
+        each.chain([pair]).map(|(spans, text)| with_table_lines(spans, file, text, Overflow::Cut(60), theme)).collect()
     }
 
     #[test]
@@ -807,6 +841,29 @@ mod tests {
         let theme = Theme::named("tokyonight").unwrap();
         let lines: Vec<String> = drawn_lines(&pricing("docs/pricing.md"), theme).iter().map(|spans| painted(spans)).collect();
         insta::assert_snapshot!("markdown_table_hunk", lines.join("\n---\n"));
+    }
+
+    #[test]
+    fn snapshot_wrapped_markdown_table_in_a_narrow_pane() {
+        let diff = crate::forge::DiffFile {
+            diff: "@@ -1,4 +1,4 @@\n \
+                   | Plan | Seats | Notes                             |\n \
+                   |:-----|------:|:----------------------------------|\n\
+                   -| Team |    10 | shared billing for each workspace |\n\
+                   +| Team |    12 | shared billing for all workspaces |\n \
+                   | Solo |     1 | one seat                          |\n"
+                .into(),
+            old_path: "docs/plans.md".into(),
+            new_path: "docs/plans.md".into(),
+            ..Default::default()
+        };
+        let review = Review::new((*crate::review::tests::review().mr).clone(), &[diff], vec![], &[]).with_split(true);
+        let anchors = Anchors { markers: review.markers(), stretch: None };
+        let rows = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. } | Row::Context { .. }));
+        let drawn = rows.flat_map(|row| {
+            wrap_row(row_line(&review, &anchors, &row, false, false, Overflow::Wrap(44), Theme::default()), 44, WRAP_INDENT)
+        });
+        insta::assert_snapshot!("wrapped_markdown_table", drawn.map(|line| spans_text(&line.spans)).collect::<Vec<_>>().join("\n"));
     }
 
     #[test]
