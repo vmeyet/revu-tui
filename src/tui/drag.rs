@@ -48,6 +48,26 @@ pub fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
     cells
 }
 
+/// Markdown the note drawing drops or turns into a glyph of its own: backticks, pipes, bullets, quotes.
+const MARKUP: [char; 8] = ['`', '|', ' ', '-', '*', '>', '#', '\t'];
+
+/// The bytes of `raw` under each cell of `drawn`, the light markdown drawing of it: each drawn
+/// character is found in `raw` past the markup the drawing dropped; a glyph of its own stands for nothing.
+pub fn aligned(drawn: &str, raw: &str) -> Vec<Range<usize>> {
+    let mut cells = vec![];
+    let mut at = 0;
+    for c in drawn.chars() {
+        let found = raw[at..].char_indices().find(|&(_, r)| r == c || !MARKUP.contains(&r)).filter(|&(_, r)| r == c);
+        let bytes = match found {
+            Some((i, r)) => at + i..at + i + r.len_utf8(),
+            None => at..at,
+        };
+        at = bytes.end;
+        cells.extend(std::iter::repeat_n(bytes, c.width().unwrap_or(0)));
+    }
+    cells
+}
+
 /// What a drag covers: from the cell it started on to the cell under the pointer, in one column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Drag {
@@ -150,6 +170,19 @@ mod tests {
         assert_eq!(cells_of("\ta", 4), [0..1, 0..1, 0..1, 0..1, 1..2]);
         assert_eq!(cells_of("é漢", 4), [0..2, 2..5, 2..5]);
         assert_eq!(cells_of("e\u{301}x", 4), [0..3, 3..4], "a combining accent stays on its letter");
+    }
+
+    /// The raw text under each drawn cell that stands for some.
+    fn under(drawn: &str, raw: &str) -> Vec<String> {
+        aligned(drawn, raw).into_iter().filter(|bytes| !bytes.is_empty()).map(|bytes| raw[bytes].to_owned()).collect()
+    }
+
+    #[test]
+    fn a_note_line_finds_its_drawn_characters_past_the_markdown_it_dropped() {
+        assert_eq!(under("• one", "- one"), [" ", "o", "n", "e"], "the bullet glyph stands for nothing");
+        assert_eq!(under("a b", "`a` b"), ["a", " ", "b"]);
+        assert_eq!(aligned("x │ y", "| x | y |")[2], 4..4, "a table line drawn over its pipes");
+        assert_eq!(aligned("  let", "let")[..2], [0..0, 0..0], "the code indent stands for nothing");
     }
 
     #[test]

@@ -4275,3 +4275,23 @@ fn a_drag_side_by_side_stays_in_the_half_it_started_in() {
     assert!(text.ends_with("\n    let client = Client::new();"), "{text}");
     assert!(!text.contains("with_key"), "{text}");
 }
+
+#[test]
+fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
+    let mut app = with_review();
+    press(&mut app, "]N");
+    app.handle_key(code(KeyCode::Enter));
+    let open = app.open.as_mut().unwrap();
+    let mut threads = open.review.threads.to_vec();
+    let thread = threads.iter_mut().find(|t| t.notes[0].body == "Why drop the plain client?").unwrap();
+    thread.notes[0].body = "Why drop the `plain` client?\n- keep `Client::new`".into();
+    open.review.threads = threads.into();
+    let (x, y) = spot(&mut app, "plain", 120, 24);
+    let word = drag(&mut app, (x, y), (x + 4, y), 120, 24);
+    assert_eq!(word, vec![Action::Copy { text: "plain".into(), done: "copied 1 line".into() }]);
+    let (x, y) = spot(&mut app, "Why drop", 120, 24);
+    let actions = drag(&mut app, (x, y), (x + 60, y + 5), 120, 24);
+    let text = "Why drop the `plain` client?\n- keep `Client::new`".to_owned();
+    assert_eq!(actions, vec![Action::Copy { text, done: "copied 2 lines".into() }]);
+    insta::assert_snapshot!("thread_selection", render_selected(&mut app, 120, 24));
+}

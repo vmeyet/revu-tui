@@ -1,0 +1,29 @@
+---
+source: src/tui/app/tests.rs
+assertion_line: 4193
+expression: "render_selected(&mut app, 120, 24)"
+---
+╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────╮╭ charge.rs:-13 · 1 thread ────────────────────╮
+│  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success      ││ ▎✓ resolved                                  │
+│   1 of 2 approvals · 3 threads, 1 unresolved                         ││ ▎you · 2h                                    │
+│  ◆ 1 on the MR  enter opens                                          ││ ▎⟦Why drop the plain client?⟧                  │
+│                                                                      ││ ▎⟦• keep Client::new⟧                          │
+│  ▾ src/pay/charge.rs                          +4 −2  ✓1 · 1 outdated ││                                              │
+│     ▾ @@ -12,4 +12,5 @@ pub async fn charge                          ││                                              │
+│      12   12  pub async fn charge(card: &Card, amount: Money) -> Re… ││                                              │
+│ ▎✓   13      -    let client = Client::new();                        ││                                              │
+│           13 +    let client = Client::with_key(idempotency_key(car… ││                                              │
+│           14 +    let attempt = Attempt::first();                    ││                                              │
+│      14   15      let response = client.charge(amount).await?;       ││                                              │
+│      15   16      audit::record(&response);                          ││                                              │
+│     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                           ││                                              │
+│      40   41  fn idempotency_key(card: &Card) -> Key {               ││                                              │
+│      41      -    Key::from(card.number())                           ││                                              │
+│           42 +    Key::from((card.number(), card.expiry()))          ││                                              │
+│           43 +    // hunk two, line 43 is new                        ││                                              │
+│      42   44  }                                                      ││                                              │
+│                                                                      ││                                              │
+│  ▸ Cargo.lock                                          +1 −1  folded ││                                              │
+│                                                                      ││                                              │
+╰──────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                                                ? help
