@@ -124,11 +124,12 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `e` | pane | edit my draft (or my note, M3) | `enter` on a draft row |
 | `d` | pane | delete my draft | `d` on a draft row |
 | `J` `K` | pane | next, previous thread on the line | none |
-| `]n` `[n` | diff | next, previous marked line, across files; the pane follows when open | next thread row |
+| `]n` `[n` | diff | next, previous line with an unresolved thread or my draft, across files; the pane follows when open | next thread row |
+| `]N` `[N` | diff | the same, resolved-only lines too | next thread row |
 | `x`, `esc`, `q` | diff or pane | close the pane | `esc` |
 | `u`, `o`, `y` | pane | open the first link, open the thread in the browser, copy its link | `u` only |
 
-Muscle memory holds: `c` comments, `r` replies, `R` resolves, `]n` walks the conversations.
+Muscle memory holds: `c` comments, `r` replies, `R` resolves, `]n` walks the open conversations.
 `r` keeps meaning refresh in the diff and the queue; it means reply only when the pane has focus, which is where it meant reply before.
 The `?` help and the README key table change in the same MR: the thread rows go, the pane keys come in.
 
@@ -156,6 +157,6 @@ Delete the tests of the removed rows rather than keeping them alive with shims.
 
 - **Keep threads inline and add the pane**: the code would still read like a chat log; the point is that the diff shows code.
 - **Open the pane automatically when the cursor lands on a marked line**: scrolling would resize the diff every few lines.
-- **List every thread of the file or the MR in the pane**: it loses the line the reader is looking at; `]n` already walks them all, and the file row counts give the overview.
+- **List every thread of the file or the MR in the pane**: it loses the line the reader is looking at; `]N` already walks them all, and the file row counts give the overview.
 - **A tooltip under the line**: too small for a conversation and nowhere to type.
 - **Keep the one-row input for replies**: one line of text, far from the thread it answers.

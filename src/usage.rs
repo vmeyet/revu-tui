@@ -73,6 +73,8 @@ const GROUPS: &[(&str, &[&str])] = &[
         &[
             "next_thread",
             "prev_thread",
+            "next_any_thread",
+            "prev_any_thread",
             "next_hunk",
             "prev_hunk",
             "next_file",
@@ -158,6 +160,7 @@ fn prefixed(prefix: char, key: KeyEvent) -> Option<&'static str> {
         ('z', 'v') => "viewed",
         ('z', 'z') => "zen",
         ('[' | ']', 'n') => pick(forward, "next_thread", "prev_thread"),
+        ('[' | ']', 'N') => pick(forward, "next_any_thread", "prev_any_thread"),
         ('[' | ']', 'c') => pick(forward, "next_hunk", "prev_hunk"),
         ('[' | ']', 'f') => pick(forward, "next_file_unresolved", "prev_file_unresolved"),
         ('[' | ']', 'r') => pick(forward, "next_review", "prev_review"),
@@ -494,6 +497,7 @@ mod tests {
         assert_eq!(action(Some(']'), key('m'), Place::Diff), Some("next_mr"));
         assert_eq!(action(None, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), Place::Diff), Some("focus_right"));
         assert_eq!(action(Some(']'), key('n'), Place::Diff), Some("next_thread"));
+        assert_eq!(action(Some('['), key('N'), Place::Diff), Some("prev_any_thread"));
         assert_eq!(action(Some('a'), key('r'), Place::Diff), Some("ask_risks"));
         assert_eq!(action(None, key('z'), Place::Diff), None, "a prefix alone is no action");
         assert_eq!(action(None, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL), Place::Queue), Some("jump"));

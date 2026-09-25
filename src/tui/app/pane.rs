@@ -1,10 +1,24 @@
 //! The right pane: the conversations of one place, opened from a marked line and following the cursor.
 use super::{Action, App, Focus, Open};
-use crate::review::{Conversation, Place, Review, Row};
+use crate::review::{Conversation, Mark, Markers, Place, Review, Row};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeSet;
 
 const HALF_PAGE: usize = 5;
+
+/// Which conversations `]n` stops on: open ones, or every one, resolved included (`]N`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Threads {
+    Open,
+    Every,
+}
+
+impl Threads {
+    /// A line whose threads are all resolved is not open; one of my drafts keeps it open.
+    fn stops_at(self, mark: Mark) -> bool {
+        self == Self::Every || mark > Mark::Resolved
+    }
+}
 
 /// What the pane shows and where the reader is in it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,13 +96,13 @@ impl Open {
 
     /// Whether the row's line carries a thread or a draft, or the header conversations on the MR.
     pub fn is_marked(&self, row: &Row) -> bool {
-        self.is_marked_in(&self.review.markers(), row)
+        self.mark_in(&self.review.markers(), row).is_some()
     }
 
-    fn is_marked_in(&self, markers: &crate::review::Markers, row: &Row) -> bool {
+    fn mark_in(&self, markers: &Markers, row: &Row) -> Option<Mark> {
         match row {
-            Row::Header => !self.review.conversations(&Place::Mr).is_empty(),
-            _ => self.review.marker_of(markers, row).is_some(),
+            Row::Header => self.review.mr_mark(),
+            _ => self.review.marker_of(markers, row).map(|marker| marker.mark),
         }
     }
 }
@@ -141,13 +155,16 @@ impl App {
         self.open = Some(open.with_pane(Some(Pane::at(place))));
     }
 
-    /// `]n` `[n`: the next marked line, in any open file; the pane follows when open.
-    /// `]n` `[n`: the next conversation in file then line order, folded or not; a folded file
-    /// or hunk on the way opens, and stays open like one opened by hand.
-    pub(super) fn jump_to_marked(&mut self, forward: bool) -> Vec<Action> {
+    /// `]n` `[n`, `]N` `[N`: the next conversation in file then line order, folded or not; a folded
+    /// file or hunk on the way opens, and stays open like one opened by hand. The pane follows when open.
+    pub(super) fn jump_to_marked(&mut self, forward: bool, threads: Threads) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let Some(target) = next_marked(open, forward) else {
-            self.toast("nothing to jump to");
+        let Some(target) = next_marked(open, forward, threads) else {
+            let text = match threads {
+                Threads::Open => format!("no open thread · {} for every thread", self.keymap.label("]N")),
+                Threads::Every => "nothing to jump to".to_owned(),
+            };
+            self.toast(text);
             return vec![];
         };
         let fold = unfolded_for(open, &target);
@@ -267,15 +284,15 @@ fn first_link(text: &str) -> Option<String> {
     Some(rest[..end].to_owned())
 }
 
-/// The next marked row after the cursor, wrapping, among the rows the review shows with every fold open.
-fn next_marked(open: &Open, forward: bool) -> Option<Row> {
+/// The next row `threads` stops on after the cursor, wrapping, among the rows the review shows with every fold open.
+fn next_marked(open: &Open, forward: bool, threads: Threads) -> Option<Row> {
     let every = open.review.with_fold(crate::diff::fold::FoldState::default()).rows();
     let markers = open.review.markers();
     let here = open.row().and_then(|row| every.iter().position(|r| super::review::same_place(r, row))).unwrap_or(0);
     let len = every.len();
     (1..=len)
         .map(|k| if forward { (here + k) % len } else { (here + len - k % len) % len })
-        .find(|&i| i != here && open.is_marked_in(&markers, &every[i]))
+        .find(|&i| i != here && open.mark_in(&markers, &every[i]).is_some_and(|mark| threads.stops_at(mark)))
         .map(|i| every[i].clone())
 }
 

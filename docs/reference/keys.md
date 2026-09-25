@@ -17,7 +17,8 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `esc` `x` | close the pane, back to the queue |
 | `tab` `S-tab` | next, previous file |
 | `]c` `[c` | next, previous hunk |
-| `]n` `[n` | next, previous conversation |
+| `]n` `[n` | next, previous open conversation |
+| `]N` `[N` | next, previous conversation, resolved too |
 | `]f` `[f` | next, previous file with a thread |
 | `]r` `[r` | next, previous MR that needs you |
 | `]m` `[m` | next, previous MR in the queue |
@@ -107,6 +108,7 @@ The old ones keep working.
 |---|---|
 | `]c` `[c` | `)c` `(c` |
 | `]n` `[n` | `)n` `(n` |
+| `]N` `[N` | `)N` `(N` |
 | `]f` `[f` | `)f` `(f` |
 | `]r` `[r` | `)r` `(r` |
 | `]m` `[m` | `)m` `(m` |
@@ -120,6 +122,8 @@ A bound key adds to the default key, it does not replace it.
 |---|---|
 | `next_thread` | `]n` |
 | `prev_thread` | `[n` |
+| `next_any_thread` | `]N` |
+| `prev_any_thread` | `[N` |
 | `next_hunk` | `]c` |
 | `prev_hunk` | `[c` |
 | `next_file_unresolved` | `]f` |

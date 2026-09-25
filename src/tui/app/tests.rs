@@ -326,9 +326,9 @@ fn tab_and_brackets_jump_between_files_hunks_and_threads() {
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
     press(&mut app, "]c");
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 1, .. })));
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "wraps to the thread on the MR");
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "then the marked removed line");
     app.handle_key(code(KeyCode::Tab));
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 1, .. })));
@@ -370,7 +370,7 @@ fn enter_toggles_a_hunk_and_opens_the_pane_on_a_marked_line() {
     app.handle_key(code(KeyCode::Enter));
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { open: false, .. })));
     app.handle_key(code(KeyCode::Enter));
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
     let open = app.open.as_ref().unwrap();
@@ -402,7 +402,7 @@ fn l_on_a_file_opens_its_outdated_threads_and_the_header_its_mr_threads() {
 #[test]
 fn the_pane_follows_the_cursor_onto_marked_lines_only() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     press(&mut app, "l");
     press(&mut app, "h");
     press(&mut app, "k");
@@ -546,7 +546,7 @@ fn snapshot_review_open() {
 #[test]
 fn snapshot_thread_open() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("thread_open", render(&mut app, 120, 24));
 }
@@ -567,7 +567,7 @@ fn the_first_question_mark_lists_the_keys_of_the_focused_pane_and_the_second_eve
     press(&mut diff, "?");
     assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "ask claude", "search & app"]);
     let mut thread = with_review();
-    press(&mut thread, "]n");
+    press(&mut thread, "]N");
     thread.handle_key(code(KeyCode::Enter));
     assert_eq!(thread.focus, Focus::Side);
     press(&mut thread, "?");
@@ -749,7 +749,7 @@ fn v_selects_a_range_for_c_y_and_esc() {
 #[test]
 fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
     assert_eq!(app.input_label(), "reply to nina");
@@ -775,7 +775,7 @@ fn cmd_enter_posts_a_new_thread_at_once_and_ctrl_s_posts_a_reply() {
     assert_eq!((key, position.line.new, body.as_str()), (&mr_key(), Some(12), "nit"));
     assert!(app.input.is_none(), "the box closes while the forge answers");
     assert!(app.open.as_ref().unwrap().review.drafts.is_empty(), "no draft on the way");
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
     press(&mut app, "agreed");
@@ -829,7 +829,7 @@ fn cmd_enter_on_an_empty_box_does_nothing_and_saves_other_boxes_as_enter_does() 
 #[test]
 fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     let id = "c0ffee00c0ffee00".to_owned();
     assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
@@ -998,7 +998,7 @@ fn snapshot_publish_modal() {
 #[test]
 fn snapshot_thread_with_a_draft_reply() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
     type_text(&mut app, "agreed, keys are per card");
@@ -1793,7 +1793,7 @@ fn type_palette(app: &mut App, line: &str) -> Vec<Action> {
 #[test]
 fn v_in_the_thread_pane_and_the_tree_uses_their_file() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
     assert_eq!(press(&mut app, "v"), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "the old line 13 opens at head line 13");
@@ -1857,7 +1857,7 @@ fn a_range_comment_marks_its_other_lines_while_the_pane_is_on_it() {
 #[test]
 fn below_120_columns_the_pane_is_a_page_and_h_goes_back_to_the_diff() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     press(&mut app, "l");
     let page = render(&mut app, 100, 20);
     assert!(page.contains("charge.rs:-13") && !page.contains("Queue"), "the pane alone:\n{page}");
@@ -1870,7 +1870,7 @@ fn below_120_columns_the_pane_is_a_page_and_h_goes_back_to_the_diff() {
 #[test]
 fn snapshot_narrow_pane_and_a_three_line_box() {
     let mut app = with_review();
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     press(&mut app, "l");
     insta::assert_snapshot!("pane_narrow", render(&mut app, 100, 20));
     press(&mut app, "r");
@@ -2089,7 +2089,7 @@ fn a_t_summarises_the_thread_and_its_answer_becomes_a_reply() {
     press(&mut app, "]c");
     app.handle_key(code(KeyCode::Enter));
     app.handle_key(code(KeyCode::Enter));
-    press(&mut app, "]n");
+    press(&mut app, "]N");
     let (id, request, _) = the_ask(&press(&mut app, "at"));
     assert!(request.system[2].text.contains("## Thread"));
     app.apply(Incoming::Answer {
@@ -2393,17 +2393,17 @@ fn with_the_azerty_preset_parentheses_jump_like_brackets() {
     let mut app = with_keys(r#"layout = "azerty""#);
     press(&mut app, ")c)c)n");
     assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`)c` twice then `)n`, as `]c]c]n` would");
-    press(&mut app, ")n");
-    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }));
-    press(&mut app, "(n");
-    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`(n` goes back");
-    press(&mut app, "]n");
+    press(&mut app, ")N");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "`)N` stops on the resolved thread");
+    press(&mut app, "(N");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`(N` goes back");
+    press(&mut app, "]N");
     assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "brackets keep working");
 }
 
 #[test]
 fn a_bound_key_does_what_its_action_does_and_a_two_key_one_waits() {
-    let mut app = with_keys(r#"bind = { next_hunk = "N", next_thread = ["nt", "ctrl-e"] }"#);
+    let mut app = with_keys(r#"bind = { next_hunk = "N", next_any_thread = ["nt", "ctrl-e"] }"#);
     press(&mut app, "N");
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
     press(&mut app, "n");
@@ -2413,10 +2413,10 @@ fn a_bound_key_does_what_its_action_does_and_a_two_key_one_waits() {
     assert_eq!(
         app.open.as_ref().unwrap().row(),
         Some(&Row::Line { file: 0, hunk: 0, index: 1 }),
-        "`nt` is `]n`: the marked line after the hunk"
+        "`nt` is `]N`: the marked line after the hunk"
     );
     app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
-    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`ctrl-e` is `]n` too, and wraps to the MR's thread");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`ctrl-e` is `]N` too, and wraps to the MR's thread");
 }
 
 #[test]
@@ -3008,7 +3008,7 @@ fn brackets_m_outside_zen_open_the_next_mr_without_a_banner() {
 #[test]
 fn arrows_in_zen_move_focus_as_outside_it() {
     let mut app = with_review();
-    press(&mut app, "zz]n");
+    press(&mut app, "zz]N");
     assert!(app.handle_key(code(KeyCode::Right)).is_empty(), "→ never changes MR");
     assert!(app.open.as_ref().unwrap().pane.is_some(), "→ on a marked line opens the pane");
     assert_eq!(app.focus, Focus::Side);
@@ -3065,7 +3065,7 @@ fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
 #[test]
 fn zen_opens_the_thread_pane_in_the_diff_column_without_a_frame() {
     let mut app = with_review();
-    press(&mut app, "zz]n");
+    press(&mut app, "zz]N");
     let diff = render(&mut app, 160, 45);
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
@@ -3642,7 +3642,7 @@ fn ascii_draws_reactions_in_plain_words() {
 #[test]
 fn q_closes_the_right_pane_before_it_asks_to_quit() {
     let mut app = with_review();
-    press(&mut app, "]nl");
+    press(&mut app, "]Nl");
     assert!(app.open.as_ref().unwrap().pane.is_some());
     press(&mut app, "q");
     assert!(app.open.as_ref().unwrap().pane.is_none(), "the thread pane closes first");
@@ -3753,11 +3753,11 @@ fn zen_shows_the_quit_prompt() {
     assert!(render(&mut app, 160, 45).contains("press q again to quit"));
 }
 
-/// Where `]n` stops, one press at a time, from the top.
-fn thread_stops(app: &mut App, presses: usize) -> Vec<Row> {
+/// Where `keys` stops, one press at a time, from the top.
+fn thread_stops(app: &mut App, keys: &str, presses: usize) -> Vec<Row> {
     (0..presses)
         .map(|_| {
-            press(app, "]n");
+            press(app, keys);
             app.open.as_ref().unwrap().row().cloned().unwrap()
         })
         .collect()
@@ -3767,61 +3767,93 @@ fn is_saved_fold(actions: &[Action]) -> bool {
     actions.iter().any(|a| matches!(a, Action::SaveState { .. }))
 }
 
+/// The review with the fixture's thread on `charge.rs` line 13 open again.
+fn with_open_thread() -> App {
+    let mut app = with_review();
+    let open = app.open.clone().unwrap();
+    app.open = Some(open.with_review(open.review.with_resolved("c0ffee00c0ffee00", false)));
+    app
+}
+
+const LINE_13: Row = Row::Line { file: 0, hunk: 0, index: 1 };
+
+#[test]
+fn bracket_n_skips_resolved_threads_and_says_how_to_reach_them() {
+    let mut app = with_review();
+    assert_eq!(thread_stops(&mut app, "]n", 2), [Row::Header, Row::Header], "the resolved line 13 is skipped");
+    assert_eq!(app.live_toast().unwrap().text, "no open thread · ]N for every thread");
+    assert_eq!(thread_stops(&mut app, "]N", 2), [LINE_13, Row::Header], "]N stops on it and wraps");
+    assert_eq!(thread_stops(&mut app, "[N", 1), [LINE_13]);
+}
+
+#[test]
+fn bracket_n_stops_on_my_draft_reply_to_a_resolved_thread() {
+    let mut app = with_review();
+    let open = app.open.clone().unwrap();
+    let reply = crate::review::Draft::reply("c0ffee00c0ffee00", "agreed");
+    app.open = Some(open.with_review(open.review.with_drafts(vec![reply])));
+    assert_eq!(thread_stops(&mut app, "]n", 2), [LINE_13, Row::Header]);
+}
+
+#[test]
+fn bracket_n_skips_the_header_once_the_mr_thread_is_resolved() {
+    let mut app = with_open_thread();
+    let open = app.open.clone().unwrap();
+    app.open = Some(open.with_review(open.review.with_resolved("6a9c1750b2d6e4f0", true)));
+    assert_eq!(thread_stops(&mut app, "]n", 1), [LINE_13]);
+    assert_eq!(thread_stops(&mut app, "]N", 1), [Row::Header], "]N still stops there");
+}
+
 #[test]
 fn bracket_n_opens_a_folded_file_and_lands_on_its_thread() {
-    let mut app = with_review();
+    let mut app = with_open_thread();
     press(&mut app, "zM");
     assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
     press(&mut app, "g");
     let actions = press(&mut app, "]n");
     let open = app.open.as_ref().unwrap();
     assert!(open.review.fold.file_is_open("src/pay/charge.rs"), "the file opened on the way");
-    assert!(matches!(open.row(), Some(Row::Line { file: 0, .. })), "{:?}", open.row());
-    assert!(marker_here(&app).is_some(), "the cursor sits on the thread's line");
+    assert_eq!(open.row(), Some(&LINE_13));
     assert!(is_saved_fold(&actions), "the unfold is kept like one done by hand");
 }
 
-/// Presses `]n` until the cursor sits on a line, the thread in `charge.rs`.
-fn to_thread_line(app: &mut App) -> Row {
-    for _ in 0..4 {
-        press(app, "]n");
-        if let Some(row @ Row::Line { .. }) = app.open.as_ref().unwrap().row() {
-            return row.clone();
-        }
-    }
-    panic!("no thread on a line")
+#[test]
+fn bracket_big_n_opens_a_folded_file_on_the_way_to_a_resolved_thread() {
+    let mut app = with_review();
+    press(&mut app, "zMg");
+    let actions = press(&mut app, "]N");
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&LINE_13));
+    assert!(is_saved_fold(&actions));
 }
 
 #[test]
 fn bracket_n_opens_a_folded_hunk_of_an_open_file() {
-    let mut app = with_review();
-    let target = to_thread_line(&mut app);
-    let Row::Line { hunk, .. } = target else { unreachable!() };
+    let mut app = with_open_thread();
+    let Row::Line { hunk, .. } = LINE_13 else { unreachable!() };
     app.review_jump_to(|r| matches!(r, Row::Hunk { file: 0, index, .. } if *index == hunk));
     press(&mut app, "za");
     assert!(!app.open.as_ref().unwrap().review.fold.hunk_is_open("src/pay/charge.rs", hunk));
-    assert_eq!(to_thread_line(&mut app), target, "the hunk opened and the cursor is back on the thread");
+    assert_eq!(thread_stops(&mut app, "]n", 1), [LINE_13], "the hunk opened and the cursor is on the thread");
     assert!(app.open.as_ref().unwrap().review.fold.hunk_is_open("src/pay/charge.rs", hunk));
 }
 
 #[test]
 fn bracket_n_order_is_unchanged_when_nothing_is_folded() {
-    let mut open_app = with_review();
+    let mut open_app = with_open_thread();
     press(&mut open_app, "zRg");
-    let stops = thread_stops(&mut open_app, 4);
-    let mut folded = with_review();
+    let stops = thread_stops(&mut open_app, "]n", 4);
+    let mut folded = with_open_thread();
     press(&mut folded, "zMg");
-    assert_eq!(thread_stops(&mut folded, 4), stops, "folds change nothing about where ]n stops");
+    assert_eq!(thread_stops(&mut folded, "]n", 4), stops, "folds change nothing about where ]n stops");
     assert_eq!(stops[..2], stops[2..], "it wraps around in the same order");
 }
 
 #[test]
 fn bracket_n_backwards_opens_a_fold_too() {
-    let mut app = with_review();
+    let mut app = with_open_thread();
     press(&mut app, "zMG");
     let actions = press(&mut app, "[n");
-    assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
-    assert!(marker_here(&app).is_some());
+    assert_eq!(app.open.as_ref().unwrap().row(), Some(&LINE_13));
     assert!(is_saved_fold(&actions));
 }
 
@@ -3835,9 +3867,10 @@ fn counting() -> App {
 #[test]
 fn keys_are_counted_by_action_in_memory_only() {
     let mut app = counting();
-    press(&mut app, "]nzajj");
+    press(&mut app, "]n[Nzajj");
     let counts = app.take_usage().unwrap();
     assert_eq!(counts.actions.get("next_thread"), Some(&1));
+    assert_eq!(counts.actions.get("prev_any_thread"), Some(&1));
     assert_eq!(counts.actions.get("fold_toggle"), Some(&1));
     assert_eq!(counts.actions.get("move_down"), Some(&2));
     assert_eq!(app.take_usage(), None, "taken once, gone");
@@ -3856,7 +3889,7 @@ fn typed_text_is_never_counted() {
 #[test]
 fn usage_off_counts_nothing() {
     let mut app = with_long_review();
-    press(&mut app, "]njjj");
+    press(&mut app, "]Njjj");
     app.now += std::time::Duration::from_secs(5);
     app.tick();
     assert_eq!(app.take_usage(), None);
@@ -3992,7 +4025,7 @@ fn up_and_down_in_the_compose_box_move_between_its_lines() {
 #[test]
 fn the_pane_keeps_its_thread_while_a_reply_is_written() {
     let mut app = with_review();
-    press(&mut app, "]nlr");
+    press(&mut app, "]Nlr");
     assert!(app.input.is_some());
     let open = app.open.clone().unwrap();
     let shown = open.pane.clone().unwrap().place;

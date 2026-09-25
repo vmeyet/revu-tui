@@ -57,17 +57,27 @@ impl Review {
         };
         for thread in self.threads.iter().filter(|t| !t.outdated) {
             let Some(anchor) = &thread.anchor else { continue };
-            let mark = if thread.resolved { Mark::Resolved } else { Mark::Unresolved };
-            let unsaved = self.replies_to(&thread.id).any(|(_, d)| d.id.is_none());
-            let replied = self.replies_to(&thread.id).next().is_some();
-            let marker = Marker { mark: if replied { mark.max(Mark::Draft) } else { mark }, count: 1, unsaved };
-            add((anchor.path.clone(), anchor.side, anchor.line), marker);
+            add((anchor.path.clone(), anchor.side, anchor.line), self.marker_of_thread(thread));
         }
         for draft in self.drafts.iter().filter(|d| d.reply_to.is_none()) {
             let Some(anchor) = &draft.anchor else { continue };
             add((anchor.path.clone(), anchor.side, anchor.line), Marker { mark: Mark::Draft, count: 1, unsaved: draft.id.is_none() });
         }
         markers
+    }
+
+    fn marker_of_thread(&self, thread: &Thread) -> Marker {
+        let mark = if thread.resolved { Mark::Resolved } else { Mark::Unresolved };
+        let unsaved = self.replies_to(&thread.id).any(|(_, d)| d.id.is_none());
+        let replied = self.replies_to(&thread.id).next().is_some();
+        Marker { mark: if replied { mark.max(Mark::Draft) } else { mark }, count: 1, unsaved }
+    }
+
+    /// The most pressing mark among the conversations on the MR itself, by the anchor column's rule.
+    pub fn mr_mark(&self) -> Option<Mark> {
+        let threads = self.threads_in(&Place::Mr).into_iter().map(|t| self.marker_of_thread(t).mark);
+        let drafts = self.new_drafts_in(&Place::Mr).into_iter().map(|_| Mark::Draft);
+        threads.chain(drafts).max()
     }
 
     /// The marker a row shows: both sides of a context line, both lines of an inline pair.
@@ -225,6 +235,17 @@ mod tests {
         assert_eq!(markers.len(), 1, "only the live thread on old line 13: {markers:?}");
         assert_eq!(review.conversations(&Place::Outdated { file: 0 }).len(), 1);
         assert_eq!(review.conversations(&Place::Mr).len(), 1);
+    }
+
+    #[test]
+    fn the_mr_takes_the_most_pressing_mark_of_its_conversations() {
+        let review = review();
+        assert_eq!(review.mr_mark(), Some(Mark::Unresolved), "a plain comment is never resolved");
+        let resolved = review.with_resolved("6a9c1750b2d6e4f0", true);
+        assert_eq!(resolved.mr_mark(), Some(Mark::Resolved));
+        assert_eq!(resolved.with_drafts(vec![Draft::new(None, "one more thing")]).mr_mark(), Some(Mark::Draft));
+        let anchored = review.threads.iter().filter(|t| t.anchor.is_some()).cloned().collect();
+        assert_eq!(Review { threads: anchored, ..review }.mr_mark(), None, "nothing on the MR");
     }
 
     #[test]
