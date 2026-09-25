@@ -58,7 +58,7 @@ Focus moves with `h` `l` between the three panes, like slack-tui's channels, mes
 
 `zz` hides everything but the diff, and `zz`, `esc`, `h` or `←` bring it back.
 No frames, no status line: one faded line on top says which MR, whose, its size, its pipeline and `◆n` unresolved threads when there are any.
-The diff sits in a centred column, 70 % of the screen and never under 120 columns, nor wider than the screen; `[tui] zen_width` fixes it instead (60 at least).
+The diff sits in a centred column, 70 % of the screen and never under 120 columns, nor wider than the screen; `[tui] zen_width` fixes it instead (60 at least). With side by side on, the column takes the whole screen, whatever the setting.
 Nothing pulses; a toast shows for two seconds on the bottom row, and notifications wait until zen ends.
 A question that needs an answer (applying a suggestion, the `'` views) brings the status line back while it waits.
 `[m` `]m` open the previous or next MR in the order the queue shows them, without leaving zen, and outside zen as well: filter, sort, sections and stacks all count, folded sections do not.
@@ -219,8 +219,8 @@ The old file on the left, the new one on the right, as GitLab shows it:
 - Each half keeps its side's fill, word fills and syntax colours (`review::colour` highlights each side on its own). A mark shows in the half of the side its thread or draft is anchored on.
 - A row is one cursor stop: `c` comments on the new side, or the old side when the row holds only a removed line; `C` on the old side, as on an inline pair.
 - `w` wraps each half under its own text; `W` reads a whitespace-only pair as context on both halves.
-- Each half wants at least 60 columns of code. A narrower diff area (resize, the pane opening, leaving zen) shows inline and toasts `side by side needs a wider window` once; the choice stays saved and comes back once the area is wide again.
-- Saved per MR as `side_by_side`; a state saved as `split` by an older revu reads as side by side.
+- Each half wants at least 50 columns of code, 117 for the diff area with the cursor bar and both gutters. A narrower one (resize, the pane opening, leaving zen) shows inline and toasts `side by side needs a wider window` once; the choice stays saved and comes back once the area is wide again.
+- Saved per MR as `side_by_side`; a state saved as `split` by an older revu reads as side by side, and so does the action `split` in `[keys.bind]` and in the usage counts.
 
 ### Anchors in the flow
 

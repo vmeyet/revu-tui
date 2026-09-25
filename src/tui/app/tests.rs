@@ -1453,6 +1453,16 @@ fn snapshot_review_side_by_side() {
 }
 
 #[test]
+fn zen_gives_side_by_side_the_whole_screen_whatever_its_width_setting() {
+    let mut app = with_sum_review();
+    app.zen_width = Some(90);
+    press(&mut app, "zzD");
+    let screen = render(&mut app, 138, 18);
+    assert!(app.open.as_ref().unwrap().review.shows_side_by_side(), "{screen}");
+    assert!(screen.lines().any(|l| l.contains("-    let b = 2;") && l.contains("+    let b = 20;")), "{screen}");
+}
+
+#[test]
 fn snapshot_review_side_by_side_in_a_narrow_window() {
     let mut app = with_sum_review();
     press(&mut app, "D");

@@ -142,7 +142,7 @@ const WRAP_INDENT: usize = 1 + ANCHOR_W + GUTTER_W * 2 + 3;
 /// A side by side half before its text: the anchor column, its one number and the sign.
 const HALF_INDENT: usize = ANCHOR_W + GUTTER_W + 2;
 /// Columns of code each half shows at least; narrower, side by side falls back to inline.
-const HALF_MIN_CODE: usize = 60;
+const HALF_MIN_CODE: usize = 50;
 const SIDE_BY_SIDE_MIN_W: usize = 1 + 2 * (HALF_INDENT + HALF_MIN_CODE);
 
 /// One long line as several screen rows of `width`: continuation rows indented under the text,

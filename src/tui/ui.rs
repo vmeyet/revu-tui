@@ -51,7 +51,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
     let (review, side) = if app.zen {
-        let width = zen_width(app.zen_width, main.width);
+        let side_by_side = app.open.as_ref().is_some_and(|o| o.review.side_by_side);
+        let width = if side_by_side { main.width } else { zen_width(app.zen_width, main.width) };
         (zen_column(review, width), zen_column(side, width))
     } else {
         (review, side)
