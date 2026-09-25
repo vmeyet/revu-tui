@@ -1,0 +1,22 @@
+---
+source: src/tui/app/tests.rs
+expression: "render(&mut app, 200, 18)"
+---
+╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││  omar · feat/checkout → main · 2h · +2 −2 · 1 files · ✓ success                                                                                          │
+│ ▎ feat charge cards at checkout          ││   1 of 2 approvals · 1 threads, 1 unresolved                                                                                                             │
+│ ▎ omar · !42 · +412 −38               2h ││                                                                                                                                                          │
+│                                          ││                                                                                                                                                          │
+│   ── MINE · 1 ────────────────────────── ││  ▾ src/sum.rs                                                                                                                                  +2 −2  ◆1 │
+│   fix flaky cache test                 D ││     ▾ @@ -1,6 +1,6 @@ fn main                                                                                                                            │
+│   nina · !41 · +3 −1                  4h ││       1  fn main() {                                                             1  fn main() {                                                          │
+│                                          ││       2      let a = 1;                                                          2      let a = 1;                                                       │
+│   ── WATCHING · 1 ────────────────────── ││ ▎     3 -    let b = 2;                                                     ◆    3 +    let b = 20;                                                      │
+│   infra: new runner                    ⠋ ││       4      println!("{}", a + b);                                              4      println!("{}", a + b);                                           │
+│   omar · !35 · +0 −0                  2d ││       5 -    let d = 4;                                                          5 +    println!("{}", c);                                               │
+│                                          ││       6  }                                                                       6  }                                                                    │
+│   ── ▸ DONE · 1 ──────────────────────── ││                                                                                                                                                          │
+│                                          ││                                                                                                                                                          │
+│                                          ││                                                                                                                                                          │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ✓ side by side                                                                                                                                                                                  ? help

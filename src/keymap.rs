@@ -30,7 +30,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("zen", "zz"),
     ("prev_mr", "[m"),
     ("next_mr", "]m"),
-    ("split", "D"),
+    ("side_by_side", "D"),
     ("tree", "t"),
     ("pipeline", "p"),
     ("wrap", "w"),

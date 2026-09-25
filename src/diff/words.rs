@@ -19,12 +19,17 @@ pub fn mark(hunk: &Hunk) -> Hunk {
 
 /// Index ranges of each `-` run and the `+` run right after it, kept only when both are as long.
 fn pairs(lines: &[Line]) -> Vec<(Range<usize>, Range<usize>)> {
+    changes(lines).into_iter().filter(|(removed, added)| !removed.is_empty() && removed.len() == added.len()).collect()
+}
+
+/// Index ranges of each `-` run and the `+` run right after it, either one possibly empty.
+fn changes(lines: &[Line]) -> Vec<(Range<usize>, Range<usize>)> {
     let mut found = Vec::new();
     let mut i = 0;
     while i < lines.len() {
         let removed = run(lines, i, LineKind::Removed);
         let added = run(lines, removed.end, LineKind::Added);
-        if !removed.is_empty() && removed.len() == added.len() {
+        if !removed.is_empty() || !added.is_empty() {
             found.push((removed.clone(), added.clone()));
         }
         i = added.end.max(removed.end).max(i + 1);
@@ -97,6 +102,12 @@ pub fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
         .flat_map(|(removed, added)| removed.zip(added))
         .filter(|&(r, a)| rule.fits(&hunk.lines[r].text, &hunk.lines[a].text))
         .collect()
+}
+
+/// The `(removed, added)` rows of a side by side diff: each `-` run beside the `+` run after it,
+/// line by line, the longer run's extra lines left without a twin.
+pub fn side_by_side_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
+    changes(&hunk.lines).into_iter().flat_map(|(removed, added)| removed.zip(added)).collect()
 }
 
 /// Every equal-run pair whose lines differ in whitespace only.
@@ -302,6 +313,14 @@ mod tests {
         assert_eq!(inline_pairs(&hunk, rule), vec![(0, 2)]);
         let unequal = parse(include_str!("fixtures/tabs.diff"))[0].clone();
         assert!(inline_pairs(&unequal, rule).is_empty(), "one removed, two added");
+    }
+
+    #[test]
+    fn side_by_side_pairs_each_removed_run_with_the_added_run_after_it_whatever_their_lengths() {
+        let hunk = &parse("@@ -1,7 +1,6 @@\n a\n-b\n-c\n-d\n+B\n e\n-f\n+F\n+G\n+H\n")[0];
+        assert_eq!(side_by_side_pairs(hunk), [(1, 4), (6, 7)], "three removed beside one added, one removed beside three added");
+        let added_only = &parse("@@ -1 +1,2 @@\n a\n+b\n")[0];
+        assert!(side_by_side_pairs(added_only).is_empty(), "an added run alone has no twin");
     }
 
     #[test]

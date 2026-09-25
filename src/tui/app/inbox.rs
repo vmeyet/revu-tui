@@ -142,7 +142,7 @@ impl App {
             fold: open.review.fold.clone(),
             viewed: open.review.viewed_fingerprints(),
             auto_folded: open.review.auto_folded.clone(),
-            split: open.review.split,
+            side_by_side: open.review.side_by_side,
             spot: Some(spot),
         };
         self.spot_saved = Some(saved);

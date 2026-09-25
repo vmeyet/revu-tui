@@ -62,10 +62,11 @@ impl Open {
     }
 
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
-    /// The reader's inline or split choice outlives the refresh.
+    /// The reader's inline or side by side choice outlives the refresh.
     pub fn with_review(&self, review: Review) -> Self {
         let review = Review {
-            split: self.review.split,
+            side_by_side: self.review.side_by_side,
+            wide: self.review.wide,
             quiet_whitespace: self.review.quiet_whitespace,
             context: self.review.context.clone(),
             ..review
@@ -137,10 +138,6 @@ impl Open {
         self.relaid(self.review.with_fold(fold))
     }
 
-    fn with_split(&self, split: bool) -> Self {
-        self.relaid(self.review.with_split(split))
-    }
-
     fn with_quiet_whitespace(&self, quiet: bool) -> Self {
         self.relaid(self.review.with_quiet_whitespace(quiet))
     }
@@ -196,6 +193,7 @@ pub(super) fn same_place(before: &Row, after: &Row) -> bool {
 
 /// How many lines `+` adds on each side of a hunk.
 const CONTEXT_STEP: u32 = 10;
+const TOO_NARROW: &str = "side by side needs a wider window";
 
 impl App {
     pub(super) fn review_move(&mut self, delta: isize) {
@@ -313,12 +311,27 @@ impl App {
         self.keep(open.with_fold(fold))
     }
 
-    /// `D`: changed words inline, or every changed line on its own row.
-    pub(super) fn toggle_split(&mut self) -> Vec<Action> {
+    /// `D`: changed words inline, or the old file beside the new one.
+    pub(super) fn toggle_side_by_side(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let next = open.with_split(!open.review.split);
-        self.toast(if next.review.split { "split diff" } else { "inline diff" });
+        let next = open.relaid(open.review.with_side_by_side(!open.review.side_by_side));
+        self.toast(match (next.review.side_by_side, next.review.wide) {
+            (true, true) => "side by side",
+            (true, false) => TOO_NARROW,
+            (false, _) => "inline diff",
+        });
         self.keep(next)
+    }
+
+    /// The diff area is drawn wide enough for two sides, or not: side by side falls back to inline
+    /// while it is narrow, saying so once, and comes back when it widens.
+    pub(crate) fn fit_diff(&mut self, wide: bool) {
+        let Some(open) = self.open.as_ref().filter(|o| o.review.wide != wide) else { return };
+        let next = open.relaid(open.review.with_wide(wide));
+        if next.review.side_by_side && !wide {
+            self.toast(TOO_NARROW);
+        }
+        self.open = Some(next);
     }
 
     /// `+`: ten more unchanged lines above and below the hunk under the cursor, read from the whole file.
@@ -365,7 +378,7 @@ impl App {
         self.open = Some(next);
     }
 
-    /// Shows `next` and saves what the reader chose in it: folds, viewed files, split.
+    /// Shows `next` and saves what the reader chose in it: folds, viewed files, side by side.
     pub(super) fn keep(&mut self, next: Open) -> Vec<Action> {
         let review = &next.review;
         let action = Action::SaveState {
@@ -373,7 +386,7 @@ impl App {
             fold: review.fold.clone(),
             viewed: review.viewed_fingerprints(),
             auto_folded: review.auto_folded.clone(),
-            split: review.split,
+            side_by_side: review.side_by_side,
             spot: None,
         };
         self.count_viewed(&next.key, &next.review);

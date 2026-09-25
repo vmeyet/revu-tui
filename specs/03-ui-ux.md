@@ -186,7 +186,7 @@ Pins are off below 20 diff rows; in zen (`zz`) they sit inside the centred colum
 - Tabs render as `→   `, trailing whitespace as `·` in `warn`, both only on changed lines.
 - Long lines are cut with `…`; `w` wraps them with a hanging indent under the text column, the line's fill carried on every row.
 - Wrapped, a markdown table line wider than the text column wraps each cell inside its column instead, `│` repeated at the column lines on every extra row and a delimiter row shrunk to the same `─┼─` columns. The columns come from that line's own pipe positions: each is as wide as the text between two pipes less its two padding spaces, and the widest gives up one column at a time (never under 3) until the line fits, so the rows of an aligned table stay aligned without seeing each other. A cell breaks at its last space in reach, else between letters, each character keeping its colours; its alignment is not kept. A line whose columns cannot fit at 3 wraps as any other line.
-- `W` hides whitespace-only changes: a removed line and its added twin that differ only in spaces, tabs or line endings read as one context row with a `≈` sign, even in split mode.
+- `W` hides whitespace-only changes: a removed line and its added twin that differ only in spaces, tabs or line endings read as one context row with a `≈` sign; side by side, each half reads as context with its own `≈`.
 - The selected line has the `▎` bar and, if the theme has `highlight`, the fill.
 
 ### Inline pairs
@@ -198,10 +198,29 @@ A removed line and its added twin read as one row when the change is small:
    3    3 ~    let b = 2;20;
 ```
 
-- The rule: the pair comes from an equal run of `-` and `+` lines (the word-diff pairing), each side changes at most `[review] inline_max_words` runs of words (default 2), and both lines keep at least `[review] inline_min_same` percent of their bytes (default 60). Anything bigger stays split, so a rewrite never turns into a puzzle.
+- The rule: the pair comes from an equal run of `-` and `+` lines (the word-diff pairing), each side changes at most `[review] inline_max_words` runs of words (default 2), and both lines keep at least `[review] inline_min_same` percent of their bytes (default 60). Anything bigger stays on two rows, so a rewrite never turns into a puzzle.
 - Both gutters show, the sign is `~` in `warn`, the kept text is plain, each old word is struck through in the removed colours and followed by its replacement in the added colours (the theme's word fills behind them on RGB themes).
 - `c` comments on the new side, `C` on the old side; `V` counts the pair as its added line. Threads and drafts on either line hang under the pair.
-- `D` switches between inline and split, remembered per MR like folds; inline is the default.
+- `D` switches between inline and side by side, remembered per MR like folds; inline is the default.
+
+### Side by side
+
+The old file on the left, the new one on the right, as GitLab shows it:
+
+```
+     12  pub fn charge(card: &Card) {           12  pub fn charge(card: &Card) {
+ ◆   13 -    let client = Client::new();         13 +    let client = Client::with_key(key);
+     14 -    let key = None;
+     15      client.send()                      14      client.send()
+```
+
+- Each half is the anchor column, its side's number, the sign and the text; the cursor bar sits once, at the left edge.
+- In a hunk, each run of removed lines sits beside the run of added lines after it, row by row; the shorter run leaves blank rows. Context, and the lines `+` shows, fill both halves.
+- Each half keeps its side's fill, word fills and syntax colours (`review::colour` highlights each side on its own). A mark shows in the half of the side its thread or draft is anchored on.
+- A row is one cursor stop: `c` comments on the new side, or the old side when the row holds only a removed line; `C` on the old side, as on an inline pair.
+- `w` wraps each half under its own text; `W` reads a whitespace-only pair as context on both halves.
+- Each half wants at least 60 columns of code. A narrower diff area (resize, the pane opening, leaving zen) shows inline and toasts `side by side needs a wider window` once; the choice stays saved and comes back once the area is wide again.
+- Saved per MR as `side_by_side`; a state saved as `split` by an older revu reads as side by side.
 
 ### Anchors in the flow
 
@@ -293,6 +312,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `p` | pipeline: jobs by stage, failures first, `o` opens a job | M5 |
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
+| `D` | inline diff, or side by side | M3 |
 | `+` | more context around the hunk | M3 |
 | `c` | comment on the line (draft) | M2 |
 | `V` | select lines | M2 |

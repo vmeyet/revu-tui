@@ -1345,29 +1345,59 @@ fn a_one_word_change_reads_as_one_row_with_its_thread_under_it() {
     let open = app.open.as_ref().unwrap();
     assert!(open.review.marker_of(&open.review.markers(), &rows[pair]).is_some(), "the thread on the added line marks the pair");
     let lines: Vec<usize> = rows.iter().filter_map(|r| if let Row::Line { index, .. } = r { Some(*index) } else { None }).collect();
-    assert_eq!(lines, vec![0, 1, 4, 5, 6, 7], "the rewritten d line stays split");
+    assert_eq!(lines, vec![0, 1, 4, 5, 6, 7], "the rewritten d line stays on two rows");
+}
+
+fn row_of(app: &App) -> Option<Row> {
+    app.open.as_ref().unwrap().row().cloned()
 }
 
 #[test]
-fn big_d_splits_and_joins_again_keeping_the_cursor_and_saving_the_choice() {
+fn big_d_sets_the_old_file_beside_the_new_and_back_keeping_the_cursor_and_saving_the_choice() {
     let mut app = with_sum_review();
-    on_pair(&mut app);
+    walk_to(&mut app, |r| matches!(r, Row::Line { index: 6, .. }));
     let actions = press(&mut app, "D");
-    assert!(matches!(actions.as_slice(), [Action::SaveState { split: true, .. }]), "{actions:?}");
-    let open = app.open.as_ref().unwrap();
-    assert!(!open.rows.iter().any(|r| matches!(r, Row::Pair { .. })));
-    assert!(matches!(open.row(), Some(Row::Line { index: 2 | 3, .. })), "the cursor stays on the b line: {:?}", open.row());
+    assert!(matches!(actions.as_slice(), [Action::SaveState { side_by_side: true, .. }]), "{actions:?}");
+    assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("side by side"));
+    assert!(matches!(row_of(&app), Some(Row::Pair { removed: 5, added: 6, .. })), "the rewritten d line sits beside its old text");
     let actions = press(&mut app, "D");
-    assert!(matches!(actions.as_slice(), [Action::SaveState { split: false, .. }]));
-    assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Pair { .. })));
+    assert!(matches!(actions.as_slice(), [Action::SaveState { side_by_side: false, .. }]));
+    assert!(matches!(row_of(&app), Some(Row::Line { index: 5, .. })), "{:?}", row_of(&app));
 }
 
 #[test]
-fn a_refresh_keeps_the_split_choice() {
+fn a_refresh_keeps_the_side_by_side_choice() {
     let mut app = with_sum_review();
     press(&mut app, "D");
     app.apply(Incoming::Review { key: mr_key(), review: Box::new(sum_review()), cached: None });
-    assert!(app.open.as_ref().unwrap().review.split);
+    assert!(app.open.as_ref().unwrap().review.shows_side_by_side());
+}
+
+#[test]
+fn side_by_side_falls_back_to_inline_in_a_narrow_diff_saying_so_once() {
+    let mut app = with_sum_review();
+    press(&mut app, "D");
+    app.fit_diff(false);
+    let open = app.open.as_ref().unwrap();
+    assert!(open.review.side_by_side && !open.rows.iter().any(|r| matches!(r, Row::Pair { removed: 5, .. })), "inline rows");
+    assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("side by side needs a wider window"));
+    app.toast("seen");
+    app.fit_diff(false);
+    assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("seen"), "no second toast while it stays narrow");
+    app.fit_diff(true);
+    assert!(app.open.as_ref().unwrap().rows.iter().any(|r| matches!(r, Row::Pair { removed: 5, .. })), "back side by side");
+}
+
+#[test]
+fn c_on_a_side_by_side_row_comments_the_new_side_and_big_c_the_old_side() {
+    let mut app = with_sum_review();
+    press(&mut app, "D");
+    walk_to(&mut app, |r| matches!(r, Row::Pair { removed: 5, .. }));
+    press(&mut app, "c");
+    assert_eq!(app.input_label(), "new thread · sum.rs:5");
+    app.handle_key(code(KeyCode::Esc));
+    press(&mut app, "C");
+    assert_eq!(app.input_label(), "new thread · sum.rs:-5");
 }
 
 #[test]
@@ -1412,6 +1442,21 @@ fn snapshot_review_inline() {
     let mut app = with_sum_review();
     on_pair(&mut app);
     insta::assert_snapshot!("review_inline", render(&mut app, 100, 18));
+}
+
+#[test]
+fn snapshot_review_side_by_side() {
+    let mut app = with_sum_review();
+    press(&mut app, "D");
+    on_pair(&mut app);
+    insta::assert_snapshot!("review_side_by_side", render(&mut app, 200, 18));
+}
+
+#[test]
+fn snapshot_review_side_by_side_in_a_narrow_window() {
+    let mut app = with_sum_review();
+    press(&mut app, "D");
+    insta::assert_snapshot!("review_side_by_side_narrow", render(&mut app, 100, 18));
 }
 
 /// The cells holding the first character of `text` on screen.
