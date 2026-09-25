@@ -102,6 +102,7 @@ pub const GROUPS: [Group; 7] = [
             ("R", "resolve, unresolve"),
             ("J K", "next, previous thread"),
             ("T", "every thread; enter goes to it"),
+            ("m", "every thread: only mine, or all"),
             ("e d", "edit, delete my draft"),
             ("S +", "apply the suggestion, react"),
             ("u", "open the first link"),

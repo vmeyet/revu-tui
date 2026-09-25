@@ -30,11 +30,13 @@ pub struct Pane {
     pub scroll: usize,
     /// Resolved threads the reader unfolded, by id; the others show their first note only.
     pub unfolded: BTreeSet<String>,
+    /// `m` in the list of every thread: only the conversations this user takes part in.
+    pub only_with: Option<String>,
 }
 
 impl Pane {
     pub fn at(place: Place) -> Self {
-        Self { place, note: 0, scroll: 0, unfolded: BTreeSet::new() }
+        Self { place, note: 0, scroll: 0, unfolded: BTreeSet::new(), only_with: None }
     }
 }
 
@@ -71,7 +73,12 @@ impl Open {
     /// The conversations the pane lists, its cursor stops, and the one under the cursor.
     pub fn pane_view(&self) -> Option<(Vec<Conversation>, Vec<Entry>, Option<Entry>)> {
         let pane = self.pane.as_ref()?;
-        let conversations = self.review.conversations(&pane.place);
+        let conversations: Vec<Conversation> = self
+            .review
+            .conversations(&pane.place)
+            .into_iter()
+            .filter(|conversation| pane.only_with.as_deref().is_none_or(|user| self.review.takes_part(conversation, user)))
+            .collect();
         let entries = entries(&self.review, &conversations, &pane.unfolded);
         let focused = entries.get(pane.note.min(entries.len().saturating_sub(1))).copied();
         Some((conversations, entries, focused))
@@ -141,16 +148,32 @@ impl App {
         true
     }
 
-    /// `T`: every conversation of the MR, or the pane closed when it already lists them.
+    /// `T`: every conversation of the MR, or the pane closed when it already lists them; in zen,
+    /// while the diff hides the list, the list shown again.
     pub(super) fn toggle_every_thread(&mut self) {
         let Some(open) = &self.open else { return };
-        if open.lists_every_thread() {
+        if self.every_thread_hidden() {
+            self.focus = Focus::Side;
+        } else if open.lists_every_thread() {
             self.close_pane();
         } else if open.review.conversations(&Place::All).is_empty() {
             self.toast("no thread on this MR yet");
         } else {
             self.open_pane(Place::All);
         }
+    }
+
+    /// The list of every conversation is open, but zen shows the diff in its place.
+    fn every_thread_hidden(&self) -> bool {
+        self.zen && self.focus == Focus::Review && self.open.as_ref().is_some_and(Open::lists_every_thread)
+    }
+
+    /// `m` in the list of every conversation: only those I take part in, or every one again.
+    fn toggle_mine(&mut self) {
+        let Some(open) = &self.open else { return };
+        let Some(pane) = &open.pane else { return };
+        let only_with = if pane.only_with.is_some() { None } else { Some(self.me.clone()) };
+        self.open = Some(open.with_pane(Some(Pane { note: 0, scroll: 0, only_with, ..pane.clone() })));
     }
 
     pub(super) fn close_pane(&mut self) {
@@ -188,7 +211,8 @@ impl App {
         self.jump_to_row(&target)
     }
 
-    /// `enter` in the list of every conversation: the diff's cursor onto the focused one's line.
+    /// `enter` in the list of every conversation: the diff's cursor onto the focused one's line;
+    /// zen shows the diff there, since the list takes its place.
     fn jump_to_focused(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some((conversations, _, Some(focused))) = open.pane_view() else { return vec![] };
@@ -196,7 +220,11 @@ impl App {
             self.toast("its line is not in the diff");
             return vec![];
         };
-        self.jump_to_row(&target)
+        let actions = self.jump_to_row(&target);
+        if self.zen {
+            self.focus = Focus::Review;
+        }
+        actions
     }
 
     /// The cursor on `target`; its folded file or hunk opens, and stays open like one opened by hand.
@@ -234,6 +262,7 @@ impl App {
             }
             KeyCode::Enter => self.unfold_focused(),
             KeyCode::Char('T') => self.toggle_every_thread(),
+            KeyCode::Char('m') if self.open.as_ref().is_some_and(Open::lists_every_thread) => self.toggle_mine(),
             KeyCode::Char('u') => {
                 let Some(url) = self.thread_link() else {
                     self.toast("no link in this thread");

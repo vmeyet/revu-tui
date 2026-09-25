@@ -50,6 +50,7 @@ A line with a conversation has a mark left of its numbers.
 | `]n` `[n` | Next, previous line with an open thread or your draft; a folded file or hunk on the way opens |
 | `]N` `[N` | The same, resolved threads too |
 | `T` or `:threads` | Every thread of the MR in the right pane, open ones first; `J` `K` walk them, `enter` takes the diff to one |
+| `m` in that list | Only the threads you take part in: you wrote in it, or have a draft there; `m` again shows them all |
 | `r` | Reply, as a draft |
 | `R` | Resolve or unresolve |
 | `q`, `x` or `esc` | Close the pane |

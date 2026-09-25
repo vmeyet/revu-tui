@@ -1,0 +1,12 @@
+---
+source: src/tui/app/tests.rs
+expression: mine
+---
+
+                               the whole MR · mine · 1 of 3 threads
+
+                               ▎src/pay/charge.rs:-13
+                               ▎let client = Client::new();
+                               ▎✓ resolved
+                               ▎you · 2h
+                               ▎Why drop the plain client?

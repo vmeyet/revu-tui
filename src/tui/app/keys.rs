@@ -116,9 +116,11 @@ impl App {
     }
 
     /// From the queue, right opens the selected MR, as `enter` does, so the diff always matches the row.
-    /// In the diff, a marked line (or a file's outdated threads) opens the pane on it.
+    /// In the diff, a marked line (or a file's outdated threads) opens the pane on it, unless the pane
+    /// lists every thread: the reader goes back to the list, which `enter` on the line would replace.
     fn focus_right(&mut self) -> Vec<Action> {
-        if self.focus == Focus::Review && (self.open_pane_here() || self.open_outdated_here()) {
+        let keeps_list = self.open.as_ref().is_some_and(super::Open::lists_every_thread);
+        if self.focus == Focus::Review && !keeps_list && (self.open_pane_here() || self.open_outdated_here()) {
             return vec![];
         }
         self.focus = match (self.focus, &self.open) {

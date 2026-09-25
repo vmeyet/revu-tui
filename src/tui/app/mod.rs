@@ -41,7 +41,7 @@ pub use feedback::Toast;
 pub use inbox::{Spot, progress_bar};
 pub use mouse::Areas;
 pub use order::QueueView;
-pub use pane::{Entry, EntryKind};
+pub use pane::{Entry, EntryKind, Pane};
 pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
 pub use pipeline::{Pipeline, Run};
 pub use prefetch::Ahead;

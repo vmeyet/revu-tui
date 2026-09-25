@@ -66,6 +66,7 @@ The arrows mean what they mean outside zen: `←` `→` move focus.
 A line on top says where you are for a moment: `‹  !1797 feat add a page  ·  3/12  ›`.
 The thread pane still opens with `enter` or `l` on a marked line, as a page of its own, and `esc`, `x` or `q` close it.
 It takes the diff's column, with no frame: one faded title line where the zen header sits, then its content from the diff's first column.
+`T` lists every thread there too; `enter` on one shows the diff at its line, and `l` or `T` bring the list back.
 The file tree, the pipeline and an AI answer open the same way.
 
 ## The queue
