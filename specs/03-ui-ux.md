@@ -419,7 +419,7 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
 - Contrast: every theme's `muted` on `base` clears 4.5:1; check with the `mix()` math, not by eye.
 - Kitty keyboard protocol is pushed when available (as slack-tui) so `S-Tab`, `ctrl-k`, `⌘k` and `⌘enter` arrive; `DISAMBIGUATE_ESCAPE_CODES` alone carries `⌘`.
 - Mouse: the wheel scrolls the pane under the pointer (three diff rows, one queue MR or note a notch) and leaves the focus where it is.
-  A left drag selects text in the pane it starts in and never leaves it: in the diff only the code, past the anchor, the numbers and the sign, and side by side only the half it started in; file, hunk and header rows give nothing.
+  A left drag selects text in the pane it starts in and never leaves it: in the diff only the code, past the anchor, the numbers and the sign, side by side only the half it started in; in the thread pane only note and draft bodies (`09-thread-pane.md`); file, hunk, header, status and author rows give nothing.
   The selected cells show reversed while the drag goes; on release the raw text goes to the clipboard and the status says `copied N lines`.
   Raw means what the drawing stands for: tabs and table pipes as written, the rows of a wrapped line joined back into one, the struck words of an inline pair left out, and a row taken to its edge brings the rest of its line, past a `…` cut too.
   The highlight stays until the next key or click, and the wheel drops it; a click without a drag, or a press outside the text, does nothing.

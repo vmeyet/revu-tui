@@ -1,5 +1,6 @@
 //! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
 use super::app::{App, Entry, EntryKind, Focus, Open};
+use super::drag::{self, TextRow};
 use super::field::Field;
 use super::images::Thumbs;
 use super::table::table_lines;
@@ -10,11 +11,11 @@ use crate::review::image::{self, Image};
 use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
-use ratatui::layout::Rect;
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
 /// The compose box grows with its text up to this many rows, then scrolls.
@@ -24,6 +25,11 @@ const COMPOSE_ROWS: usize = 8;
 /// the rows its thumbnail needs, or a line of its own when it cannot be drawn.
 enum Piece {
     Text(Line<'static>),
+    /// A line of a body, and the text as written that a drag copies.
+    Written {
+        line: Line<'static>,
+        raw: String,
+    },
     Picture(Image),
 }
 
@@ -39,6 +45,8 @@ enum Mark {
     Picture { url: String, size: ratatui::layout::Size },
     /// A picture shown as its `[image: …]` line, clickable to its web link.
     Link { text: String, url: String },
+    /// A row of a body line, and the bytes of the line as written under each of its cells.
+    Written { raw: String, cells: Vec<Range<usize>> },
 }
 
 /// The pane, and the pictures it made room for: the caller paints them last, above the fades.
@@ -84,12 +92,12 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
         lines.push((None, Piece::Text(Line::from(Span::styled(footer, Style::default().fg(theme.faded))))));
     }
     let mut rows: Vec<(bool, Line<'static>)> = vec![];
-    let mut marks: Vec<(usize, Mark)> = vec![];
-    for (entry, piece) in lines {
+    let mut marks: Vec<(usize, usize, Mark)> = vec![];
+    for (index, (entry, piece)) in lines.into_iter().enumerate() {
         let on = entry.is_some() && entry == current;
         for (line, mark) in lay_out(piece, thumbs, width, theme, &web) {
             if let Some(mark) = mark {
-                marks.push((rows.len(), mark));
+                marks.push((rows.len(), index, mark));
             }
             rows.push((on, line));
         }
@@ -112,7 +120,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
         .collect();
     f.render_widget(Paragraph::new(drawn), inner);
     let mut placements = vec![];
-    for (row, mark) in marks {
+    for (row, piece, mark) in marks {
         let Some(y) = row.checked_sub(scroll).filter(|y| *y < height) else { continue };
         let (x, y) = (inner.x + 1, inner.y + y as u16);
         match mark {
@@ -122,6 +130,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
             }
             Mark::Picture { .. } => {}
             Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text, url }),
+            Mark::Written { raw, cells } => {
+                app.text_rows.push(TextRow { at: Position::new(x, y), width: width as u16, line: piece, text: raw, cells });
+            }
         }
     }
     placements
@@ -132,6 +143,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
 fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl Fn(&str) -> String) -> Vec<(Line<'static>, Option<Mark>)> {
     let image = match piece {
         Piece::Text(line) => return wrap(line, width).into_iter().map(|l| (l, None)).collect(),
+        Piece::Written { line, raw } => return written_rows(line, &raw, width),
         Piece::Picture(image) => image,
     };
     let cols = u16::try_from(width).unwrap_or(u16::MAX);
@@ -147,6 +159,19 @@ fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl
     let text = super::ui::truncate(&fallback(&image), width);
     let mark = Mark::Link { text: text.clone(), url: web(&image.url) };
     vec![(Line::from(Span::styled(text, Style::default().fg(theme.link))), Some(mark))]
+}
+
+/// A body line wrapped to `width`, each row with the bytes of `raw` under its cells.
+fn written_rows(line: Line<'static>, raw: &str, width: usize) -> Vec<(Line<'static>, Option<Mark>)> {
+    let drawn: String = line.spans.iter().map(|span| span.content.as_ref()).collect();
+    let cells = drag::aligned(&drawn, raw);
+    let rows = wrap(line, width).into_iter().scan(0, |start, row| {
+        let end = (*start + row.width()).min(cells.len());
+        let mark = Mark::Written { raw: raw.to_owned(), cells: cells[*start..end].to_vec() };
+        *start = end;
+        Some((row, Some(mark)))
+    });
+    rows.collect()
 }
 
 /// How a picture reads where it cannot be drawn.
@@ -408,7 +433,7 @@ pub fn body_lines<'a>(body: &str, width: usize, theme: Theme) -> Vec<Line<'a>> {
     body_pieces(body, &[], width, theme)
         .into_iter()
         .map(|piece| match piece {
-            Piece::Text(line) => line,
+            Piece::Text(line) | Piece::Written { line, .. } => line,
             Piece::Picture(image) => Line::from(Span::styled(fallback(&image), Style::default().fg(theme.link))),
         })
         .collect()
@@ -442,11 +467,11 @@ fn body_pieces(body: &str, replaced: &[String], width: usize, theme: Theme) -> V
         }
         match fence {
             Fence::Code => {
-                lines.push(Piece::Text(Line::from(Span::styled(format!("  {raw}"), Style::default().fg(theme.code)))));
+                lines.push(written(Line::from(Span::styled(format!("  {raw}"), Style::default().fg(theme.code))), raw));
                 continue;
             }
             Fence::Suggestion => {
-                lines.push(Piece::Text(Line::from(Span::styled(format!("+ {raw}"), Style::default().fg(theme.success)))));
+                lines.push(written(Line::from(Span::styled(format!("+ {raw}"), Style::default().fg(theme.success))), raw));
                 continue;
             }
             Fence::Out => {}
@@ -457,7 +482,7 @@ fn body_pieces(body: &str, replaced: &[String], width: usize, theme: Theme) -> V
         }
         let run: Vec<&str> = std::iter::once(raw).chain(std::iter::from_fn(|| raws.next_if(|l| l.trim_start().starts_with('|')))).collect();
         match table_lines(&run, width, theme) {
-            Some(table) => lines.extend(table.into_iter().map(Piece::Text)),
+            Some(table) => lines.extend(table.into_iter().zip(&run).map(|(line, raw)| written(line, raw))),
             None => lines.extend(run.iter().flat_map(|raw| prose(raw, theme))),
         }
     }
@@ -467,8 +492,12 @@ fn body_pieces(body: &str, replaced: &[String], width: usize, theme: Theme) -> V
 /// A line outside fences and tables, each picture under it.
 fn prose(raw: &str, theme: Theme) -> Vec<Piece> {
     let (text, pictures) = image::split(raw);
-    let line = (pictures.is_empty() || !text.trim().is_empty()).then(|| Piece::Text(text_line(&text, theme)));
+    let line = (pictures.is_empty() || !text.trim().is_empty()).then(|| written(text_line(&text, theme), raw));
     line.into_iter().chain(pictures.into_iter().map(Piece::Picture)).collect()
+}
+
+fn written(line: Line<'static>, raw: &str) -> Piece {
+    Piece::Written { line, raw: raw.to_owned() }
 }
 
 /// One line of prose: bullets, quotes and code spans.
@@ -508,7 +537,7 @@ mod tests {
         pieces
             .into_iter()
             .map(|piece| match piece {
-                Piece::Text(line) => line,
+                Piece::Text(line) | Piece::Written { line, .. } => line,
                 Piece::Picture(image) => Line::from(fallback(&image)),
             })
             .collect()
@@ -521,7 +550,9 @@ mod tests {
         let shape: Vec<String> = pieces
             .iter()
             .map(|p| match p {
-                Piece::Text(line) => format!("text {}", line.spans.iter().map(|s| s.content.to_string()).collect::<String>()),
+                Piece::Text(line) | Piece::Written { line, .. } => {
+                    format!("text {}", line.spans.iter().map(|s| s.content.to_string()).collect::<String>())
+                }
                 Piece::Picture(image) => format!("picture {}", image.url),
             })
             .collect();

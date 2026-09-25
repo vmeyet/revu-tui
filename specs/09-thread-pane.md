@@ -92,6 +92,8 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - Resolved threads fold to their status line and first note; `enter` on one unfolds it.
 - A thin `─` rule in `border` separates threads.
 - The footer of the list says what else exists in the file: `3 more threads in this file · ]n`.
+- A mouse drag copies bodies as written, the markdown source: each drawn character finds its byte past the backticks, pipes, bullets and quote marks the drawing dropped.
+  Status, author and reaction lines and a suggestion's `-` lines copy nothing; a body row taken to its edge brings its whole source line.
 
 ### Every thread
 
