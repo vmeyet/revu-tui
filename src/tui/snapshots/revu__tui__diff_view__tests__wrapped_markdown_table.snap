@@ -1,0 +1,15 @@
+---
+source: src/tui/diff_view.rs
+expression: "drawn.map(|line| spans_text(&line.spans)).collect::<Vec<_>>().join(\"\\n\")"
+---
+      1    1  │ Plan │ Seats │ Notes       │
+      2    2  │──────┼───────┼─────────────│
+      3      -│ Team │ 10    │ shared      │
+              │      │       │ billing for │
+              │      │       │ each        │
+              │      │       │ workspace   │
+           3 +│ Team │ 12    │ shared      │
+              │      │       │ billing for │
+              │      │       │ all         │
+              │      │       │ workspaces  │
+      4    4  │ Solo │ 1     │ one seat    │
