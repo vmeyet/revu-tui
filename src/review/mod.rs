@@ -8,7 +8,7 @@ pub mod thread;
 pub mod tree;
 
 pub use draft::Draft;
-pub use place::{Conversation, Mark, Marker, Markers, Place};
+pub use place::{Conversation, Mark, Marker, Markers, Place, Spot};
 pub use thread::{Anchor, Side, Thread};
 
 use crate::diff::fold::{FileMeta, FoldState};
@@ -112,15 +112,15 @@ impl File {
         FileMeta { path: self.new_path.clone(), too_large: self.too_large, binary: self.binary }
     }
 
-    fn has_line(&self, anchor: &Anchor) -> bool {
+    fn line_at(&self, anchor: &Anchor) -> Option<&diff::Line> {
         let path = match anchor.side {
             Side::New => &self.new_path,
             Side::Old => &self.old_path,
         };
         if path != &anchor.path {
-            return false;
+            return None;
         }
-        self.hunks.iter().flat_map(|h| &h.lines).any(|l| match anchor.side {
+        self.hunks.iter().flat_map(|h| &h.lines).find(|l| match anchor.side {
             Side::New => l.new == Some(anchor.line),
             Side::Old => l.old == Some(anchor.line),
         })
@@ -378,7 +378,7 @@ impl Review {
         self.drafts
             .iter()
             .enumerate()
-            .filter(|(_, d)| d.anchor.as_ref().is_some_and(|a| !self.files.iter().any(|f| f.has_line(a))))
+            .filter(|(_, d)| d.anchor.as_ref().is_some_and(|a| !self.files.iter().any(|f| f.line_at(a).is_some())))
             .map(|(i, _)| i)
             .collect()
     }
@@ -456,7 +456,7 @@ fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
         .into_iter()
         .filter_map(Thread::from_discussion)
         .map(|t| {
-            let outdated = t.anchor.as_ref().is_some_and(|a| !files.iter().any(|f| f.has_line(a)));
+            let outdated = t.anchor.as_ref().is_some_and(|a| !files.iter().any(|f| f.line_at(a).is_some()));
             t.with_outdated(outdated)
         })
         .collect();

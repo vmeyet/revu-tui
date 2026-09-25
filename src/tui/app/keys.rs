@@ -229,6 +229,7 @@ impl App {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('D') => return self.toggle_side_by_side(),
             KeyCode::Char('t') => self.toggle_tree(),
+            KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('p') => return self.toggle_pipeline(),
             KeyCode::Char('W') => self.toggle_whitespace(),
             KeyCode::Char('+') if self.open_react_here() => {}

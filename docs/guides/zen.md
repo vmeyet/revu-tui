@@ -25,7 +25,7 @@ A line on top says which MR you are on, for example `3/12`.
 ## Leave
 
 `zz`, `esc`, `h` or `←` bring the queue back.
-The thread pane still opens with `enter` or `→` on a marked line; `q`, `x` or `esc` close it.
+The thread pane still opens with `enter` or `→` on a marked line, or with `T` on every thread; `q`, `x` or `esc` close it.
 
 ## Change the width
 

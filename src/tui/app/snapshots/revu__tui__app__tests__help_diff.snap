@@ -24,11 +24,11 @@ expression: "render(&mut app, 100, 30)"
 │                    │          i  the MR cover page                          │                    │
 │                    │          D  inline diff, or side by side               │      +1 −1  folded │
 │                    │          t  file tree                                  │                    │
+│                    │          T  every thread of the MR                     │                    │
 │                    │          p  pipeline                                   │                    │
 │                    │         zz  zen: the diff alone, quiet                 │                    │
-│                    │        w W  wrap long lines, hide whitespace changes   │                    │
 │                    │                                                        │                    │
-│                    ╰───── 1–22 of 56 · j k scroll · ? every key · esc close ╯                    │
+│                    ╰───── 1–22 of 57 · j k scroll · ? every key · esc close ╯                    │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

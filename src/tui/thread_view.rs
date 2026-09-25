@@ -1,4 +1,4 @@
-//! The right pane: every conversation of one place, notes in order, bodies as light markdown.
+//! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
 use super::app::{App, Entry, EntryKind, Focus, Open};
 use super::field::Field;
 use super::images::Thumbs;
@@ -7,7 +7,7 @@ use super::theme::Theme;
 use super::ui::{short_age, side_pane};
 use crate::forge::Note;
 use crate::review::image::{self, Image};
-use crate::review::{Conversation, Place, Review, Thread};
+use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -225,6 +225,7 @@ fn title(review: &Review, place: &Place, count: usize, here: bool) -> String {
         Place::Line { file, .. } => (name(*file), None),
         Place::Mr => ("on the MR".to_owned(), None),
         Place::Outdated { file } => (format!("{} · outdated", name(*file)), None),
+        Place::All => ("the whole MR".to_owned(), None),
     };
     let head = if count == 0 { head } else { format!("{head} · {threads}") };
     match (here, line) {
@@ -256,6 +257,10 @@ fn conversation_lines(
     let theme = look.theme;
     let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
     let mut lines = vec![];
+    if open.lists_every_thread() {
+        let first = entries.iter().find(|e| e.conversation == index).copied();
+        lines.extend(heading(&open.review, conversation, look).into_iter().map(|line| (first, Piece::Text(line))));
+    }
     if let Some(thread) = conversation.thread.as_deref().and_then(|id| open.review.thread(id)) {
         let shown = entries.iter().filter(|e| e.conversation == index && matches!(e.kind, EntryKind::Note(_))).count();
         lines.push((stop(EntryKind::Note(0)), Piece::Text(status(thread, shown, theme))));
@@ -279,6 +284,28 @@ fn conversation_lines(
         lines.extend(draft_lines(draft, &replaced, look).into_iter().map(|line| (entry, line)));
     }
     lines
+}
+
+/// Where a conversation hangs, over it in the list of every conversation: `path:line`, then the
+/// code of that line, faded, so the reader keeps the context.
+fn heading(review: &Review, conversation: &Conversation, look: Look) -> Vec<Line<'static>> {
+    let (place, code) = match review.spot(conversation) {
+        Spot::Mr => ("on the MR".to_owned(), None),
+        Spot::Outdated(anchor) => (format!("{} · outdated", line_name(anchor)), None),
+        Spot::Line(anchor) => (line_name(anchor), review.line_text(anchor)),
+    };
+    let place = Line::from(Span::styled(place, Style::default().fg(look.theme.muted)));
+    let code =
+        code.map(|text| Line::from(Span::styled(super::ui::truncate(text.trim(), look.width), Style::default().fg(look.theme.faded))));
+    std::iter::once(place).chain(code).collect()
+}
+
+/// `src/pay/charge.rs:57`, `src/pay/charge.rs:-13` for the old side.
+fn line_name(anchor: &Anchor) -> String {
+    match anchor.side {
+        Side::New => format!("{}:{}", anchor.path, anchor.line),
+        Side::Old => format!("{}:-{}", anchor.path, anchor.line),
+    }
 }
 
 fn status(thread: &Thread, shown: usize, theme: Theme) -> Line<'static> {

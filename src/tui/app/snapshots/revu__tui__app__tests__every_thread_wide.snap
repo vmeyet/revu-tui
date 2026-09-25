@@ -1,0 +1,34 @@
+---
+source: src/tui/app/tests.rs
+expression: wide
+---
+╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ the whole MR · 3 threads ────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││  omar · 2h · +5 −3 · 2 files · ✓ success         ││ ▎on the MR                                                   │
+│ ▎ feat charge cards at checkout          ││   1 of 2 approvals · 3 threads, 1 unresolved     ││ ▎· comment                                                   │
+│ ▎ omar · !42 · +412 −38               2h ││  ◆ 1 on the MR  enter opens                      ││ ▎lea · 2h                                                    │
+│                                          ││                                                  ││ ▎Looks good overall, one question inline.                    │
+│   ── MINE · 1 ────────────────────────── ││ ▎▾ src/pay/charge.rs      +4 −2  ✓1 · 1 outdated ││  ─────────────────────────────────────────────────────────── │
+│   fix flaky cache test                 D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge      ││  src/pay/charge.rs:57 · outdated                             │
+│   nina · !41 · +3 −1                  4h ││      12   12  pub async fn charge(card: &Card, … ││  ◆ outdated                                                  │
+│                                          ││  ✓   13      -    let client = Client::new();    ││  lea · 1h                                                    │
+│   ── WATCHING · 1 ────────────────────── ││           13 +    let client = Client::with_key… ││  Should this retry on timeout?                               │
+│   infra: new runner                    ⠋ ││           14 +    let attempt = Attempt::first(… ││  ─────────────────────────────────────────────────────────── │
+│   omar · !35 · +0 −0                  2d ││      14   15      let response = client.charge(… ││  src/pay/charge.rs:-13                                       │
+│                                          ││      15   16      audit::record(&response);      ││  let client = Client::new();                                 │
+│   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││  ✓ resolved                                                  │
+│                                          ││      40   41  fn idempotency_key(card: &Card) -… ││  you · 2h                                                    │
+│                                          ││      41      -    Key::from(card.number())       ││  Why drop the plain client?                                  │
+│                                          ││           42 +    Key::from((card.number(), car… ││                                                              │
+│                                          ││           43 +    // hunk two, line 43 is new    ││                                                              │
+│                                          ││      42   44  }                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved                                                                                                                        ? help
