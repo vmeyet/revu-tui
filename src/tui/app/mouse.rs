@@ -1,5 +1,6 @@
 //! The mouse wheel scrolls the pane under the pointer, as its arrow keys would, and leaves the focus where it is.
 //! A drag with the left button selects the text of the pane it starts in and copies it on release.
+//! A click on a link opens it: the terminal hands revu the clicks, so it no longer opens links itself.
 use super::{Action, App, Focus};
 use crate::tui::drag::Drag;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
@@ -42,7 +43,7 @@ impl App {
                 self.drag = self.drag.map(|drag| drag.moved_to(&self.text_rows, at));
                 vec![]
             }
-            MouseEventKind::Up(MouseButton::Left) => self.copy_drag(),
+            MouseEventKind::Up(MouseButton::Left) => self.release(at),
             _ => vec![],
         }
     }
@@ -53,6 +54,26 @@ impl App {
         self.repeat = None;
         let times = if pane == Focus::Review { DIFF_ROWS } else { 1 };
         (0..times).flat_map(|_| self.scroll(pane, KeyEvent::from(arrow))).collect()
+    }
+
+    /// A click on a link opens it; any other release ends the drag.
+    fn release(&mut self, at: Position) -> Vec<Action> {
+        let clicked = self.drag.is_none_or(Drag::is_click);
+        match self.link_at(at).filter(|_| clicked) {
+            Some(url) => {
+                self.drag = None;
+                vec![Action::OpenUrl(url)]
+            }
+            None => self.copy_drag(),
+        }
+    }
+
+    fn link_at(&self, at: Position) -> Option<String> {
+        let covers = |link: &&crate::tui::ui::Link| {
+            let width = u16::try_from(link.text.chars().count()).unwrap_or(u16::MAX);
+            link.y == at.y && (link.x..link.x.saturating_add(width)).contains(&at.x)
+        };
+        self.links.iter().find(covers).map(|link| link.url.clone())
     }
 
     /// A release ends the drag: the text goes to the clipboard, the highlight stays until the next key or click.
