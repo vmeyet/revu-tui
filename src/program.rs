@@ -72,14 +72,14 @@ pub mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    /// An executable script in a temp dir, and the command that runs it.
+    /// A script in a temp dir, and the command that runs it.
     pub fn script(body: &str) -> (tempfile::TempDir, String) {
-        use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("program.sh");
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let command = shell_words::quote(&path.to_string_lossy()).into_owned();
+        std::fs::write(&path, format!("{body}\n")).unwrap();
+        // Handing the file to `sh` rather than exec'ing it: on Linux a test running beside this one can fork while
+        // the write is still open, and exec then fails with "Text file busy".
+        let command = format!("/bin/sh {}", shell_words::quote(&path.to_string_lossy()));
         (dir, command)
     }
 
