@@ -19,8 +19,12 @@ impl App {
         vec![]
     }
 
-    /// Out of zen: the queue and the frames come back, and what arrived meanwhile is sent.
+    /// Out of zen: the queue and the frames come back, its cursor on the open MR, and what arrived
+    /// meanwhile is sent.
     pub(super) fn leave_zen(&mut self) -> Vec<Action> {
+        if let Some(key) = self.open.as_ref().map(|o| o.key.clone()) {
+            self.select_in_queue(&key);
+        }
         self.zen = false;
         self.zen_switch = None;
         std::mem::take(&mut self.quiet_notices)

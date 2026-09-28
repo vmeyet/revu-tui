@@ -24,6 +24,8 @@ pub mod share;
 /// `revu show`.
 pub mod show;
 mod target;
+/// `revu tui` and `revu <ref>`.
+pub mod tui;
 /// `revu update`.
 pub mod update;
 /// `revu usage`.

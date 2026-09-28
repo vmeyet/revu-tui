@@ -18,6 +18,9 @@ pub struct Cli {
     /// What to run; the TUI when omitted.
     #[command(subcommand)]
     pub command: Option<Command>,
+    /// Without a command: the TUI, open on this MR.
+    #[command(flatten)]
+    pub tui: TuiArgs,
 }
 
 /// Every subcommand `revu` knows.
@@ -53,8 +56,8 @@ pub enum Command {
     Share(ShareArgs),
     /// The AI providers: store a key, forget it, see which one is on.
     Ai(AiArgs),
-    /// Interactive review client.
-    Tui,
+    /// Interactive review client, on the queue or straight on one MR in zen.
+    Tui(TuiArgs),
     /// Generate shell completions.
     Completions {
         /// The shell to write the script for.
@@ -118,6 +121,13 @@ pub struct ListArgs {
     /// Print the last fetched queue without touching the network.
     #[arg(long)]
     pub cached: bool,
+}
+
+/// What the TUI opens on.
+#[derive(Args, Debug)]
+pub struct TuiArgs {
+    /// Open the TUI on this MR, in zen: `42`, `group/project!42` or an MR URL (quote `'!42'` in your shell).
+    pub mr: Option<String>,
 }
 
 /// The merge request a read command works on.
@@ -247,4 +257,37 @@ pub struct AiLoginArgs {
     /// Reuse the TypeSafe key slack-tui keeps in the keychain.
     #[arg(long, conflicts_with = "token")]
     pub from_slack_tui: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(std::iter::once("revu").chain(args.iter().copied())).unwrap()
+    }
+
+    #[test]
+    fn a_bare_reference_opens_the_tui_on_it() {
+        let cli = parse(&["42"]);
+        assert!(cli.command.is_none());
+        assert_eq!(cli.tui.mr.as_deref(), Some("42"));
+        assert_eq!(parse(&["acme/widgets!42"]).tui.mr.as_deref(), Some("acme/widgets!42"));
+    }
+
+    #[test]
+    fn tui_takes_the_reference_too() {
+        assert!(matches!(parse(&["tui", "!42"]).command, Some(Command::Tui(TuiArgs { mr: Some(mr) })) if mr == "!42"));
+        assert!(matches!(parse(&["tui"]).command, Some(Command::Tui(TuiArgs { mr: None }))));
+    }
+
+    #[test]
+    fn subcommands_win_over_the_reference() {
+        let cli = parse(&["list"]);
+        assert!(matches!(cli.command, Some(Command::List(_))));
+        assert!(cli.tui.mr.is_none());
+        assert!(matches!(parse(&["show", "42"]).command, Some(Command::Show(RefArgs { mr: Some(mr) })) if mr == "42"));
+        assert!(parse(&[]).tui.mr.is_none());
+    }
 }

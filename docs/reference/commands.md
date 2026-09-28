@@ -1,7 +1,8 @@
 <!-- Written by `revu docs` from the code. Edit the code, then run `revu docs`. -->
 # Commands
 
-`revu` with no command opens the review screen.
+`revu` with no command opens the review screen; `revu 42` opens it on MR 42 of the checkout's project, in zen.
+It takes every form `revu show` takes; quote `'!42'`, which bash and zsh read as history.
 Every command also takes the flags below.
 
 | Flag | Means |
@@ -177,7 +178,11 @@ Ask Claude about a merge request; the answer streams to stdout.
 
 ## `revu tui`
 
-Interactive review client.
+Interactive review client, on the queue or straight on one MR in zen.
+
+| Argument | Means |
+|---|---|
+| `MR` | Open the TUI on this MR, in zen: `42`, `group/project!42` or an MR URL (quote `'!42'` in your shell) |
 
 ## `revu completions`
 

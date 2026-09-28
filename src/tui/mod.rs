@@ -104,8 +104,8 @@ struct SavedAnswer {
     usage: Usage,
 }
 
-/// Runs the review TUI until the user quits, restoring the terminal on the way out.
-pub async fn run(ctx: Ctx) -> Result<()> {
+/// Runs the review TUI until the user quits, restoring the terminal on the way out; on `start` in zen when given.
+pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
     let theme = match ctx.config.tui.theme.as_deref() {
         Some(name) => theme::Theme::named(name)
             .ok_or_else(|| anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", ")))?,
@@ -153,19 +153,29 @@ pub async fn run(ctx: Ctx) -> Result<()> {
         usage: ctx.config.usage.enabled,
     };
     let mut app = App::new(settings);
+    let first = match start {
+        Some(key) => app.start_on(key),
+        None => app.start(),
+    };
     let (mut terminal, screen) = screen::Screen::enter();
-    let outcome = event_loop(&mut terminal, &screen, &mut app, &backend).await;
+    let outcome = event_loop(&mut terminal, &screen, &mut app, &backend, first).await;
     screen.leave();
     outcome
 }
 
-async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, app: &mut App, backend: &Backend) -> Result<()> {
+async fn event_loop(
+    terminal: &mut ratatui::DefaultTerminal,
+    screen: &screen::Screen,
+    app: &mut App,
+    backend: &Backend,
+    first: Vec<Action>,
+) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Incoming>();
     let mut keys = Keys::new();
     let mut shown = Shown::default();
     let mut ticked = Instant::now();
     let mut flushed = Instant::now();
-    for action in app.start() {
+    for action in first {
         spawn(action, backend, tx.clone());
     }
     while !app.should_quit {

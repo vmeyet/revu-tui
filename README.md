@@ -22,6 +22,7 @@ You need Rust 1.90 or newer.
 ```sh
 cd ~/code/widgets   # any checkout of a GitLab or GitHub project
 revu
+revu 42             # straight into MR 42 of this project, in zen
 ```
 
 | You see | You do |

@@ -113,3 +113,24 @@ fn ai_ask_says_claude_is_off_before_touching_the_network() {
 fn merge_help_mentions_yes() {
     revu().args(["merge", "--help"]).assert().success().stdout(predicate::str::contains("--yes"));
 }
+
+#[test]
+fn a_bare_number_outside_a_checkout_fails_before_the_tui() {
+    revu()
+        .args(["--host", "localhost:1", "42"])
+        .current_dir(std::env::temp_dir())
+        .env("GITLAB_TOKEN", "glpat-xxxx")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("group/project!42"));
+}
+
+#[test]
+fn tui_rejects_a_reference_before_the_screen_changes() {
+    revu()
+        .args(["--host", "localhost:1", "tui", "nonsense"])
+        .env("GITLAB_TOKEN", "glpat-xxxx")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("group/project!42"));
+}

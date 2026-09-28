@@ -432,9 +432,9 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
 
 ## DX for the person running it
 
-- `revu` with no subcommand opens the TUI.
+- `revu` with no subcommand opens the TUI; `revu <ref>` (or `revu tui <ref>`) opens it on that MR, in zen, through the same resolver as `revu show`, with a bare `42` meaning the checkout's project. A reference that does not resolve fails on the shell, before the screen changes. The MR opens at once and the queue loads behind it; `esc` leaves zen onto the normal layout, the queue's cursor on that MR.
 - `revu list` and `revu show <ref>` print aligned tables, `--json` for scripts; `revu diff <ref>` prints the coloured diff to a pager (`$PAGER`, default `less -R`).
 - `revu comment <ref> <path>:<line> <text>` and `revu approve <ref>` for scripts and other agents.
-- `<ref>` accepts `group/project!42`, `!42` (current repo from `git remote`), an MR URL, or nothing (current branch).
+- `<ref>` accepts `group/project!42`, `42`, `!42` or `#42` (current repo from `git remote`; quote `'!42'`, bash and zsh expand `!`), an MR URL, or nothing (current branch).
 - Error lines are `✗ message` plus dimmed causes, same as slack-tui.
 - `revu --version` prints the crate version and the commit; `revu update` rebuilds from the repo.
