@@ -143,6 +143,8 @@ impl App {
                 if self.open.is_some() {
                     self.offline = self.offline.or(Some(self.now));
                 } else {
+                    let held = self.leave_zen();
+                    self.composed.extend(held);
                     self.focus = super::Focus::Queue;
                     self.warn(format!("{message} · enter to retry"));
                 }

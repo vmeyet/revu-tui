@@ -3126,6 +3126,31 @@ fn esc_and_h_leave_zen() {
 }
 
 #[test]
+fn starting_on_an_mr_opens_it_in_zen_with_the_queue_loading_behind() {
+    let target = with_queue().zen_order()[1].clone();
+    let mut app = app();
+    assert_eq!(app.start_on(target.clone()), vec![Action::LoadQueue { scope: None, from_cache: true }, Action::Open(target.clone())]);
+    assert!(app.zen);
+    assert_eq!(app.focus, Focus::Review);
+    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+    app.apply(Incoming::Review { key: target.clone(), review: Box::new(review()), cached: None });
+    assert_eq!(app.open.as_ref().map(|o| o.key.clone()), Some(target.clone()), "the queue arriving leaves the MR open");
+    app.handle_key(code(KeyCode::Esc));
+    assert!(!app.zen);
+    assert_eq!(app.focus, Focus::Review, "esc leaves zen onto the diff");
+    assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(target), "the queue shows it selected, as if opened from it");
+}
+
+#[test]
+fn starting_on_an_mr_that_fails_to_open_leaves_zen_for_the_queue() {
+    let mut app = app();
+    app.start_on(mr_key());
+    app.apply(Incoming::Failed { what: Failure::Open, message: "404 Not Found".into() });
+    assert!(!app.zen, "zen hides the queue, the only place left to go");
+    assert_eq!(app.focus, Focus::Queue);
+}
+
+#[test]
 fn notifications_wait_for_zen_to_end() {
     let mut app = with_review();
     let full = sections();

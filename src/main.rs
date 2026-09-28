@@ -44,7 +44,8 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Publish(args)) => commands::publish::run(&ctx, args).await,
         Some(Command::Share(args)) => commands::share::run(&ctx, args).await,
         Some(Command::Ai(args)) => commands::ai::ask(&ctx, args).await,
-        Some(Command::Tui) | None => revu::tui::run(ctx).await,
+        Some(Command::Tui(args)) => commands::tui::run(ctx, args).await,
+        None => commands::tui::run(ctx, cli.tui).await,
         Some(
             Command::Login(_)
             | Command::Logout { .. }

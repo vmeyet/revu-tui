@@ -35,6 +35,10 @@ The left pane is the [queue](concepts.md#queue): the MRs of this repo, in [secti
 Move with `j` and `k`.
 Press `enter` on an MR to open its diff.
 
+To go straight to one MR, give its number: `revu 42` opens MR 42 of this repo in [zen](guides/zen.md), and `esc` brings the queue back.
+`revu acme/widgets!42` and an MR URL work from anywhere.
+Quote `'!42'` if you write it that way: bash and zsh read `!` as history.
+
 ## 4. Read the diff
 
 | Key | Does |

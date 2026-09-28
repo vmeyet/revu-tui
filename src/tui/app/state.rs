@@ -298,6 +298,13 @@ impl App {
         vec![Action::LoadQueue { scope: self.scope(), from_cache: true }]
     }
 
+    /// `revu 42`: the MR opens in zen at once, and the queue loads behind it.
+    pub fn start_on(&mut self, key: MrKey) -> Vec<Action> {
+        let opening = self.open_key(key);
+        self.zen = true;
+        [self.start(), opening].concat()
+    }
+
     /// The project the queue is limited to, `None` for every project.
     pub fn scope(&self) -> Option<String> {
         self.project.clone().filter(|_| !self.everywhere)

@@ -417,7 +417,8 @@ fn commands_page() -> String {
         GENERATED.to_owned(),
         "# Commands".to_owned(),
         String::new(),
-        "`revu` with no command opens the review screen.".to_owned(),
+        "`revu` with no command opens the review screen; `revu 42` opens it on MR 42 of the checkout's project, in zen.".to_owned(),
+        "It takes every form `revu show` takes; quote `'!42'`, which bash and zsh read as history.".to_owned(),
         "Every command also takes the flags below.".to_owned(),
         String::new(),
     ];

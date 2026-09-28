@@ -1,5 +1,5 @@
-//! How a merge request is named on the command line: `group/project!42`, `owner/repo#42`, `!42` or
-//! `#42`, an MR or PR URL, or nothing.
+//! How a merge request is named on the command line: `group/project!42`, `owner/repo#42`, `42`, `!42`
+//! or `#42`, an MR or PR URL, or nothing.
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
@@ -35,17 +35,21 @@ impl Target {
     }
 }
 
-/// `local_project` is only asked for the bare `!42` form.
+/// `local_project` is only asked for the bare `42`, `!42` and `#42` forms.
 pub fn parse(text: &str, local_project: impl FnOnce() -> Option<String>) -> Result<MrRef> {
     let text = text.trim();
     if let Some(url) = text.strip_prefix("https://").or_else(|| text.strip_prefix("http://")) {
         return parse_url(url).with_context(|| format!("not a merge request URL: {text}"));
     }
-    let (project, iid) =
-        text.rsplit_once(['!', '#']).with_context(|| format!("not an MR reference: {text} (try group/project!42 or owner/repo#42)"))?;
+    let (project, iid) = text
+        .rsplit_once(['!', '#'])
+        .or_else(|| text.parse::<u64>().is_ok().then_some(("", text)))
+        .with_context(|| format!("not an MR reference: {text} (try group/project!42 or owner/repo#42)"))?;
     let iid: u64 = iid.parse().with_context(|| format!("not an MR number: {iid}"))?;
     let project = match project {
-        "" => ProjectRef::Path(local_project().context("`!42` and `#42` need a checkout with an origin remote")?),
+        "" => ProjectRef::Path(
+            local_project().context("`42`, `!42` and `#42` need a checkout with an origin remote: name the MR as group/project!42")?,
+        ),
         digits if digits.bytes().all(|b| b.is_ascii_digit()) => ProjectRef::Id(digits.parse()?),
         path => ProjectRef::Path(path.to_owned()),
     };
@@ -146,6 +150,11 @@ mod tests {
             MrRef { project: ProjectRef::Path("acme/widgets".into()), iid: 42 }
         );
         assert!(parse("!42", no_local).unwrap_err().to_string().contains("origin remote"));
+        assert!(parse("42", no_local).unwrap_err().to_string().contains("group/project!42"));
+        assert_eq!(
+            parse("42", || Some("acme/widgets".into())).unwrap(),
+            MrRef { project: ProjectRef::Path("acme/widgets".into()), iid: 42 }
+        );
         assert_eq!(
             parse("#42", || Some("acme/widgets".into())).unwrap(),
             MrRef { project: ProjectRef::Path("acme/widgets".into()), iid: 42 }

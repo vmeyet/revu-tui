@@ -2,6 +2,9 @@
 
 `zz` shows the diff alone, with nothing around it.
 
+`revu 42` starts there: MR 42 of the checkout's project opens in zen while the queue loads behind it.
+It takes every form `revu show` takes, `acme/widgets!42` or an MR URL too; quote `'!42'`, which bash and zsh read as history.
+
 ## What changes
 
 | Around the diff | In zen |
