@@ -96,12 +96,35 @@ struct Backend {
 /// What opening an MR fetches: the MR, its diffs, its discussions and my drafts.
 type Fetched = (Mr, Vec<DiffFile>, Vec<Discussion>, Vec<HeldDraft>);
 
-/// An answer kept in the cache: asking the same thing about the same diff paints it at once.
+/// An answer kept in the cache: asking the same thing about the same diff paints it at once, and
+/// `a h` lists it. Answers kept before the label was saved have none and are not listed.
 #[derive(Serialize, Deserialize)]
 struct SavedAnswer {
     text: String,
     model: String,
     usage: Usage,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    asked_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    head: Option<String>,
+    #[serde(default)]
+    request: Option<Ask>,
+}
+
+impl SavedAnswer {
+    fn past(self) -> Option<app::PastAnswer> {
+        let outcome = Outcome { stop: Stop::Done, usage: self.usage, model: self.model };
+        Some(app::PastAnswer {
+            label: self.label?,
+            asked_at: self.asked_at?,
+            head: self.head?,
+            request: self.request?,
+            text: self.text,
+            outcome,
+        })
+    }
 }
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out; on `start` in zen when given.
@@ -480,7 +503,12 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
                 let outcome = backend.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
-            Action::Ask { key, id, request, fresh } => backend.ask(&key, id, &request, fresh, &send).await,
+            Action::Ask { key, id, request, fresh, label, head } => backend.ask(&key, id, &request, fresh, &label, &head, &send).await,
+            Action::LoadAnswers(key) => {
+                let wanted = key.clone();
+                let answers = backend.off(move |b| b.past_answers(&wanted)).await.unwrap_or_default();
+                send(Incoming::PastAnswers { key, answers });
+            }
             Action::Triage(mr) => {
                 send(backend.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
             }
@@ -620,7 +648,18 @@ impl Backend {
 
     /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
     /// Only a finished answer is kept, so a cut or refused one is asked again next time.
-    async fn ask(&self, key: &MrKey, id: u64, request: &Ask, fresh: bool, send: &impl Fn(Incoming)) {
+    /// The answers kept for `key` that say what they were, newest first.
+    fn past_answers(&self, key: &MrKey) -> Vec<app::PastAnswer> {
+        let cache = self.cache_of(key);
+        let (dir, prefix) = keys::answers(key);
+        let mut answers: Vec<app::PastAnswer> =
+            cache.keys_in(&dir, prefix).iter().filter_map(|entry| cache.read::<SavedAnswer>(entry)?.past()).collect();
+        answers.sort_by_key(|a| std::cmp::Reverse(a.asked_at));
+        answers
+    }
+
+    #[allow(clippy::too_many_arguments, reason = "the label and head only go into what is kept")]
+    async fn ask(&self, key: &MrKey, id: u64, request: &Ask, fresh: bool, label: &str, head: &str, send: &impl Fn(Incoming)) {
         let part = |part: Part| Incoming::Answer { key: key.clone(), id, part };
         let Some(claude) = &self.claude else {
             send(part(Part::Failed("Claude is off".into())));
@@ -650,7 +689,16 @@ impl Backend {
         match streamed {
             Ok(outcome) => {
                 if outcome.stop == Stop::Done {
-                    let (wanted, saved) = (key.clone(), SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage });
+                    let saved = SavedAnswer {
+                        text,
+                        model: outcome.model.clone(),
+                        usage: outcome.usage,
+                        label: Some(label.to_owned()),
+                        asked_at: Some(Utc::now()),
+                        head: Some(head.to_owned()),
+                        request: Some(request.clone()),
+                    };
+                    let wanted = key.clone();
                     let _ = self.off(move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
                 }
                 send(part(Part::Done { outcome, cached_text: None }));
@@ -1059,6 +1107,28 @@ mod tests {
         assert!(shown.changed(&ratatui::buffer::Buffer::empty(area)));
     }
 
+    #[test]
+    fn kept_answers_list_newest_first_and_skip_those_saved_without_a_label() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        let mr = key();
+        let saved = |label: Option<&str>, hours: i64| SavedAnswer {
+            text: "text".into(),
+            model: "claude-opus-5".into(),
+            usage: Usage::default(),
+            label: label.map(str::to_owned),
+            asked_at: Some(Utc::now() - chrono::Duration::hours(hours)),
+            head: Some("b2".into()),
+            request: Some(Ask { system: vec![], turns: vec![] }),
+        };
+        let cache = backend.cache_of(&mr);
+        cache.write(&keys::answer(&mr, "old"), &saved(Some("explain · a.rs"), 5)).unwrap();
+        cache.write(&keys::answer(&mr, "new"), &saved(Some("summary"), 1)).unwrap();
+        cache.write(&keys::answer(&mr, "before"), &serde_json::json!({"text": "t", "model": "m", "usage": Usage::default()})).unwrap();
+        let labels: Vec<String> = backend.past_answers(&mr).into_iter().map(|a| a.label).collect();
+        assert_eq!(labels, ["summary", "explain · a.rs"]);
+    }
+
     #[tokio::test]
     async fn off_runs_the_work_with_the_backend_and_hands_back_its_result() {
         let dir = tempfile::tempdir().unwrap();
@@ -1203,9 +1273,9 @@ mod tests {
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
         let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
-        backend.ask(&key(), 1, &request, false, &listen).await;
-        backend.ask(&key(), 2, &request, false, &listen).await;
-        backend.ask(&key(), 3, &request, true, &listen).await;
+        backend.ask(&key(), 1, &request, false, "explain", "b2", &listen).await;
+        backend.ask(&key(), 2, &request, false, "explain", "b2", &listen).await;
+        backend.ask(&key(), 3, &request, true, "explain", "b2", &listen).await;
         let heard = heard.into_inner().unwrap();
         let cached: Vec<_> = heard
             .iter()

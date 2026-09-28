@@ -58,6 +58,14 @@ impl Cache {
         self.dir.join(key).is_file()
     }
 
+    /// The entries of folder `dir` whose names start with `prefix`, as keys `read` takes; none
+    /// when the folder is not there.
+    pub fn keys_in(&self, dir: &str, prefix: &str) -> Vec<String> {
+        let Ok(listed) = std::fs::read_dir(self.dir.join(dir)) else { return vec![] };
+        let names = listed.filter_map(|entry| entry.ok()?.file_name().into_string().ok());
+        names.filter(|name| name.starts_with(prefix)).map(|name| format!("{dir}/{name}")).collect()
+    }
+
     /// A missing or unreadable file is a miss; an unreadable one is removed so it cannot fail again.
     pub fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let path = self.dir.join(key);
@@ -210,6 +218,11 @@ pub mod keys {
         format!("{}/ai/answer.{}.json", dir(key), sha1_smol::Sha1::from(request.as_bytes()).digest())
     }
 
+    /// Where every answer about an MR lies, and what their names start with.
+    pub fn answers(key: &MrKey) -> (String, &'static str) {
+        (format!("{}/ai", dir(key)), "answer.")
+    }
+
     /// What Jev read in an MR at one head commit.
     pub fn reading(key: &MrKey, head: &str) -> String {
         format!("{}/ai/reading.{head}.json", dir(key))
@@ -311,6 +324,19 @@ mod tests {
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         assert_eq!(names, vec!["state.json"]);
+    }
+
+    #[test]
+    fn keys_in_lists_one_folders_entries_by_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path());
+        cache.write("mr/a/1/ai/answer.1.json", &1).unwrap();
+        cache.write("mr/a/1/ai/answer.2.json", &2).unwrap();
+        cache.write("mr/a/1/ai/verdict.json", &3).unwrap();
+        let mut found = cache.keys_in("mr/a/1/ai", "answer.");
+        found.sort();
+        assert_eq!(found, ["mr/a/1/ai/answer.1.json", "mr/a/1/ai/answer.2.json"]);
+        assert!(cache.keys_in("mr/a/2/ai", "answer.").is_empty());
     }
 
     #[test]

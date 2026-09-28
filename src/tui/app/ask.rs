@@ -4,6 +4,7 @@ use crate::ai::anthropic::{self, Ask, Outcome, Role, Turn};
 use crate::ai::context::{self, Prompt, Scope};
 use crate::forge::Position;
 use crate::review::Row;
+use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 const HALF_PAGE: usize = 10;
@@ -24,6 +25,18 @@ pub struct Answer {
     pub scroll: usize,
     /// Where `c` puts a draft made of the answer: the lines asked about, or the thread.
     pub target: Target,
+}
+
+/// An answer Claude gave before on this MR, kept in the cache.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PastAnswer {
+    pub label: String,
+    pub asked_at: DateTime<Utc>,
+    /// The commit asked about: once the MR moved on, the answer reads an older push.
+    pub head: String,
+    pub request: Ask,
+    pub text: String,
+    pub outcome: Outcome,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,6 +71,9 @@ pub enum Part {
 impl App {
     /// `a` then a letter: the question, about the hunk, file, thread or lines under the cursor.
     pub(super) fn ask_key(&mut self, c: char) -> Vec<Action> {
+        if c == 'h' {
+            return self.open.as_ref().map(|o| vec![Action::LoadAnswers(o.key.clone())]).unwrap_or_default();
+        }
         if self.ask_model.is_none() {
             self.warn("Claude is off · set [ai.anthropic] enabled = true and run revu ai login anthropic");
             return vec![];
@@ -140,10 +156,41 @@ impl App {
             scroll: 0,
             target,
         };
-        let key = open.key.clone();
+        let (key, head) = (open.key.clone(), open.review.mr.refs.head.clone());
+        self.open = Some(Open { answer: Some(answer.clone()), pane: None, tree: None, pipeline: None, ..open.clone() });
+        self.focus = Focus::Side;
+        vec![Action::Ask { key, id: self.next_answer, request: Box::new(request), fresh, label: answer.label, head }]
+    }
+
+    /// The answers kept for the open MR, listed in the search box to pick one; a word when none is.
+    pub(super) fn apply_past_answers(&mut self, key: &MrKey, answers: Vec<PastAnswer>) {
+        if self.open.as_ref().is_none_or(|o| o.key != *key) {
+            return;
+        }
+        if answers.is_empty() {
+            self.toast("no answer kept for this MR yet · a then e, r, s, t, c or a asks");
+            return;
+        }
+        self.past_answers = answers;
+        self.open_palette(crate::tui::palette::Mode::Answers);
+    }
+
+    /// A kept answer back in the pane, as it was, ready for a follow-up.
+    pub(super) fn show_past_answer(&mut self, index: usize) {
+        let (Some(open), Some(past)) = (&self.open, self.past_answers.get(index)) else { return };
+        self.next_answer += 1;
+        let answer = Answer {
+            id: self.next_answer,
+            label: past.label.clone(),
+            request: past.request.clone(),
+            text: past.text.clone(),
+            state: AnswerState::Done(past.outcome.clone()),
+            cached: true,
+            scroll: 0,
+            target: Target::Nowhere,
+        };
         self.open = Some(Open { answer: Some(answer), pane: None, tree: None, pipeline: None, ..open.clone() });
         self.focus = Focus::Side;
-        vec![Action::Ask { key, id: self.next_answer, request: Box::new(request), fresh }]
     }
 
     pub(super) fn apply_answer(&mut self, key: &MrKey, id: u64, part: Part) {

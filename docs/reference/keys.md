@@ -90,6 +90,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 |---|---|
 | `a` `e` `r` `s` | explain, risks, summary |
 | `a` `t` `c` `a` | thread, comment, anything |
+| `a` `h` | answers kept for this MR |
 | `c` `⏎` `R` `y` | answer: draft, follow up, again, copy |
 
 ## Search & app

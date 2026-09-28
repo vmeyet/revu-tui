@@ -107,6 +107,8 @@ pub struct App {
     pub react: Option<super::Pick>,
     /// What `/` looks for in the diff, while it is typed and after, until `esc`.
     pub search: Option<super::Search>,
+    /// The answers `a h` found kept for the open MR, which the search box lists.
+    pub past_answers: Vec<super::PastAnswer>,
     pub ascii: bool,
     pub notify: bool,
     pub hosts: crate::forge::Hosts,
@@ -237,6 +239,7 @@ impl App {
             confirm: None,
             react: None,
             search: None,
+            past_answers: vec![],
             ascii: settings.ascii,
             notify: settings.notify,
             hosts: settings.hosts,
