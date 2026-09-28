@@ -68,7 +68,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
     f.render_widget(block(&title), area);
     let inner = if app.input.is_some() {
         let height = if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) };
-        let [list, box_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(height)]).areas(inner);
+        let [list, box_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(inner);
         draw_compose(f, theme, &app.input_label(), &app.buffer, box_area);
         list
     } else {
