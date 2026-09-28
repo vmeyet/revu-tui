@@ -108,6 +108,9 @@ flowchart LR
 | Config | `~/.config/revu/config.toml` |
 | Cache | `~/Library/Caches/revu/` |
 
+The cache keeps each MR's diff, threads and Claude's answers.
+Once a day revu drops what it keeps for merged or closed MRs, and for MRs you have not opened in 30 days.
+
 ## See also
 
 - [Start here](start.md), to try it.

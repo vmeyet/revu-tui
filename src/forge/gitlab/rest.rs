@@ -14,6 +14,12 @@ struct Project {
 }
 
 #[derive(Deserialize)]
+struct MrState {
+    iid: u64,
+    state: String,
+}
+
+#[derive(Deserialize)]
 struct MrIid {
     iid: u64,
 }
@@ -183,6 +189,17 @@ impl Client {
         let paths: Vec<String> = found.iter().map(|e| format!("{project}/environments/{}", e.id)).collect();
         let environments = futures_util::future::try_join_all(paths.iter().map(|p| self.get::<Environment>(p))).await?;
         Ok(environments.into_iter().filter_map(|e| e.review_app(key, branch, head, newest)).collect())
+    }
+
+    /// Which of `numbers` in `project` are merged or closed, a hundred per request.
+    pub async fn finished(&self, project: &str, numbers: &[u64]) -> Result<Vec<u64>> {
+        let mut done = vec![];
+        for chunk in numbers.chunks(100) {
+            let iids: String = chunk.iter().map(|n| format!("&iids[]={n}")).collect();
+            let found: Vec<MrState> = self.get(&format!("{}/merge_requests?state=all&per_page=100{iids}", project_path(project))).await?;
+            done.extend(found.into_iter().filter(|mr| mr.state != "opened").map(|mr| mr.iid));
+        }
+        Ok(done)
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
@@ -647,6 +664,22 @@ mod tests {
         let seen: Vec<(&str, bool)> = found.iter().map(|d| (d.environment.as_str(), d.current)).collect();
         assert_eq!(seen, [("review/feat-checkout", true), ("storybook/feat-checkout", false)], "another branch's app is left out");
         assert_eq!(ref_slug("Feat/Checkout_2--"), "feat-checkout-2");
+    }
+
+    #[tokio::test]
+    async fn finished_names_the_merged_and_closed_mrs_among_those_asked() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests"))
+            .and(query_param("state", "all"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                {"iid": 40, "state": "merged"}, {"iid": 41, "state": "opened"}, {"iid": 42, "state": "closed"}
+            ])))
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).finished("acme/widgets", &[40, 41, 42]).await.unwrap(), [40, 42]);
+        let asked = server.received_requests().await.unwrap();
+        assert!(asked[0].url.query().unwrap_or_default().contains("41"), "the numbers go in the request");
     }
 
     #[tokio::test]

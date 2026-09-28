@@ -4,8 +4,9 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const DIR_MODE: u32 = 0o700;
 const FILE_MODE: u32 = 0o600;
@@ -13,6 +14,33 @@ const FILE_MODE: u32 = 0o600;
 #[derive(Clone, Debug)]
 pub struct Cache {
     dir: PathBuf,
+}
+
+/// An MR the cache holds a folder for, and when anything in it was last written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Kept {
+    pub project: String,
+    pub number: u64,
+    pub touched: SystemTime,
+}
+
+/// The kept MRs to drop: those the forge says are merged or closed, and any untouched for `idle`,
+/// which also covers an MR on a project the forge could not answer for.
+pub fn to_forget<'a>(kept: &'a [Kept], finished: &HashSet<(String, u64)>, now: SystemTime, idle: Duration) -> Vec<&'a Kept> {
+    let old = |k: &Kept| now.duration_since(k.touched).is_ok_and(|age| age > idle);
+    kept.iter().filter(|k| finished.contains(&(k.project.clone(), k.number)) || old(k)).collect()
+}
+
+/// When anything under `path` was last written, looking one folder deep as the MR layout is.
+fn newest_write(path: &Path) -> Option<SystemTime> {
+    std::fs::read_dir(path)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let meta = entry.metadata().ok()?;
+            if meta.is_dir() { newest_write(&entry.path()) } else { meta.modified().ok() }
+        })
+        .max()
 }
 
 /// A cached value and when it was fetched, so a stale view can say how stale.
@@ -64,6 +92,32 @@ impl Cache {
         let Ok(listed) = std::fs::read_dir(self.dir.join(dir)) else { return vec![] };
         let names = listed.filter_map(|entry| entry.ok()?.file_name().into_string().ok());
         names.filter(|name| name.starts_with(prefix)).map(|name| format!("{dir}/{name}")).collect()
+    }
+
+    /// Every MR this cache holds a folder for, with when anything in it was last written.
+    pub fn kept_mrs(&self) -> Vec<Kept> {
+        let mrs = self.dir.join("mr");
+        let Ok(projects) = std::fs::read_dir(&mrs) else { return vec![] };
+        let mut kept = vec![];
+        for project in projects.filter_map(Result::ok) {
+            let Some(slug) = project.file_name().to_str().map(str::to_owned) else { continue };
+            let Ok(numbers) = std::fs::read_dir(project.path()) else { continue };
+            for folder in numbers.filter_map(Result::ok) {
+                let Some(number) = folder.file_name().to_str().and_then(|n| n.parse().ok()) else { continue };
+                let touched = newest_write(&folder.path()).unwrap_or(SystemTime::UNIX_EPOCH);
+                kept.push(Kept { project: slug.replace('+', "/"), number, touched });
+            }
+        }
+        kept
+    }
+
+    /// Drops everything kept for one MR; a folder already gone is fine.
+    pub fn forget_mr(&self, project: &str, number: u64) -> Result<()> {
+        let path = self.dir.join(keys::mr_dir(project, number));
+        match std::fs::remove_dir_all(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e).with_context(|| format!("removing {}", path.display())),
+            _ => Ok(()),
+        }
     }
 
     /// A missing or unreadable file is a miss; an unreadable one is removed so it cannot fail again.
@@ -176,7 +230,17 @@ pub mod keys {
 
     /// The directory of one MR: its project path with `+` for `/`, then its number.
     fn dir(key: &MrKey) -> String {
-        format!("mr/{}/{}", slug(&key.project), key.number)
+        mr_dir(&key.project, key.number)
+    }
+
+    /// The folder everything about one MR sits in.
+    pub fn mr_dir(project: &str, number: u64) -> String {
+        format!("mr/{}/{number}", slug(project))
+    }
+
+    /// When the cache of every host was last cleaned, in the shared cache.
+    pub fn pruned() -> String {
+        "pruned.json".to_owned()
     }
 
     fn slug(project: &str) -> String {
@@ -337,6 +401,32 @@ mod tests {
         found.sort();
         assert_eq!(found, ["mr/a/1/ai/answer.1.json", "mr/a/1/ai/answer.2.json"]);
         assert!(cache.keys_in("mr/a/2/ai", "answer.").is_empty());
+    }
+
+    #[test]
+    fn kept_mrs_are_found_by_folder_and_forgotten_twice_without_harm() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path());
+        cache.write("mr/acme+widgets/42/mr.json", &1).unwrap();
+        cache.write("mr/acme+widgets/42/ai/answer.1.json", &2).unwrap();
+        cache.write("mr/acme+widgets/41/mr.json", &3).unwrap();
+        let mut kept = cache.kept_mrs();
+        kept.sort_by_key(|k| k.number);
+        assert_eq!(kept.iter().map(|k| (k.project.as_str(), k.number)).collect::<Vec<_>>(), [("acme/widgets", 41), ("acme/widgets", 42)]);
+        cache.forget_mr("acme/widgets", 42).unwrap();
+        cache.forget_mr("acme/widgets", 42).unwrap();
+        assert_eq!(cache.kept_mrs().len(), 1);
+    }
+
+    #[test]
+    fn merged_closed_and_long_untouched_mrs_are_forgotten() {
+        let now = SystemTime::now();
+        let day = Duration::from_secs(86_400);
+        let kept = |number: u64, days: u64| Kept { project: "acme/widgets".into(), number, touched: now - day * days as u32 };
+        let all = [kept(40, 2), kept(41, 2), kept(42, 45)];
+        let finished: HashSet<(String, u64)> = [("acme/widgets".to_owned(), 40)].into();
+        let gone: Vec<u64> = to_forget(&all, &finished, now, day * 30).into_iter().map(|k| k.number).collect();
+        assert_eq!(gone, [40, 42], "41 is open and was read two days ago");
     }
 
     #[test]

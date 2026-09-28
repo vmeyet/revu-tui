@@ -208,6 +208,14 @@ impl Forge {
         }
     }
 
+    /// Which of the MRs `numbers` of `project` are merged or closed.
+    pub async fn finished(&self, project: &str, numbers: &[u64]) -> Result<Vec<u64>> {
+        match self {
+            Forge::GitLab(client) => client.finished(project, numbers).await,
+            Forge::GitHub(client) => client.finished(project, numbers).await,
+        }
+    }
+
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         match self {
             Forge::GitLab(client) => client.diffs(key).await,
