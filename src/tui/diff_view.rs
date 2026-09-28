@@ -59,6 +59,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let folded = app.header_folded;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
     let wrap = app.wrap;
+    let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let Some(open) = app.open.as_mut() else { return };
     let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
@@ -79,10 +80,17 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         {
             return lines;
         }
-        if wrap && matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-            wrap_row(row_line(&open.review, &anchors, row, selected, in_range, overflow, theme), width, WRAP_INDENT)
+        let text_row = matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. });
+        let found = |line: Line<'static>| match &sought {
+            Some(query) if text_row => {
+                super::app::mark_search(&line, query, WRAP_INDENT, Style::default().add_modifier(Modifier::REVERSED))
+            }
+            _ => line,
+        };
+        if wrap && text_row {
+            wrap_row(found(row_line(&open.review, &anchors, row, selected, in_range, overflow, theme)), width, WRAP_INDENT)
         } else {
-            vec![row_line(&open.review, &anchors, row, selected, in_range, Overflow::Cut(width), theme)]
+            vec![found(row_line(&open.review, &anchors, row, selected, in_range, Overflow::Cut(width), theme))]
         }
     };
     let pinning = height >= PIN_MIN_HEIGHT;

@@ -139,7 +139,7 @@ impl Open {
         Some((file.new_path.clone(), hunk))
     }
 
-    fn with_fold(&self, fold: FoldState) -> Self {
+    pub(super) fn with_fold(&self, fold: FoldState) -> Self {
         self.relaid(self.review.with_fold(fold))
     }
 

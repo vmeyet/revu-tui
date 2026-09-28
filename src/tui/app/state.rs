@@ -105,6 +105,8 @@ pub struct App {
     pub confirm: Option<super::Confirm>,
     /// The reaction picker `+` opened on a note; every key answers it first.
     pub react: Option<super::Pick>,
+    /// What `/` looks for in the diff, while it is typed and after, until `esc`.
+    pub search: Option<super::Search>,
     pub ascii: bool,
     pub notify: bool,
     pub hosts: crate::forge::Hosts,
@@ -234,6 +236,7 @@ impl App {
             news: None,
             confirm: None,
             react: None,
+            search: None,
             ascii: settings.ascii,
             notify: settings.notify,
             hosts: settings.hosts,

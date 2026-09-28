@@ -54,6 +54,14 @@ impl App {
         if self.filtering {
             return self.handle_filter_key(key);
         }
+        if self.search.as_ref().is_some_and(|s| s.typing) {
+            self.handle_search_key(key);
+            return vec![];
+        }
+        if key.code == KeyCode::Esc && self.search.is_some() && self.focus == Focus::Review {
+            self.clear_search();
+            return vec![];
+        }
         match self.keymap.feed(self.held.take(), key) {
             crate::keymap::Feed::Hold(first) => {
                 self.held = Some(first);
@@ -228,6 +236,9 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.review_move(-self.step()),
             KeyCode::Char('g') => self.review_first(),
             KeyCode::Char('G') => self.review_last(),
+            KeyCode::Char('/') => self.start_search(),
+            KeyCode::Char('n') if self.search.is_some() => self.search_step(true),
+            KeyCode::Char('N') if self.search.is_some() => self.search_step(false),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('D') => return self.toggle_side_by_side(),

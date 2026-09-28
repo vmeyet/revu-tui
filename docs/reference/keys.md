@@ -38,6 +38,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 
 | Keys | Does |
 |---|---|
+| `/` `n` `N` | find text in the MR, next, previous |
 | `i` | the MR cover page |
 | `D` | inline diff, or side by side |
 | `t` | file tree |

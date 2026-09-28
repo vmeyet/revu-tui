@@ -231,6 +231,10 @@ A two-cell anchor column left of the numbers shows `◆` (unresolved, `warn`), `
 The row under the header lists the threads on the MR; file rows add `· n outdated`.
 While the pane is on a range comment, the range's other lines show `│` in `accent`.
 
+### Find in the MR (`/`)
+
+`/` in the diff opens a line in the status row: each key typed moves the cursor to the first match from where the search started, and every match on screen is drawn reversed. The search covers the whole MR, not the screen: every line of every hunk, both sides, and each file's path, folded files and hunks included (`[review] fold`, too large, viewed); a match inside a fold opens it. Smart case: all lowercase matches any case, a capital asks for the exact one. `enter` keeps the search, `esc` while typing drops it and puts the cursor back. Then `n` and `N` go to the next and previous match, round the end of the MR with a toast, and the status row counts `3/17`; `esc` clears it. A user binding on `n` or `N` wins over these.
+
 ### Visual select
 
 `V` starts a range from the current line; `j/k` extend it; the range fill uses `highlight` or, without one, inverts the gutters.

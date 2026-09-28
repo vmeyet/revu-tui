@@ -20,6 +20,15 @@ A command that needs more, like `go`, waits for you to finish the line.
 `ctrl-p` and `ctrl-n` bring back the commands you ran before.
 `⌫` on an empty line goes back to MRs, then closes.
 
+## Find in the diff
+
+`/` in the diff finds text anywhere in the MR, not only on screen.
+It looks in every file, folded ones too, and opens the fold where it lands.
+Type lowercase to match any case; a capital letter matches that case only.
+`enter` keeps the search, then `n` and `N` go to the next and previous match.
+`esc` clears it.
+Your terminal's `⌘F` only sees the screen, so use `/` instead.
+
 ## Filter the queue
 
 Press `/` in the queue and type a query.
