@@ -347,8 +347,9 @@ impl Review {
     }
 
     /// The MR marked approved by me or not, ahead of the forge's answer.
-    pub fn with_approved(&self, approved: bool) -> Self {
-        let approvals = crate::forge::Approvals { user_has_approved: approved, ..self.mr.approvals.clone() };
+    /// My approval, `me`'s, added or taken back ahead of the forge's answer, so the header and `M` agree at once.
+    pub fn with_approved(&self, approved: bool, me: &str) -> Self {
+        let approvals = self.mr.approvals.with_mine(approved, me);
         Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self.clone() }
     }
 

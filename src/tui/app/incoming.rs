@@ -79,6 +79,8 @@ impl App {
             Incoming::Approved { key, approve } => {
                 self.set_approved(&key, approve);
                 self.toast(if approve { "approved" } else { "approval removed" });
+                let follow = self.reread(&key);
+                self.composed.extend(follow);
             }
             Incoming::Composed { input, text } => {
                 if let Some(text) = text {

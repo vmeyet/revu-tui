@@ -108,9 +108,8 @@ impl App {
     pub(super) fn apply_posted(&mut self, key: &MrKey, to: &Post) {
         self.unsent.remove(&target_key(&to.input()));
         self.toast("posted");
-        if self.open.as_ref().is_some_and(|o| &o.key == key) {
-            self.poll.discussions_due = Some(self.now);
-        }
+        let follow = self.reread(key);
+        self.composed.extend(follow);
     }
 
     /// The box comes back with the text when nothing else is being written on that MR.

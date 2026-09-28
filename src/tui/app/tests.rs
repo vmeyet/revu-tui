@@ -805,6 +805,23 @@ fn cmd_enter_posts_a_new_thread_at_once_and_ctrl_s_posts_a_reply() {
 }
 
 #[test]
+fn my_approval_shows_at_once_lets_me_merge_and_is_read_back_from_the_forge() {
+    let mut app = with_review();
+    let approvals = |app: &App| app.open.as_ref().unwrap().review.mr.approvals.clone();
+    let before = approvals(&app);
+    app.apply(Incoming::Approved { key: mr_key(), approve: true });
+    let after = approvals(&app);
+    assert!(after.user_has_approved && after.approved_by.iter().any(|u| u.username == "nina"));
+    assert_eq!(after.approvals_left, before.approvals_left.saturating_sub(1));
+    let screen = render(&mut app, 150, 30);
+    assert!(screen.contains(&format!("{} of", before.approved_by.len() + 1)), "the header counts it:\n{screen}");
+    let asked = app.take_actions();
+    assert!(asked.contains(&Action::RefreshMr(mr_key())), "then the forge's count replaces the guess: {asked:?}");
+    app.apply(Incoming::Approved { key: mr_key(), approve: false });
+    assert_eq!(approvals(&app), before, "taking it back undoes it");
+}
+
+#[test]
 fn a_posted_comment_clears_its_text_and_refreshes_the_threads() {
     let mut app = with_review();
     on_line(&mut app);
@@ -815,7 +832,7 @@ fn a_posted_comment_clears_its_text_and_refreshes_the_threads() {
     app.poll.discussions_due = None;
     app.apply(Incoming::Posted { key: mr_key(), to: to.clone() });
     assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("posted"));
-    assert_eq!(app.poll.discussions_due, Some(app.now), "the new note shows on the next tick");
+    assert!(app.take_actions().contains(&Action::RefreshMr(mr_key())), "the new note is read back at once");
     press(&mut app, "c");
     assert_eq!(app.buffer.text(), "", "nothing left to send on the line");
 }
