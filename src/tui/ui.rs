@@ -48,8 +48,14 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
     app.text_rows.clear();
     let input_rows = u16::from(app.filtering);
-    let status_rows =
-        u16::from(!app.zen || app.confirm.is_some() || app.pending == Some('\'') || app.quit_prompt().is_some() || app.react.is_some());
+    let status_rows = u16::from(
+        !app.zen
+            || app.confirm.is_some()
+            || app.pending == Some('\'')
+            || app.quit_prompt().is_some()
+            || app.react.is_some()
+            || app.search.is_some(),
+    );
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(super::app::Open::side_open);
@@ -287,6 +293,17 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(" next MR · ", muted),
             Span::styled("esc", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
             Span::styled(" stay", muted),
+        ]);
+        f.render_widget(Paragraph::new(line), area);
+        return;
+    }
+    if let Some(search) = &app.search {
+        let count = app.search_count().map(|c| format!("  {c}")).unwrap_or_default();
+        let (cursor, hint) = if search.typing { ("▏", "  enter keep · esc back") } else { ("", "  n N next, previous · esc") };
+        let line = Line::from(vec![
+            Span::styled(format!(" /{}{cursor}", search.query), Style::default().fg(theme.accent)),
+            Span::styled(count, Style::default().fg(theme.muted)),
+            Span::styled(hint, muted),
         ]);
         f.render_widget(Paragraph::new(line), area);
         return;

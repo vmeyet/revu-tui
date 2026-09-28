@@ -60,6 +60,7 @@ pub const GROUPS: [Group; 7] = [
     Group {
         title: "view",
         keys: &[
+            ("/ n N", "find text in the MR, next, previous"),
             ("i", "the MR cover page"),
             ("D", "inline diff, or side by side"),
             ("t", "file tree"),

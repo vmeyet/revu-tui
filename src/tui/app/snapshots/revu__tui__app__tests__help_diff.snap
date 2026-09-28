@@ -21,14 +21,14 @@ expression: "render(&mut app, 100, 30)"
 │                    │      ]m [m  next, previous MR in the queue             │ card.expiry()))    │
 │                    │                                                        │ew                  │
 │                    │  VIEW                                                  │                    │
-│                    │          i  the MR cover page                          │                    │
-│                    │          D  inline diff, or side by side               │      +1 −1  folded │
+│                    │      / n N  find text in the MR, next, previous        │                    │
+│                    │          i  the MR cover page                          │      +1 −1  folded │
+│                    │          D  inline diff, or side by side               │                    │
 │                    │          t  file tree                                  │                    │
 │                    │          T  every thread of the MR                     │                    │
 │                    │          p  pipeline                                   │                    │
-│                    │         zz  zen: the diff alone, quiet                 │                    │
 │                    │                                                        │                    │
-│                    ╰───── 1–22 of 57 · j k scroll · ? every key · esc close ╯                    │
+│                    ╰───── 1–22 of 58 · j k scroll · ? every key · esc close ╯                    │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help
