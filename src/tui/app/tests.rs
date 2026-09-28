@@ -3230,6 +3230,26 @@ fn in_zen_h_and_l_move_between_the_diff_and_the_pane_under_it() {
 }
 
 #[test]
+fn in_zen_a_new_thread_box_keeps_a_row_to_type_in() {
+    let mut app = with_review();
+    let file = DiffFile {
+        diff: "@@ -1,2 +1,3 @@\n a\n-b\n+c\n+d\n".into(),
+        old_path: "src/quiet.rs".into(),
+        new_path: "src/quiet.rs".into(),
+        ..DiffFile::default()
+    };
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(mr(), &[file], vec![], &[])), cached: None });
+    app.review_jump_to(|row| matches!(row, Row::Line { .. }));
+    press(&mut app, "zzc");
+    for (width, height) in [(138, 40), (120, 25)] {
+        let screen = render(&mut app, width, height);
+        let lines: Vec<&str> = screen.lines().collect();
+        let top = lines.iter().position(|l| l.contains("╭ new thread")).unwrap_or_else(|| panic!("a box:\n{screen}"));
+        assert!(lines[top + 1].contains('│'), "{width}x{height}: a row to type in under the box's top:\n{screen}");
+    }
+}
+
+#[test]
 fn in_zen_the_compose_box_lets_the_pane_under_the_diff_grow() {
     let mut app = zen_on_a_thread();
     render(&mut app, 138, 40);
