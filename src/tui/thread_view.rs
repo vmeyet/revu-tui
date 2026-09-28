@@ -5,7 +5,7 @@ use super::field::Field;
 use super::images::Thumbs;
 use super::table::table_lines;
 use super::theme::Theme;
-use super::ui::{short_age, side_pane};
+use super::ui::{rule_pane, short_age, side_pane};
 use crate::forge::Note;
 use crate::review::image::{self, Image};
 use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
@@ -49,40 +49,87 @@ enum Mark {
     Written { raw: String, cells: Vec<Range<usize>> },
 }
 
+/// The pane's rows laid out at a width: its title, each row with whether the cursor bar is on it,
+/// and what some rows carry besides their text.
+struct Laid {
+    title: String,
+    rows: Vec<(bool, Line<'static>)>,
+    marks: Vec<(usize, usize, Mark)>,
+}
+
 /// The pane, and the pictures it made room for: the caller paints them last, above the fades.
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
+/// Under zen's diff it hangs from a rule carrying its title.
+pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<Placement> {
     let theme = app.theme;
-    let today = app.today;
-    let me = app.me.clone();
-    let ascii = app.ascii;
-    let focused = app.focus == Focus::Side;
-    let zen = app.zen;
-    let compose = app.input.is_some().then(|| (app.input_label(), app.buffer.clone()));
-    let host = app.host.clone();
-    let thumbs = &app.thumbs;
-    let Some(open) = app.open.as_mut() else { return vec![] };
-    let Some((conversations, entries, current)) = open.pane_view() else { return vec![] };
-    let Some(pane) = open.pane.clone() else { return vec![] };
-    let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&host), &open.key.project, url);
-    let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
-    let block = side_pane(theme, &title(&open.review, &pane, conversations.len(), here), focused, zen);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-    let inner = match &compose {
-        Some((label, field)) => {
-            let [list, box_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(box_height(field, inner))]).areas(inner);
-            draw_compose(f, theme, label, field, box_area);
-            list
-        }
-        None => inner,
+    let (focused, zen) = (app.focus == Focus::Side, app.zen);
+    let block = |title: &str| if under_diff { rule_pane(theme, title) } else { side_pane(theme, title, focused, zen) };
+    let inner = block("").inner(area);
+    let Some(Laid { title, rows, marks }) = lay_out_pane(app, inner.width.saturating_sub(1) as usize) else { return vec![] };
+    f.render_widget(block(&title), area);
+    let inner = if app.input.is_some() {
+        let height = if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) };
+        let [list, box_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(height)]).areas(inner);
+        draw_compose(f, theme, &app.input_label(), &app.buffer, box_area);
+        list
+    } else {
+        inner
     };
-    let width = inner.width.saturating_sub(1) as usize;
+    let height = inner.height as usize;
+    let first = rows.iter().position(|(on, _)| *on).unwrap_or(0);
+    let last = rows.iter().rposition(|(on, _)| *on).unwrap_or(0);
+    let Some(pane) = app.open.as_mut().and_then(|open| open.pane.as_mut()) else { return vec![] };
+    let scroll = settle(pane.scroll, first, last, height);
+    pane.scroll = scroll;
+    let drawn: Vec<Line> = rows
+        .into_iter()
+        .skip(scroll)
+        .take(height)
+        .map(|(on, line)| {
+            let bar = Span::styled(if on { "▎" } else { " " }, Style::default().fg(theme.accent));
+            Line::from(std::iter::once(bar).chain(line.spans).collect::<Vec<_>>())
+        })
+        .collect();
+    f.render_widget(Paragraph::new(drawn), inner);
+    let width = inner.width.saturating_sub(1);
+    let mut placements = vec![];
+    for (row, piece, mark) in marks {
+        let Some(y) = row.checked_sub(scroll).filter(|y| *y < height) else { continue };
+        let (x, y) = (inner.x + 1, inner.y + y as u16);
+        match mark {
+            Mark::Picture { url, size } if row + usize::from(size.height) <= scroll + height => {
+                placements.push(Placement { url, area: Rect::new(x, y, size.width.min(width), size.height) });
+            }
+            Mark::Picture { .. } => {}
+            Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text, url }),
+            Mark::Written { raw, cells } => app.text_rows.push(TextRow { at: Position::new(x, y), width, line: piece, text: raw, cells }),
+        }
+    }
+    placements
+}
+
+/// The rows the pane under zen's diff takes `width` columns wide to show all it holds: its rule,
+/// its conversations and the compose box, which the pane grows for rather than holding it to a share.
+pub fn rows_needed(app: &App, width: u16) -> u16 {
+    let inner = rule_pane(app.theme, "").inner(Rect::new(0, 0, width, 1));
+    let rows = lay_out_pane(app, inner.width.saturating_sub(1) as usize).map_or(0, |laid| laid.rows.len());
+    let compose = if app.input.is_some() { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { 0 };
+    u16::try_from(rows).unwrap_or(u16::MAX).saturating_add(compose).saturating_add(1)
+}
+
+/// The conversations of the open pane as rows `width` cells wide, pictures and links marked.
+fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
+    let theme = app.theme;
+    let open = app.open.as_ref()?;
+    let (conversations, entries, current) = open.pane_view()?;
+    let pane = open.pane.as_ref()?;
+    let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&app.host), &open.key.project, url);
+    let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
     let mut lines: Vec<(Option<Entry>, Piece)> = vec![];
     for (index, conversation) in conversations.iter().enumerate() {
         if index > 0 {
             lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
-        let look = Look { theme, today, me: &me, ascii, width };
+        let look = Look { theme, today: app.today, me: &app.me, ascii: app.ascii, width };
         lines.extend(conversation_lines(open, conversation, index, &entries, look));
     }
     if conversations.is_empty() && pane.only_with.is_some() {
@@ -101,47 +148,14 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) -> Vec<Placement> {
     let mut marks: Vec<(usize, usize, Mark)> = vec![];
     for (index, (entry, piece)) in lines.into_iter().enumerate() {
         let on = entry.is_some() && entry == current;
-        for (line, mark) in lay_out(piece, thumbs, width, theme, &web) {
+        for (line, mark) in lay_out(piece, &app.thumbs, width, theme, &web) {
             if let Some(mark) = mark {
                 marks.push((rows.len(), index, mark));
             }
             rows.push((on, line));
         }
     }
-    let height = inner.height as usize;
-    let first = rows.iter().position(|(on, _)| *on).unwrap_or(0);
-    let last = rows.iter().rposition(|(on, _)| *on).unwrap_or(0);
-    let scroll = settle(pane.scroll, first, last, height);
-    if let Some(pane) = open.pane.as_mut() {
-        pane.scroll = scroll;
-    }
-    let drawn: Vec<Line> = rows
-        .into_iter()
-        .skip(scroll)
-        .take(height)
-        .map(|(on, line)| {
-            let bar = Span::styled(if on { "▎" } else { " " }, Style::default().fg(theme.accent));
-            Line::from(std::iter::once(bar).chain(line.spans).collect::<Vec<_>>())
-        })
-        .collect();
-    f.render_widget(Paragraph::new(drawn), inner);
-    let mut placements = vec![];
-    for (row, piece, mark) in marks {
-        let Some(y) = row.checked_sub(scroll).filter(|y| *y < height) else { continue };
-        let (x, y) = (inner.x + 1, inner.y + y as u16);
-        match mark {
-            Mark::Picture { url, size } if row + usize::from(size.height) <= scroll + height => {
-                let width = size.width.min(inner.width.saturating_sub(1));
-                placements.push(Placement { url, area: Rect::new(x, y, width, size.height) });
-            }
-            Mark::Picture { .. } => {}
-            Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text, url }),
-            Mark::Written { raw, cells } => {
-                app.text_rows.push(TextRow { at: Position::new(x, y), width: width as u16, line: piece, text: raw, cells });
-            }
-        }
-    }
-    placements
+    Some(Laid { title: title(&open.review, pane, conversations.len(), here), rows, marks })
 }
 
 /// A piece as rows: text wrapped to `width`; a ready picture as blank rows its thumbnail covers;
@@ -187,10 +201,14 @@ fn fallback(image: &Image) -> String {
 
 /// Text rows the box shows: its own lines, at least one, at most 8 or 40 % of the pane, plus its border.
 pub(super) fn box_height(field: &Field, pane: Rect) -> u16 {
-    let width = pane.width.saturating_sub(4).max(1) as usize;
+    box_rows(field, pane.width, usize::from(pane.height) * 40 / 100)
+}
+
+/// The compose box's rows in a pane `width` cells wide, its text held to `most` rows.
+fn box_rows(field: &Field, width: u16, most: usize) -> u16 {
+    let width = width.saturating_sub(4).max(1) as usize;
     let rows: usize = field.text().split('\n').map(|line| line.width().max(1).div_ceil(width)).sum();
-    let most = (usize::from(pane.height) * 40 / 100).clamp(1, COMPOSE_ROWS);
-    (rows.clamp(1, most) + 2) as u16
+    (rows.clamp(1, most.clamp(1, COMPOSE_ROWS)) + 2) as u16
 }
 
 /// The compose box: its target in the top border, the keys in the bottom one, the caret reversed.

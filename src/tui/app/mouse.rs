@@ -18,6 +18,11 @@ pub struct Areas {
 }
 
 impl Areas {
+    /// The diff and the right pane were both on screen.
+    pub fn both_shown(self) -> bool {
+        !self.review.is_empty() && !self.side.is_empty()
+    }
+
     fn under(self, at: Position) -> Option<Focus> {
         [(self.queue, Focus::Queue), (self.review, Focus::Review), (self.side, Focus::Side)]
             .into_iter()

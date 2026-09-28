@@ -64,10 +64,11 @@ A question that needs an answer (applying a suggestion, the `'` views) brings th
 `[m` `]m` open the previous or next MR in the order the queue shows them, without leaving zen, and outside zen as well: filter, sort, sections and stacks all count, folded sections do not.
 The arrows mean what they mean outside zen: `←` `→` move focus.
 A line on top says where you are for a moment: `‹  !1797 feat add a page  ·  3/12  ›`.
-The thread pane still opens with `enter` or `l` on a marked line, as a page of its own, and `esc`, `x` or `q` close it.
-It takes the diff's column, with no frame: one faded title line where the zen header sits, then its content from the diff's first column.
-`T` lists every thread there too; `enter` on one shows the diff at its line, and `l` or `T` bring the list back.
-The file tree, the pipeline and an AI answer open the same way.
+The thread pane still opens with `enter` or `l` on a marked line, and `esc`, `x` or `q` close it.
+It opens under the diff in zen's column, with no frame: a faded rule carries its title, and it takes what it needs up to a quarter of the column (8 rows at least for that share, half while a comment is written); `09-thread-pane.md` § Zen.
+`T` lists every thread there too; `enter` on one moves the diff above to its line.
+A column under 24 rows keeps the pane a page of its own: one faded title line where the zen header sits, `enter` in the list of every thread shows the diff at its line, and `l` or `T` bring the list back.
+The file tree, the pipeline and an AI answer take the whole column, as a page of their own.
 
 ## The queue
 
@@ -239,7 +240,7 @@ While the pane is on a range comment, the range's other lines show `│` in `acc
 
 One of:
 
-- **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, a file's outdated threads, or with `T` the whole MR, each headed by its line), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff, a table as aligned columns split by `│` under a `─┼─` rule, its widest columns cut with `…` when the pane is narrower and left as raw text when even that does not fit. The compose box sits at its bottom. It follows the cursor onto marked lines, except while it lists the whole MR. Width: three columns from 150, the queue steps aside from 120, a page of its own below.
+- **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, a file's outdated threads, or with `T` the whole MR, each headed by its line), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff, a table as aligned columns split by `│` under a `─┼─` rule, its widest columns cut with `…` when the pane is narrower and left as raw text when even that does not fit. The compose box sits at its bottom. It follows the cursor onto marked lines, except while it lists the whole MR. Width: three columns from 150, the queue steps aside from 120, a page of its own below; in zen, under the diff.
 - **Overview** (`o` on the header, or on open when there is no thread): description as markdown, labels, reviewers with their state, approvals, pipeline link, then the activity list (system notes) in `muted`.
 - **Pipeline** (`p`): the CI run of the head commit (GitLab's newest MR pipeline, GitHub's check runs grouped by workflow): a count per state, then each stage in the order it ran with its jobs, counted failures first, glyph, name and duration; the cursor starts on the first failure; `o` opens the job, `y` copies its link, `r` asks again, and a run still going is asked again every 15 s while the pane shows it. A failure the forge lets pass shows `!` in the warning colour. The header's pipeline word links to the run. Above the jobs, `REVIEW APPS` lists each environment the branch went to with its address, the newest successful deployment of each; they are asked when the MR opens, after a push, and once a run the pane shows ends. The cover (`i`) from an open MR shows the app to try.
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` unresolved threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
