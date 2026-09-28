@@ -115,6 +115,7 @@ pub const GROUPS: [Group; 7] = [
         keys: &[
             ("a e r s", "explain, risks, summary"),
             ("a t c a", "thread, comment, anything"),
+            ("a h", "answers kept for this MR"),
             ("c ⏎ R y", "answer: draft, follow up, again, copy"),
         ],
         focus: &[Focus::Review, Focus::Side],

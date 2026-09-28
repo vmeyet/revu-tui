@@ -55,6 +55,7 @@ impl App {
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
+            Incoming::PastAnswers { key, answers } => self.apply_past_answers(&key, answers),
             Incoming::Deployments { key, deployments } => {
                 if let Some(open) = self.open.clone().filter(|o| o.key == key) {
                     self.open = Some(Open { deployments: Some(deployments), ..open });

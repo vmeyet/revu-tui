@@ -47,6 +47,7 @@ Press `a`, then a letter.
 | `a t` | The thread | What is agreed, what is open, who acts next |
 | `a c` | The selected lines | A review comment, ready to edit |
 | `a a` | Anything | Your own question |
+| `a h` | Nothing new | The answers you got before on this MR |
 
 The answer streams into the right pane.
 
@@ -56,6 +57,10 @@ The answer streams into the right pane.
 | `enter` | Ask a follow-up |
 | `R` | Ask again, past the cache |
 | `y` | Copy it |
+
+`a h` lists the answers Claude gave before on this MR, newest first.
+One asked before the last push says `older push`.
+`enter` shows it again, for free, and you can ask a follow-up from there.
 
 `:ai off` stops both helpers until you type `:ai on`.
 

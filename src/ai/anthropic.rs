@@ -1,7 +1,7 @@
 //! Claude over raw HTTPS: one streamed Messages API call, with prompt caching on the stable blocks
 //! and server-side fallbacks, so a refused question is answered by another model when one can.
 use super::Secret;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fmt;
 use std::time::Duration;
@@ -15,13 +15,13 @@ const RETRYABLE: [u16; 5] = [429, 500, 502, 503, 529];
 const LONGEST_WAIT: Duration = Duration::from_secs(30);
 
 /// One block of the system prompt; `cached` ones end a cache breakpoint, so the stable parts are paid once.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block {
     pub text: String,
     pub cached: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     User,
@@ -29,14 +29,14 @@ pub enum Role {
 }
 
 /// One turn of the conversation.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Turn {
     pub role: Role,
     pub text: String,
 }
 
 /// Everything one call sends: the system blocks, then the turns so far, the question last.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ask {
     pub system: Vec<Block>,
     pub turns: Vec<Turn>,

@@ -13,6 +13,8 @@ pub enum Mode {
     Mrs,
     Files,
     Commands,
+    /// The answers Claude gave before on the open MR, `a h`.
+    Answers,
 }
 
 impl Mode {
@@ -22,6 +24,7 @@ impl Mode {
             Mode::Mrs => ("", "MRs · @author !42 ~label draft:no"),
             Mode::Files => ("/", "files of the open MR"),
             Mode::Commands => (">", "commands"),
+            Mode::Answers => ("", "answers kept for this MR"),
         }
     }
 }
@@ -31,6 +34,8 @@ pub enum Target {
     Mr(MrKey),
     /// A file of the open MR, by its index in the review.
     File(usize),
+    /// A kept answer, by its index in the list `a h` found.
+    Answer(usize),
 }
 
 /// One row of the palette's list: what it shows, and where `enter` goes.

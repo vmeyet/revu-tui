@@ -22,7 +22,7 @@ pub fn draw(f: &mut Frame, app: &App, palette: &Palette, area: Rect) {
     let mut lines = vec![prompt(app, palette, sign), Line::default()];
     lines.extend(match palette.mode {
         Mode::Commands => command_lines(app, palette, room),
-        Mode::Mrs | Mode::Files => list_lines(app, palette, room),
+        Mode::Mrs | Mode::Files | Mode::Answers => list_lines(app, palette, room),
     });
     lines.push(Line::from(Span::styled(footer(palette.mode), Style::default().fg(theme.faded))));
     f.render_widget(Clear, popup);
@@ -70,6 +70,7 @@ fn list_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
             let (icon, colour) = match candidate.target {
                 Target::Mr(_) => ("◆", theme.accent),
                 Target::File(_) => ("·", theme.muted),
+                Target::Answer(_) => ("✦", theme.accent),
             };
             let detail = if candidate.detail.is_empty() { String::new() } else { format!("  {}", candidate.detail) };
             let label = truncate(&candidate.label, room.saturating_sub(detail.width()));
@@ -106,6 +107,7 @@ fn footer(mode: Mode) -> &'static str {
     match mode {
         Mode::Mrs => "  ↑↓ pick · enter opens · > commands · / files · esc",
         Mode::Files => "  ↑↓ pick · enter jumps · ⌫ back to MRs · esc",
+        Mode::Answers => "  ↑↓ pick · enter shows it · esc",
         Mode::Commands => "  ↑↓ pick · tab completes · ^p history · esc",
     }
 }

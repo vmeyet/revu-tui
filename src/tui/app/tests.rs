@@ -4617,3 +4617,46 @@ fn esc_while_typing_puts_the_cursor_back_and_a_capital_asks_for_the_exact_case()
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.live_toast().map(|t| t.text.clone()).as_deref(), Some("no match"));
 }
+
+fn past(label: &str, head: &str, asked_at: chrono::DateTime<chrono::Utc>, text: &str) -> super::PastAnswer {
+    let request = crate::ai::anthropic::Ask {
+        system: vec![],
+        turns: vec![crate::ai::anthropic::Turn { role: crate::ai::anthropic::Role::User, text: "Explain this hunk".into() }],
+    };
+    super::PastAnswer { label: label.into(), asked_at, head: head.into(), request, text: text.into(), outcome: done("claude-opus-5") }
+}
+
+#[test]
+fn a_h_lists_the_kept_answers_and_enter_brings_one_back_ready_for_a_follow_up() {
+    let mut app = asking();
+    on_line(&mut app);
+    assert_eq!(press(&mut app, "ah"), vec![Action::LoadAnswers(mr_key())]);
+    let head = app.open.as_ref().unwrap().review.mr.refs.head.clone();
+    let hours_ago = |h: i64| app.today - chrono::Duration::hours(h);
+    let answers = vec![
+        past("explain · charge.rs", &head, hours_ago(1), "It retries."),
+        past("summary", "older1", hours_ago(30), "Cards charged once."),
+    ];
+    app.apply(Incoming::PastAnswers { key: mr_key(), answers });
+    let screen = render(&mut app, 150, 30);
+    assert!(screen.contains("explain · charge.rs") && screen.contains("summary"), "{screen}");
+    assert!(screen.contains("1d · older push"), "an answer from before the last push says so:\n{screen}");
+    press(&mut app, "sum");
+    app.handle_key(code(KeyCode::Enter));
+    let shown = answer(&app);
+    assert_eq!((shown.label.as_str(), shown.text.as_str(), shown.cached), ("summary", "Cards charged once.", true));
+    assert_eq!(app.focus, Focus::Side);
+    app.handle_key(code(KeyCode::Enter));
+    let actions = type_text(&mut app, "why once?");
+    let (_, request, _) = the_ask(&actions);
+    assert_eq!(request.turns.len(), 3, "the kept question, its answer, the follow-up");
+}
+
+#[test]
+fn a_h_with_nothing_kept_says_how_to_ask() {
+    let mut app = with_review();
+    press(&mut app, "ah");
+    app.apply(Incoming::PastAnswers { key: mr_key(), answers: vec![] });
+    assert!(app.palette.is_none());
+    assert!(app.live_toast().unwrap().text.contains("no answer kept"));
+}

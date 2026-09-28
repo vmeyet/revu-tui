@@ -36,7 +36,7 @@ mod write;
 mod zen;
 
 pub use apply::Confirm;
-pub use ask::{Answer, AnswerState, Part};
+pub use ask::{Answer, AnswerState, Part, PastAnswer};
 pub use brief::{Brief, ThreadRow};
 pub use feedback::Toast;
 pub use inbox::{Spot, progress_bar};
@@ -222,7 +222,12 @@ pub enum Action {
         id: u64,
         request: Box<crate::ai::anthropic::Ask>,
         fresh: bool,
+        /// What the answer is kept under, so `a h` lists it: its title and the commit asked about.
+        label: String,
+        head: String,
     },
+    /// `a h`: the answers kept for the MR.
+    LoadAnswers(MrKey),
     /// Ask Jev how urgent and how big a queue MR is.
     Triage(Box<QueueMr>),
     /// Ask Jev whether the open MR waits on me and how risky each file is, at commit `head`.
@@ -396,6 +401,11 @@ pub enum Incoming {
     Checks {
         key: MrKey,
         checks: Option<crate::forge::checks::Checks>,
+    },
+    /// The answers kept for the MR, newest first.
+    PastAnswers {
+        key: MrKey,
+        answers: Vec<PastAnswer>,
     },
     /// The open MR's review apps, newest deployment of each environment.
     Deployments {
