@@ -202,10 +202,12 @@ mr/<group+project>/<number>/diffs.<head_sha>.json
 mr/<group+project>/<number>/discussions.json
 mr/<group+project>/<number>/drafts.json
 mr/<group+project>/<number>/state.json    viewed files, folds, last opened
-ai/<group+project>/<number>/<head_sha>/<question_hash>.json
+mr/<group+project>/<number>/ai/answer.<request_hash>.json   Claude's answer, its title, time, head, request
+pruned.json                         (shared root) when the cache was last pruned
 ```
 
 Files are written to a temp name then renamed, mode 0600, directory 0700.
+Once a day, starting the TUI prunes every host's cache in the background: the forge is asked once per project which kept MRs are merged or closed (GitLab `merge_requests?iids[]=…&state=all`, GitHub one GraphQL query with a `pullRequest(number:)` alias per PR), and their `mr/…/<number>/` folders go; so does any MR folder untouched for 30 days, which also covers a project the forge cannot answer for. Pruning twice is harmless.
 Opening an MR paints from cache, then three requests refresh it in parallel; a differing `head_sha` invalidates diffs and clears word-diff and fold state for changed files only.
 
 ## Polling

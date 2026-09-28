@@ -542,6 +542,20 @@ impl Client {
         self.graphql::<Value>(&query, json!({"id": pr.id})).await.map(|_| ())
     }
 
+    /// Which of `numbers` in `project` are merged or closed: one query per fifty, each PR an alias.
+    pub async fn finished(&self, project: &str, numbers: &[u64]) -> Result<Vec<u64>> {
+        let (owner, name) = owner_and_name(project)?;
+        let mut done = vec![];
+        for chunk in numbers.chunks(50) {
+            let fields: String = chunk.iter().map(|n| format!(" p{n}: pullRequest(number: {n}) {{ state }}")).collect();
+            let query = format!("query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{{fields} }} }}");
+            let data: Value = self.graphql(&query, json!({"owner": owner, "name": name})).await?;
+            let state = |n: &u64| data["repository"][format!("p{n}")]["state"].as_str().map(str::to_owned);
+            done.extend(chunk.iter().filter(|n| state(n).is_some_and(|s| s != "OPEN")));
+        }
+        Ok(done)
+    }
+
     pub(super) async fn threads(&self, key: &MrKey) -> Result<PrThreads> {
         let (owner, name) = owner_and_name(&key.project)?;
         let data: ThreadsData = self.graphql(THREADS, json!({"owner": owner, "name": name, "number": key.number})).await?;
@@ -860,6 +874,20 @@ mod tests {
             !mr.approvals.approved && mr.approvals.approvals_left == 1 && mr.approvals.user_can_approve && !mr.approvals.user_has_approved
         );
         assert_eq!(mr.reviewers.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), ["nina", "lea"]);
+    }
+
+    #[tokio::test]
+    async fn finished_asks_every_pr_in_one_query_and_names_the_closed_ones() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("p7: pullRequest(number: 7)"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"repository": {
+                "p7": {"state": "MERGED"}, "p8": {"state": "OPEN"}, "p9": {"state": "CLOSED"}
+            }}})))
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).finished("acme/widgets", &[7, 8, 9]).await.unwrap(), [7, 9]);
     }
 
     #[tokio::test]
