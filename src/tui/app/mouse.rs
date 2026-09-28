@@ -31,12 +31,16 @@ impl Areas {
 }
 
 impl App {
-    /// The wheel and a left drag; nothing works over an overlay or a prompt.
+    /// The wheel, a left drag and a click on a link; over an overlay only its links answer, over a prompt nothing.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
-        if self.modal() || self.confirm.is_some() || self.react.is_some() {
+        let at = Position::new(mouse.column, mouse.row);
+        if self.confirm.is_some() || self.react.is_some() {
             return vec![];
         }
-        let at = Position::new(mouse.column, mouse.row);
+        if self.modal() {
+            let released = matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left));
+            return self.link_at(at).filter(|_| released).map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default();
+        }
         match mouse.kind {
             MouseEventKind::ScrollDown => self.wheel(at, KeyCode::Down),
             MouseEventKind::ScrollUp => self.wheel(at, KeyCode::Up),
