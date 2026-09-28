@@ -1,7 +1,7 @@
 //! The pipeline pane: the run's state and counts, then each stage and its jobs, failures first.
 use super::app::{App, Focus, Open, Run};
 use super::theme::Theme;
-use super::ui::{DEPLOYED, draw_empty, settle_scroll, side_pane, spinner, truncate};
+use super::ui::{DEPLOYED, Link, draw_empty, settle_scroll, side_pane, spinner, truncate};
 use crate::forge::checks::{Checks, Job, JobState};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame, app: &App, area: Rect) {
+pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(pipeline) = &open.pipeline else { return };
@@ -29,34 +29,55 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         Run::Ready(checks) => checks,
     };
     let deployed = deployment_lines(open, inner.width as usize, theme);
-    let lines: Vec<(Option<usize>, Line)> =
-        deployed.into_iter().map(|line| (None, line)).chain(lines(checks, pipeline.selected, inner.width as usize, theme, tick)).collect();
+    let lines: Vec<(Option<usize>, Line)> = deployed
+        .iter()
+        .map(|(line, _)| (None, line.clone()))
+        .chain(lines(checks, pipeline.selected, inner.width as usize, theme, tick))
+        .collect();
     let height = inner.height as usize;
     let cursor = lines.iter().position(|(job, _)| *job == Some(pipeline.selected)).unwrap_or(0);
     let scroll = settle_scroll(0, cursor, height);
+    let links = app_links(&deployed, scroll, inner);
     let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|(_, line)| line).collect();
     f.render_widget(Paragraph::new(shown), inner);
+    app.links.extend(links);
 }
 
-/// The review apps above the jobs, each with its address so the terminal can open it; a blank
-/// row closes the block. Nothing when the branch went nowhere.
-fn deployment_lines<'a>(open: &Open, width: usize, theme: Theme) -> Vec<Line<'a>> {
+/// Each review app's address where it shows in `inner`, `scroll` rows down, so a click opens it.
+fn app_links(deployed: &[(Line, Option<String>)], scroll: usize, inner: Rect) -> Vec<Link> {
+    let height = usize::from(inner.height);
+    deployed
+        .iter()
+        .enumerate()
+        .filter_map(|(row, (line, url))| {
+            let y = u16::try_from(row.checked_sub(scroll).filter(|y| *y < height)?).ok()?;
+            let text = line.spans.first()?.content.trim_start().to_owned();
+            let x = inner.x + u16::try_from(line.width() - text.width()).ok()?;
+            Some(Link { x, y: inner.y + y, text, url: url.clone()? })
+        })
+        .collect()
+}
+
+/// The review apps above the jobs, each with its address, which a click opens; a blank row closes
+/// the block. Nothing when the branch went nowhere.
+fn deployment_lines<'a>(open: &Open, width: usize, theme: Theme) -> Vec<(Line<'a>, Option<String>)> {
     let Some(deployments) = open.deployments.as_deref().filter(|d| !d.is_empty()) else { return vec![] };
-    let mut lines = vec![Line::from(Span::styled(" REVIEW APPS", Style::default().fg(theme.faded)))];
+    let mut lines = vec![(Line::from(Span::styled(" REVIEW APPS", Style::default().fg(theme.faded))), None)];
     for deployment in deployments {
         let behind = !deployment.current;
         let name = format!(" {DEPLOYED}{}", deployment.environment);
         let note = if behind { " · older push" } else { "" };
-        lines.push(Line::from(vec![
-            Span::styled(name, if behind { Style::default().fg(theme.muted) } else { Style::default() }),
-            Span::styled(note, Style::default().fg(theme.faded)),
-        ]));
-        lines.push(Line::from(Span::styled(
-            format!("   {}", truncate(&deployment.url, width.saturating_sub(4))),
-            Style::default().fg(theme.link),
-        )));
+        lines.push((
+            Line::from(vec![
+                Span::styled(name, if behind { Style::default().fg(theme.muted) } else { Style::default() }),
+                Span::styled(note, Style::default().fg(theme.faded)),
+            ]),
+            None,
+        ));
+        let url = Span::styled(format!("   {}", truncate(&deployment.url, width.saturating_sub(4))), Style::default().fg(theme.link));
+        lines.push((Line::from(url), Some(deployment.url.clone())));
     }
-    lines.push(Line::default());
+    lines.push((Line::default(), None));
     lines
 }
 

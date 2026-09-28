@@ -4,7 +4,7 @@ use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;
 use super::thread_view::body_lines;
-use super::ui::{DEPLOYED, pane, short_age, truncate};
+use super::ui::{DEPLOYED, Link, pane, short_age, truncate};
 use crate::forge::ReviewState;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -29,7 +29,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let Some(brief) = app.brief.as_mut() else { return };
     let width = (area.width * SIZE_PCT / 100).clamp(area.width.min(40), MAX_WIDTH).min(area.width);
     let text_w = width.saturating_sub(2 + 2 * PAD_X);
-    let (lines, target_lines) = lines(brief, theme, today, usize::from(text_w));
+    let (lines, target_lines, app_lines) = lines(brief, theme, today, usize::from(text_w));
     let rows = wrapped_rows(&lines, text_w);
     let frame_y = 2 + 2 * PAD_Y;
     let height = (rows as u16).saturating_add(frame_y).min(area.height * SIZE_PCT / 100).max(area.height.min(10));
@@ -57,13 +57,33 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         brief.follow = false;
     }
     brief.scroll = brief.scroll.min(rows.saturating_sub(visible));
+    let links = app_links(brief, &lines, &app_lines, inner);
     let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((brief.scroll as u16, 0));
     f.render_widget(Clear, popup);
     f.render_widget(paragraph.block(block).style(Style::default().bg(theme.surface)), popup);
+    app.links.extend(links);
 }
 
-/// The cover's lines, and the line each thread row starts on.
-fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) -> (Vec<Line<'a>>, Vec<usize>) {
+/// Each review app's address where it shows in `inner`, so a click opens it.
+fn app_links(brief: &Brief, lines: &[Line], app_lines: &[usize], inner: Rect) -> Vec<Link> {
+    let shown = |line: usize| {
+        let row = wrapped_rows(&lines[..line], inner.width).checked_sub(brief.scroll)?;
+        u16::try_from(row).ok().filter(|row| *row < inner.height)
+    };
+    brief
+        .deployments
+        .iter()
+        .zip(app_lines)
+        .filter_map(|(deployment, &line)| {
+            let [name, url] = lines[line].spans.as_slice() else { return None };
+            let x = inner.x + u16::try_from(name.width()).ok()?;
+            Some(Link { x, y: inner.y + shown(line)?, text: url.content.to_string(), url: deployment.url.clone() })
+        })
+        .collect()
+}
+
+/// The cover's lines, the line each thread row starts on, and the line each review app sits on.
+fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) -> (Vec<Line<'a>>, Vec<usize>, Vec<usize>) {
     let mut lines = head(brief, theme, today);
     lines.push(Line::default());
     match brief.description.trim() {
@@ -74,8 +94,9 @@ fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) ->
     lines.push(checks_line(brief, theme, width));
     if !brief.deployments.is_empty() {
         section(&mut lines, "review apps", "", theme);
-        lines.extend(brief.deployments.iter().map(|d| deployment_line(d, theme, width)));
     }
+    let apps: Vec<usize> = (lines.len()..lines.len() + brief.deployments.len()).collect();
+    lines.extend(brief.deployments.iter().map(|d| deployment_line(d, theme, width)));
     section(&mut lines, "review", "", theme);
     lines.extend(review_lines(brief, theme, width));
     let mut targets = vec![];
@@ -90,7 +111,7 @@ fn lines<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>, width: usize) ->
         section(&mut lines, "threads", &format!("{} open", brief.unresolved), theme);
         lines.push(Line::from(Span::styled("open the MR to see its threads", Style::default().fg(theme.faded))));
     }
-    (lines, targets)
+    (lines, targets, apps)
 }
 
 fn head<'a>(brief: &Brief, theme: Theme, today: DateTime<Utc>) -> Vec<Line<'a>> {

@@ -2296,6 +2296,26 @@ fn review_apps_show_in_the_header_the_pipeline_and_the_cover_and_reload_once_a_r
 }
 
 #[test]
+fn a_click_on_a_review_app_opens_it_from_the_pipeline_and_the_cover() {
+    use crate::forge::Deployment;
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let mut app = with_pipeline();
+    let url = "https://feat-checkout.review.acme.test";
+    let deployments = vec![Deployment { environment: "review/feat-checkout".into(), url: url.into(), current: true }];
+    app.apply(Incoming::Deployments { key: mr_key(), deployments });
+    let click = |app: &mut App, at: (u16, u16)| {
+        mouse(app, MouseEventKind::Down(MouseButton::Left), at);
+        mouse(app, MouseEventKind::Up(MouseButton::Left), at)
+    };
+    for (keys, height) in [("", 30), ("pi", 50)] {
+        press(&mut app, keys);
+        render(&mut app, 200, height);
+        let link = app.links.iter().find(|l| l.text == url).unwrap_or_else(|| panic!("after {keys:?}: {:?}", app.links)).clone();
+        assert_eq!(click(&mut app, (link.x + 2, link.y)), vec![Action::OpenUrl(url.into())], "after {keys:?}");
+    }
+}
+
+#[test]
 fn p_opens_the_pipeline_on_its_first_failure_and_o_opens_that_job() {
     let mut app = with_pipeline();
     assert_eq!(app.focus, Focus::Side);
