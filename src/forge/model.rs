@@ -153,6 +153,24 @@ pub struct Approvals {
     pub approved_by: Vec<User>,
 }
 
+impl Approvals {
+    /// The approvals once mine, `me`'s, is added or taken back, counted the way the forge will
+    /// until its own answer comes; a removal gives back the approval it had taken.
+    pub fn with_mine(&self, approve: bool, me: &str) -> Self {
+        let had = self.approved_by.iter().any(|u| u.username == me);
+        let mut approved_by: Vec<User> = self.approved_by.iter().filter(|u| u.username != me).cloned().collect();
+        let approvals_left = match (approve, had) {
+            (true, false) => self.approvals_left.saturating_sub(1),
+            (false, true) => self.approvals_left + 1,
+            _ => self.approvals_left,
+        };
+        if approve {
+            approved_by.push(User { id: 0, username: me.to_owned(), name: me.to_owned() });
+        }
+        Self { approved: approvals_left == 0, approvals_left, user_has_approved: approve, approved_by, ..self.clone() }
+    }
+}
+
 /// One changed file: its unified diff body (hunks from the first `@@`) and how it changed.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiffFile {
@@ -483,6 +501,16 @@ mod tests {
         let saved = serde_json::to_string(&[Emoji::Rocket, hundred]).unwrap();
         assert_eq!(saved, r#"["Rocket","💯"]"#);
         assert_eq!(serde_json::from_str::<Vec<Emoji>>(&saved).unwrap(), [Emoji::Rocket, hundred]);
+    }
+
+    #[test]
+    fn my_approval_counts_at_once_and_taking_it_back_undoes_it() {
+        let lea = User { id: 1, username: "lea".into(), name: "Lea".into() };
+        let before = Approvals { approved: false, approvals_left: 1, approved_by: vec![lea], ..Approvals::default() };
+        let mine = before.with_mine(true, "nina");
+        assert_eq!((mine.approved, mine.approvals_left, mine.user_has_approved, mine.approved_by.len()), (true, 0, true, 2));
+        assert_eq!(mine.with_mine(true, "nina"), mine, "approving twice counts once");
+        assert_eq!(mine.with_mine(false, "nina"), Approvals { user_has_approved: false, ..before });
     }
 
     #[test]
