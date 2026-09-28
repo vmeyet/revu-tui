@@ -5,7 +5,7 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph};
 use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
@@ -27,6 +27,12 @@ const SIDE_PCT: u16 = 40;
 const ZEN_PCT: u32 = 70;
 /// A comfortable line of code with both gutters and the sign.
 const ZEN_MIN_W: u16 = 120;
+/// From this many rows zen's column holds the diff over the thread pane; shorter, the pane is a page of its own.
+const ZEN_SPLIT_FROM: u16 = 24;
+/// The thread pane's share of zen's column under the diff, and while a comment is being written.
+const ZEN_PANE_PCT: u16 = 25;
+const ZEN_COMPOSE_PCT: u16 = 50;
+const ZEN_PANE_MIN: u16 = 8;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_FRAME: Duration = Duration::from_millis(80);
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
@@ -51,14 +57,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
-    let (review, side) = if app.zen {
-        let side_by_side = app.open.as_ref().is_some_and(|o| o.review.side_by_side);
-        let width = if side_by_side { main.width } else { zen_width(app.zen_width, main.width) };
-        (zen_column(review, width), zen_column(side, width))
-    } else {
-        (review, side)
-    };
+    let (shown, review, side) = if app.zen { zen_areas(app, main, shown, [review, side]) } else { (shown, review, side) };
     let side_open = side_open && shown.side > 0;
+    let split = app.zen && shown.diff && side_open;
     let hidden = Rect::default();
     app.areas = super::app::Areas {
         queue: if shown.queue > 0 { queue } else { hidden },
@@ -79,7 +80,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     } else if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
         super::tree_view::draw(f, app, side);
     } else if side_open {
-        pictures = thread_view::draw(f, app, side);
+        pictures = thread_view::draw(f, app, side, split);
     }
     if app.filtering {
         draw_filter(f, app, input);
@@ -166,7 +167,7 @@ struct Columns {
 }
 
 /// The right pane's width rules: all three columns from 150, the queue steps aside from 120,
-/// and below that, or in zen, the pane is a page of its own while it has the keys.
+/// and below that, or in a zen column too short to split, the pane is a page of its own while it has the keys.
 fn columns(width: u16, side_open: bool, side_focused: bool, zen: bool) -> Columns {
     let side = SIDE_W.max(width * SIDE_PCT / 100);
     let queue = match (zen, width) {
@@ -181,6 +182,32 @@ fn columns(width: u16, side_open: bool, side_focused: bool, zen: bool) -> Column
         (true, _) if side_focused => Columns { queue: 0, side: width, diff: false },
         (true, _) => Columns { queue: 0, side: 0, diff: true },
     }
+}
+
+/// Zen's column for the diff and the right pane: the diff over the thread pane when the column is
+/// tall enough, else the one `shown` gives it.
+fn zen_areas(app: &App, main: Rect, shown: Columns, [review, side]: [Rect; 2]) -> (Columns, Rect, Rect) {
+    let side_by_side = app.open.as_ref().is_some_and(|o| o.review.side_by_side);
+    let width = if side_by_side { main.width } else { zen_width(app.zen_width, main.width) };
+    let column = zen_column(main, width);
+    let threads = app.open.as_ref().is_some_and(super::app::Open::shows_threads);
+    let needs = threads.then(|| thread_view::rows_needed(app, column.width));
+    match needs.and_then(|needs| zen_split(column, needs, app.input.is_some())) {
+        Some([diff, pane]) => (Columns { queue: 0, side: column.width, diff: true }, diff, pane),
+        None => (shown, zen_column(review, width), zen_column(side, width)),
+    }
+}
+
+/// `column` as the diff over the thread pane: the pane takes what it `needs`, up to a quarter of
+/// the column (half while `composing`) and never fewer than `ZEN_PANE_MIN` rows for that share.
+/// A column too short for both gives none.
+fn zen_split(column: Rect, needs: u16, composing: bool) -> Option<[Rect; 2]> {
+    if column.height < ZEN_SPLIT_FROM {
+        return None;
+    }
+    let share = if composing { ZEN_COMPOSE_PCT } else { ZEN_PANE_PCT };
+    let most = (column.height * share / 100).max(ZEN_PANE_MIN);
+    Some(Layout::vertical([Constraint::Min(1), Constraint::Length(needs.min(most))]).areas(column))
 }
 
 /// Zen's column: `fixed` columns when `[tui] zen_width` sets it, else a share of the screen that grows with it.
@@ -211,6 +238,15 @@ pub fn side_pane(theme: Theme, title: &str, focused: bool, zen: bool) -> Block<'
         return pane(theme, title, focused);
     }
     Block::default().title(Span::styled(format!(" {title}"), Style::default().fg(theme.faded))).padding(Padding::new(1, 1, 1, 0))
+}
+
+/// Zen's thread pane under the diff: a faded rule carrying its title, no frame.
+pub fn rule_pane(theme: Theme, title: &str) -> Block<'static> {
+    let title = Line::from(vec![
+        Span::styled("─ ", Style::default().fg(theme.border)),
+        Span::styled(format!("{title} "), Style::default().fg(theme.faded)),
+    ]);
+    Block::new().borders(Borders::TOP).border_style(Style::default().fg(theme.border)).title(title).padding(Padding::horizontal(1))
 }
 
 pub fn draw_empty(f: &mut Frame, theme: Theme, area: Rect, lines: &[&str]) {
@@ -449,6 +485,45 @@ mod columns_tests {
     fn the_zen_column_sits_in_the_middle_under_the_banner_row() {
         assert_eq!(zen_column(Rect::new(0, 0, 160, 40), 112), Rect::new(24, 1, 112, 39));
         assert_eq!(zen_column(Rect::new(0, 0, 80, 40), 100), Rect::new(0, 1, 80, 39));
+    }
+
+    fn pane_rows(height: u16, needs: u16, composing: bool) -> Option<u16> {
+        zen_split(Rect::new(9, 1, 120, height), needs, composing).map(|[_, pane]| pane.height)
+    }
+
+    #[test]
+    fn zen_puts_the_diff_over_the_thread_pane_a_quarter_of_the_column_at_most() {
+        let split = zen_split(Rect::new(9, 1, 120, 39), 30, false);
+        assert_eq!(split, Some([Rect::new(9, 1, 120, 30), Rect::new(9, 31, 120, 9)]), "a quarter of 39 rows");
+        assert_eq!(pane_rows(59, 30, false), Some(14));
+        assert_eq!(pane_rows(99, 60, false), Some(24));
+    }
+
+    #[test]
+    fn the_pane_under_the_diff_never_takes_more_than_it_needs() {
+        assert_eq!(pane_rows(39, 5, false), Some(5));
+        assert_eq!(pane_rows(59, 9, false), Some(9));
+    }
+
+    #[test]
+    fn the_pane_under_the_diff_may_take_8_rows_when_a_quarter_is_fewer() {
+        assert_eq!(pane_rows(24, 30, false), Some(8));
+        assert_eq!(pane_rows(29, 30, false), Some(8));
+        assert_eq!(pane_rows(24, 6, false), Some(6), "still no more than it needs");
+    }
+
+    #[test]
+    fn composing_lets_the_pane_under_the_diff_grow_to_half_the_column() {
+        assert_eq!(pane_rows(39, 30, true), Some(19));
+        assert_eq!(pane_rows(39, 12, true), Some(12), "past the quarter, only as far as the box needs");
+        assert_eq!(pane_rows(39, 4, true), Some(4));
+    }
+
+    #[test]
+    fn a_column_under_24_rows_leaves_the_pane_a_page_of_its_own() {
+        assert_eq!(pane_rows(23, 5, false), None);
+        assert_eq!(pane_rows(23, 5, true), None);
+        assert_eq!(pane_rows(ZEN_SPLIT_FROM, 5, false), Some(5));
     }
 
     #[test]

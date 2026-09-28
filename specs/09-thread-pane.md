@@ -77,7 +77,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - 150 columns and more: queue, diff and pane side by side.
 - 120 to 149 columns: the queue hides while the pane is open, and comes back when it closes.
 - Under 120 columns: the pane takes the whole review area, like a page; `h` or `esc` returns to the diff at the same line.
-- Reading mode (`z`): no queue and no pane beside the diff; `enter` on a marked line opens the pane the narrow way, full width.
+- Reading mode (`zz`): no queue and no pane beside the diff; the thread pane opens under the diff in zen's column, see Zen.
 
 ### What it shows
 
@@ -104,11 +104,22 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - `m` keeps only the conversations I take part in: I wrote one of its notes, started it, or have a draft or a draft reply in it; `m` again lists them all. The title says so, `the whole MR · mine · 3 of 12 threads`, and an empty result reads `you take part in no thread · m shows them all`. The choice lasts while the list is open; `J` `K` `r` `R` `enter` work on what it shows.
 - Each conversation opens on where it hangs, in `muted`: `src/pay/charge.rs:57` (`:-13` for the old side), `src/pay/charge.rs:57 · outdated`, or `on the MR`; under a line in the diff, its code, trimmed, in `faded`, so the reader keeps the context.
 - `J` `K` move between conversations; `r`, `R`, `+`, `e`, `d`, `S` act on the one under the cursor as in the pane of one line, and the list stays.
-- `enter` takes the diff's cursor to the conversation's line, opening its file and hunk as `]n` does, and folds or unfolds a resolved thread; the MR's own conversations go to the header, outdated ones to their file row. The list stays; it keeps the focus, except in zen, where the diff shows at the line. Under 120 columns, `h` shows the diff there.
+- `enter` takes the diff's cursor to the conversation's line, opening its file and hunk as `]n` does, and folds or unfolds a resolved thread; the MR's own conversations go to the header, outdated ones to their file row. The list stays and keeps the focus; where the list takes the diff's place (a short zen column), the diff shows at the line instead. Under 120 columns, `h` shows the diff there.
 - From the diff, `l` goes back to the list, on the conversation it left, even on a marked line; `enter` on a marked line swaps the list for that line's threads.
 - It does not follow the cursor: moving in the diff keeps the list.
 - `T` again, `esc`, `x` or `q` close it; `c` on a line switches the pane to that line, as it would from any place.
-- In zen it opens the narrow way, like the pane of one line: zen's column is at least 120 columns, so the list beside it would squeeze the code, and a screen of 138 has no room for both. While the diff shows, `T` brings the list back instead of closing it.
+- In zen it opens under the diff, like the pane of one line; in a short zen column, where the list takes the diff's place, `T` from the diff brings the list back instead of closing it.
+
+### Zen
+
+Zen's column is at least 120 columns, so a pane beside the diff would squeeze the code, and a screen of 138 has no room for both: the thread pane (one line, the compose box, every thread) opens under the diff instead.
+
+- The diff on top keeps its cursor line in view; the pane under it takes what it needs, up to a quarter of the column, and never fewer than 8 rows for that share.
+- While a comment is written the pane grows for the box, up to half the column.
+- No frame: a faded `─ charge.rs:57 · 2 threads ───` rule carries its title.
+- `h` `l` and the arrows move focus between the two; the wheel scrolls the part under the pointer, and a drag stays in the part it started in.
+- A column under 24 rows has no room for both: the pane takes it whole while it has the keys, and `h` shows the diff in its place.
+- The file tree, the pipeline and an AI answer still take the whole column.
 
 ### Moving inside it
 

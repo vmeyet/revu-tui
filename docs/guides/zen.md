@@ -14,7 +14,7 @@ It takes every form `revu show` takes, `acme/widgets!42` or an MR URL too; quote
 | The MR header | One faded line on top; `◆3` counts the unresolved threads |
 | File and hunk headers | Pinned at the top of the column while you scroll |
 | The diff | A centred column, 70 % of the screen and 120 columns at least; the whole screen when `D` shows it side by side |
-| The thread pane | The same column, with one faded title line and no frame |
+| The thread pane | Under the diff in the same column, behind a faded rule with its title, no frame |
 | Notifications | Held until you leave zen |
 
 ## Move between MRs
@@ -29,7 +29,17 @@ A line on top says which MR you are on, for example `3/12`.
 
 `zz`, `esc`, `h` or `←` bring the queue back.
 The thread pane still opens with `enter` or `→` on a marked line, or with `T` on every thread; `q`, `x` or `esc` close it.
-In the list of every thread, `enter` shows the diff at that thread's line; `l`, `→` or `T` bring the list back.
+
+## The thread pane
+
+It opens under the diff, which keeps your line in view.
+It takes the rows its threads need, up to a quarter of the column, and grows up to half while you write a comment.
+`h` and `l`, or `←` and `→`, move between the diff and the pane.
+The mouse wheel scrolls the part under the pointer; a drag copies from one part only.
+In the list of every thread, `enter` moves the diff above to that thread's line.
+
+On a terminal under about 25 rows the pane takes the whole column instead.
+There, `enter` in the list of every thread shows the diff at that line, and `l`, `→` or `T` bring the list back.
 
 ## Change the width
 

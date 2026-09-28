@@ -1,6 +1,6 @@
 ---
 source: src/tui/app/tests.rs
-expression: "render(&mut app, 100, 30)"
+expression: screen
 ---
 
  charge.rs:-13 · 1 thread

@@ -85,6 +85,11 @@ impl Open {
         self.pane.is_some() || self.tree.is_some() || self.answer.is_some() || self.pipeline.is_some()
     }
 
+    /// The right pane shows threads: no file tree, pipeline or answer took their place.
+    pub fn shows_threads(&self) -> bool {
+        self.pane.is_some() && self.tree.is_none() && self.answer.is_none() && self.pipeline.is_none()
+    }
+
     pub fn row(&self) -> Option<&Row> {
         self.rows.get(self.selected)
     }

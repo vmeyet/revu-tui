@@ -3179,22 +3179,96 @@ fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
     insta::assert_snapshot!("zen_medium", render(&mut app, 100, 30));
 }
 
-#[test]
-fn zen_opens_the_thread_pane_in_the_diff_column_without_a_frame() {
+/// Zen on the line with the resolved thread, its pane open and focused.
+fn zen_on_a_thread() -> App {
     let mut app = with_review();
     press(&mut app, "zz]N");
-    let diff = render(&mut app, 160, 45);
     app.handle_key(code(KeyCode::Enter));
     assert_eq!(app.focus, Focus::Side);
-    let screen = render(&mut app, 160, 45);
+    app
+}
+
+#[test]
+fn zen_opens_the_thread_pane_under_the_diff_behind_a_rule() {
+    let mut app = zen_on_a_thread();
+    let screen = render(&mut app, 138, 40);
     assert!(!screen.contains('╭') && !screen.contains('╰'), "no frame:\n{screen}");
-    let indent = |screen: &str| {
-        let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
-        first.len() - first.trim_start().len()
-    };
-    assert_eq!(indent(&screen), indent(&diff), "the title starts where the zen header does:\n{screen}");
-    insta::assert_snapshot!("zen_thread_wide", screen);
-    insta::assert_snapshot!("zen_thread_medium", render(&mut app, 100, 30));
+    assert!(screen.contains("▎✓   13      -    let client = Client::new();"), "the diff keeps its cursor line:\n{screen}");
+    let rows = screen.lines().collect::<Vec<_>>();
+    let rule = rows.iter().position(|row| row.trim_start().starts_with("─ charge.rs:-13 · 1 thread ──")).expect("a rule over the pane");
+    assert!(rows[rule + 3].contains("Why drop the plain client?"), "the thread right under it:\n{screen}");
+    let (diff, pane) = (app.areas.review, app.areas.side);
+    assert_eq!((diff.x, diff.width, diff.bottom()), (pane.x, pane.width, pane.y), "one column, the pane right under the diff");
+    assert_eq!(pane.height, 4, "no more rows than the thread takes");
+    insta::assert_snapshot!("zen_split", screen);
+}
+
+#[test]
+fn a_short_zen_column_opens_the_thread_pane_as_a_page_of_its_own() {
+    let mut app = zen_on_a_thread();
+    let screen = render(&mut app, 100, 24);
+    assert!(!screen.contains("let client = Client::new()") && screen.contains("charge.rs:-13 · 1 thread"), "{screen}");
+    let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(first.starts_with(" charge.rs:-13"), "the title starts where the zen header does:\n{screen}");
+    assert!(!app.areas.both_shown());
+    insta::assert_snapshot!("zen_thread_short", screen);
+}
+
+#[test]
+fn in_zen_h_and_l_move_between_the_diff_and_the_pane_under_it() {
+    let mut app = zen_on_a_thread();
+    render(&mut app, 138, 40);
+    press(&mut app, "h");
+    assert_eq!((app.focus, app.zen), (Focus::Review, true), "h from the pane stays in zen");
+    assert!(render(&mut app, 138, 40).contains("─ charge.rs:-13 · 1 thread"), "the pane stays under the diff");
+    press(&mut app, "l");
+    assert_eq!(app.focus, Focus::Side);
+    app.handle_key(code(KeyCode::Left));
+    assert_eq!(app.focus, Focus::Review);
+    app.handle_key(code(KeyCode::Right));
+    assert_eq!(app.focus, Focus::Side);
+}
+
+#[test]
+fn in_zen_the_compose_box_lets_the_pane_under_the_diff_grow() {
+    let mut app = zen_on_a_thread();
+    render(&mut app, 138, 40);
+    let reading = app.areas.side.height;
+    press(&mut app, "r");
+    for line in ["agreed", "keys are per card", "and per amount"] {
+        press(&mut app, line);
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+    }
+    let screen = render(&mut app, 138, 40);
+    assert!(screen.contains("reply to nina") && screen.contains("agreed") && screen.contains("and per amount"), "{screen}");
+    assert_eq!((reading, app.areas.side.height), (4, 10), "past the quarter: the thread and a box of four lines");
+    insta::assert_snapshot!("zen_split_compose", screen);
+    press(&mut app, &"one more line ".repeat(60));
+    render(&mut app, 138, 40);
+    assert_eq!(app.areas.side.height, 1 + 3 + 8 + 2, "the box stops at eight lines");
+    let mut list = with_review();
+    press(&mut list, "zzTragreed");
+    render(&mut list, 138, 40);
+    assert_eq!(list.areas.side.height, 39 / 2, "every thread and a box: half the column, no more");
+}
+
+#[test]
+fn in_zen_the_wheel_and_a_drag_stay_in_the_part_under_the_pointer() {
+    let mut app = with_review();
+    press(&mut app, "zzT");
+    render(&mut app, 138, 40);
+    let (diff, pane) = (app.areas.review, app.areas.side);
+    let selected = app.open.as_ref().unwrap().selected;
+    wheel(&mut app, true, pane.x + 5, pane.y + 2);
+    assert_eq!(app.open.as_ref().unwrap().selected, selected, "the diff stays");
+    assert_ne!(focused_thread(&app).as_deref(), Some("6a9c1750b2d6e4f0"), "the list moved");
+    wheel(&mut app, true, diff.x + 5, diff.y + 5);
+    assert_ne!(app.open.as_ref().unwrap().selected, selected, "the diff moved");
+    assert_eq!(app.focus, Focus::Side);
+    let code = spot(&mut app, "let client = Client::new()", 138, 40);
+    let actions = drag(&mut app, code, (code.0, pane.y + 3), 138, 40);
+    let Some(Action::Copy { text, .. }) = actions.first() else { panic!("a copy: {actions:?}") };
+    assert!(text.starts_with("let client = Client::new();") && !text.contains("Why drop"), "{text}");
 }
 
 #[test]
@@ -4366,22 +4440,38 @@ fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
 }
 
 #[test]
-fn in_zen_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_the_list_back() {
+fn in_zen_enter_in_every_thread_moves_the_diff_above_and_keeps_the_list() {
+    let mut app = with_review();
+    press(&mut app, "zzT");
+    let list = render(&mut app, 138, 40);
+    assert!(list.contains("the whole MR · 3 threads") && list.contains("@@ -12,4"), "the diff over the list:\n{list}");
+    press(&mut app, "JJ");
+    app.handle_key(code(KeyCode::Enter));
+    let open = app.open.as_ref().unwrap();
+    assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "the list keeps the keys");
+    assert!(render(&mut app, 138, 40).contains("▎✓   13      -    let client = Client::new();"));
+    press(&mut app, "hT");
+    assert_eq!((listed_place(&app), app.focus, app.zen), (None, Focus::Review, true), "T from the diff closes the list it shows");
+}
+
+#[test]
+fn in_a_short_zen_column_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_the_list_back() {
     let mut app = with_review();
     press(&mut app, "zzT");
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
-    let list = render(&mut app, 138, 40);
+    let list = render(&mut app, 138, 24);
     assert!(list.contains("the whole MR · 3 threads") && !list.contains("@@ -12,4"), "the list takes the diff's column:\n{list}");
     press(&mut app, "JJ");
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_ref().unwrap();
     assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
     assert_eq!((listed_place(&app), app.focus, app.zen), (Some(Place::All), Focus::Review, true), "the diff shows the line, in zen");
-    assert!(render(&mut app, 138, 40).contains("▎✓   13      -    let client = Client::new();"));
+    assert!(render(&mut app, 138, 24).contains("▎✓   13      -    let client = Client::new();"));
     press(&mut app, "l");
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "l on the marked line goes back to the list");
     assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "on the thread it left");
-    insta::assert_snapshot!("every_thread_zen_back", render(&mut app, 138, 40));
+    insta::assert_snapshot!("every_thread_zen_back", render(&mut app, 138, 24));
     press(&mut app, "hT");
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "T from the diff shows the hidden list");
     press(&mut app, "T");
@@ -4415,7 +4505,8 @@ fn snapshot_every_thread_mine() {
     let mut app = with_review();
     press(&mut app, "zzTm");
     let mine = render(&mut app, 200, 50);
-    assert!(mine.contains("the whole MR · mine · 1 of 3 threads") && !mine.contains("on the MR"), "{mine}");
+    let pane = mine.split("─ the whole MR · mine · 1 of 3 threads").nth(1).unwrap_or_else(|| panic!("the title on the rule:\n{mine}"));
+    assert!(!pane.contains("on the MR"), "{mine}");
     insta::assert_snapshot!("every_thread_zen_mine", mine);
     app.me = "omar".into();
     press(&mut app, "mm");

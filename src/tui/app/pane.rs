@@ -165,7 +165,7 @@ impl App {
 
     /// The list of every conversation is open, but zen shows the diff in its place.
     fn every_thread_hidden(&self) -> bool {
-        self.zen && self.focus == Focus::Review && self.open.as_ref().is_some_and(Open::lists_every_thread)
+        self.zen && self.focus == Focus::Review && !self.areas.both_shown() && self.open.as_ref().is_some_and(Open::lists_every_thread)
     }
 
     /// `m` in the list of every conversation: only those I take part in, or every one again.
@@ -212,7 +212,7 @@ impl App {
     }
 
     /// `enter` in the list of every conversation: the diff's cursor onto the focused one's line;
-    /// zen shows the diff there, since the list takes its place.
+    /// zen shows the diff there when the list takes its place.
     fn jump_to_focused(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some((conversations, _, Some(focused))) = open.pane_view() else { return vec![] };
@@ -221,7 +221,7 @@ impl App {
             return vec![];
         };
         let actions = self.jump_to_row(&target);
-        if self.zen {
+        if self.zen && !self.areas.both_shown() {
             self.focus = Focus::Review;
         }
         actions
