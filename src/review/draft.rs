@@ -18,6 +18,13 @@ pub struct Draft {
     pub resolve: bool,
 }
 
+/// A draft named whatever its place in the list: by the id this session gave it, else by the forge's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DraftId {
+    Local(u64),
+    Forge(u64),
+}
+
 impl Draft {
     /// A fresh note on a line, or on the MR when `anchor` is None.
     #[cfg(test)]
@@ -90,6 +97,17 @@ impl Draft {
         Self { local_id: Some(local_id), ..self }
     }
 
+    pub fn draft_id(&self) -> Option<DraftId> {
+        self.local_id.map(DraftId::Local).or(self.id.map(DraftId::Forge))
+    }
+
+    pub fn is(&self, id: DraftId) -> bool {
+        match id {
+            DraftId::Local(local) => self.local_id == Some(local),
+            DraftId::Forge(forge) => self.id == Some(forge),
+        }
+    }
+
     /// Whether this draft sits in the diff at `(path, side, line)`.
     pub fn is_at(&self, path: &str, side: Side, line: u32) -> bool {
         self.reply_to.is_none() && self.anchor.as_ref().is_some_and(|a| a.path == path && a.side == side && a.line == line)
@@ -97,11 +115,12 @@ impl Draft {
 }
 
 /// The forge's fresh drafts plus the ones this session wrote that it does not hold yet: a refresh never loses a draft.
-/// A written draft the forge now lists takes its id instead of showing twice.
+/// A written draft the forge now lists takes its id instead of showing twice; every draft keeps its local id.
 pub fn carry(held: &[Draft], old: &[Draft]) -> Vec<Draft> {
     let unsaved: Vec<&Draft> = old.iter().filter(|d| d.id.is_none()).collect();
     let listed = |draft: &Draft| held.iter().find(|h| h.same_as(draft)).and_then(|h| h.id);
-    let kept = held.iter().filter(|h| !unsaved.iter().any(|d| d.same_as(h))).cloned();
+    let local_of = |held: &Draft| old.iter().find(|d| d.id.is_some() && d.id == held.id).and_then(|d| d.local_id);
+    let kept = held.iter().filter(|h| !unsaved.iter().any(|d| d.same_as(h))).map(|h| Draft { local_id: local_of(h), ..h.clone() });
     kept.chain(unsaved.iter().map(|d| Draft { id: listed(d), ..(*d).clone() })).collect()
 }
 
@@ -160,8 +179,13 @@ mod tests {
         let web = held(3, "from the web", None, None, false);
         let landed = Draft::on(position(), "nit").with_local_id(1);
         let offline = Draft::reply("t1", "agreed").with_local_id(2);
-        let fresh = [web.clone(), held(7, "nit", Some(position()), None, false)];
-        let carried = carry(&fresh, &[web.clone(), landed.clone(), offline.clone()]);
-        assert_eq!(carried, vec![web, landed.with_id(7), offline], "one copy of the landed draft, still findable by its local id");
+        let saved = held(5, "typo", None, None, false);
+        let fresh = [web.clone(), saved.clone(), held(7, "nit", Some(position()), None, false)];
+        let carried = carry(&fresh, &[web.clone(), saved.clone().with_local_id(4), landed.clone(), offline.clone()]);
+        assert_eq!(
+            carried,
+            vec![web, saved.with_local_id(4), landed.with_id(7), offline],
+            "one copy of the landed draft, and every draft still findable by its local id"
+        );
     }
 }

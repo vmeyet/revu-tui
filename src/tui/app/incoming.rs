@@ -34,6 +34,7 @@ impl App {
                 self.prefetch();
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
+            Incoming::Mr { key, mr } => self.apply_mr(&key, *mr),
             Incoming::Resume { key, spot } => self.resume(&key, &spot),
             Incoming::Progress(counts) => {
                 let open = self.open.as_ref().map(|o| (o.key.clone(), o.review.progress()));
@@ -50,7 +51,7 @@ impl App {
                 }
             }
             Incoming::Done(text) => self.toast(text),
-            Incoming::File { key, path, text } => self.apply_file(&key, path, &text),
+            Incoming::File { key, path, sha, text } => self.apply_file(&key, path, &sha, &text),
             Incoming::DraftSaved { key, draft, id } => {
                 let follow = self.apply_draft_saved(&key, &draft, id);
                 self.composed.extend(follow);
@@ -100,6 +101,17 @@ impl App {
         }
     }
 
+    /// Every answer that is waiting applied in one go, so the loop draws once per batch and not once per piece of a stream.
+    pub fn apply_all(&mut self, waiting: impl IntoIterator<Item = Incoming>) -> Vec<super::Action> {
+        waiting
+            .into_iter()
+            .flat_map(|incoming| {
+                self.apply(incoming);
+                self.take_actions()
+            })
+            .collect()
+    }
+
     /// Actions an `Incoming` produced, taken by the loop right after `apply`.
     pub fn take_actions(&mut self) -> Vec<super::Action> {
         std::mem::take(&mut self.composed)
@@ -136,6 +148,15 @@ impl App {
                 self.prefetch();
             }
         }
+    }
+
+    /// A poll found the head unchanged: the MR's own fields change, the diff and the reader's place stay.
+    fn apply_mr(&mut self, key: &super::MrKey, mr: crate::forge::Mr) {
+        let Some(open) = self.open.take_if(|o| o.key == *key) else { return };
+        let same_head = open.review.mr.refs.head == mr.refs.head;
+        self.open = Some(if same_head { Open { review: open.review.with_mr(mr), cached: None, ..open } } else { open });
+        self.offline = None;
+        self.schedule_review();
     }
 
     fn apply_failure(&mut self, what: Failure, message: String) {

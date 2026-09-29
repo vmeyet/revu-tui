@@ -91,6 +91,8 @@ struct Backend {
     claude: Option<Claude>,
     /// MRs being opened right now: loading ahead waits while there are any.
     opening: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// The order of the last state save written per MR; also the one lock every write of `state.json` takes.
+    saved: std::sync::Arc<std::sync::Mutex<HashMap<MrKey, u64>>>,
 }
 
 /// What opening an MR fetches: the MR, its diffs, its discussions and my drafts.
@@ -153,6 +155,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         jev: jev(&ctx.config.ai),
         claude: claude(&ctx.config.ai),
         opening: std::sync::Arc::default(),
+        saved: std::sync::Arc::default(),
     };
     let settings = Settings {
         theme,
@@ -224,7 +227,7 @@ async fn event_loop(
                 Event::Mouse(mouse) => { wake(app); app.handle_mouse(mouse) }
                 _ => vec![],
             },
-            Some(incoming) = rx.recv() => { wake(app); app.apply(incoming); app.take_actions() }
+            Some(incoming) = rx.recv() => { wake(app); app.apply_all(std::iter::once(incoming).chain(std::iter::from_fn(|| rx.try_recv().ok()))) }
             () = tokio::time::sleep_until(next_tick.into()) => {
                 ticked = Instant::now();
                 wake(app);
@@ -448,9 +451,12 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             }
             Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
             Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
+            Action::PollMr { key, head } => send(backend.poll_review(key, &head).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
             Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::SaveState { key, fold, viewed, auto_folded, side_by_side, spot } => {
-                let save = move |b: &Backend| b.save_state(&key, fold, viewed, &auto_folded, side_by_side, spot);
+            Action::SaveState { key, order, fold, viewed, auto_folded, side_by_side, spot } => {
+                let chosen =
+                    MrState { fold, viewed_files: viewed, auto_folded: (*auto_folded).clone(), side_by_side, spot, opened_at: None };
+                let save = move |b: &Backend| b.save_state(&key, order, chosen);
                 if let Err(e) = backend.off(save).await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
@@ -499,7 +505,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             )),
             Action::LoadFile { key, path, sha } => {
                 let outcome = backend.forge_of(&key).file(&key, &path, &sha).await;
-                send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, text }));
+                send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, sha, text }));
             }
             Action::React { key, thread, index, note, emoji, on } => {
                 if let Err(e) = backend.forge_of(&key).react(&note, emoji, on).await {
@@ -805,7 +811,8 @@ impl Backend {
             Ok(None) => (None, None),
             Err(e) => (self.cached_ready(scope.as_deref()), Some(format!("{e:#}"))),
         };
-        Ok((self.queue_answer(scope, &queue, &others, ready.as_ref(), false), failure))
+        let answer = self.off(move |b| b.queue_answer(scope, &queue, &others, ready.as_ref(), false)).await?;
+        Ok((answer, failure))
     }
 
     fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
@@ -923,10 +930,43 @@ impl Backend {
 
     async fn fetch_review(&self, key: MrKey) -> Result<Incoming> {
         let fetched = self.fetch(&key).await?;
+        self.reviewed(key, fetched).await
+    }
+
+    /// The MR alone while its head is still `head`: no diffs, threads or drafts fetched, nothing highlighted again.
+    /// Once the head moved, the review is built again, with the new head's diffs from the cache when loading ahead put them there.
+    async fn poll_review(&self, key: MrKey, head: &str) -> Result<Incoming> {
+        let forge = self.forge_of(&key);
+        let mr = forge.mr(&key).await?;
+        if mr.refs.head == head {
+            let (wanted, kept) = (key.clone(), mr.clone());
+            self.off(move |b| {
+                let _ = b.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept);
+                b.mark_opened(&wanted);
+            })
+            .await?;
+            return Ok(Incoming::Mr { key, mr: Box::new(mr) });
+        }
+        let (diffs, discussions, drafts) =
+            tokio::try_join!(self.diffs_at(&key, &mr.refs.head), forge.discussions(&key), forge.drafts(&key))?;
+        self.reviewed(key, (mr, diffs, discussions, drafts)).await
+    }
+
+    /// The diffs of `head`, which never change once pushed: from the cache when it holds them.
+    async fn diffs_at(&self, key: &MrKey, head: &str) -> Result<Vec<DiffFile>> {
+        let (wanted, at) = (key.clone(), head.to_owned());
+        let cached = self.off(move |b| b.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await.ok().flatten();
+        match cached {
+            Some(diffs) => Ok(diffs),
+            None => self.forge_of(key).diffs(key).await,
+        }
+    }
+
+    /// What a fetch brought, kept in the cache and built into a review off the loop.
+    async fn reviewed(&self, key: MrKey, fetched: Fetched) -> Result<Incoming> {
         self.off(move |b| {
             b.keep(&key, &fetched);
-            let state = MrState { opened_at: Some(Utc::now()), ..b.state(&key) };
-            let _ = b.cache_of(&key).write(&keys::state(&key), &state);
+            b.mark_opened(&key);
             let (mr, diffs, discussions, drafts) = fetched;
             let review = b.build(&key, mr, &diffs, discussions, &drafts);
             Incoming::Review { key, review: Box::new(review), cached: None }
@@ -1000,7 +1040,10 @@ impl Backend {
     /// else a private read-only copy of what the forge serves.
     async fn view(&self, key: MrKey, path: &str, sha: &str, line: u32, note: Option<String>) -> Result<Incoming> {
         crate::open::safe_path(path)?;
-        let checkout = self.checkout.as_ref().filter(|_| key.host.is_none()).and_then(|c| c.head().map(|head| (c, head)));
+        let checkout = match self.checkout.as_ref().filter(|_| key.host.is_none()) {
+            Some(checkout) => checkout.head().await.map(|head| (checkout, head)),
+            None => None,
+        };
         let source = crate::open::Source::pick(&key.project, sha, checkout.as_ref().map(|(c, head)| (c.project.as_str(), head.as_str())));
         let (file, dir, note) = if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
             (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
@@ -1047,20 +1090,25 @@ impl Backend {
             .with_drafts(drafts.iter().map(Draft::held).collect())
     }
 
-    /// Saves what the reader chose; a `None` spot keeps the place saved before.
-    fn save_state(
-        &self,
-        key: &MrKey,
-        fold: FoldState,
-        viewed_files: BTreeMap<String, String>,
-        auto_folded: &BTreeSet<String>,
-        side_by_side: bool,
-        spot: Option<app::Spot>,
-    ) -> Result<()> {
+    /// Saves what the reader chose unless a newer save of `key` already landed; a `None` spot keeps the place saved before.
+    /// Saves run each on its own blocking thread, so they can finish out of order.
+    fn save_state(&self, key: &MrKey, order: u64, chosen: MrState) -> Result<()> {
+        let mut saved = self.saved.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if saved.get(key).is_some_and(|&last| last >= order) {
+            return Ok(());
+        }
         let before = self.state(key);
-        let state =
-            MrState { fold, viewed_files, auto_folded: auto_folded.clone(), side_by_side, spot: spot.or(before.spot.clone()), ..before };
-        self.cache_of(key).write(&keys::state(key), &state)
+        let state = MrState { spot: chosen.spot.or(before.spot), opened_at: before.opened_at, ..chosen };
+        self.cache_of(key).write(&keys::state(key), &state)?;
+        saved.insert(key.clone(), order);
+        Ok(())
+    }
+
+    /// Under the lock of the reader's saves, so neither writes over what the other just wrote.
+    fn mark_opened(&self, key: &MrKey) {
+        let _saving = self.saved.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let state = MrState { opened_at: Some(Utc::now()), ..self.state(key) };
+        let _ = self.cache_of(key).write(&keys::state(key), &state);
     }
 
     /// Sends where the reader left `key` last time, when a place was saved.
@@ -1254,28 +1302,29 @@ mod tests {
             jev: None,
             claude: None,
             opening: std::sync::Arc::default(),
+            saved: std::sync::Arc::default(),
         };
         let spot = app::Spot { path: "a.rs".into(), old: None, new: Some(3) };
-        backend
-            .save_state(
-                &key(),
-                FoldState::default(),
-                BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]),
-                &BTreeSet::new(),
-                true,
-                Some(spot.clone()),
-            )
-            .unwrap();
-        backend
-            .save_state(&key(), FoldState::default(), BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), &BTreeSet::new(), true, None)
-            .unwrap();
+        let viewed = BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]);
+        let chosen = MrState { viewed_files: viewed.clone(), side_by_side: true, ..MrState::default() };
+        backend.save_state(&key(), 1, MrState { spot: Some(spot.clone()), ..chosen.clone() }).unwrap();
+        backend.save_state(&key(), 2, chosen).unwrap();
         let state = backend.state(&key());
-        assert_eq!(
-            (state.viewed_files, state.side_by_side),
-            (BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]), true),
-            "the side by side choice is remembered per MR"
-        );
+        assert_eq!((state.viewed_files, state.side_by_side), (viewed, true), "the side by side choice is remembered per MR");
         assert_eq!(state.spot, Some(spot), "a save without a place keeps the one saved before");
+    }
+
+    #[test]
+    fn a_state_save_finishing_after_a_newer_one_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        backend.save_state(&key(), 2, MrState { side_by_side: true, ..MrState::default() }).unwrap();
+        backend.save_state(&key(), 1, MrState::default()).unwrap();
+        backend.mark_opened(&key());
+        backend.save_state(&key(), 2, MrState::default()).unwrap();
+        let state = backend.state(&key());
+        assert!(state.side_by_side, "the older save and a repeat of the newest one are dropped");
+        assert!(state.opened_at.is_some(), "stamping the MR opened keeps what the reader chose");
     }
 
     #[tokio::test]
@@ -1295,6 +1344,7 @@ mod tests {
             jev: None,
             claude: None,
             opening: std::sync::Arc::default(),
+            saved: std::sync::Arc::default(),
         };
         let mr = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
         let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
@@ -1341,6 +1391,7 @@ mod tests {
             jev: None,
             claude: Some(Claude::with_base(&server.uri(), ai::Secret::new("sk-ant-test"), "claude-opus-5")),
             opening: std::sync::Arc::default(),
+            saved: std::sync::Arc::default(),
         };
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
@@ -1371,8 +1422,9 @@ mod tests {
         })
     }
 
-    /// One MR on the mock GitLab, changed at `updated`; each of its five requests may come `times` times.
-    async fn mount_mr(server: &wiremock::MockServer, updated: &str, times: u64) {
+    /// One MR on the mock GitLab, changed at `updated`; its five requests (MR, approvals, diffs, discussions,
+    /// drafts) may come `times[i]` times.
+    async fn mount_mr(server: &wiremock::MockServer, updated: &str, times: [u64; 5]) {
         use wiremock::matchers::{method, path};
         use wiremock::{Mock, ResponseTemplate};
         let base = "/api/v4/projects/acme%2Fwidgets/merge_requests/42";
@@ -1389,7 +1441,7 @@ mod tests {
             (format!("{base}/discussions"), serde_json::json!([])),
             (format!("{base}/draft_notes"), serde_json::json!([])),
         ];
-        for (route, body) in answers {
+        for ((route, body), times) in answers.into_iter().zip(times) {
             Mock::given(method("GET"))
                 .and(path(route))
                 .respond_with(ResponseTemplate::new(200).set_body_json(body))
@@ -1406,7 +1458,7 @@ mod tests {
     #[tokio::test]
     async fn loading_ahead_fills_the_cache_opening_reads_without_marking_the_mr_opened() {
         let server = wiremock::MockServer::start().await;
-        mount_mr(&server, "2026-09-22T09:00:00Z", 1).await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", [1; 5]).await;
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
         backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
@@ -1418,7 +1470,7 @@ mod tests {
     #[tokio::test]
     async fn a_cache_as_new_as_the_queue_is_not_fetched_again_and_a_newer_change_is() {
         let server = wiremock::MockServer::start().await;
-        mount_mr(&server, "2026-09-22T09:00:00Z", 2).await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", [2; 5]).await;
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
         backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
@@ -1427,9 +1479,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_poll_reads_only_the_mr_while_the_head_stays_and_a_new_heads_diffs_come_from_the_cache() {
+        let server = wiremock::MockServer::start().await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", [2, 2, 0, 1, 1]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
+        let Ok(Incoming::Mr { mr, .. }) = backend.poll_review(key(), "bbbb").await else { panic!("the head did not move") };
+        assert_eq!(mr.refs.head, "bbbb");
+        assert!(backend.state(&key()).opened_at.is_some());
+        backend.cache.write(&keys::diffs(&key(), "bbbb"), &Vec::<DiffFile>::new()).unwrap();
+        let Ok(Incoming::Review { review, cached: None, .. }) = backend.poll_review(key(), "aaaa").await else { panic!("the head moved") };
+        assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");
+    }
+
+    #[tokio::test]
     async fn loading_ahead_steps_aside_while_an_mr_opens() {
         let server = wiremock::MockServer::start().await;
-        mount_mr(&server, "2026-09-22T09:00:00Z", 0).await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", [0; 5]).await;
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
         let _opening = Opening::start(&backend.opening);
@@ -1450,7 +1516,7 @@ mod tests {
             )
             .mount(&server)
             .await;
-        mount_mr(&server, "2026-09-22T09:00:00Z", 0).await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", [0; 5]).await;
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
         backend.forge.me().await.unwrap();
@@ -1489,6 +1555,7 @@ mod tests {
             jev: None,
             claude: None,
             opening: std::sync::Arc::default(),
+            saved: std::sync::Arc::default(),
         }
     }
 
@@ -1552,6 +1619,7 @@ mod tests {
             jev: None,
             claude: None,
             opening: std::sync::Arc::default(),
+            saved: std::sync::Arc::default(),
         }
     }
 

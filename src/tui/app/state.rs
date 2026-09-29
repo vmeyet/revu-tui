@@ -196,6 +196,8 @@ pub struct App {
     pub next_answer: u64,
     /// The local id of the last draft written.
     pub next_draft: u64,
+    /// The number of the last state save sent: one that finishes after a newer one is dropped.
+    pub next_save: u64,
     /// What Jev said about each queue MR.
     pub verdicts: HashMap<MrKey, crate::ai::triage::Verdict>,
     /// MRs Jev is being asked about right now, so a new queue does not ask twice.
@@ -296,6 +298,7 @@ impl App {
             asked: false,
             next_answer: 0,
             next_draft: 0,
+            next_save: 0,
             verdicts: HashMap::new(),
             triage_asked: std::collections::HashSet::new(),
             readings: HashMap::new(),
@@ -334,10 +337,10 @@ impl App {
             self.poll.queue_due = None;
             actions.push(Action::LoadQueue { scope: self.scope(), from_cache: false });
         }
-        let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return actions };
+        let Some((key, head)) = self.open.as_ref().map(|o| (o.key.clone(), o.review.mr.refs.head.clone())) else { return actions };
         if self.poll.mr_due.is_some_and(|due| self.now >= due) {
             self.poll.mr_due = None;
-            actions.push(Action::RefreshMr(key.clone()));
+            actions.push(Action::PollMr { key: key.clone(), head });
         }
         if self.poll.discussions_due.is_some_and(|due| self.now >= due) {
             self.poll.discussions_due = None;

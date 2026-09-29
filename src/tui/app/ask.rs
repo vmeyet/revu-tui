@@ -46,6 +46,29 @@ pub enum AnswerState {
     Failed(String),
 }
 
+impl Answer {
+    fn with_part(self, part: Part) -> Self {
+        match part {
+            Part::Text(more) => Self { text: self.text + &more, ..self },
+            Part::Restart => Self { text: String::new(), ..self },
+            Part::Done { outcome, cached_text } => {
+                Self { cached: cached_text.is_some(), text: cached_text.unwrap_or(self.text), state: AnswerState::Done(outcome), ..self }
+            }
+            Part::Failed(message) => Self { state: AnswerState::Failed(message), ..self },
+        }
+    }
+}
+
+impl Open {
+    /// Takes and gives back the whole `Open`: a stream grows the answer piece by piece, so nothing else is copied.
+    fn with_answer_part(self, key: &MrKey, id: u64, part: Part) -> Self {
+        match self.answer {
+            Some(answer) if self.key == *key && answer.id == id => Self { answer: Some(answer.with_part(part)), ..self },
+            answer => Self { answer, ..self },
+        }
+    }
+}
+
 /// Where an answer can become a draft.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -194,20 +217,8 @@ impl App {
     }
 
     pub(super) fn apply_answer(&mut self, key: &MrKey, id: u64, part: Part) {
-        let Some(open) = self.open.as_ref().filter(|o| o.key == *key) else { return };
-        let Some(answer) = open.answer.clone().filter(|a| a.id == id) else { return };
-        let answer = match part {
-            Part::Text(more) => Answer { text: answer.text + &more, ..answer },
-            Part::Restart => Answer { text: String::new(), ..answer },
-            Part::Done { outcome, cached_text } => Answer {
-                cached: cached_text.is_some(),
-                text: cached_text.unwrap_or(answer.text),
-                state: AnswerState::Done(outcome),
-                ..answer
-            },
-            Part::Failed(message) => Answer { state: AnswerState::Failed(message), ..answer },
-        };
-        self.open = Some(Open { answer: Some(answer), ..open.clone() });
+        let Some(open) = self.open.take() else { return };
+        self.open = Some(open.with_answer_part(key, id, part));
     }
 
     pub(super) fn handle_answer_key(&mut self, key: KeyEvent) -> Vec<Action> {

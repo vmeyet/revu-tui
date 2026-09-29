@@ -62,13 +62,14 @@ impl Open {
     }
 
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
-    /// The reader's inline or side by side choice outlives the refresh.
+    /// The reader's inline or side by side choice outlives the refresh; the lines read around hunks only while the head stays.
     pub fn with_review(&self, review: Review) -> Self {
+        let same_head = review.mr.refs.head == self.review.mr.refs.head;
         let review = Review {
             side_by_side: self.review.side_by_side,
             wide: self.review.wide,
             quiet_whitespace: self.review.quiet_whitespace,
-            context: self.review.context.clone(),
+            context: if same_head { self.review.context.clone() } else { crate::review::Context::default() },
             ..review
         };
         let rows = review.rows();
@@ -367,9 +368,9 @@ impl App {
         load.into_iter().collect()
     }
 
-    /// A file read whole arrived: the hunks waiting on it show their extra lines.
-    pub(super) fn apply_file(&mut self, key: &MrKey, path: String, text: &str) {
-        let Some(open) = self.open.as_ref().filter(|o| &o.key == key) else { return };
+    /// A file read whole arrived: the hunks waiting on it show their extra lines, unless a push moved the head since it was asked.
+    pub(super) fn apply_file(&mut self, key: &MrKey, path: String, sha: &str, text: &str) {
+        let Some(open) = self.open.as_ref().filter(|o| &o.key == key && o.review.mr.refs.head == sha) else { return };
         let mut context = open.review.context.clone();
         context.texts.insert(path, std::sync::Arc::new(text.lines().map(str::to_owned).collect()));
         self.open = Some(open.relaid(open.review.with_context(context)));
@@ -385,18 +386,25 @@ impl App {
 
     /// Shows `next` and saves what the reader chose in it: folds, viewed files, side by side.
     pub(super) fn keep(&mut self, next: Open) -> Vec<Action> {
-        let review = &next.review;
-        let action = Action::SaveState {
-            key: next.key.clone(),
+        self.count_viewed(&next.key, &next.review);
+        self.open = Some(next);
+        self.save_state(None).into_iter().collect()
+    }
+
+    /// What the reader chose in the open MR and, when given, where the cursor rests.
+    pub(super) fn save_state(&mut self, spot: Option<super::Spot>) -> Option<Action> {
+        self.next_save += 1;
+        let open = self.open.as_ref()?;
+        let review = &open.review;
+        Some(Action::SaveState {
+            key: open.key.clone(),
+            order: self.next_save,
             fold: review.fold.clone(),
             viewed: review.viewed_fingerprints(),
             auto_folded: review.auto_folded.clone(),
             side_by_side: review.side_by_side,
-            spot: None,
-        };
-        self.count_viewed(&next.key, &next.review);
-        self.open = Some(next);
-        vec![action]
+            spot,
+        })
     }
 
     pub(super) fn enter_review_row(&mut self) -> Vec<Action> {

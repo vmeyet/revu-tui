@@ -1,6 +1,6 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
 use super::{Action, App, Input, MrKey, Open, Post};
-use crate::review::{Draft, Place, Review};
+use crate::review::{Draft, DraftId, Place, Review};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
@@ -25,11 +25,13 @@ impl App {
             Input::EditDraft { .. } if open.lists_every_thread() => None,
             Input::Reply { thread } => Some(place_of_thread(review, thread)),
             Input::Ask { .. } | Input::FollowUp => None,
-            Input::EditDraft { index } => review.drafts.get(*index).map(|draft| match (&draft.position, &draft.reply_to) {
-                (Some(position), _) => place_of_position(review, position).unwrap_or(Place::Mr),
-                (None, Some(thread)) => place_of_thread(review, thread),
-                (None, None) => Place::Mr,
-            }),
+            Input::EditDraft { draft } => {
+                review.drafts.iter().find(|d| d.is(*draft)).map(|draft| match (&draft.position, &draft.reply_to) {
+                    (Some(position), _) => place_of_position(review, position).unwrap_or(Place::Mr),
+                    (None, Some(thread)) => place_of_thread(review, thread),
+                    (None, None) => Place::Mr,
+                })
+            }
         };
         match place {
             Some(place) if open.pane.as_ref().is_none_or(|p| p.place != place) => self.open_pane(place),
@@ -137,7 +139,7 @@ impl App {
         match input {
             Input::Comment { position } => self.add_draft(&open, Draft::on(*position, text)),
             Input::Reply { thread } => self.add_draft(&open, Draft::reply(&thread, text)),
-            Input::EditDraft { index } => self.change_draft(&open, index, text),
+            Input::EditDraft { draft } => self.change_draft(&open, draft, text),
             question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
         }
     }
@@ -150,8 +152,9 @@ impl App {
         vec![Action::SaveDraft { key: open.key.clone(), draft: Box::new(draft) }]
     }
 
-    fn change_draft(&mut self, open: &Open, index: usize, text: String) -> Vec<Action> {
-        let Some(draft) = open.review.drafts.get(index) else { return vec![] };
+    fn change_draft(&mut self, open: &Open, id: DraftId, text: String) -> Vec<Action> {
+        let Some(index) = open.review.drafts.iter().position(|d| d.is(id)) else { return vec![] };
+        let draft = &open.review.drafts[index];
         let changed = draft.clone().with_body(text);
         let mut drafts = open.review.drafts.clone();
         drafts[index] = changed.clone();
@@ -234,7 +237,7 @@ fn target_key(input: &Input) -> String {
             format!("line {}:{:?}:{:?}:{:?}", position.new_path, position.line, position.start, position.old_path)
         }
         Input::Reply { thread } => format!("reply {thread}"),
-        Input::EditDraft { index } => format!("draft {index}"),
+        Input::EditDraft { draft } => format!("draft {draft:?}"),
         Input::Ask { scope, concern, .. } => format!("ask {concern} {scope:?}"),
         Input::FollowUp => "follow-up".to_owned(),
     }
