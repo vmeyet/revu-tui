@@ -28,8 +28,20 @@ impl Marker {
     }
 }
 
-/// Markers by `(path, side, line)`, built once per review.
-pub type Markers = BTreeMap<(String, Side, u32), Marker>;
+/// Markers by path, then by `(side, line)`, built once per review; drawn rows look them up by a borrowed path.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Markers(BTreeMap<String, BTreeMap<(Side, u32), Marker>>);
+
+impl Markers {
+    pub fn at(&self, path: &str, side: Side, line: u32) -> Option<Marker> {
+        self.0.get(path)?.get(&(side, line)).copied()
+    }
+
+    fn add(&mut self, anchor: &Anchor, marker: Marker) {
+        let lines = self.0.entry(anchor.path.clone()).or_default();
+        lines.entry((anchor.side, anchor.line)).and_modify(|old| *old = old.merge(marker)).or_insert(marker);
+    }
+}
 
 /// Where the pane looks: a line of a file (both numbers of a context line), the MR, a file's outdated
 /// threads, or every conversation of the MR.
@@ -60,18 +72,14 @@ pub struct Conversation {
 impl Review {
     /// Every line carrying a thread or one of my drafts, with what its anchor column shows.
     pub fn markers(&self) -> Markers {
-        let mut markers = Markers::new();
-        let mut add = |key: (String, Side, u32), marker: Marker| {
-            let merged = markers.get(&key).map_or(marker, |old| old.merge(marker));
-            markers.insert(key, merged);
-        };
+        let mut markers = Markers::default();
         for thread in self.threads.iter().filter(|t| !t.outdated) {
             let Some(anchor) = &thread.anchor else { continue };
-            add((anchor.path.clone(), anchor.side, anchor.line), self.marker_of_thread(thread));
+            markers.add(anchor, self.marker_of_thread(thread));
         }
         for draft in self.drafts.iter().filter(|d| d.reply_to.is_none()) {
             let Some(anchor) = &draft.anchor else { continue };
-            add((anchor.path.clone(), anchor.side, anchor.line), Marker { mark: Mark::Draft, count: 1, unsaved: draft.id.is_none() });
+            markers.add(anchor, Marker { mark: Mark::Draft, count: 1, unsaved: draft.id.is_none() });
         }
         markers
     }
@@ -94,8 +102,8 @@ impl Review {
     pub fn marker_of(&self, markers: &Markers, row: &Row) -> Option<Marker> {
         let Place::Line { file, new, old } = self.place_of(row)? else { return None };
         let file = &self.files[file];
-        let new = new.and_then(|n| markers.get(&(file.new_path.clone(), Side::New, n)).copied());
-        let old = old.and_then(|n| markers.get(&(file.old_path.clone(), Side::Old, n)).copied());
+        let new = new.and_then(|n| markers.at(&file.new_path, Side::New, n));
+        let old = old.and_then(|n| markers.at(&file.old_path, Side::Old, n));
         match (new, old) {
             (Some(a), Some(b)) => Some(a.merge(b)),
             (a, b) => a.or(b),
@@ -301,7 +309,7 @@ mod tests {
     fn outdated_and_mr_level_threads_never_mark_a_line() {
         let review = review();
         let markers = review.markers();
-        assert_eq!(markers.len(), 1, "only the live thread on old line 13: {markers:?}");
+        assert_eq!(markers.0.values().map(BTreeMap::len).sum::<usize>(), 1, "only the live thread on old line 13: {markers:?}");
         assert_eq!(review.conversations(&Place::Outdated { file: 0 }).len(), 1);
         assert_eq!(review.conversations(&Place::Mr).len(), 1);
     }

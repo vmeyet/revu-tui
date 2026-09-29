@@ -171,6 +171,8 @@ pub struct App {
     pub drag: Option<crate::tui::drag::Drag>,
     /// Pictures of the comments the right pane shows, each fetched once.
     pub thumbs: crate::tui::images::Thumbs,
+    /// The right pane as the last frame laid it out.
+    pub pane_layout: Option<crate::tui::thread_view::PaneLayout>,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
     pub viewing: Option<crate::open::View>,
     /// What the editor's text turned into; the loop drains it after `apply`.
@@ -275,6 +277,7 @@ impl App {
             areas: super::Areas::default(),
             text_rows: vec![],
             drag: None,
+            pane_layout: None,
             thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
             viewing: None,
             composed: vec![],

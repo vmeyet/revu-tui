@@ -8,7 +8,7 @@ use super::theme::Theme;
 use super::ui::{rule_pane, short_age, side_pane};
 use crate::forge::Note;
 use crate::review::image::{self, Image};
-use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
+use crate::review::{Anchor, Conversation, Draft, File, Place, Review, Side, Spot, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -16,6 +16,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::ops::Range;
+use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 
 /// The compose box grows with its text up to this many rows, then scrolls.
@@ -40,6 +41,7 @@ pub struct Placement {
 }
 
 /// What a laid-out row carries besides its text.
+#[derive(Debug)]
 enum Mark {
     /// The first of the rows reserved for a ready picture.
     Picture { url: String, size: ratatui::layout::Size },
@@ -49,12 +51,78 @@ enum Mark {
     Written { raw: String, cells: Vec<Range<usize>> },
 }
 
-/// The pane's rows laid out at a width: its title, each row with whether the cursor bar is on it,
+/// The pane's rows laid out at a width: its title, each row with the cursor stop it belongs to,
 /// and what some rows carry besides their text.
+#[derive(Debug)]
 struct Laid {
     title: String,
-    rows: Vec<(bool, Line<'static>)>,
+    rows: Vec<(Option<Entry>, Line<'static>)>,
     marks: Vec<(usize, usize, Mark)>,
+}
+
+/// The last frame's layout of the pane, and what it was laid out from.
+#[derive(Debug)]
+pub struct PaneLayout {
+    inputs: PaneInputs,
+    laid: Laid,
+}
+
+/// Everything the pane's layout reads, the cursor and the scroll aside: they only move within it.
+#[derive(Debug)]
+struct PaneInputs {
+    threads: Arc<[Thread]>,
+    files: Arc<[File]>,
+    drafts: Vec<Draft>,
+    pane: Pane,
+    here: bool,
+    width: usize,
+    theme: Theme,
+    /// Ages next to notes read in whole seconds.
+    second: i64,
+    me: String,
+    ascii: bool,
+    pictures: u64,
+}
+
+impl PaneInputs {
+    fn of(app: &App, width: usize) -> Option<Self> {
+        let open = app.open.as_ref()?;
+        let pane = open.pane.as_ref()?;
+        Some(Self {
+            threads: Arc::clone(&open.review.threads),
+            files: Arc::clone(&open.review.files),
+            drafts: open.review.drafts.clone(),
+            pane: Pane { note: 0, scroll: 0, ..pane.clone() },
+            here: at_cursor(open, pane),
+            width,
+            theme: app.theme,
+            second: app.today.timestamp(),
+            me: app.me.clone(),
+            ascii: app.ascii,
+            pictures: app.thumbs.changes(),
+        })
+    }
+}
+
+/// Threads and files by identity: a review shares them until a fetch replaces them, and a held copy
+/// keeps their memory from being reused by the next ones.
+impl PartialEq for PaneInputs {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.threads, &other.threads)
+            && Arc::ptr_eq(&self.files, &other.files)
+            && (&self.drafts, &self.pane, self.here, self.width, self.theme, self.second, &self.me, self.ascii, self.pictures)
+                == (&other.drafts, &other.pane, other.here, other.width, other.theme, other.second, &other.me, other.ascii, other.pictures)
+    }
+}
+
+/// The last frame's layout while nothing it was made from changed.
+fn cached(app: &App, width: usize) -> Option<&Laid> {
+    let last = app.pane_layout.as_ref()?;
+    PaneInputs::of(app, width).is_some_and(|inputs| inputs == last.inputs).then_some(&last.laid)
+}
+
+fn fresh_layout(app: &App, width: usize) -> Option<PaneLayout> {
+    Some(PaneLayout { inputs: PaneInputs::of(app, width)?, laid: lay_out_pane(app, width)? })
 }
 
 /// The pane, and the pictures it made room for: the caller paints them last, above the fades.
@@ -64,8 +132,12 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
     let (focused, zen) = (app.focus == Focus::Side, app.zen);
     let block = |title: &str| if under_diff { rule_pane(theme, title) } else { side_pane(theme, title, focused, zen) };
     let inner = block("").inner(area);
-    let Some(Laid { title, rows, marks }) = lay_out_pane(app, inner.width.saturating_sub(1) as usize) else { return vec![] };
-    f.render_widget(block(&title), area);
+    let width = inner.width.saturating_sub(1) as usize;
+    if cached(app, width).is_none() {
+        app.pane_layout = fresh_layout(app, width);
+    }
+    let Some(PaneLayout { laid: Laid { title, rows, marks }, .. }) = &app.pane_layout else { return vec![] };
+    f.render_widget(block(title), area);
     let inner = if app.input.is_some() {
         let height = if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) };
         let [list, box_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(inner);
@@ -75,18 +147,20 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
         inner
     };
     let height = inner.height as usize;
-    let first = rows.iter().position(|(on, _)| *on).unwrap_or(0);
-    let last = rows.iter().rposition(|(on, _)| *on).unwrap_or(0);
+    let current = app.open.as_ref().and_then(Open::pane_view).and_then(|(_, _, current)| current);
+    let on = |entry: &Option<Entry>| entry.is_some() && *entry == current;
+    let first = rows.iter().position(|(entry, _)| on(entry)).unwrap_or(0);
+    let last = rows.iter().rposition(|(entry, _)| on(entry)).unwrap_or(0);
     let Some(pane) = app.open.as_mut().and_then(|open| open.pane.as_mut()) else { return vec![] };
     let scroll = settle(pane.scroll, first, last, height);
     pane.scroll = scroll;
     let drawn: Vec<Line> = rows
-        .into_iter()
+        .iter()
         .skip(scroll)
         .take(height)
-        .map(|(on, line)| {
-            let bar = Span::styled(if on { "▎" } else { " " }, Style::default().fg(theme.accent));
-            Line::from(std::iter::once(bar).chain(line.spans).collect::<Vec<_>>())
+        .map(|(entry, line)| {
+            let bar = Span::styled(if on(entry) { "▎" } else { " " }, Style::default().fg(theme.accent));
+            Line::from(std::iter::once(bar).chain(line.spans.iter().cloned()).collect::<Vec<_>>())
         })
         .collect();
     f.render_widget(Paragraph::new(drawn), inner);
@@ -97,11 +171,13 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
         let (x, y) = (inner.x + 1, inner.y + y as u16);
         match mark {
             Mark::Picture { url, size } if row + usize::from(size.height) <= scroll + height => {
-                placements.push(Placement { url, area: Rect::new(x, y, size.width.min(width), size.height) });
+                placements.push(Placement { url: url.clone(), area: Rect::new(x, y, size.width.min(width), size.height) });
             }
             Mark::Picture { .. } => {}
-            Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text, url }),
-            Mark::Written { raw, cells } => app.text_rows.push(TextRow { at: Position::new(x, y), width, line: piece, text: raw, cells }),
+            Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text: text.clone(), url: url.clone() }),
+            Mark::Written { raw, cells } => {
+                app.text_rows.push(TextRow { at: Position::new(x, y), width, line: *piece, text: raw.clone(), cells: cells.clone() });
+            }
         }
     }
     placements
@@ -111,7 +187,11 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
 /// its conversations and the compose box, which the pane grows for rather than holding it to a share.
 pub fn rows_needed(app: &App, width: u16) -> u16 {
     let inner = rule_pane(app.theme, "").inner(Rect::new(0, 0, width, 1));
-    let rows = lay_out_pane(app, inner.width.saturating_sub(1) as usize).map_or(0, |laid| laid.rows.len());
+    let width = inner.width.saturating_sub(1) as usize;
+    let rows = match cached(app, width) {
+        Some(laid) => laid.rows.len(),
+        None => lay_out_pane(app, width).map_or(0, |laid| laid.rows.len()),
+    };
     let compose = if app.input.is_some() { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { 0 };
     u16::try_from(rows).unwrap_or(u16::MAX).saturating_add(compose).saturating_add(1)
 }
@@ -120,10 +200,10 @@ pub fn rows_needed(app: &App, width: u16) -> u16 {
 fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
     let theme = app.theme;
     let open = app.open.as_ref()?;
-    let (conversations, entries, current) = open.pane_view()?;
+    let (conversations, entries, _) = open.pane_view()?;
     let pane = open.pane.as_ref()?;
     let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&app.host), &open.key.project, url);
-    let here = open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place);
+    let here = at_cursor(open, pane);
     let mut lines: Vec<(Option<Entry>, Piece)> = vec![];
     for (index, conversation) in conversations.iter().enumerate() {
         if index > 0 {
@@ -144,18 +224,22 @@ fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
         let footer = format!("{more} more thread{} in this file · ]n", if more == 1 { "" } else { "s" });
         lines.push((None, Piece::Text(Line::from(Span::styled(footer, Style::default().fg(theme.faded))))));
     }
-    let mut rows: Vec<(bool, Line<'static>)> = vec![];
+    let mut rows: Vec<(Option<Entry>, Line<'static>)> = vec![];
     let mut marks: Vec<(usize, usize, Mark)> = vec![];
     for (index, (entry, piece)) in lines.into_iter().enumerate() {
-        let on = entry.is_some() && entry == current;
         for (line, mark) in lay_out(piece, &app.thumbs, width, theme, &web) {
             if let Some(mark) = mark {
                 marks.push((rows.len(), index, mark));
             }
-            rows.push((on, line));
+            rows.push((entry, line));
         }
     }
     Some(Laid { title: title(&open.review, pane, conversations.len(), here), rows, marks })
+}
+
+/// The diff's cursor sits on the place the pane shows.
+fn at_cursor(open: &Open, pane: &Pane) -> bool {
+    open.row().and_then(|row| open.review.place_of(row)).is_some_and(|place| place == pane.place)
 }
 
 /// A piece as rows: text wrapped to `width`; a ready picture as blank rows its thumbnail covers;

@@ -3,7 +3,7 @@ use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins}
 use super::drag::{self, TextRow};
 use super::table::{self, TableLine};
 use super::theme::Theme;
-use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate};
+use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate, truncate_tabs};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::{Deployment, Kind};
@@ -15,6 +15,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Padding, Paragraph};
+use std::collections::VecDeque;
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
@@ -100,10 +101,11 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     } else {
         settle_scroll(open.scroll, open.selected, height)
     };
-    while wrap
-        && open.scroll < open.selected
-        && (open.scroll..=open.selected).map(|i| render(open, i).len()).sum::<usize>() > height - pinned_at(open).count()
-    {
+    let mut drawn: VecDeque<Vec<Line>> =
+        if wrap { (open.scroll..=open.selected).map(|i| render(open, i)).collect() } else { VecDeque::new() };
+    let mut drawn_height: usize = drawn.iter().map(Vec::len).sum();
+    while wrap && open.scroll < open.selected && drawn_height > height - pinned_at(open).count() {
+        drawn_height -= drawn.pop_front().map_or(0, |row| row.len());
         open.scroll += 1;
     }
     let pinned = pinned_at(open);
@@ -121,7 +123,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         }
         let top = body.y + lines.len() as u16;
         selectable.extend(text_rows(&open.review, &open.rows[i], i, Rect { y: top, ..body }, wrap));
-        lines.extend(render(open, i));
+        lines.extend(drawn.pop_front().unwrap_or_else(|| render(open, i)));
     }
     lines.truncate(height);
     selectable.retain(|row| row.at.y < body.bottom());
@@ -176,11 +178,11 @@ fn inline_text(review: &Review, row: &Row) -> Option<(String, Vec<Range<usize>>)
         Row::Line { file, hunk, index } => review.files[*file].hunks[*hunk].lines[*index].text.clone(),
         Row::Pair { file, hunk, removed, added } => {
             let lines = &review.files[*file].hunks[*hunk].lines;
-            let (old, new) = (&lines[*removed].text, &lines[*added].text);
-            if !(review.quiet_whitespace && same_but_whitespace(old, new)) {
-                return Some((new.clone(), pair_cells(old, new)));
+            let (old, new) = (&lines[*removed], &lines[*added]);
+            if !(review.quiet_whitespace && same_but_whitespace(&old.text, &new.text)) {
+                return Some((new.text.clone(), pair_cells(old, new)));
             }
-            new.clone()
+            new.text.clone()
         }
         Row::Context { file, old, new, .. } => context_line(review, *file, *old, *new).text,
         Row::Header | Row::File { .. } | Row::Hunk { .. } | Row::Gap => return None,
@@ -190,7 +192,7 @@ fn inline_text(review: &Review, row: &Row) -> Option<(String, Vec<Range<usize>>)
 }
 
 /// A removed line and its added twin on one row copy as the added line: the struck old words stand for nothing.
-fn pair_cells(old: &str, new: &str) -> Vec<Range<usize>> {
+fn pair_cells(old: &DiffLine, new: &DiffLine) -> Vec<Range<usize>> {
     let mut cells = vec![];
     let mut at = 0;
     for part in segments(old, new) {
@@ -598,7 +600,7 @@ fn half_line(review: &Review, anchors: &Anchors, half: &Half, marked: bool, widt
         Side::Old => (&file.old_path, half.line.old),
         Side::New => (&file.new_path, half.line.new),
     };
-    let marker = number_here.and_then(|n| anchors.markers.get(&(path.clone(), half.side, n)).copied());
+    let marker = number_here.and_then(|n| anchors.markers.at(path, half.side, n));
     let stretched = marker.is_none() && number_here.is_some_and(|n| anchors.stretch.is_some_and(|s| s.holds(half.file, half.side, n)));
     let anchor = if stretched { range_spans(theme) } else { anchor_spans(marker, theme) };
     let drawn = numbered_spans(format!("{} ", number(number_here)), &half.line, half.code, marked, width.saturating_sub(ANCHOR_W), theme);
@@ -904,7 +906,7 @@ fn pair_spans<'a>(
     let with_fill = |style: Style, fill: Option<Color>| fill.map_or(style, |f| style.bg(f));
     let dropped = with_fill(Style::default().fg(theme.danger).add_modifier(Modifier::CROSSED_OUT), theme.removed_word);
     let added = with_fill(Style::default().fg(theme.success), theme.added_word);
-    let parts = segments(&old.text, &new.text);
+    let parts = segments(old, new);
     let mut styled: Vec<(&str, Style)> = vec![];
     let mut at = 0;
     for part in &parts {
@@ -970,7 +972,7 @@ fn fit<'a>(parts: Vec<(&str, Style)>, room: usize) -> Vec<Span<'a>> {
         if used >= room {
             break;
         }
-        let cut = truncate(&text.replace('\t', TAB), room - used);
+        let cut = truncate_tabs(text, TAB, room - used);
         used += cut.width();
         spans.push(Span::styled(cut, style));
     }
@@ -1013,6 +1015,11 @@ mod tests {
         assert!(!none.contains('◆') && !none.contains('✓'), "{none}");
     }
 
+    /// One changed number, marked as a review loads it.
+    fn total_pair() -> diff::Hunk {
+        diff::words::mark(&diff::parse("@@ -1 +1 @@\n-const total = 1;\n+const total = 2;\n")[0])
+    }
+
     fn cart() -> crate::review::File {
         crate::review::File::from_diff(&crate::forge::DiffFile {
             diff: include_str!("../review/fixtures/cart.ts.diff").to_owned(),
@@ -1025,7 +1032,7 @@ mod tests {
     /// Each piece of a painted line as `fg/bg text`, so a snapshot shows the colours.
     #[test]
     fn an_inline_row_keeps_syntax_on_the_kept_text_and_diff_colours_on_the_words() {
-        let hunk = &diff::parse("@@ -1 +1 @@\n-const total = 1;\n+const total = 2;\n")[0];
+        let hunk = total_pair();
         let (old, new) = (&hunk.lines[0], &hunk.lines[1]);
         let code = [(0..5, Token::Keyword), (14..15, Token::Number)];
         let theme = Theme::named("tokyonight").unwrap();
@@ -1232,7 +1239,8 @@ mod tests {
 
     #[test]
     fn an_inline_pair_selects_as_the_added_line_its_struck_words_standing_for_nothing() {
-        let cells = pair_cells("const total = 1;", "const total = 2;");
+        let hunk = total_pair();
+        let cells = pair_cells(&hunk.lines[0], &hunk.lines[1]);
         assert_eq!(cells.len(), "const total = 1;2;".len());
         assert_eq!(cells[14..], [14..14, 14..14, 14..15, 15..16]);
     }
