@@ -149,16 +149,20 @@ impl App {
     }
 
     fn edit_draft(&mut self, index: usize) -> bool {
-        let Some(body) = self.open.as_ref().and_then(|o| o.review.drafts.get(index)).map(|d| d.body.clone()) else { return false };
-        self.open_input(Input::EditDraft { index }, &body);
+        let Some(draft) = self.open.as_ref().and_then(|o| o.review.drafts.get(index)) else { return false };
+        let Some(id) = draft.draft_id() else { return false };
+        let body = draft.body.clone();
+        self.open_input(Input::EditDraft { draft: id }, &body);
         true
     }
 
     /// `E` in the pane: my draft under the cursor in the editor, else a reply to the thread.
     pub(super) fn compose_draft_here(&mut self) -> Vec<Action> {
         let Some(open) = self.open.as_ref() else { return vec![] };
-        if let Some(index) = open.focused_draft() {
-            return vec![Action::Compose { input: Input::EditDraft { index }, draft: open.review.drafts[index].body.clone() }];
+        if let Some(draft) = open.focused_draft().map(|index| &open.review.drafts[index])
+            && let Some(id) = draft.draft_id()
+        {
+            return vec![Action::Compose { input: Input::EditDraft { draft: id }, draft: draft.body.clone() }];
         }
         match open.focused_thread() {
             Some(thread) => vec![Action::Compose { input: Input::Reply { thread }, draft: String::new() }],

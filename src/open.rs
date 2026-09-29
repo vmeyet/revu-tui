@@ -194,13 +194,18 @@ impl Checkout {
     }
 
     /// Asked each time: the reader may have checked out another commit since `revu` started.
-    pub fn head(&self) -> Option<String> {
-        git(&self.root, &["rev-parse", "HEAD"])
+    pub async fn head(&self) -> Option<String> {
+        let output = tokio::process::Command::new("git").arg("-C").arg(&self.root).args(["rev-parse", "HEAD"]).output().await.ok()?;
+        said(output)
     }
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git").arg("-C").arg(dir).args(args).output().ok()?;
+    said(Command::new("git").arg("-C").arg(dir).args(args).output().ok()?)
+}
+
+/// What a successful git command printed, trimmed; nothing when it failed or printed nothing.
+fn said(output: std::process::Output) -> Option<String> {
     let text = String::from_utf8(output.stdout).ok()?.trim().to_owned();
     (output.status.success() && !text.is_empty()).then_some(text)
 }
@@ -376,6 +381,14 @@ mod tests {
             assert!(safe_path(bad).is_err(), "{bad:?}");
         }
         assert!(safe_path(&"a/".repeat(2049)).is_err());
+    }
+
+    #[tokio::test]
+    async fn the_checkout_head_is_asked_without_blocking_the_runtime() {
+        let checkout = Checkout { root: PathBuf::from(env!("CARGO_MANIFEST_DIR")), project: "acme/widgets".into() };
+        assert!(checkout.head().await.is_some_and(|head| head.chars().all(|c| c.is_ascii_hexdigit())));
+        let elsewhere = Checkout { root: PathBuf::from("/nonexistent"), project: "acme/widgets".into() };
+        assert_eq!(elsewhere.head().await, None);
     }
 
     #[test]

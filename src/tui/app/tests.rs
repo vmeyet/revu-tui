@@ -495,7 +495,8 @@ fn polling_fires_once_per_due_date_and_backs_off_on_failure() {
     app.now += Duration::from_secs(30);
     let actions = app.tick();
     assert!(
-        actions.contains(&Action::LoadQueue { scope: None, from_cache: false }) && actions.contains(&Action::RefreshMr(mr_key())),
+        actions.contains(&Action::LoadQueue { scope: None, from_cache: false })
+            && actions.contains(&Action::PollMr { key: mr_key(), head: "bbbb".into() }),
         "{actions:?}"
     );
     app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
@@ -504,6 +505,22 @@ fn polling_fires_once_per_due_date_and_backs_off_on_failure() {
     assert_eq!(app.tick(), vec![], "backed off for five minutes");
     app.now += Duration::from_secs(200);
     assert!(!app.tick().is_empty());
+}
+
+#[test]
+fn a_poll_at_the_same_head_changes_the_mr_and_keeps_the_diff_and_the_cursor() {
+    let mut app = with_review();
+    press(&mut app, "]cj");
+    let before = app.open.clone().unwrap();
+    let renamed = Mr { title: "feat: charge cards twice".into(), ..mr() };
+    app.apply(Incoming::Mr { key: mr_key(), mr: Box::new(renamed) });
+    let open = app.open.clone().unwrap();
+    assert_eq!(open.review.mr.title, "feat: charge cards twice");
+    assert_eq!((open.selected, open.rows), (before.selected, before.rows));
+    let pushed = Mr { title: "pushed".into(), refs: crate::forge::Refs { head: "cccc".into(), ..mr().refs }, ..mr() };
+    app.apply(Incoming::Mr { key: mr_key(), mr: Box::new(pushed) });
+    assert_eq!(app.open.as_ref().unwrap().review.mr.title, "feat: charge cards twice", "a moved head waits for the whole review");
+    assert!(app.poll.mr_due.is_some(), "polling goes on either way");
 }
 
 #[test]
@@ -1054,6 +1071,22 @@ fn the_publish_modal_walks_the_drafts_toggles_approve_and_publishes() {
 }
 
 #[test]
+fn an_edit_lands_on_its_draft_when_a_refresh_moved_it_in_the_list() {
+    let mut app = with_saved_draft();
+    press(&mut app, "Pe");
+    let nit = app.open.as_ref().unwrap().review.drafts[0].clone();
+    let held = |id: u64, body: &str, position| {
+        crate::review::Draft::held(&crate::forge::Draft { id, body: body.into(), position, reply_to: None, resolve: false })
+    };
+    let refreshed = review().with_drafts(vec![held(3, "from the web", None), held(9, "nit", nit.position.clone())]);
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(refreshed), cached: None });
+    let actions = type_text(&mut app, "!");
+    let drafts = &app.open.as_ref().unwrap().review.drafts;
+    assert_eq!((drafts[0].body.as_str(), drafts[1].body.as_str()), ("from the web", "nit!"));
+    assert!(matches!(actions.as_slice(), [Action::UpdateDraft { id: 9, .. }]), "{actions:?}");
+}
+
+#[test]
 fn the_publish_modal_edits_deletes_and_survives_a_failure() {
     let mut app = with_saved_draft();
     press(&mut app, "P");
@@ -1126,7 +1159,9 @@ fn big_e_and_s_open_the_editor_and_what_comes_back_is_a_draft() {
     press(&mut app, "kl");
     assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
     let actions = press(&mut app, "E");
-    assert!(matches!(actions.as_slice(), [Action::Compose { input: Input::EditDraft { index: 0 }, draft }] if draft == "from the editor"));
+    assert!(
+        matches!(actions.as_slice(), [Action::Compose { input: Input::EditDraft { draft: crate::review::DraftId::Local(1) }, draft }] if draft == "from the editor")
+    );
 }
 
 #[test]
@@ -1945,12 +1980,17 @@ fn equals_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
         "{actions:?}"
     );
     let text: String = (1..=40).map(|n| format!("line {n}\n")).collect();
-    app.apply(Incoming::File { key: mr_key(), path: path.clone(), text });
-    let contexts = app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
-    assert_eq!(contexts, 20, "ten above, ten below");
+    let contexts = |app: &App| app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
+    app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "old".into(), text: text.clone() });
+    assert_eq!(contexts(&app), 0, "a file read at another head is dropped");
+    app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "bbbb".into(), text });
+    assert_eq!(contexts(&app), 20, "ten above, ten below");
     assert_eq!(press(&mut app, "="), vec![], "the file is read once");
     let screen = render(&mut app, 120, 40);
     assert!(screen.contains("line 2"), "{screen}");
+    let pushed = Mr { refs: crate::forge::Refs { head: "cccc".into(), ..mr().refs }, ..mr() };
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(pushed, &diffs(), discussions(), &[])), cached: None });
+    assert_eq!(contexts(&app), 0, "after a push the lines around hunks are read again");
 }
 
 #[test]
@@ -2257,6 +2297,18 @@ fn a_e_explains_the_hunk_under_the_cursor_and_streams_into_the_pane() {
     assert_eq!(answer(&app).state, super::AnswerState::Done(done("claude-opus-5")));
     let screen = render(&mut app, 150, 24);
     assert!(screen.contains("Claude · explain") && screen.contains("a retry.") && screen.contains("1.2k cached"), "{screen}");
+}
+
+#[test]
+fn pieces_waiting_together_apply_in_order_before_the_next_draw() {
+    let mut app = asking();
+    on_line(&mut app);
+    let (id, _, _) = the_ask(&press(&mut app, "ae"));
+    app.take_actions();
+    let piece = |text: &str| Incoming::Answer { key: mr_key(), id, part: super::Part::Text(text.into()) };
+    let actions = app.apply_all([piece("one "), piece("two "), piece("three")]);
+    assert!(actions.is_empty(), "{actions:?}");
+    assert_eq!(answer(&app).text, "one two three");
 }
 
 #[test]

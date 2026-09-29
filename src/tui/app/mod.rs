@@ -91,9 +91,16 @@ pub enum Action {
     /// Load these MRs into the cache ahead of time, quietly: nothing answers.
     Prefetch(Vec<Ahead>),
     RefreshMr(MrKey),
+    /// The minute's poll: the MR alone while its head is still `head`, the whole review once it moved.
+    PollMr {
+        key: MrKey,
+        head: String,
+    },
     RefreshDiscussions(MrKey),
     SaveState {
         key: MrKey,
+        /// Grows with every save: a save finishing after a newer one changes nothing.
+        order: u64,
         fold: FoldState,
         /// Viewed files with the fingerprint of the change seen.
         viewed: BTreeMap<String, String>,
@@ -261,7 +268,7 @@ pub enum Input {
         thread: String,
     },
     EditDraft {
-        index: usize,
+        draft: crate::review::DraftId,
     },
     /// A question to Claude about `scope`; `concern` makes it the subject of a drafted comment.
     Ask {
@@ -334,6 +341,11 @@ pub enum Incoming {
         review: Box<Review>,
         cached: Option<Duration>,
     },
+    /// The MR read again at the head already shown: title, state, approvals and the like, the diff unchanged.
+    Mr {
+        key: MrKey,
+        mr: Box<crate::forge::Mr>,
+    },
     /// Where the reader left this MR last time, sent once it is painted.
     Resume {
         key: MrKey,
@@ -346,10 +358,11 @@ pub enum Incoming {
         discussions: Vec<Discussion>,
     },
     Done(String),
-    /// A file read whole, split into lines, for the context around its hunks.
+    /// A file read whole at commit `sha`, split into lines, for the context around its hunks.
     File {
         key: MrKey,
         path: String,
+        sha: String,
         text: String,
     },
     /// `draft` is the one sent, as it was sent.

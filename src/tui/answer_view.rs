@@ -16,7 +16,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let focused = app.focus == Focus::Side;
     let elapsed = app.now.duration_since(app.started);
     let compose = matches!(app.input, Some(Input::Ask { .. } | Input::FollowUp)).then(|| (app.input_label(), app.buffer.clone()));
-    let Some(answer) = app.open.as_ref().and_then(|o| o.answer.clone()) else { return };
+    let Some(answer) = app.open.as_ref().and_then(|o| o.answer.as_ref()) else { return };
     let title = if answer.cached { format!("Claude · {} · cached", answer.label) } else { format!("Claude · {}", answer.label) };
     let block = side_pane(theme, &title, focused, app.zen);
     let inner = block.inner(area);
@@ -33,10 +33,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let width = body.width.saturating_sub(1) as usize;
     let lines: Vec<Line> = body_lines(&answer.text, width, theme).into_iter().flat_map(|line| wrap(line, width)).collect();
     let height = body.height as usize;
-    let scroll = scroll_of(&answer, lines.len(), height);
+    let scroll = scroll_of(answer, lines.len(), height);
     let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|l| indent(l)).collect();
     f.render_widget(Paragraph::new(shown), body);
-    f.render_widget(Paragraph::new(footer_line(&answer, theme, spinner(elapsed), footer.width as usize)), footer);
+    f.render_widget(Paragraph::new(footer_line(answer, theme, spinner(elapsed), footer.width as usize)), footer);
 }
 
 /// While it streams the pane follows the end; once done the reader's scroll holds.

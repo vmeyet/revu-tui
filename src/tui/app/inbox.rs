@@ -131,20 +131,13 @@ impl App {
 
     /// The open MR's state with the cursor's place, unless that place is already saved.
     pub(super) fn save_spot_now(&mut self) -> Option<Action> {
-        let open = self.open.as_ref()?;
+        let key = self.open.as_ref()?.key.clone();
         let spot = self.spot()?;
-        let saved = (open.key.clone(), spot.clone());
+        let saved = (key, spot.clone());
         if self.spot_saved.as_ref() == Some(&saved) {
             return None;
         }
-        let action = Action::SaveState {
-            key: open.key.clone(),
-            fold: open.review.fold.clone(),
-            viewed: open.review.viewed_fingerprints(),
-            auto_folded: open.review.auto_folded.clone(),
-            side_by_side: open.review.side_by_side,
-            spot: Some(spot),
-        };
+        let action = self.save_state(Some(spot))?;
         self.spot_saved = Some(saved);
         Some(action)
     }

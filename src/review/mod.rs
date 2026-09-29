@@ -7,7 +7,7 @@ pub mod suggestion;
 pub mod thread;
 pub mod tree;
 
-pub use draft::Draft;
+pub use draft::{Draft, DraftId};
 pub use place::{Conversation, Mark, Marker, Markers, Place, Spot};
 pub use thread::{Anchor, Side, Thread};
 
@@ -259,6 +259,10 @@ impl Review {
             quiet_whitespace: false,
             context: Context::default(),
         }
+    }
+
+    pub fn with_mr(&self, mr: Mr) -> Self {
+        Self { mr: Arc::new(mr), ..self.clone() }
     }
 
     pub fn with_inline(&self, inline: InlineRule) -> Self {
