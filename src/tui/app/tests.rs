@@ -663,9 +663,15 @@ fn with_saved_draft() -> App {
     let mut app = with_review();
     on_line(&mut app);
     press(&mut app, "c");
-    type_text(&mut app, "nit");
-    app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
+    let save = type_text(&mut app, "nit");
+    app.apply(saved(&save, 9));
     app
+}
+
+/// The forge's answer to the one draft save in `actions`.
+fn saved(actions: &[Action], id: u64) -> Incoming {
+    let [Action::SaveDraft { key, draft }] = actions else { panic!("{actions:?}") };
+    Incoming::DraftSaved { key: key.clone(), draft: draft.clone(), id }
 }
 
 #[test]
@@ -677,7 +683,7 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
     press(&mut app, "c");
     assert_eq!(app.input_label(), "new thread · charge.rs:12");
     let actions = type_text(&mut app, "nit: rename");
-    let [Action::SaveDraft { key, index: 0, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+    let [Action::SaveDraft { key, draft }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(*key, mr_key());
     assert_eq!(draft.body, "nit: rename");
     assert_eq!(draft.position.as_ref().and_then(|p| p.line.new), Some(12));
@@ -686,7 +692,7 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
     let marker = marker_here(&app).expect("the line is marked");
     assert_eq!((marker.mark, marker.unsaved), (crate::review::Mark::Draft, true), "an unsaved draft of mine, no row inserted");
     assert_eq!(app.unsaved_drafts(), 1);
-    app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
+    app.apply(saved(&actions, 9));
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
     assert_eq!(app.unsaved_drafts(), 0);
 }
@@ -905,21 +911,111 @@ fn an_unsaved_draft_is_posted_again_by_r_and_deleted_without_a_request() {
     on_line(&mut app);
     press(&mut app, "c");
     type_text(&mut app, "nit");
-    app.apply(Incoming::Failed { what: Failure::Draft { index: 0 }, message: "offline".into() });
+    app.apply(Incoming::Failed { what: Failure::Draft, message: "offline".into() });
     assert!(app.live_toast().unwrap().text.contains("r to retry"));
     let actions = press(&mut app, "r");
-    assert!(matches!(actions.as_slice(), [Action::RefreshMr(key), Action::SaveDraft { index: 0, .. }] if *key == mr_key()), "{actions:?}");
+    assert!(matches!(actions.as_slice(), [Action::RefreshMr(key), Action::SaveDraft { .. }] if *key == mr_key()), "{actions:?}");
     press(&mut app, "l");
     assert_eq!(press(&mut app, "d"), vec![], "GitLab never had it");
     assert_eq!(app.draft_count(), 0);
+}
+
+/// The review as the forge lists it once the one draft save in `actions` landed as `id`.
+fn listing(actions: &[Action], id: u64) -> Review {
+    let [Action::SaveDraft { draft, .. }] = actions else { panic!("{actions:?}") };
+    review().with_drafts(vec![crate::review::Draft { id: Some(id), local_id: None, ..draft.as_ref().clone() }])
+}
+
+fn draft_writes(actions: Vec<Action>) -> Vec<Action> {
+    actions
+        .into_iter()
+        .filter(|a| matches!(a, Action::SaveDraft { .. } | Action::UpdateDraft { .. } | Action::DeleteDraft { .. }))
+        .collect()
+}
+
+#[test]
+fn a_draft_deleted_while_its_save_is_in_flight_is_deleted_on_the_forge_once_the_save_lands() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    let save = type_text(&mut app, "nit");
+    press(&mut app, "l");
+    assert_eq!(press(&mut app, "d"), vec![], "no id to delete yet");
+    app.apply(saved(&save, 9));
+    assert_eq!(app.take_actions(), vec![Action::DeleteDraft { key: mr_key(), id: 9 }], "the forge would publish it otherwise");
+    assert_eq!(app.draft_count(), 0);
+}
+
+#[test]
+fn a_save_answered_twice_changes_nothing_and_a_twin_on_the_forge_is_deleted() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    let save = type_text(&mut app, "nit");
+    app.apply(saved(&save, 9));
+    app.apply(saved(&save, 9));
+    assert_eq!(app.take_actions(), vec![]);
+    app.apply(saved(&save, 11));
+    assert_eq!(app.take_actions(), vec![Action::DeleteDraft { key: mr_key(), id: 11 }], "two saves raced and both posted");
+    assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
+}
+
+#[test]
+fn a_save_lands_on_its_own_draft_after_an_earlier_draft_went() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    let first = type_text(&mut app, "nit");
+    press(&mut app, "jjc");
+    let second = type_text(&mut app, "second");
+    press(&mut app, "Pd");
+    app.handle_key(code(KeyCode::Esc));
+    app.apply(saved(&first, 9));
+    assert_eq!(app.take_actions(), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
+    assert_eq!(app.unsaved_drafts(), 1, "the second draft did not take the first one's id");
+    app.apply(saved(&second, 10));
+    let drafts = &app.open.as_ref().unwrap().review.drafts;
+    assert_eq!((drafts.len(), drafts[0].id, drafts[0].body.as_str()), (1, Some(10), "second"));
+}
+
+#[test]
+fn an_edit_made_while_the_save_is_in_flight_survives_a_refresh_and_reaches_the_forge() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    let save = type_text(&mut app, "nit");
+    press(&mut app, "le");
+    assert_eq!(type_text(&mut app, " (typo)"), vec![], "no id to update yet");
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(listing(&save, 9)), cached: None });
+    app.take_actions();
+    app.apply(saved(&save, 9));
+    let actions = draft_writes(app.take_actions());
+    let [Action::UpdateDraft { id: 9, draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(draft.body, "nit (typo)");
+    let drafts = &app.open.as_ref().unwrap().review.drafts;
+    assert_eq!((drafts.len(), drafts[0].id, drafts[0].body.as_str()), (1, Some(9), "nit (typo)"), "one draft, the new text");
+}
+
+#[test]
+fn a_refresh_keeps_a_draft_whose_save_failed_until_the_forge_lists_it() {
+    let mut app = with_review();
+    on_line(&mut app);
+    press(&mut app, "c");
+    let save = type_text(&mut app, "nit");
+    app.apply(Incoming::Failed { what: Failure::Draft, message: "offline".into() });
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+    assert_eq!((app.draft_count(), app.unsaved_drafts()), (1, 1), "the poll did not lose it");
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(listing(&save, 9)), cached: None });
+    assert_eq!((app.draft_count(), app.unsaved_drafts()), (1, 0), "the post had landed: one draft, saved");
+    assert_eq!(draft_writes(app.take_actions()), vec![]);
 }
 
 #[test]
 fn the_publish_modal_walks_the_drafts_toggles_approve_and_publishes() {
     let mut app = with_saved_draft();
     press(&mut app, "jjc");
-    type_text(&mut app, "second");
-    app.apply(Incoming::DraftSaved { key: mr_key(), index: 1, id: 10 });
+    let save = type_text(&mut app, "second");
+    app.apply(saved(&save, 10));
     press(&mut app, "P");
     let publish = app.publish.clone().unwrap();
     assert_eq!((publish.selected, publish.approve, publish.busy), (0, false, false));
@@ -1007,7 +1103,7 @@ fn big_e_and_s_open_the_editor_and_what_comes_back_is_a_draft() {
     assert_eq!(app.draft_count(), 0);
     app.apply(Incoming::Composed { input, text: Some("from the editor".into()) });
     let actions = app.take_actions();
-    assert!(matches!(actions.as_slice(), [Action::SaveDraft { index: 0, .. }]), "{actions:?}");
+    assert!(matches!(actions.as_slice(), [Action::SaveDraft { .. }]), "{actions:?}");
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "from the editor");
     press(&mut app, "kl");
     assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
@@ -1039,8 +1135,8 @@ fn snapshot_thread_with_a_draft_reply() {
     press(&mut app, "]N");
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
-    type_text(&mut app, "agreed, keys are per card");
-    app.apply(Incoming::DraftSaved { key: mr_key(), index: 0, id: 9 });
+    let save = type_text(&mut app, "agreed, keys are per card");
+    app.apply(saved(&save, 9));
     insta::assert_snapshot!("thread_draft_reply", render(&mut app, 120, 24));
 }
 
@@ -1579,8 +1675,10 @@ fn a_draft_whose_line_left_the_diff_is_named_before_publishing_and_m_moves_it_to
     assert_eq!(app.publish.as_ref().unwrap().selected, 1, "the cursor lands on the stranded draft");
     assert!(app.live_toast().unwrap().text.contains("m moves it to the MR"));
     let actions = press(&mut app, "m");
-    let [Action::DeleteDraft { id: 5, .. }, Action::SaveDraft { index: 1, draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+    let [Action::DeleteDraft { id: 5, .. }, Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!((draft.anchor.clone(), draft.position.clone()), (None, None), "the note now sits on the MR");
+    let first = app.open.as_ref().unwrap().review.drafts[0].local_id;
+    assert!(draft.local_id.is_some() && draft.local_id != first, "the save's answer finds the moved draft, not its neighbour");
     assert!(app.open.as_ref().unwrap().review.stranded().is_empty());
 }
 

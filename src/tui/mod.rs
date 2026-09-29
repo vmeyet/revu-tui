@@ -473,9 +473,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
             }
             Action::Yank(url) => send(copy(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
-            Action::SaveDraft { key, index, draft } => {
-                send(backend.save_draft(key, index, &draft).await.unwrap_or_else(|e| failed(Failure::Draft { index }, &e)));
-            }
+            Action::SaveDraft { key, draft } => send(backend.save_draft(key, draft).await.unwrap_or_else(|e| failed(Failure::Draft, &e))),
             Action::UpdateDraft { key, id, draft } => {
                 if let Err(e) = backend.forge_of(&key).update_draft(&key, id, &draft.payload()).await {
                     send(failed(Failure::Local, &e));
@@ -975,13 +973,13 @@ impl Backend {
     }
 
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
-    async fn save_draft(&self, key: MrKey, index: usize, draft: &Draft) -> Result<Incoming> {
+    async fn save_draft(&self, key: MrKey, draft: Box<Draft>) -> Result<Incoming> {
         let held = self.forge_of(&key).drafts(&key).await?;
         let id = match held.iter().find(|note| draft.same_as(&Draft::held(note))) {
             Some(note) => note.id,
             None => self.forge_of(&key).create_draft(&key, &draft.payload()).await?.id,
         };
-        Ok(Incoming::DraftSaved { key, index, id })
+        Ok(Incoming::DraftSaved { key, draft, id })
     }
 
     async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
@@ -1608,9 +1606,9 @@ mod tests {
             .mount(&server)
             .await;
         let backend = backend_on(&server);
-        let same = backend.save_draft(key(), 0, &draft_at(12, "nit")).await.unwrap();
-        assert_eq!(same, Incoming::DraftSaved { key: key(), index: 0, id: 5 });
-        let fresh = backend.save_draft(key(), 1, &draft_at(13, "other")).await.unwrap();
-        assert_eq!(fresh, Incoming::DraftSaved { key: key(), index: 1, id: 6 });
+        let same = Box::new(draft_at(12, "nit"));
+        assert_eq!(backend.save_draft(key(), same.clone()).await.unwrap(), Incoming::DraftSaved { key: key(), draft: same, id: 5 });
+        let fresh = Box::new(draft_at(13, "other"));
+        assert_eq!(backend.save_draft(key(), fresh.clone()).await.unwrap(), Incoming::DraftSaved { key: key(), draft: fresh, id: 6 });
     }
 }

@@ -190,6 +190,8 @@ pub struct App {
     pub asked: bool,
     /// The id of the last answer started.
     pub next_answer: u64,
+    /// The local id of the last draft written.
+    pub next_draft: u64,
     /// What Jev said about each queue MR.
     pub verdicts: HashMap<MrKey, crate::ai::triage::Verdict>,
     /// MRs Jev is being asked about right now, so a new queue does not ask twice.
@@ -287,6 +289,7 @@ impl App {
             ask_model: settings.ask,
             asked: false,
             next_answer: 0,
+            next_draft: 0,
             verdicts: HashMap::new(),
             triage_asked: std::collections::HashSet::new(),
             readings: HashMap::new(),

@@ -6,6 +6,8 @@ use crate::forge::{self, Position};
 pub struct Draft {
     /// Set once the forge holds it as a draft.
     pub id: Option<u64>,
+    /// Set on a draft written in this session, so the forge's late answer finds it wherever the list moved.
+    pub local_id: Option<u64>,
     pub anchor: Option<Anchor>,
     /// What the forge needs to hang the note on a line; None on the MR itself or in a reply.
     pub position: Option<Position>,
@@ -20,22 +22,39 @@ impl Draft {
     /// A fresh note on a line, or on the MR when `anchor` is None.
     #[cfg(test)]
     pub fn new(anchor: Option<Anchor>, body: impl Into<String>) -> Self {
-        Self { id: None, anchor, position: None, reply_to: None, body: body.into(), resolve: false }
+        Self { id: None, local_id: None, anchor, position: None, reply_to: None, body: body.into(), resolve: false }
     }
 
     /// A fresh note on the line `position` names.
     pub fn on(position: Position, body: impl Into<String>) -> Self {
-        Self { id: None, anchor: anchor_of(&position), position: Some(position), reply_to: None, body: body.into(), resolve: false }
+        Self {
+            id: None,
+            local_id: None,
+            anchor: anchor_of(&position),
+            position: Some(position),
+            reply_to: None,
+            body: body.into(),
+            resolve: false,
+        }
     }
 
     pub fn reply(thread: &str, body: impl Into<String>) -> Self {
-        Self { id: None, anchor: None, position: None, reply_to: Some(thread.to_owned()), body: body.into(), resolve: false }
+        Self {
+            id: None,
+            local_id: None,
+            anchor: None,
+            position: None,
+            reply_to: Some(thread.to_owned()),
+            body: body.into(),
+            resolve: false,
+        }
     }
 
     /// One the forge already holds.
     pub fn held(draft: &forge::Draft) -> Self {
         Self {
             id: Some(draft.id),
+            local_id: None,
             anchor: draft.position.as_ref().and_then(anchor_of),
             position: draft.position.clone(),
             reply_to: draft.reply_to.clone(),
@@ -63,15 +82,27 @@ impl Draft {
         self.body == other.body && self.reply_to == other.reply_to && self.anchor == other.anchor
     }
 
-    #[cfg(test)]
     pub fn with_id(self, id: u64) -> Self {
         Self { id: Some(id), ..self }
+    }
+
+    pub fn with_local_id(self, local_id: u64) -> Self {
+        Self { local_id: Some(local_id), ..self }
     }
 
     /// Whether this draft sits in the diff at `(path, side, line)`.
     pub fn is_at(&self, path: &str, side: Side, line: u32) -> bool {
         self.reply_to.is_none() && self.anchor.as_ref().is_some_and(|a| a.path == path && a.side == side && a.line == line)
     }
+}
+
+/// The forge's fresh drafts plus the ones this session wrote that it does not hold yet: a refresh never loses a draft.
+/// A written draft the forge now lists takes its id instead of showing twice.
+pub fn carry(held: &[Draft], old: &[Draft]) -> Vec<Draft> {
+    let unsaved: Vec<&Draft> = old.iter().filter(|d| d.id.is_none()).collect();
+    let listed = |draft: &Draft| held.iter().find(|h| h.same_as(draft)).and_then(|h| h.id);
+    let kept = held.iter().filter(|h| !unsaved.iter().any(|d| d.same_as(h))).cloned();
+    kept.chain(unsaved.iter().map(|d| Draft { id: listed(d), ..(*d).clone() })).collect()
 }
 
 #[cfg(test)]
@@ -122,5 +153,15 @@ mod tests {
     fn the_payload_carries_the_whole_draft() {
         let payload = Draft::on(position(), "nit").payload();
         assert_eq!((payload.body.as_str(), payload.position, payload.reply_to, payload.resolve), ("nit", Some(position()), None, false));
+    }
+
+    #[test]
+    fn a_refresh_keeps_the_drafts_the_forge_does_not_hold_and_adopts_the_ones_it_now_lists() {
+        let web = held(3, "from the web", None, None, false);
+        let landed = Draft::on(position(), "nit").with_local_id(1);
+        let offline = Draft::reply("t1", "agreed").with_local_id(2);
+        let fresh = [web.clone(), held(7, "nit", Some(position()), None, false)];
+        let carried = carry(&fresh, &[web.clone(), landed.clone(), offline.clone()]);
+        assert_eq!(carried, vec![web, landed.with_id(7), offline], "one copy of the landed draft, still findable by its local id");
     }
 }
