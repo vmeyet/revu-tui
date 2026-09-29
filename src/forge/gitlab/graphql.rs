@@ -68,14 +68,14 @@ impl Client {
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
     pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
         let (asking_body, authored_body) = (json!({"query": asking_query()}), json!({"query": authored_query()}));
-        let asking = self.post_json::<Answer>("graphql", &asking_body);
-        let authored = self.post_json::<Answer>("graphql", &authored_body);
+        let asking = self.http.post_json::<Answer>(super::GRAPHQL, &asking_body);
+        let authored = self.http.post_json::<Answer>(super::GRAPHQL, &authored_body);
         let Some(path) = project else {
             let (asking, authored) = tokio::try_join!(asking, authored)?;
             return queue_from(asking, authored, None);
         };
         let open_body = json!({"query": project_query(), "variables": {"project": path}});
-        let (asking, authored, open) = tokio::try_join!(asking, authored, self.post_json::<Answer>("graphql", &open_body))?;
+        let (asking, authored, open) = tokio::try_join!(asking, authored, self.http.post_json::<Answer>(super::GRAPHQL, &open_body))?;
         queue_from(asking, authored, Some((open, path)))
     }
 }
@@ -84,7 +84,7 @@ impl Client {
     /// Marks the MR a draft, or ready; GitLab leaves an MR already there as it is.
     pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
         let variables = json!({"project": key.project, "iid": key.number.to_string(), "draft": draft});
-        let answer = self.post_json::<Answer>("graphql", &json!({"query": SET_DRAFT, "variables": variables})).await?;
+        let answer = self.http.post_json::<Answer>(super::GRAPHQL, &json!({"query": SET_DRAFT, "variables": variables})).await?;
         let payload = data_of(answer)?.merge_request_set_draft.context("GraphQL answered without the merge request")?;
         if !payload.errors.is_empty() {
             bail!("GitLab: {}", payload.errors.join("; "));

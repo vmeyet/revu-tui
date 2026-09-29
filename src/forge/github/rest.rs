@@ -3,10 +3,12 @@
 use super::Client;
 use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
+use crate::forge::http::HttpError;
 use crate::forge::{self, DiffFile, Discussion, MrKey, Note, Position};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
+use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -207,13 +209,13 @@ impl Client {
     pub async fn apply(&self, key: &MrKey, branch: &str, suggestion: &forge::Suggestion) -> Result<()> {
         let repo = repo_path(&key.project);
         let pull_path = format!("{repo}/pulls/{}", key.number);
-        let (access, pull) = tokio::try_join!(self.get::<RepoAccess>(&repo), self.get::<PullHead>(&pull_path))?;
+        let (access, pull) = tokio::try_join!(self.http.get::<RepoAccess>(&repo), self.http.get::<PullHead>(&pull_path))?;
         let own_branch = pull.head.repo.is_some_and(|r| r.full_name == key.project);
         if !own_branch || !access.permissions.is_some_and(|p| p.push) {
             bail!("GitHub has no API to apply this suggestion here: o opens it on the web");
         }
         let path = format!("{repo}/contents/{}", suggestion.path);
-        let file: Contents = self.get(&format!("{path}?ref={branch}")).await?;
+        let file: Contents = self.http.get(&format!("{path}?ref={branch}")).await?;
         let text = decode(&file.content)?;
         let proposal =
             crate::review::suggestion::Proposal { above: suggestion.above, below: suggestion.below, text: suggestion.text.clone() };
@@ -224,7 +226,7 @@ impl Client {
             "sha": file.sha,
             "branch": branch,
         });
-        self.put_json::<serde_json::Value>(&path, &body).await.map(|_| ())
+        self.http.put_json::<serde_json::Value>(&path, &body).await.map(|_| ())
     }
 
     /// The check runs on `head`, grouped by workflow; `None` when nothing ran on it.
@@ -232,7 +234,7 @@ impl Client {
         let repo = repo_path(&key.project);
         let runs_path = format!("{repo}/commits/{head}/check-runs?per_page=100");
         let workflows_path = format!("{repo}/actions/runs?head_sha={head}&per_page=100");
-        let (runs, workflows) = tokio::try_join!(self.get::<CheckRuns>(&runs_path), self.get::<WorkflowRuns>(&workflows_path))?;
+        let (runs, workflows) = tokio::try_join!(self.http.get::<CheckRuns>(&runs_path), self.http.get::<WorkflowRuns>(&workflows_path))?;
         if runs.check_runs.is_empty() {
             return Ok(None);
         }
@@ -246,7 +248,7 @@ impl Client {
     pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
         let repo = repo_path(&key.project);
         let branch: String = url::form_urlencoded::byte_serialize(branch.as_bytes()).collect();
-        let listed: Vec<DeploymentWire> = self.get(&format!("{repo}/deployments?ref={branch}&per_page=30")).await?;
+        let listed: Vec<DeploymentWire> = self.http.get(&format!("{repo}/deployments?ref={branch}&per_page=30")).await?;
         let mut newest: Vec<DeploymentWire> = vec![];
         for deployment in listed {
             if newest.iter().all(|n| n.environment != deployment.environment) {
@@ -254,7 +256,7 @@ impl Client {
             }
         }
         let paths: Vec<String> = newest.iter().map(|d| format!("{repo}/deployments/{}/statuses?per_page=1", d.id)).collect();
-        let statuses = futures_util::future::try_join_all(paths.iter().map(|p| self.get::<Vec<DeploymentStatus>>(p))).await?;
+        let statuses = futures_util::future::try_join_all(paths.iter().map(|p| self.http.get::<Vec<DeploymentStatus>>(p))).await?;
         Ok(newest
             .into_iter()
             .zip(statuses)
@@ -267,12 +269,12 @@ impl Client {
     }
 
     pub async fn me(&self) -> Result<forge::User> {
-        self.get::<RestUser>("user").await.map(forge::User::from)
+        self.http.get::<RestUser>("user").await.map(forge::User::from)
     }
 
     /// The `owner/repo` of the repository with this numeric id.
     pub async fn project_path(&self, id: u64) -> Result<String> {
-        let repo: Repo = self.get(&format!("repositories/{id}")).await.with_context(|| format!("repository {id}"))?;
+        let repo: Repo = self.http.get(&format!("repositories/{id}")).await.with_context(|| format!("repository {id}"))?;
         Ok(repo.full_name)
     }
 
@@ -280,7 +282,7 @@ impl Client {
     pub async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>> {
         let owner = project.split('/').next().unwrap_or_default();
         let head: String = url::form_urlencoded::byte_serialize(format!("{owner}:{branch}").as_bytes()).collect();
-        let found: Vec<PrNumber> = self.get(&format!("{}/pulls?state=open&head={head}", repo_path(project))).await?;
+        let found: Vec<PrNumber> = self.http.get(&format!("{}/pulls?state=open&head={head}", repo_path(project))).await?;
         Ok(found.first().map(|p| p.number))
     }
 
@@ -290,7 +292,7 @@ impl Client {
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
-        let files: Vec<File> = self.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
+        let files: Vec<File> = self.http.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
@@ -298,7 +300,7 @@ impl Client {
     pub async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
         let Some(position) = position else {
             let path = format!("{}/issues/{}/comments", repo_path(&key.project), key.number);
-            return self.post_json::<PostedComment>(&path, &json!({"body": body})).await.map(|c| c.into_discussion(None));
+            return self.http.post_json::<PostedComment>(&path, &json!({"body": body})).await.map(|c| c.into_discussion(None));
         };
         let (side, line) = wire::side_of(position.line).context("the line has no number")?;
         let mut payload = json!({"body": body, "commit_id": position.refs.head, "path": position.path(), "line": line, "side": side});
@@ -307,7 +309,7 @@ impl Client {
             payload["start_side"] = json!(start_side);
         }
         let path = format!("{}/pulls/{}/comments", repo_path(&key.project), key.number);
-        self.post_json::<PostedComment>(&path, &payload).await.map(|c| c.into_discussion(Some(position.clone())))
+        self.http.post_json::<PostedComment>(&path, &payload).await.map(|c| c.into_discussion(Some(position.clone())))
     }
 
     /// An approval is a review of its own. GitHub has no taking it back for the one who gave it.
@@ -319,7 +321,11 @@ impl Client {
             forge::MergeMethod::Rebase => "rebase",
         };
         let path = format!("{}/pulls/{}/merge", repo_path(&key.project), key.number);
-        self.put_json::<serde_json::Value>(&path, &json!({"sha": head, "merge_method": method})).await.map(|_| ()).map_err(merge_refused)
+        self.http
+            .put_json::<serde_json::Value>(&path, &json!({"sha": head, "merge_method": method}))
+            .await
+            .map(|_| ())
+            .map_err(merge_refused)
     }
 
     pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
@@ -327,27 +333,27 @@ impl Client {
             bail!("GitHub cannot unapprove; request changes or dismiss the review from the web");
         }
         let path = format!("{}/pulls/{}/reviews", repo_path(&key.project), key.number);
-        self.post_json::<serde_json::Value>(&path, &json!({"event": "APPROVE"})).await.map(|_| ()).map_err(cannot_approve)
+        self.http.post_json::<serde_json::Value>(&path, &json!({"event": "APPROVE"})).await.map(|_| ()).map_err(cannot_approve)
     }
 }
 
 /// The answers GitHub gives a merge it will not do, in words the reader can act on.
 fn merge_refused(err: anyhow::Error) -> anyhow::Error {
-    let text = err.to_string();
-    match () {
-        () if text.contains("HTTP 409") => anyhow!("the branch moved since you read it: refresh with r and look at the new commits"),
-        () if text.contains("HTTP 405") => {
-            anyhow!("GitHub will not merge it yet: {}", text.rsplit_once(" 405 ").map_or(text.as_str(), |(_, rest)| rest))
-        }
-        () if text.contains("HTTP 403") => anyhow!("you are not allowed to merge into this branch"),
-        () => err,
+    let Some(refused) = err.downcast_ref::<HttpError>() else { return err };
+    match refused.status {
+        StatusCode::CONFLICT => anyhow!("the branch moved since you read it: refresh with r and look at the new commits"),
+        StatusCode::METHOD_NOT_ALLOWED => anyhow!("GitHub will not merge it yet: {}", refused.message),
+        StatusCode::FORBIDDEN => anyhow!("you are not allowed to merge into this branch"),
+        _ => err,
     }
 }
 
 /// GitHub answers 422 to approving one's own PR, or while a pending review is open.
 fn cannot_approve(err: anyhow::Error) -> anyhow::Error {
-    let text = err.to_string();
-    if text.contains("HTTP 422") { anyhow!("GitHub refused the approval: {}", text.rsplit(" 422 ").next().unwrap_or(&text)) } else { err }
+    match err.downcast_ref::<HttpError>() {
+        Some(refused) if refused.status == StatusCode::UNPROCESSABLE_ENTITY => anyhow!("GitHub refused the approval: {}", refused.message),
+        _ => err,
+    }
 }
 
 #[cfg(test)]

@@ -30,7 +30,7 @@ impl Client {
             Owner::Id(id) => format!("projects/{id}"),
         };
         let path = format!("{owner}/uploads/{}/{}", upload.secret, upload.file);
-        let response = self.send(Method::GET, self.url(&path)?, None).await?;
+        let response = self.http.send(Method::GET, &path, None).await?;
         image::read(response).await
     }
 }

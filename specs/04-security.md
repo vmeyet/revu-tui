@@ -34,7 +34,7 @@ Expiry: `GET /personal_access_tokens/self` gives `expires_at`; the TUI status li
 
 ## The token goes to one host
 
-`api::Client` is built with the host and refuses any request whose URL host differs, before adding the header.
+`forge::http::Transport` is built with a base URL and refuses any request whose scheme, host or port differs from it, before adding the header.
 Redirects are not followed (`reqwest::redirect::Policy::none()`), so a 302 to another host cannot carry the header.
 TLS via rustls with webpki roots; no `danger_accept_invalid_certs` option exists.
 

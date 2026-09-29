@@ -6,55 +6,52 @@ mod graphql;
 mod rest;
 mod wire;
 
+use super::http::{Flavor, Transport, scrub};
 use super::{LineRef, Side};
 use crate::auth::Credentials;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest::{Method, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use url::Url;
 
-const PAGE_SIZE: &str = "100";
 /// What the contents API is asked for to answer with the file itself rather than base64 JSON.
 const RAW: &str = "application/vnd.github.raw+json";
-const MAX_WAIT: Duration = Duration::from_secs(60);
 const API_VERSION: &str = "2022-11-28";
+
+static FLAVOR: Flavor =
+    Flavor { remaining: "x-ratelimit-remaining", reset: "x-ratelimit-reset", waits_on_spent_403: true, error_message: wire::error_message };
 
 /// One GitHub host. The token goes to its API host only: `api.github.com` for github.com, the
 /// host itself for GitHub Enterprise; redirects are refused and every URL is checked first.
 #[derive(Clone, Debug)]
 pub struct Client {
-    http: reqwest::Client,
+    http: Transport,
     host: String,
-    budget: super::budget::Budget,
-    api_host: String,
-    rest: Url,
-    graphql: Url,
+    /// The GraphQL endpoint, relative to the REST base.
+    graphql: &'static str,
     /// Where comment pictures come from; shared, so the client stays small to clone.
     downloads: std::sync::Arc<attachment::Downloads>,
 }
 
 impl Client {
     pub fn new(credentials: &Credentials) -> Result<Self> {
-        let (rest, graphql) = if credentials.host == "github.com" {
-            ("https://api.github.com/".to_owned(), "https://api.github.com/graphql".to_owned())
+        let web = format!("https://{}/", credentials.host);
+        if credentials.host == "github.com" {
+            Self::build(credentials, "https://api.github.com/", "graphql", &web)
         } else {
-            (format!("https://{}/api/v3/", credentials.host), format!("https://{}/api/graphql", credentials.host))
-        };
-        Self::build(credentials, &rest, &graphql, &format!("https://{}/", credentials.host))
+            Self::build(credentials, &format!("https://{}/api/v3/", credentials.host), "../graphql", &web)
+        }
     }
 
-    /// For tests: REST at `base`, GraphQL at `base/graphql`. The host guard applies to that server.
+    /// For tests: REST at `base`, GraphQL at `base/graphql`. The origin guard applies to that server.
     #[cfg(test)]
     pub fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
-        let base = base.trim_end_matches('/');
-        let client = Self::build(credentials, &format!("{base}/"), &format!("{base}/graphql"), &format!("{base}/"))?;
+        let base = format!("{}/", base.trim_end_matches('/'));
+        let client = Self::build(credentials, &base, "graphql", &base)?;
         Ok(Self { downloads: std::sync::Arc::new(client.downloads.trusting()), ..client })
     }
 
-    fn build(credentials: &Credentials, rest: &str, graphql: &str, web: &str) -> Result<Self> {
+    fn build(credentials: &Credentials, rest: &str, graphql: &'static str, web: &str) -> Result<Self> {
         let mut headers = HeaderMap::new();
         let mut token =
             HeaderValue::from_str(&format!("Bearer {}", credentials.token)).context("token has characters a header cannot carry")?;
@@ -62,124 +59,31 @@ impl Client {
         headers.insert(AUTHORIZATION, token);
         headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
         headers.insert("X-GitHub-Api-Version", HeaderValue::from_static(API_VERSION));
-        let http = reqwest::Client::builder()
-            .default_headers(headers)
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
-            .build()?;
-        let rest = Url::parse(rest).context("host is not a hostname")?;
-        let graphql = Url::parse(graphql).context("host is not a hostname")?;
-        let api_host = rest.host_str().context("API url without a host")?.to_owned();
+        let http = Transport::new(rest, headers, &FLAVOR)?;
         let downloads = std::sync::Arc::new(attachment::Downloads::new(web)?);
-        Ok(Self { http, host: credentials.host.clone(), api_host, rest, graphql, downloads, budget: super::budget::Budget::default() })
+        Ok(Self { http, host: credentials.host.clone(), graphql, downloads })
     }
 
     pub fn host(&self) -> &str {
         &self.host
     }
 
-    async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let response = self.send(Method::GET, self.url(path)?, None).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
-    }
-
-    async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
-        let response = self.send(Method::POST, self.url(path)?, Some(body)).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("POST {path}: unreadable answer"))
-    }
-
-    async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
-        let response = self.send(Method::PUT, self.url(path)?, Some(body)).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("PUT {path}: unreadable answer"))
-    }
-
-    /// Every page of a list, following `Link: rel="next"` until it stops.
-    async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
-        let mut url = self.url(path)?;
-        url.query_pairs_mut().append_pair("per_page", PAGE_SIZE);
-        let mut items = Vec::new();
-        loop {
-            let response = self.send(Method::GET, url, None).await?;
-            let next = response.headers().get("link").and_then(|h| h.to_str().ok()).and_then(next_link).map(str::to_owned);
-            let page: Vec<T> = response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable page"))?;
-            items.extend(page);
-            match next {
-                Some(link) => url = self.guard(Url::parse(&link).with_context(|| format!("bad link {link:?}"))?)?,
-                None => return Ok(items),
-            }
-        }
-    }
-
     pub fn rate(&self) -> super::budget::RateLimit {
-        self.budget.now()
+        self.http.rate()
     }
 
     /// A file's bytes as text: the contents API answers raw when asked for `vnd.github.raw`.
     async fn get_raw(&self, path: &str) -> Result<String> {
-        let url = self.url(path)?;
-        let response = self.http.get(url.clone()).header(ACCEPT, RAW).send().await.map_err(scrub)?;
-        let response = checked(response, &Method::GET, &url).await?;
+        let response = self.http.fetch(path, RAW).await?;
         response.text().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
     }
 
     /// One GraphQL call; an answer carrying `errors` is an error, whatever its status.
     async fn graphql<T: DeserializeOwned>(&self, query: &str, variables: serde_json::Value) -> Result<T> {
         let body = serde_json::json!({"query": query, "variables": variables});
-        let response = self.send(Method::POST, self.guard(self.graphql.clone())?, Some(&body)).await?;
-        let answer: wire::Answer<T> = response.json().await.map_err(scrub).context("GraphQL: unreadable answer")?;
+        let answer: wire::Answer<T> = self.http.post_json(self.graphql, &body).await?;
         answer.into_data()
     }
-
-    /// One request, retried once after the wait GitHub asks for when it rate-limits.
-    async fn send(&self, method: Method, url: Url, body: Option<&serde_json::Value>) -> Result<Response> {
-        let first = self.send_once(method.clone(), url.clone(), body).await?;
-        if !rate_limited(&first) {
-            return checked(first, &method, &url).await;
-        }
-        let wait = wait_from(first.headers()).min(MAX_WAIT);
-        self.budget.waiting_for(wait);
-        tokio::time::sleep(wait).await;
-        self.budget.done_waiting();
-        let second = self.send_once(method.clone(), url.clone(), body).await?;
-        checked(second, &method, &url).await
-    }
-
-    async fn send_once(&self, method: Method, url: Url, body: Option<&serde_json::Value>) -> Result<Response> {
-        let request = self.http.request(method, url);
-        let request = match body {
-            Some(json) => request.json(json),
-            None => request,
-        };
-        let response = request.send().await.map_err(scrub)?;
-        self.budget.note(super::budget::header_number(response.headers(), "x-ratelimit-remaining"));
-        Ok(response)
-    }
-
-    fn url(&self, path: &str) -> Result<Url> {
-        self.guard(self.rest.join(path.trim_start_matches('/'))?)
-    }
-
-    fn guard(&self, url: Url) -> Result<Url> {
-        if url.host_str() != Some(self.api_host.as_str()) {
-            bail!("refusing to send the token to {}", url.host_str().unwrap_or("?"));
-        }
-        Ok(url)
-    }
-}
-
-/// A 429, or a 403 that says the quota is spent: both come back after a wait.
-fn rate_limited(response: &Response) -> bool {
-    let spent = response.headers().get("x-ratelimit-remaining").and_then(|h| h.to_str().ok()) == Some("0");
-    response.status() == StatusCode::TOO_MANY_REQUESTS || (response.status() == StatusCode::FORBIDDEN && spent)
-}
-
-async fn checked(response: Response, method: &Method, url: &Url) -> Result<Response> {
-    let status = response.status();
-    if status.is_success() {
-        return Ok(response);
-    }
-    let message = response.text().await.unwrap_or_default();
-    bail!("{method} {}: HTTP {} {}", url.path(), status.as_u16(), wire::error_message(&message))
 }
 
 /// GitHub's page for one diff line: the PR's files, scrolled to `diff-sha256(path)` and the side.
@@ -190,30 +94,6 @@ pub fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
         (Side::Old, Some(n)) => format!("{web_url}/files#diff-{anchor}L{n}"),
         (_, None) => format!("{web_url}/files#diff-{anchor}"),
     }
-}
-
-/// `Retry-After` in seconds, else `X-RateLimit-Reset` as a unix time, else one second.
-fn wait_from(headers: &HeaderMap) -> Duration {
-    let number = |name: &str| headers.get(name).and_then(|h| h.to_str().ok()?.trim().parse::<u64>().ok());
-    if let Some(seconds) = number("retry-after") {
-        return Duration::from_secs(seconds);
-    }
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-    number("x-ratelimit-reset").map_or(Duration::from_secs(1), |reset| Duration::from_secs(reset.saturating_sub(now)))
-}
-
-/// The `<url>` whose `rel="next"` in a `Link` header.
-fn next_link(header: &str) -> Option<&str> {
-    header.split(',').map(str::trim).find(|part| part.contains("rel=\"next\"")).and_then(|part| {
-        let start = part.find('<')? + 1;
-        let end = part.find('>')?;
-        part.get(start..end)
-    })
-}
-
-/// reqwest errors carry the URL, never the header, but the chain is cut here anyway.
-fn scrub(err: reqwest::Error) -> anyhow::Error {
-    anyhow::anyhow!("{}", err.without_url())
 }
 
 /// `owner/repo` split for GraphQL, which names a repository by its two halves.
@@ -238,18 +118,12 @@ mod tests {
     #[test]
     fn github_com_talks_to_its_api_host_and_enterprise_to_its_own() {
         let dotcom = Client::new(&creds()).unwrap();
-        assert_eq!((dotcom.rest.as_str(), dotcom.graphql.as_str()), ("https://api.github.com/", "https://api.github.com/graphql"));
+        assert_eq!(dotcom.http.url("user").unwrap().as_str(), "https://api.github.com/user");
+        assert_eq!(dotcom.http.url(dotcom.graphql).unwrap().as_str(), "https://api.github.com/graphql");
+        assert!(dotcom.http.url("https://github.com/user").is_err(), "the web host is not the API host");
         let enterprise = Client::new(&Credentials { host: "git.acme.dev".into(), token: "t".into() }).unwrap();
-        assert_eq!(enterprise.url("user").unwrap().as_str(), "https://git.acme.dev/api/v3/user");
-        assert_eq!(enterprise.graphql.as_str(), "https://git.acme.dev/api/graphql");
-    }
-
-    #[test]
-    fn token_never_leaves_the_api_host() {
-        let client = Client::new(&creds()).unwrap();
-        let err = client.guard(Url::parse("https://github.com/user").unwrap()).unwrap_err().to_string();
-        assert!(err.contains("github.com"), "{err}");
-        assert!(client.guard(Url::parse("https://evil.example/x").unwrap()).is_err());
+        assert_eq!(enterprise.http.url("user").unwrap().as_str(), "https://git.acme.dev/api/v3/user");
+        assert_eq!(enterprise.http.url(enterprise.graphql).unwrap().as_str(), "https://git.acme.dev/api/graphql");
     }
 
     #[tokio::test]
@@ -295,8 +169,9 @@ mod tests {
             )
             .mount(&server)
             .await;
-        let err = Client::with_base(&creds(), &server.uri()).unwrap().me().await.unwrap_err().to_string();
-        assert!(err.contains("HTTP 403") && err.contains("not accessible"), "{err}");
+        let err = Client::with_base(&creds(), &server.uri()).unwrap().me().await.unwrap_err();
+        assert_eq!(crate::forge::http::status(&err), Some(reqwest::StatusCode::FORBIDDEN));
+        assert!(err.to_string().ends_with("HTTP 403 Resource not accessible by integration"), "{err}");
         assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
 
@@ -315,11 +190,5 @@ mod tests {
         assert_eq!(owner_and_name("acme/widgets").unwrap(), ("acme", "widgets"));
         assert!(owner_and_name("widgets").is_err());
         assert!(owner_and_name("/widgets").is_err());
-    }
-
-    #[test]
-    fn next_link_is_found_among_the_relations() {
-        let header = r#"<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=5>; rel="last""#;
-        assert_eq!(next_link(header), Some("https://api.github.com/x?page=2"));
     }
 }

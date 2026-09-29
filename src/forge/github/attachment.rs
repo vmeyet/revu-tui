@@ -1,8 +1,9 @@
 //! Pictures in GitHub comments: uploaded attachments on the web host, user-content links, and
 //! files of the repo. Each goes where its token may go, or goes without one.
 use super::Client;
-use crate::forge::image;
+use crate::forge::{http, image};
 use anyhow::{Context, Result, bail};
+use reqwest::StatusCode;
 use reqwest::header::{ACCEPT, LOCATION};
 use url::Url;
 
@@ -57,10 +58,9 @@ impl Client {
     async fn repo_file(&self, repo: &str, rest: &[String]) -> Result<Vec<u8>> {
         for at in 1..rest.len() {
             let (git_ref, path) = (rest[..at].join("/"), rest[at..].join("/"));
-            let url = self.url(&format!("repos/{repo}/contents/{path}?ref={git_ref}"))?;
-            let response = self.http.get(url).header(ACCEPT, super::RAW).send().await.map_err(super::scrub)?;
-            if response.status() != reqwest::StatusCode::NOT_FOUND {
-                return image::read(response).await;
+            match self.http.fetch(&format!("repos/{repo}/contents/{path}?ref={git_ref}"), super::RAW).await {
+                Err(err) if http::status(&err) == Some(StatusCode::NOT_FOUND) => {}
+                answer => return image::read(answer?).await,
             }
         }
         bail!("no such file in {repo}")
@@ -70,7 +70,7 @@ impl Client {
     /// since the main client refuses redirects so the token can never follow one.
     async fn attachment(&self, path: &str) -> Result<Vec<u8>> {
         let url = self.downloads.web.join(path.trim_start_matches('/'))?;
-        let response = self.http.get(url).header(ACCEPT, "image/*").send().await.map_err(super::scrub)?;
+        let response = self.http.client().get(url).header(ACCEPT, "image/*").send().await.map_err(super::scrub)?;
         if !response.status().is_redirection() {
             return image::read(response).await;
         }
