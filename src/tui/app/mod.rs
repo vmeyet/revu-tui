@@ -116,10 +116,9 @@ pub enum Action {
         message: String,
         done: String,
     },
-    /// Post the draft at `index` of the open review; the answer carries the id GitLab gave it.
+    /// Post a draft of the open review; the answer carries it back with the id the forge gave it.
     SaveDraft {
         key: MrKey,
-        index: usize,
         draft: Box<Draft>,
     },
     /// The changed draft in full, position included, so GitLab keeps it on its line.
@@ -280,9 +279,7 @@ pub enum Failure {
     Open,
     Poll,
     Local,
-    Draft {
-        index: usize,
-    },
+    Draft,
     Publish,
     /// The comment stayed off the forge; its text waits in the box.
     Post {
@@ -355,9 +352,10 @@ pub enum Incoming {
         path: String,
         text: String,
     },
+    /// `draft` is the one sent, as it was sent.
     DraftSaved {
         key: MrKey,
-        index: usize,
+        draft: Box<Draft>,
         id: u64,
     },
     Published {

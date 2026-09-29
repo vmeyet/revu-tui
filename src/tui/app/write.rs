@@ -1,7 +1,7 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
 use super::{Action, App, Failure, Input, MrKey, Open};
 use crate::forge::Position;
-use crate::review::{Row, position, suggestion};
+use crate::review::{Draft, Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// The publish modal: the cursor walks the drafts and ends on the publish row.
@@ -235,12 +235,12 @@ impl App {
         if draft.anchor.is_none() {
             return vec![];
         }
-        let moved = draft.clone().on_the_mr();
+        let moved = draft.clone().on_the_mr().with_local_id(self.new_local_id());
         let mut drafts = open.review.drafts.clone();
         drafts[index] = moved.clone();
         self.open = Some(open.with_review(open.review.with_drafts(drafts)));
         let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id });
-        let save = Action::SaveDraft { key: open.key.clone(), index, draft: Box::new(moved) };
+        let save = Action::SaveDraft { key: open.key.clone(), draft: Box::new(moved) };
         delete.into_iter().chain([save]).collect()
     }
 
@@ -268,9 +268,8 @@ impl App {
         open.review
             .drafts
             .iter()
-            .enumerate()
-            .filter(|(_, d)| d.id.is_none())
-            .map(|(index, draft)| Action::SaveDraft { key: open.key.clone(), index, draft: Box::new(draft.clone()) })
+            .filter(|d| d.id.is_none())
+            .map(|draft| Action::SaveDraft { key: open.key.clone(), draft: Box::new(draft.clone()) })
             .collect()
     }
 
@@ -309,14 +308,36 @@ impl App {
         vec![Action::Resolve { key: open.key.clone(), thread: thread.id, resolved }]
     }
 
-    pub(super) fn apply_draft_saved(&mut self, key: &MrKey, index: usize, id: u64) {
-        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
-        let mut drafts = open.review.drafts.clone();
-        match drafts.get_mut(index) {
-            Some(draft) if draft.id.is_none() => draft.id = Some(id),
-            _ => return,
+    pub(super) fn new_local_id(&mut self) -> u64 {
+        self.next_draft += 1;
+        self.next_draft
+    }
+
+    /// The save's answer finds its draft by local id. A draft gone meanwhile, or held already under another id,
+    /// is deleted from the forge so publishing never shows it; one edited meanwhile is updated there.
+    pub(super) fn apply_draft_saved(&mut self, key: &MrKey, sent: &Draft, id: u64) -> Vec<Action> {
+        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return vec![] };
+        let delete = vec![Action::DeleteDraft { key: key.clone(), id }];
+        let Some(draft) = open.review.drafts.iter().find(|d| d.local_id == sent.local_id) else { return delete };
+        match draft.id {
+            None => {}
+            Some(held) if held == id => return vec![],
+            Some(_) => return delete,
         }
+        let saved = draft.clone().with_id(id);
+        let drafts = open
+            .review
+            .drafts
+            .iter()
+            .filter(|d| d.id != Some(id))
+            .map(|d| if d.local_id == sent.local_id { &saved } else { d })
+            .cloned()
+            .collect();
         self.open = Some(open.with_review(open.review.with_drafts(drafts)));
+        if saved.payload() == sent.payload() {
+            return vec![];
+        }
+        vec![Action::UpdateDraft { key: key.clone(), id, draft: Box::new(saved) }]
     }
 
     pub(super) fn apply_published(&mut self, key: &MrKey, approved: bool, count: usize) {
@@ -349,7 +370,7 @@ impl App {
 
     pub(super) fn apply_write_failure(&mut self, what: Failure, message: String) {
         match what {
-            Failure::Draft { .. } => self.warn(format!("draft not saved: {message} · r to retry")),
+            Failure::Draft => self.warn(format!("draft not saved: {message} · r to retry")),
             Failure::Publish => {
                 if let Some(publish) = &self.publish {
                     self.publish = Some(Publish { busy: false, ..publish.clone() });

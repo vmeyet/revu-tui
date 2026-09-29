@@ -56,6 +56,8 @@ TDD order:
 2. `api::rest` draft notes CRUD, bulk publish, resolve, approve with wiremock.
 3. `tui::app`: `c` on a line opens the input, `enter` creates a `Draft` and returns `Action::SaveDraft`; `V` range; `r` reply; `R` resolve; `P` opens the publish modal; `A` approve.
 4. Draft sync: a local draft gets its GitLab id on the first successful POST; a retry first lists `GET draft_notes` and re-posts only what is absent, so a network blip never duplicates a draft.
+   The answer finds its draft by a local id, not its place in the list: a draft deleted while its save was in flight is deleted on the forge too, and one edited meanwhile is updated there.
+   A refresh keeps every draft the forge does not hold yet; one it now lists takes its id instead of showing twice.
 5. `E` compose in `$EDITOR` for long comments; `s` suggestion prefill.
 6. Snapshots: line with a draft, publish modal, thread with a reply in flight.
 7. `revu comment <ref> <path>:<line> <text>` and `revu approve <ref>` subcommands.

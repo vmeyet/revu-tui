@@ -143,11 +143,11 @@ impl App {
     }
 
     fn add_draft(&mut self, open: &Open, draft: Draft) -> Vec<Action> {
+        let draft = draft.with_local_id(self.new_local_id());
         let mut drafts = open.review.drafts.clone();
         drafts.push(draft.clone());
-        let index = drafts.len() - 1;
         self.open = Some(Open { select_from: None, ..open.with_review(open.review.with_drafts(drafts)) });
-        vec![Action::SaveDraft { key: open.key.clone(), index, draft: Box::new(draft) }]
+        vec![Action::SaveDraft { key: open.key.clone(), draft: Box::new(draft) }]
     }
 
     fn change_draft(&mut self, open: &Open, index: usize, text: String) -> Vec<Action> {

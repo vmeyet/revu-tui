@@ -1,5 +1,5 @@
 use super::{App, Failure, Incoming, Open};
-use crate::review::Review;
+use crate::review::{Review, draft};
 
 impl App {
     pub fn apply(&mut self, incoming: Incoming) {
@@ -51,7 +51,10 @@ impl App {
             }
             Incoming::Done(text) => self.toast(text),
             Incoming::File { key, path, text } => self.apply_file(&key, path, &text),
-            Incoming::DraftSaved { key, index, id } => self.apply_draft_saved(&key, index, id),
+            Incoming::DraftSaved { key, draft, id } => {
+                let follow = self.apply_draft_saved(&key, &draft, id);
+                self.composed.extend(follow);
+            }
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
@@ -110,7 +113,7 @@ impl App {
             self.news = self.open.as_ref().filter(|o| o.key == key).and_then(|o| news(&o.review, &review)).or(self.news.take());
         }
         let next = match self.open.as_ref().filter(|o| o.key == key) {
-            Some(open) => open.with_review(carry_folds(&open.review, &review)),
+            Some(open) => open.with_review(carry_over(&open.review, &review)),
             None => Open::new(key.clone(), review),
         };
         self.count_viewed(&key, &next.review);
@@ -175,8 +178,9 @@ fn news(old: &Review, fresh: &Review) -> Option<String> {
     (new_notes > 0).then(|| format!("● {new_notes} new note{}", if new_notes == 1 { "" } else { "s" }))
 }
 
-/// Fresh data keeps the folds of every file that did not change, so a poll never unfolds what was read.
-fn carry_folds(old: &Review, fresh: &Review) -> Review {
+/// Fresh data keeps the folds of every file that did not change, so a poll never unfolds what was read,
+/// and the drafts the forge does not hold yet, so a poll never loses one.
+fn carry_over(old: &Review, fresh: &Review) -> Review {
     let mut fold = fresh.fold.clone();
     for file in old.files.iter() {
         let unchanged = fresh.files.iter().any(|f| f.new_path == file.new_path && f.hunks == file.hunks);
@@ -190,5 +194,5 @@ fn carry_folds(old: &Review, fresh: &Review) -> Review {
             fold.hunks.insert(file.new_path.clone(), hunks.clone());
         }
     }
-    fresh.with_fold(fold).with_viewed(fresh.still_viewed(&old.viewed_fingerprints()))
+    fresh.with_fold(fold).with_viewed(fresh.still_viewed(&old.viewed_fingerprints())).with_drafts(draft::carry(&fresh.drafts, &old.drafts))
 }

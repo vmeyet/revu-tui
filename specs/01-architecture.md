@@ -170,6 +170,7 @@ pub struct Thread {
 
 pub struct Draft {
     pub id: Option<u64>,         // Some once GitLab holds it as a draft note
+    pub local_id: Option<u64>,   // Some on a draft written this session: the save's answer finds it by this
     pub anchor: Option<Anchor>,
     pub reply_to: Option<String>,  // thread id
     pub body: String,
