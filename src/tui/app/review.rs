@@ -1,6 +1,6 @@
 use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
-use crate::forge::{Kind, LineRef};
+use crate::forge::{Kind, LineRef, Sha};
 use crate::review::{Review, Row};
 use std::time::{Duration, Instant};
 
@@ -369,8 +369,8 @@ impl App {
     }
 
     /// A file read whole arrived: the hunks waiting on it show their extra lines, unless a push moved the head since it was asked.
-    pub(super) fn apply_file(&mut self, key: &MrKey, path: String, sha: &str, text: &str) {
-        let Some(open) = self.open.as_ref().filter(|o| &o.key == key && o.review.mr.refs.head == sha) else { return };
+    pub(super) fn apply_file(&mut self, key: &MrKey, path: String, sha: &Sha, text: &str) {
+        let Some(open) = self.open.as_ref().filter(|o| &o.key == key && &o.review.mr.refs.head == sha) else { return };
         let mut context = open.review.context.clone();
         context.texts.insert(path, std::sync::Arc::new(text.lines().map(str::to_owned).collect()));
         self.open = Some(open.relaid(open.review.with_context(context)));

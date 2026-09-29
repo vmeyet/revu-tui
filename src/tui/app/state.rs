@@ -203,7 +203,7 @@ pub struct App {
     /// MRs Jev is being asked about right now, so a new queue does not ask twice.
     pub triage_asked: std::collections::HashSet<MrKey>,
     /// What Jev read in each opened MR, with the head commit it read.
-    pub readings: HashMap<MrKey, (String, crate::ai::triage::Reading)>,
+    pub readings: HashMap<MrKey, (crate::forge::Sha, crate::ai::triage::Reading)>,
     pub toast: Option<Toast>,
     /// Since when refreshes fail while a cached view is shown.
     pub offline: Option<Instant>,

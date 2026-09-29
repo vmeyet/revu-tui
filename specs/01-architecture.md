@@ -30,7 +30,7 @@ src/
     store.rs         SecretStore trait, SecurityCli, MemoryStore   (copied from slack-tui)
   forge/             the seam, see 07-forges.md
     mod.rs           Kind (which forge a host runs), Forge (enum, one arm per backend), re-exports
-    model.rs         the neutral model: MrKey, Mr, MrState, PipelineStatus, Refs, DiffFile, Discussion, Note, Position, LineRef, Draft, NewDraft
+    model.rs         the neutral model: MrKey, Mr, MrState, PipelineStatus, Refs, Sha, DiffFile, FileKind, Discussion, Note, Position, LineRef, Draft, NewDraft
     queue.rs         Queue, QueueMr, Sections and the pure split into sections
     rules.rs         which queue MRs need me now, and why the others do not
     checks.rs        the CI run of the head commit, jobs by stage
@@ -128,7 +128,7 @@ pub struct Mr {                  // forge/model.rs; see 07-forges.md for the res
     pub target_branch: String,
     pub web_url: String,
     pub updated_at: DateTime<Utc>,
-    pub refs: Refs,              // base, start, head: what notes on lines are made against
+    pub refs: Refs,              // base, start, head (Sha): what notes on lines are made against
     pub pipeline: Option<Pipeline>,   // status: PipelineStatus, web_url
     pub changes_count: Option<String>,
     pub conflicts: bool,
@@ -140,7 +140,7 @@ pub struct Mr {                  // forge/model.rs; see 07-forges.md for the res
 pub struct File {
     pub old_path: String,
     pub new_path: String,
-    pub kind: FileKind,          // Added | Deleted | Renamed | Modified | Mode
+    pub kind: FileKind,          // Added | Deleted | Renamed | Modified | Mode, the DiffFile's change
     pub binary: bool,
     pub too_large: bool,         // GitLab `too_large` or > 2000 lines: folded by default
     pub hunks: Vec<Hunk>,

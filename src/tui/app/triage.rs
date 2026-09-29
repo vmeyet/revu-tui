@@ -53,7 +53,7 @@ impl App {
         self.verdicts.insert(key, verdict);
     }
 
-    pub(super) fn apply_read(&mut self, key: MrKey, head: String, reading: Reading) {
+    pub(super) fn apply_read(&mut self, key: MrKey, head: crate::forge::Sha, reading: Reading) {
         self.readings.insert(key, (head, reading));
     }
 

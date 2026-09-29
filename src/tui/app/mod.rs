@@ -58,7 +58,7 @@ pub use write::Publish;
 
 use crate::diff::fold::FoldState;
 pub use crate::forge::MrKey;
-use crate::forge::{Discussion, Position, QueueMr, Sections};
+use crate::forge::{Discussion, Position, QueueMr, Sections, Sha};
 use crate::review::{Draft, Review};
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -94,7 +94,7 @@ pub enum Action {
     /// The minute's poll: the MR alone while its head is still `head`, the whole review once it moved.
     PollMr {
         key: MrKey,
-        head: String,
+        head: Sha,
     },
     RefreshDiscussions(MrKey),
     SaveState {
@@ -163,13 +163,13 @@ pub enum Action {
     LoadFile {
         key: MrKey,
         path: String,
-        sha: String,
+        sha: Sha,
     },
     /// `v`: the file `path` at commit `sha`, for the reader's program at `line`; `note` says whose file it is.
     View {
         key: MrKey,
         path: String,
-        sha: String,
+        sha: Sha,
         line: u32,
         note: Option<String>,
     },
@@ -190,7 +190,7 @@ pub enum Action {
     /// Merge the MR as `plan` says while its head is `head`; asked only after the reader said yes.
     Merge {
         key: MrKey,
-        head: String,
+        head: Sha,
         plan: crate::forge::MergePlan,
     },
     /// Mark my MR a draft, or ready for review.
@@ -212,13 +212,13 @@ pub enum Action {
     /// `p`: the jobs of the CI run on the head commit `head`.
     LoadChecks {
         key: MrKey,
-        head: String,
+        head: Sha,
     },
     /// The review apps of the MR of `branch`, `head` telling which run it as it is now.
     LoadDeployments {
         key: MrKey,
         branch: String,
-        head: String,
+        head: Sha,
     },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
@@ -230,7 +230,7 @@ pub enum Action {
         fresh: bool,
         /// What the answer is kept under, so `a h` lists it: its title and the commit asked about.
         label: String,
-        head: String,
+        head: Sha,
     },
     /// `a h`: the answers kept for the MR.
     LoadAnswers(MrKey),
@@ -239,7 +239,7 @@ pub enum Action {
     /// Ask Jev whether the open MR waits on me and how risky each file is, at commit `head`.
     Read {
         key: MrKey,
-        head: String,
+        head: Sha,
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
     },
@@ -362,7 +362,7 @@ pub enum Incoming {
     File {
         key: MrKey,
         path: String,
-        sha: String,
+        sha: Sha,
         text: String,
     },
     /// `draft` is the one sent, as it was sent. The forge may fold it into a note it already holds:
@@ -452,7 +452,7 @@ pub enum Incoming {
     },
     Read {
         key: MrKey,
-        head: String,
+        head: Sha,
         reading: crate::ai::triage::Reading,
     },
     Failed {

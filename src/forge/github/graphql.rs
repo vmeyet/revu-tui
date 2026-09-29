@@ -258,7 +258,7 @@ impl Pr {
             target_branch: self.base_ref_name,
             web_url: self.url,
             updated_at: self.updated_at,
-            refs: Refs { base: self.base_ref_oid.clone(), start: self.base_ref_oid, head: self.head_ref_oid },
+            refs: Refs { base: self.base_ref_oid.clone().into(), start: self.base_ref_oid.into(), head: self.head_ref_oid.into() },
             pipeline,
             changes_count: Some(self.changed_files.to_string()),
             conflicts: self.mergeable.as_deref() == Some("CONFLICTING"),
@@ -460,7 +460,7 @@ impl PrThreads {
     }
 
     fn refs(&self) -> Refs {
-        Refs { base: self.base_ref_oid.clone(), start: self.base_ref_oid.clone(), head: self.head_ref_oid.clone() }
+        Refs { base: self.base_ref_oid.clone().into(), start: self.base_ref_oid.clone().into(), head: self.head_ref_oid.clone().into() }
     }
 
     /// My pending review, which holds every draft: its node id and its database id.
@@ -943,7 +943,7 @@ mod tests {
         assert_eq!(open.notes.len(), 2, "my pending reply is a draft, not a note");
         let position = open.notes[0].position.as_ref().unwrap();
         assert_eq!(
-            (position.path(), position.line, &position.refs.head[..]),
+            (position.path(), position.line, position.refs.head.as_str()),
             ("src/pay/charge.rs", LineRef { old: None, new: Some(57) }, "bbbb")
         );
         assert!(open.notes[1].position.is_none());

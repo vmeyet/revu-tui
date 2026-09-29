@@ -3,7 +3,7 @@ use crate::cache::keys;
 use crate::cli::RefArgs;
 use crate::ctx::Ctx;
 use crate::diff::{self, LineKind};
-use crate::forge::{DiffFile, Discussion, Kind, Mr, MrKey, Note, Position};
+use crate::forge::{DiffFile, Discussion, FileKind, Kind, Mr, MrKey, Note, Position};
 use crate::render::{self, Cell, Style, Theme, cell, right};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -110,15 +110,15 @@ fn meta(mr: &Mr, threads: usize, open: usize, now: DateTime<Utc>) -> String {
 }
 
 fn file_row(file: &DiffFile, stat: &FileStat) -> Vec<Cell> {
-    let state = match file {
-        f if f.too_large => "too large",
-        f if f.new_file => "new",
-        f if f.deleted_file => "deleted",
-        f if f.renamed_file => "renamed",
-        f if f.diff.is_empty() => "binary",
+    let state = match file.change {
+        _ if file.too_large => "too large",
+        FileKind::Added => "new",
+        FileKind::Deleted => "deleted",
+        FileKind::Renamed => "renamed",
+        _ if file.diff.is_empty() => "binary",
         _ => "",
     };
-    let path = if file.renamed_file { format!("{} → {}", file.old_path, file.new_path) } else { file.new_path.clone() };
+    let path = if file.change == FileKind::Renamed { format!("{} → {}", file.old_path, file.new_path) } else { file.new_path.clone() };
     vec![
         cell(format!("  {path}"), Style::Plain),
         right(format!("+{}", stat.additions), Style::Ok),
@@ -176,7 +176,7 @@ mod tests {
                 new_path: "src/pay/charge.rs".into(),
                 ..DiffFile::default()
             },
-            DiffFile { old_path: "old.rs".into(), new_path: "new.rs".into(), renamed_file: true, ..DiffFile::default() },
+            DiffFile { old_path: "old.rs".into(), new_path: "new.rs".into(), change: FileKind::Renamed, ..DiffFile::default() },
         ]
     }
 

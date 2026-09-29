@@ -137,9 +137,38 @@ pub struct MergePlan {
 /// base; elsewhere it is the base), and its head. Notes on lines are made against these.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Refs {
-    pub base: String,
-    pub start: String,
-    pub head: String,
+    pub base: Sha,
+    pub start: Sha,
+    pub head: Sha,
+}
+
+/// A commit id, typed apart from branch names and paths that sit next to it in a call.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Sha(String);
+
+impl Sha {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for Sha {
+    fn from(sha: &str) -> Self {
+        Self(sha.to_owned())
+    }
+}
+
+impl From<String> for Sha {
+    fn from(sha: String) -> Self {
+        Self(sha)
+    }
+}
+
+impl std::fmt::Display for Sha {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,29 +307,28 @@ impl Approvals {
 }
 
 /// One changed file: its unified diff body (hunks from the first `@@`) and how it changed.
+/// `change` has no default, so diffs cached before it existed fail to read and are fetched again.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiffFile {
     pub diff: String,
     pub old_path: String,
     pub new_path: String,
-    /// File modes when the forge gives them; a mode-only change reads as such.
-    #[serde(default)]
-    pub a_mode: String,
-    #[serde(default)]
-    pub b_mode: String,
-    #[serde(default)]
-    pub new_file: bool,
-    #[serde(default)]
-    pub renamed_file: bool,
-    #[serde(default)]
-    pub deleted_file: bool,
-    #[serde(default)]
-    pub generated_file: bool,
+    pub change: FileKind,
     /// The forge withheld the body: too many lines for it to send.
     #[serde(default)]
     pub too_large: bool,
-    #[serde(default)]
-    pub collapsed: bool,
+}
+
+/// How a file changed; a renamed file's old name is its `old_path`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FileKind {
+    Added,
+    Deleted,
+    Renamed,
+    #[default]
+    Modified,
+    /// Only its mode changed, so its body is empty without being binary.
+    Mode,
 }
 
 /// A thread as the forge holds it: its notes in order, the first one carrying where it hangs.
@@ -689,6 +717,12 @@ mod tests {
         assert_eq!(Mr { draft: true, ..mergeable() }.draft_refusal(), None);
         assert_eq!(Mr { mine: false, ..mergeable() }.draft_refusal().as_deref(), Some("it is not yours"));
         assert_eq!(Mr { state: MrState::Closed, ..mergeable() }.draft_refusal().as_deref(), Some("this MR is closed"));
+    }
+
+    #[test]
+    fn a_diff_cached_before_files_had_a_kind_is_not_read() {
+        let old = r#"{"diff": "", "old_path": "a.rs", "new_path": "a.rs", "new_file": true}"#;
+        assert!(serde_json::from_str::<DiffFile>(old).is_err());
     }
 
     #[test]

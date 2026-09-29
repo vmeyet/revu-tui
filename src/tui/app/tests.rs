@@ -100,8 +100,6 @@ fn diffs() -> Vec<DiffFile> {
             diff: include_str!("../../review/fixtures/charge.diff").to_owned(),
             old_path: "src/pay/charge.rs".into(),
             new_path: "src/pay/charge.rs".into(),
-            a_mode: "100644".into(),
-            b_mode: "100644".into(),
             ..DiffFile::default()
         },
         DiffFile {
@@ -1518,8 +1516,6 @@ fn sum_review() -> Review {
         diff: include_str!("../../review/fixtures/sum.diff").to_owned(),
         old_path: "src/sum.rs".into(),
         new_path: "src/sum.rs".into(),
-        a_mode: "100644".into(),
-        b_mode: "100644".into(),
         ..DiffFile::default()
     };
     let on_new_line_three = json!({
@@ -2100,7 +2096,7 @@ fn deleted_and_binary_files_say_what_they_can() {
         diff: "@@ -1,2 +0,0 @@\n-a\n-b\n".into(),
         old_path: "src/gone.rs".into(),
         new_path: "src/gone.rs".into(),
-        deleted_file: true,
+        change: crate::forge::FileKind::Deleted,
         ..DiffFile::default()
     };
     let binary = DiffFile { old_path: "logo.png".into(), new_path: "logo.png".into(), ..DiffFile::default() };
@@ -3564,16 +3560,12 @@ fn long_review() -> Review {
         diff: format!("@@ -0,0 +1,30 @@ fn charge\n{}@@ -40,0 +71,30 @@ fn refund\n{}", lines(1), lines(71)),
         old_path: "src/pay/charge.rs".into(),
         new_path: "src/pay/charge.rs".into(),
-        a_mode: "100644".into(),
-        b_mode: "100644".into(),
         ..DiffFile::default()
     };
     let short = DiffFile {
         diff: "@@ -1 +1 @@\n-a\n+b\n".into(),
         old_path: "src/pay/mod.rs".into(),
         new_path: "src/pay/mod.rs".into(),
-        a_mode: "100644".into(),
-        b_mode: "100644".into(),
         ..DiffFile::default()
     };
     Review::new(mr(), &[long, short], vec![], &[])
@@ -4856,7 +4848,7 @@ fn a_h_lists_the_kept_answers_and_enter_brings_one_back_ready_for_a_follow_up() 
     let head = app.open.as_ref().unwrap().review.mr.refs.head.clone();
     let hours_ago = |h: i64| app.today - chrono::Duration::hours(h);
     let answers = vec![
-        past("explain · charge.rs", &head, hours_ago(1), "It retries."),
+        past("explain · charge.rs", head.as_str(), hours_ago(1), "It retries."),
         past("summary", "older1", hours_ago(30), "Cards charged once."),
     ];
     app.apply(Incoming::PastAnswers { key: mr_key(), answers });

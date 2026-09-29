@@ -44,8 +44,9 @@ An answer outside 2xx is an `HttpError { request, status, message }` inside the 
 | `Mr` | Header data: title, description, `state`, author, branches, `refs`, pipeline, conflicts, labels, `approvals`. |
 | `MrState` | `Open`, `Merged`, `Closed`. GitLab's `locked` (merging) reads as open. |
 | `PipelineStatus` | GitLab's pipeline statuses, one variant each; `is_running()` says which still wait. A GitHub check rollup is `Success`, `Failed` or `Running`. |
-| `Refs { base, start, head }` | The diff a review reads. GitLab tells `start` apart from `base`; GitHub repeats `base`. |
-| `DiffFile` | One file: unified body from the first `@@`, both paths, added/deleted/renamed flags, modes when known, `too_large`. |
+| `Refs { base, start, head }` | The diff a review reads, each a `Sha`. GitLab tells `start` apart from `base`; GitHub repeats `base`. |
+| `Sha` | A commit id, typed so it cannot swap with a branch or a path: `Forge::file`, `checks`, `deployments`, `merge` and the TUI actions take it. Stored as a plain string. |
+| `DiffFile` | One file: unified body from the first `@@`, both paths, `change: FileKind` (Added, Deleted, Renamed, Modified, Mode), `too_large`. GitLab's flags and modes turn into `change` in its wire; diffs cached before read as a miss and are fetched again. |
 | `Discussion { id, notes }`, `Note` | A thread and its notes; `Note.position` says where the first one hangs. |
 | `Position { refs, old_path, new_path, line, start }` | Where a note hangs: one line, or `start..=line` in one file. |
 | `LineRef { old, new }` | One diff line by its numbers: removed = old only, added = new only, context = both. `side()` is New when `new` exists. |
@@ -67,6 +68,7 @@ async fn project_path(&self, id: u64) -> Result<String>
 async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>>
 async fn mr(&self, key: &MrKey) -> Result<Mr>
 async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>>
+async fn file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String>
 async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>>
 async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>>
 async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft>
