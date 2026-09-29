@@ -196,6 +196,7 @@ impl App {
             return vec![];
         }
         self.queue_loading = true;
+        self.queue_failed = false;
         vec![Action::LoadQueue { scope: self.scope(), from_cache: false }]
     }
 
@@ -210,6 +211,7 @@ impl App {
         self.queue_selected = 0;
         self.queue_scroll = 0;
         self.queue_loading = true;
+        self.queue_failed = false;
         vec![Action::LoadQueue { scope: self.scope(), from_cache: true }]
     }
 
@@ -246,8 +248,10 @@ impl App {
             KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('p') => return self.toggle_pipeline(),
             KeyCode::Char('W') => self.toggle_whitespace(),
-            KeyCode::Char('+') if self.open_react_here() => {}
-            KeyCode::Char('+') => return self.expand_context(),
+            KeyCode::Char('+') => {
+                self.open_react_here();
+            }
+            KeyCode::Char('=') => return self.expand_context(),
             KeyCode::Char('w') => {
                 self.wrap = !self.wrap;
                 self.toast(if self.wrap { "long lines wrap" } else { "long lines end in …" });

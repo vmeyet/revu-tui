@@ -518,6 +518,24 @@ fn queue_failures_toast_and_stop_the_spinner() {
 }
 
 #[test]
+fn a_first_queue_failure_stays_in_the_pane_until_r_retries() {
+    let mut app = app();
+    app.now = app.started;
+    app.apply(Incoming::Failed { what: Failure::Queue, message: "HTTP 502".into() });
+    app.now += Duration::from_secs(5);
+    insta::assert_snapshot!("queue_failed", render(&mut app, 100, 14));
+    assert_eq!(press(&mut app, "r"), vec![Action::LoadQueue { scope: None, from_cache: false }]);
+    assert!(!app.queue_failed, "the skeleton comes back while it loads");
+}
+
+#[test]
+fn a_queue_failure_keeps_the_queue_already_shown() {
+    let mut app = with_queue();
+    app.apply(Incoming::Failed { what: Failure::Queue, message: "HTTP 502".into() });
+    assert!(!render(&mut app, 100, 16).contains("did not load"));
+}
+
+#[test]
 fn help_and_quit() {
     let mut app = app();
     press(&mut app, "?");
@@ -1818,10 +1836,10 @@ fn snapshot_wrapped_lines() {
 }
 
 #[test]
-fn plus_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
+fn equals_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
     let mut app = with_review();
     press(&mut app, "]cj");
-    let actions = press(&mut app, "+");
+    let actions = press(&mut app, "=");
     let open = app.open.clone().unwrap();
     let path = open.review.files[0].new_path.clone();
     assert!(
@@ -1832,7 +1850,7 @@ fn plus_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
     app.apply(Incoming::File { key: mr_key(), path: path.clone(), text });
     let contexts = app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
     assert_eq!(contexts, 20, "ten above, ten below");
-    assert_eq!(press(&mut app, "+"), vec![], "the file is read once");
+    assert_eq!(press(&mut app, "="), vec![], "the file is read once");
     let screen = render(&mut app, 120, 40);
     assert!(screen.contains("line 2"), "{screen}");
 }
@@ -2532,17 +2550,17 @@ fn with_the_azerty_preset_parentheses_jump_like_brackets() {
 
 #[test]
 fn a_bound_key_does_what_its_action_does_and_a_two_key_one_waits() {
-    let mut app = with_keys(r#"bind = { next_hunk = "N", next_any_thread = ["nt", "ctrl-e"] }"#);
-    press(&mut app, "N");
+    let mut app = with_keys(r#"bind = { next_hunk = "F", next_any_thread = ["ft", "ctrl-e"] }"#);
+    press(&mut app, "F");
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
-    press(&mut app, "n");
-    assert!(app.held.is_some(), "`n` waits for its second key");
+    press(&mut app, "f");
+    assert!(app.held.is_some(), "`f` waits for its second key");
     press(&mut app, "t");
     assert!(app.held.is_none());
     assert_eq!(
         app.open.as_ref().unwrap().row(),
         Some(&Row::Line { file: 0, hunk: 0, index: 1 }),
-        "`nt` is `]N`: the marked line after the hunk"
+        "`ft` is `]N`: the marked line after the hunk"
     );
     app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
     assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`ctrl-e` is `]N` too, and wraps to the MR's thread");
@@ -2555,7 +2573,7 @@ fn snapshot_help_with_the_azerty_preset_and_a_binding() {
         r#"
         layout = "azerty"
         [bind]
-        next_thread = "N"
+        next_thread = "F"
         "#,
     );
     press(&mut app, "??");
@@ -3800,7 +3818,7 @@ fn plus_opens_the_picker_and_a_digit_toggles_my_reaction_at_once() {
 }
 
 #[test]
-fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_shows_more_lines() {
+fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_does_nothing() {
     let mut app = with_reactions();
     app.close_pane();
     app.zen = true;
@@ -3817,9 +3835,8 @@ fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_shows_more_lines
     let mut open = app.open.clone().unwrap();
     open.selected = open.rows.iter().position(|r| matches!(r, Row::Line { .. }) && !open.is_marked(r)).unwrap();
     app.open = Some(open);
-    let actions = press(&mut app, "+");
+    assert_eq!(press(&mut app, "+"), vec![]);
     assert!(app.react.is_none(), "a line without a thread");
-    assert!(matches!(actions.as_slice(), [Action::LoadFile { .. }]), "{actions:?}");
 }
 
 #[test]

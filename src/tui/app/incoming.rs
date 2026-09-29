@@ -24,6 +24,7 @@ impl App {
                 self.sections = Some(sections);
                 self.opened = opened;
                 self.queue_loading = false;
+                self.queue_failed = false;
                 self.offline = None;
                 self.queue_settle();
                 self.schedule_queue();
@@ -138,6 +139,7 @@ impl App {
         match what {
             Failure::Queue => {
                 self.queue_loading = false;
+                self.queue_failed = true;
                 self.warn(format!("{message} · r to retry"));
                 self.back_off();
             }

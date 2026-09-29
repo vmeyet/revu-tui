@@ -36,7 +36,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("pipeline", "p"),
     ("wrap", "w"),
     ("whitespace", "W"),
-    ("more_context", "+"),
+    ("more_context", "="),
     ("view_file", "ctrl-v"),
     ("description", "i"),
     ("comment", "c"),
@@ -65,7 +65,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
 ];
 
 /// Every key revu reads outside a text box, in some pane: a user key may not take one of them.
-const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtTpWw+xcCVsEPAMmedJKRSuY?'123456789";
+const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtTpWw+=xcCVsEPAMmedJKRSuYnN?'123456789";
 
 /// The second keys each built-in prefix already reads.
 const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "erstah")];
@@ -429,11 +429,11 @@ mod tests {
 
     #[test]
     fn a_binding_stands_for_the_default_keys_of_its_action() {
-        let map = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["n"]), ("prev_thread", &["N"]), ("jump", &["ctrl-p"])])).unwrap();
-        assert_eq!(chars(&map.feed(None, press('n'))), "]n");
-        assert_eq!(chars(&map.feed(None, press('N'))), "[n");
+        let map = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["f"]), ("prev_thread", &["F"]), ("jump", &["ctrl-p"])])).unwrap();
+        assert_eq!(chars(&map.feed(None, press('f'))), "]n");
+        assert_eq!(chars(&map.feed(None, press('F'))), "[n");
         assert_eq!(chars(&map.feed(None, KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL))), "^k");
-        assert_eq!(map.label("]n [n"), "n ]n N [n");
+        assert_eq!(map.label("]n [n"), "f ]n F [n");
         assert_eq!(map.label("^k"), "^p ^k");
     }
 
@@ -441,11 +441,11 @@ mod tests {
     fn a_two_key_binding_waits_for_its_second_key_and_lets_anything_else_through() {
         let map = Keymap::new(&keys(Layout::Qwerty, &[("next_hunk", &["gh"])])).unwrap_err();
         assert!(map.to_string().contains("`g`"), "{map}");
-        let map = Keymap::new(&keys(Layout::Qwerty, &[("next_hunk", &["nh"])])).unwrap();
-        let held = map.feed(None, press('n'));
-        assert_eq!(held, Feed::Hold(press('n')));
-        assert_eq!(chars(&map.feed(Some(press('n')), press('h'))), "]c");
-        assert_eq!(chars(&map.feed(Some(press('n')), press('j'))), "nj", "a wrong second key hands both over as they are");
+        let map = Keymap::new(&keys(Layout::Qwerty, &[("next_hunk", &["fh"])])).unwrap();
+        let held = map.feed(None, press('f'));
+        assert_eq!(held, Feed::Hold(press('f')));
+        assert_eq!(chars(&map.feed(Some(press('f')), press('h'))), "]c");
+        assert_eq!(chars(&map.feed(Some(press('f')), press('j'))), "fj", "a wrong second key hands both over as they are");
     }
 
     #[test]
@@ -466,9 +466,9 @@ mod tests {
 
     #[test]
     fn two_bindings_on_one_key_fail_and_name_both_actions() {
-        let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["n"]), ("next_hunk", &["n"])])).unwrap_err().to_string();
+        let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["f"]), ("next_hunk", &["f"])])).unwrap_err().to_string();
         assert!(err.contains("next_thread") && err.contains("next_hunk"), "{err}");
-        let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["n"]), ("next_hunk", &["nh"])])).unwrap_err().to_string();
+        let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["f"]), ("next_hunk", &["fh"])])).unwrap_err().to_string();
         assert!(err.contains("next_thread") && err.contains("next_hunk"), "a key that starts another binding collides: {err}");
     }
 
@@ -494,6 +494,16 @@ mod tests {
                 && let Some(c) = key.plain_char()
             {
                 assert!(TAKEN.contains(c), "{name}: `{c}` should be in TAKEN");
+            }
+        }
+    }
+
+    #[test]
+    fn two_actions_share_a_default_only_when_their_panes_never_meet() {
+        let apart = [("suggest", "sort_queue")];
+        for (i, (name, default)) in ACTIONS.iter().enumerate() {
+            for (other, same) in ACTIONS[i + 1..].iter().filter(|(_, d)| d == default) {
+                assert!(apart.contains(&(*name, *other)), "{name} and {other} both default to `{same}`");
             }
         }
     }

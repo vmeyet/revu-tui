@@ -83,7 +83,7 @@ Tokens never go here: they live in the macOS keychain.
 
 | Key | Type | Default | Does |
 |---|---|---|---|
-| `default` | command | `$VISUAL`, `$EDITOR`, then `less` | The program `v` opens a file with. |
+| `default` | command | `$VISUAL`, `$EDITOR`, then `less` | The program `^v` opens a file with. |
 
 ## `[open.files]`
 
@@ -198,7 +198,7 @@ layout = "azerty"
 quit_confirm = true
 
 [keys.bind]
-next_thread = "N"
+next_thread = "F"
 
 [ai.typesafe]
 enabled = true

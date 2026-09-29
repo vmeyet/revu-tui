@@ -10,7 +10,7 @@ TDD order inside each milestone is given; write the failing test first.
 2. `cargo build && cargo test` must be green before and after.
 3. Run against the real thing with `revu login --from-glab` once, then `cargo run -- <cmd>`; never paste output that names a private project into the repo.
 4. Snapshot changes (`cargo insta review`) are reviewed by eye: a snapshot is a design decision.
-5. Every new key goes in the `?` help and in `README.md` in the same MR.
+5. Every new key goes in the `?` help (`src/tui/help.rs`) in the same MR; `cargo run -- docs` then writes it into `docs/reference/keys.md`.
 
 ## M0 · Bootstrap (done 2026-09-22)
 
@@ -77,7 +77,9 @@ Done outside the original milestones, recorded so nobody plans them again:
 - **Themes:** the nine palettes, each with its diff and syntax colours.
 - **Tooling:** `revu update` (cargo install from the public repo), pedantic lints, CI (fmt, clippy, test), rename `gitlabmr`/`mr` → `revu` with a one-time move of config, cache and keychain (removed 2026-09-24).
 
-## M3 · Polish
+## M3 · Polish (done, one gap open)
+
+Everything below shipped except the item marked open; the screenshot test has not been run on record.
 
 Spec: `03` in full.
 
@@ -85,7 +87,7 @@ Carried gaps, first:
 
 - `?` help fits a 24-row terminal (scrolls).
 - Publish modal: `enter` on the footer publishes; the footer reads `enter publish · e edit`.
-- A publish the forge refuses names the draft whose line vanished and offers to turn it into an MR-level note.
+- Open: a publish the forge refuses names the draft whose line vanished and offers to turn it into an MR-level note. Today the modal stays and the toast gives the forge's reason.
 - The header folds to one row.
 - `zo` / `zc` in the queue act on the section under the cursor.
 
@@ -93,7 +95,7 @@ Then:
 
 - `:` palette with completion and history, `ctrl-k` jump across the queue and the open MR's files.
 - File tree pane `t`, viewed files `zv`, saved fold state.
-- Zen `zz` (was reading mode `z`), wrap `w`, whitespace toggle `W`, expand context `+`.
+- Zen `zz` (was reading mode `z`), wrap `w`, whitespace toggle `W`, expand context `=` (was `+`, which now only reacts).
 - Live `●` markers, rate-limit backoff in the status line, empty states and the loading skeleton, `:set theme=`.
 
 Acceptance: the designer test in `03-ui-ux.md` ("the screenshot test") passes on Ghostty and iTerm2 in a dark and a light theme.
@@ -147,5 +149,5 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 
 - Tests green, `cargo clippy -- -D warnings` clean, `cargo fmt` clean.
 - No comment in the diff that explains what the code does.
-- README key table updated.
+- `?` help and the generated `docs/reference/keys.md` updated (`cargo run -- docs`).
 - The MR description says what the user can now do, in two sentences.

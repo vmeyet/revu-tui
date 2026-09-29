@@ -1,4 +1,4 @@
-//! `v`: the file under the cursor, handed whole to the reader's own program at the line they look at.
+//! `^v`: the file under the cursor, handed whole to the reader's own program at the line they look at.
 //! Everything here but [`run`], [`write_private`] and [`Checkout`] is pure.
 use crate::config;
 use crate::diff::{Hunk, Line};

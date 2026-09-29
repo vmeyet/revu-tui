@@ -439,7 +439,7 @@ impl Share {
     }
 }
 
-/// `v`: which program opens a file, by glob on its path, as in `"*.md" = "glow -p"`.
+/// `^v`: which program opens a file, by glob on its path, as in `"*.md" = "glow -p"`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Open {
@@ -542,7 +542,7 @@ mod tests {
             usage: Usage { enabled: true },
             keys: Keys {
                 layout: Layout::Azerty,
-                bind: BTreeMap::from([("next_thread".into(), Bind::One("N".into())), ("jump".into(), Bind::Many(vec!["ctrl-p".into()]))]),
+                bind: BTreeMap::from([("next_thread".into(), Bind::One("F".into())), ("jump".into(), Bind::Many(vec!["ctrl-p".into()]))]),
                 quit_confirm: false,
             },
             share: Share {
