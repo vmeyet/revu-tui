@@ -194,11 +194,11 @@ Generate shell completions.
 
 ## `revu update`
 
-Rebuild and install the latest `revu` with cargo.
+Install the latest `revu`: with brew when brew installed it, else rebuilt with cargo.
 
 | Flag | Means |
 |---|---|
-| `-f, --force` | Install even when the running binary is already the latest commit. |
+| `-f, --force` | Install even when the running binary is already the latest commit (`brew reinstall` under brew) |
 
 ## `revu usage`
 

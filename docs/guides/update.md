@@ -1,6 +1,7 @@
 # Update revu
 
 `revu update` installs the latest version from GitHub.
+When brew installed revu, it runs `brew upgrade vmeyet/tap/revu` instead, and `-f` runs `brew reinstall`.
 
 ```sh
 revu update       # does nothing when you already run the latest commit

@@ -16,6 +16,7 @@ revu login github.com --from-gh   # GitHub: reuse the token gh holds
 
 You need Rust 1.90 or newer.
 `revu update` installs the latest version later.
+When brew installed revu, `revu update` runs `brew upgrade` for you.
 
 ## A 30-second tour
 
