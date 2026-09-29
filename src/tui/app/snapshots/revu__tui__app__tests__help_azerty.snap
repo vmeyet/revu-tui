@@ -15,7 +15,7 @@ expression: "render(&mut app, 160, 45)"
 │   infra: new runner   │      esc x  close the pane, back to the queue              ⌘enter ^s  in the box: post now, no draft         │                       │
 │   omar · !35 · +0 −0  │  tab S-tab  next, previous file                            ⌥enter ^o  in the box: new line, $EDITOR          │                       │
 │                       │      )c (c  next, previous hunk                             ⌥← ⌥→ ⌥⌫  in the box: word back, on, delete      │                       │
-│   ── ▸ DONE · 1 ──────│    N )n (n  next, previous open conversation                     esc  drop the selection, leave the box      │                       │
+│   ── ▸ DONE · 1 ──────│    F )n (n  next, previous open conversation                     esc  drop the selection, leave the box      │                       │
 │                       │      )N (N  next, previous conversation, resolved too              P  publish every draft                    │                       │
 │                       │      )f (f  next, previous file with a thread                    A M  approve or unapprove, merge mine       │                       │
 │                       │      )r (r  next, previous MR that needs you                       H  mark mine draft or ready               │                       │
@@ -38,7 +38,7 @@ expression: "render(&mut app, 160, 45)"
 │                       │          p  pipeline                                         c ⏎ R y  answer: draft, follow up, again, copy  │                       │
 │                       │         zz  zen: the diff alone, quiet                                                                       │                       │
 │                       │        w W  wrap long lines, hide whitespace changes       SEARCH & APP                                      │                       │
-│                       │          +  more lines; on a thread, react                        ^k  MRs · / files · > commands             │                       │
+│                       │        = +  more lines, react on a thread                         ^k  MRs · / files · > commands             │                       │
 │                       │         ^v  the file in your own program                           :  commands: :go !42, :set theme=nord     │                       │
 │                       │   za zc zo  toggle, close, open the fold                         o y  open in the browser, copy the link     │                       │
 │                       │                                                                                                              │                       │

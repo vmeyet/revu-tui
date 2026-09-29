@@ -203,7 +203,7 @@ pub const SETTINGS: &[Setting] = &[
         key: "default",
         kind: "command",
         default: "`$VISUAL`, `$EDITOR`, then `less`",
-        meaning: "The program `v` opens a file with.",
+        meaning: "The program `^v` opens a file with.",
         example: "\"hx\"",
     },
     Setting {
@@ -252,7 +252,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: "key or list of keys",
         default: "none",
         meaning: "Extra keys for an action; see the actions table.",
-        example: "\"N\"",
+        example: "\"F\"",
     },
     Setting {
         table: "ai.typesafe",
@@ -342,7 +342,7 @@ fn keys_page() -> Result<String> {
         String::new(),
         "## Actions you can bind".to_owned(),
         String::new(),
-        "Give an action more keys under `[keys.bind]`, as in `next_thread = \"N\"`.".to_owned(),
+        "Give an action more keys under `[keys.bind]`, as in `next_thread = \"F\"`.".to_owned(),
         "A bound key adds to the default key, it does not replace it.".to_owned(),
         String::new(),
         "| Action | Default key |".to_owned(),

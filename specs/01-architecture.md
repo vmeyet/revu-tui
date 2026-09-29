@@ -8,61 +8,83 @@ Crate `revu`, binary `revu`, edition 2024, Rust 1.90+.
 ```
 src/
   main.rs            parse Cli, dispatch, print errors as `✗ message` + dimmed causes
-  lib.rs             pub mod list
-  cli.rs             clap: login, logout, whoami, list, show, diff, comment, approve, tui, completions, update
+  lib.rs             the library behind the binary
+  cli.rs             clap: login, logout, whoami, list, show, diff, comment, approve, merge, ready, publish, share, ai, tui, completions, update, usage, docs
   ctx.rs             Ctx { forge: Forge, config, cache, json, project } opened once per command
   config.rs          ~/.config/revu/config.toml
   cache.rs           ~/.cache/revu/<host>/…  json files, atomic writes
-  version.rs         `revu --version` = crate version + git hash from build.rs
+  keymap.rs          `[keys]`: the AZERTY preset and `[keys.bind]` aliases
+  mrref.rs           `group/project!42`, `owner/repo#42`, `42` on the command line
+  query.rs           the filter language the palette, the queue filter and saved views share
+  fuzzy.rs           fzf-style subsequence matching
+  open.rs, program.rs   `^v` and user commands, run without a shell
+  ready.rs, share.rs    the ready source and `Y`, both through a user command
+  render.rs          plain-terminal output for the scriptable commands (copied from slack-tui)
+  docs.rs            `revu docs`: docs/reference/ written from the code
+  usage.rs           `[usage]`: what revu is used for, counted on this machine only
+  version.rs         `revu --version` = crate version + commit from build.rs
   update.rs          `revu update`, copied from slack-tui
+  syntax/mod.rs      tree-sitter grammars, loaded on first use
   auth/
     mod.rs           SERVICE, Credentials { host, token }, resolve(env, store, config, host)
     store.rs         SecretStore trait, SecurityCli, MemoryStore   (copied from slack-tui)
-    login.rs         prompt / --from-glab / --token -, verify with GET /user, store
   forge/             the seam, see 07-forges.md
     mod.rs           Kind (which forge a host runs), Forge (enum, one arm per backend), re-exports
     model.rs         the neutral model: MrKey, Mr, Refs, DiffFile, Discussion, Note, Position, LineRef, Draft, NewDraft
     queue.rs         Queue, QueueMr, Sections and the pure split into sections
+    rules.rs         which queue MRs need me now, and why the others do not
+    checks.rs        the CI run of the head commit, jobs by stage
+    budget.rs        rate-limit budget and backoff state
+    image.rs         fetching pictures notes point at, capped
     gitlab/
       mod.rs         Client: PRIVATE-TOKEN header, host guard, pagination, rate-limit backoff, line_url
       wire.rs        GitLab JSON (Mr, DiffRefs, Discussion, Note, DraftNote, Position, line_code) and its conversions
       graphql.rs     the queue query; typed answer turned into Queue
-      rest.rs        mr, diffs, discussions, drafts, draft CRUD, publish, resolve, approve, comment
-    github/          phase 2
+      rest.rs        mr, diffs, discussions, drafts, draft CRUD, publish, resolve, approve, comment, merge
+      award.rs       reactions (award emoji)
+      upload.rs      pictures uploaded to a project
+    github/
+      mod.rs         Client: bearer token, host guard, rate-limit backoff, line_url
+      wire.rs        GitHub REST and GraphQL shapes and their conversions
+      graphql.rs     the queue, one PR, its threads, the pending review
+      rest.rs        who I am, changed files, comments, approvals, the contents API
+      attachment.rs  pictures in comments
   diff/
     mod.rs           parse(unified: &str) -> Vec<Hunk>; Line { kind, old, new, text }
     words.rs         intra-line word diff between a paired -/+ block (crate `similar`)
     fold.rs          FoldState per file and hunk, viewed files, "expand all" helpers
+    arbitrary.rs     generated diffs for property tests
   review/
     mod.rs           Review { mr, files, threads, drafts, viewed, fold } — the pure model the TUI edits
     position.rs      builds a neutral Position from a selected line (or range) and the MR's refs
     thread.rs        Thread model: root note, replies, resolvable/resolved, anchored line
-  render/            plain-terminal rendering for the scriptable commands (copied from slack-tui)
+    place.rs         anchor marks per line, and what the right pane lists
+    draft.rs, suggestion.rs, image.rs, tree.rs   drafts, suggestion blocks, pictures, the file tree
   commands/          one file per subcommand
   tui/
     mod.rs           run(): terminal setup, event loop, Action runner
-    app/
+    app/             the pure state machine: keys in, actions out, incoming answers applied
       mod.rs         Focus, Input, Action, Incoming enums
       state.rs       App struct, Default
       keys.rs        handle_key -> Vec<Action>
       incoming.rs    apply(Incoming)
-      queue.rs       queue rows, sections, badges
-      review.rs      diff navigation, folds, selection, drafts in the App
-      commands.rs    `:` verbs
-      feedback.rs    Toast
       tests.rs       state machine tests
+      …              one module per feature: queue, order, stack, review, pane, write, search, zen, brief, pipeline, ask, …
     ui.rs            draw(): layout and panes
-    diff_view.rs     the diff pane renderer (rows from Review + FoldState)
-    thread_view.rs   the right pane renderer
+    *_view.rs        one renderer per pane or modal: queue, diff, thread, tree, pipeline, answer, brief, publish, share, palette
     theme.rs         copied from slack-tui, plus diff colours
-    field.rs, palette.rs, complete.rs, jump.rs, compose.rs, motion.rs   copied from slack-tui
+    screen.rs, ground.rs   the terminal as revu holds it, and its background colour
+    field.rs, palette.rs, complete.rs, compose.rs   copied from slack-tui
+    help.rs, table.rs, images.rs, drag.rs   the `?` overlay, markdown tables, pictures, mouse selection
   ai/
-    mod.rs           Assistant trait, Context builder, cache
+    mod.rs           which provider is on, and where its key comes from
+    context.rs       what Claude reads for a question, in cached blocks
+    triage.rs        Jev's questions about queue MRs and files
     typesafe.rs      copied from slack-tui (typed judgments)
     anthropic.rs     Messages API, streaming, prompt caching
 tests/
   cli.rs             assert_cmd
-  snapshots/         insta
+  docs.rs            docs/reference/ is fresh, links resolve, the prose keeps the house style
 ```
 
 ## Runtime

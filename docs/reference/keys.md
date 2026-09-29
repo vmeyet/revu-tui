@@ -46,7 +46,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `p` | pipeline |
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
-| `+` | more lines; on a thread, react |
+| `=` `+` | more lines, react on a thread |
 | `^v` | the file in your own program |
 | `za` `zc` `zo` | toggle, close, open the fold |
 | `zM` `zR` | fold, unfold every file |
@@ -120,7 +120,7 @@ The old ones keep working.
 
 ## Actions you can bind
 
-Give an action more keys under `[keys.bind]`, as in `next_thread = "N"`.
+Give an action more keys under `[keys.bind]`, as in `next_thread = "F"`.
 A bound key adds to the default key, it does not replace it.
 
 | Action | Default key |
@@ -153,7 +153,7 @@ A bound key adds to the default key, it does not replace it.
 | `pipeline` | `p` |
 | `wrap` | `w` |
 | `whitespace` | `W` |
-| `more_context` | `+` |
+| `more_context` | `=` |
 | `view_file` | `ctrl-v` |
 | `description` | `i` |
 | `comment` | `c` |

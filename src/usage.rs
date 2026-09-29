@@ -270,7 +270,8 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('p') => "pipeline",
         KeyCode::Char('W') => "whitespace",
         KeyCode::Char('w') => "wrap",
-        KeyCode::Char('+') => "more_context",
+        KeyCode::Char('=') => "more_context",
+        KeyCode::Char('+') => "react",
         KeyCode::Tab => "next_file",
         KeyCode::BackTab => "prev_file",
         KeyCode::Char('r') => "refresh",
@@ -512,7 +513,8 @@ mod tests {
         assert_eq!(action(None, key('s'), Place::Diff), Some("suggest"));
         assert_eq!(action(None, key('S'), Place::Pane), Some("apply_suggestion"));
         assert_eq!(action(None, key('+'), Place::Pane), Some("react"));
-        assert_eq!(action(None, key('+'), Place::Diff), Some("more_context"));
+        assert_eq!(action(None, key('+'), Place::Diff), Some("react"));
+        assert_eq!(action(None, key('='), Place::Diff), Some("more_context"));
         assert_eq!(action(Some(']'), key('m'), Place::Diff), Some("next_mr"));
         assert_eq!(action(None, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), Place::Diff), Some("focus_right"));
         assert_eq!(action(Some(']'), key('n'), Place::Diff), Some("next_thread"));

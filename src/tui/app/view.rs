@@ -1,4 +1,4 @@
-//! `v` and `:view`: which file, which version, which line; the loop hands the terminal over.
+//! `^v` and `:view`: which file, which version, which line; the loop hands the terminal over.
 use super::{Action, App};
 use crate::open;
 use crate::review::{FileKind, Side};

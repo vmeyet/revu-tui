@@ -29,6 +29,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let block = pane(theme, &title, app.focus == Focus::Queue);
     let inner = block.inner(area);
     f.render_widget(block, area);
+    if app.sections.is_none() && app.queue_failed {
+        return draw_empty(f, theme, inner, &["✗", "", "the queue did not load", "r to retry"]);
+    }
     if app.sections.is_none() {
         return draw_skeleton(f, theme, inner);
     }

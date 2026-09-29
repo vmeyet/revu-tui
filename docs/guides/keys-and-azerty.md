@@ -28,8 +28,8 @@ The bracket keys keep working.
 
 ```toml
 [keys.bind]
-next_thread = "N"
-prev_thread = ["P", "ctrl-y"]
+next_thread = "F"
+prev_thread = ["B", "ctrl-y"]
 ```
 
 A key you add does what the default key does, in the pane you are in.

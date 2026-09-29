@@ -48,7 +48,7 @@ The mockup below predates it.
 
 - Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below.
 - Middle: the review, `Min(60)`.
-- Right: 32 columns or 40 % of the width, only when a thread, the MR overview, the file tree or an AI answer is open.
+- Right: 32 columns or 40 % of the width, only when a thread, the pipeline, the file tree or an AI answer is open.
 - Row above the status line: the input row, only while typing.
 - Status line: host, user, pending drafts, then right aligned the poll state and `? help`. Toasts replace the left part for 4 s.
 
@@ -158,8 +158,9 @@ Renames show `old → new`; a pure mode change shows `mode 644 → 755`.
 ### Hunks
 
 A hunk row is `▾ @@ -a,b +c,d @@ context`, `muted`, with the function context in `fg`; folded it appends `(n lines)`.
-`+` on a hunk (its header or any line in it) shows 10 more unchanged lines above and below it, read once from the whole file at the head commit (`Forge::file`: GitLab `repository/files/:path/raw`, GitHub `contents/:path` as raw). Lines between two hunks are never shown twice; old-side numbers follow the offset at each end of the hunk. Comments go on diff lines, not on these extra lines.
-On a line with a thread, `+` opens the reaction picker on the thread's first note instead, the diff keeping the focus (zen reacts this way); more lines are one line away.
+`=` on a hunk (its header or any line in it) shows 10 more unchanged lines above and below it, read once from the whole file at the head commit (`Forge::file`: GitLab `repository/files/:path/raw`, GitHub `contents/:path` as raw). Lines between two hunks are never shown twice; old-side numbers follow the offset at each end of the hunk. Comments go on diff lines, not on these extra lines.
+On a line with a thread, `+` opens the reaction picker on the thread's first note, the diff keeping the focus (zen reacts this way); elsewhere `+` does nothing.
+The two keys used to be one `+`, which left `[keys.bind]` unable to tell `more_context` from `react`.
 The picker holds the eight reactions both forges share; where the forge takes any emoji (`Kind::any_emoji`, GitLab), `/` turns it into a search over every emoji by its short code, ranked by the fuzzy matcher, eight to a page.
 
 Sticky headers: once a file's own row scrolls above the view, a copy stays pinned at the top of the diff, on the surface colour, until the next file's row reaches the top.
@@ -217,7 +218,7 @@ The old file on the left, the new one on the right, as GitLab shows it:
 ```
 
 - Each half is the anchor column, its side's number, the sign and the text; the cursor bar sits once, at the left edge.
-- In a hunk, each run of removed lines sits beside the run of added lines after it, row by row; the shorter run leaves blank rows. Context, and the lines `+` shows, fill both halves.
+- In a hunk, each run of removed lines sits beside the run of added lines after it, row by row; the shorter run leaves blank rows. Context, and the lines `=` shows, fill both halves.
 - Each half keeps its side's fill, word fills and syntax colours (`review::colour` highlights each side on its own). A mark shows in the half of the side its thread or draft is anchored on.
 - A row is one cursor stop: `c` comments on the new side, or the old side when the row holds only a removed line; `C` on the old side, as on an inline pair.
 - `w` wraps each half under its own text; `W` reads a whitespace-only pair as context on both halves.
@@ -245,12 +246,13 @@ While the pane is on a range comment, the range's other lines show `│` in `acc
 One of:
 
 - **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, a file's outdated threads, or with `T` the whole MR, each headed by its line), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff, a table as aligned columns split by `│` under a `─┼─` rule, its widest columns cut with `…` when the pane is narrower and left as raw text when even that does not fit. The compose box sits at its bottom. It follows the cursor onto marked lines, except while it lists the whole MR. Width: three columns from 150, the queue steps aside from 120, a page of its own below; in zen, under the diff.
-- **Overview** (`o` on the header, or on open when there is no thread): description as markdown, labels, reviewers with their state, approvals, pipeline link, then the activity list (system notes) in `muted`.
 - **Pipeline** (`p`): the CI run of the head commit (GitLab's newest MR pipeline, GitHub's check runs grouped by workflow): a count per state, then each stage in the order it ran with its jobs, counted failures first, glyph, name and duration; the cursor starts on the first failure; `o` opens the job, `y` copies its link, `r` asks again, and a run still going is asked again every 15 s while the pane shows it. A failure the forge lets pass shows `!` in the warning colour. The header's pipeline word links to the run. Above the jobs, `REVIEW APPS` lists each environment the branch went to with its address, the newest successful deployment of each, and a click on an address opens it; they are asked when the MR opens, after a push, and once a run the pane shows ends. The cover (`i`) from an open MR shows the app to try, its address clickable too: over the cover a click on a link still answers, nothing else does.
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` unresolved threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
+- **AI answer** (M4): title `ask · file` and the streaming markdown; a `cached` tag when served from cache.
 
 `zv` (in the diff or the tree) marks the file viewed and folds it. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
-- **AI answer** (M4): title `ask · file` and the streaming markdown; a `cached` tag when served from cache.
+
+The MR's description, checks, reviews, threads and files are the cover (`i`), drawn over the main area rather than in this pane; `o` opens the MR in the browser.
 
 ## Publish modal (`P`)
 
@@ -320,7 +322,8 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
 | `D` | inline diff, or side by side | M3 |
-| `+` | more context around the hunk | M3 |
+| `=` | more context around the hunk | M3 |
+| `+` | react to the thread on the line | M5 |
 | `c` | comment on the line (draft) | M2 |
 | `V` | select lines | M2 |
 | `^v` | the file after the change in the reader's program, at the cursor's line (`08-open-file.md`) | M3b |
@@ -355,7 +358,7 @@ A user key never replaces a default: it stands for the default key of its action
 Keys are translated after text boxes, modals and the help had their turn, so typing `(` in a comment is still `(`.
 A two-key binding holds its first key; a second key that matches nothing hands both over as they are, so `z` then `a` stays `za`.
 The config fails to load, naming the file, on an unknown action, a key that does not parse, a key revu already reads (named with its action), and two actions on one key or on keys where one starts the other.
-`?` shows the keys in effect: with the preset, `]n [n` reads `)n (n`, and a bound key comes first (`N )n (n`).
+`?` shows the keys in effect: with the preset, `]n [n` reads `)n (n`, and a bound key comes first (`F )n (n`).
 
 ### Search: `ctrl-k`, `⌘k`, `:`
 
@@ -377,9 +380,9 @@ While `'` waits, the status line lists the views. Views are checked when the con
 
 ### Command line (`>` in the search)
 
-Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:help`, `:quit`.
 While the verb is typed, `↑` `↓` move a cursor through the command list and `enter` runs the command under it, or writes it and waits when it needs an argument (`go `, `set `). Past the verb, `↑` `↓` walk the argument's completions as Tab does. Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `ctrl-p` `ctrl-n` walk the history.
-Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:ai off`, `:ai on`, `:ask <text>`, `:cache clear`.
+Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:cache clear`.
 
 
 ## Notifications (M5)
@@ -433,7 +436,7 @@ Diff rows are produced lazily from `Review + FoldState` for the visible window, 
   Shift-drag (Ghostty, Kitty, `WezTerm`) or ⌥-drag (iTerm2, Terminal.app) still gives the terminal's own selection, whole screen rows.
   The mouse is let go on exit, on a panic and while `$EDITOR` or `^v` owns the terminal.
   Keyboard remains complete.
-- Minimum size 80×24; below that the queue hides and a one-line notice says so.
+- Built for 80×24 and wider; a smaller terminal draws what fits, with no notice.
 
 ## DX for the person running it
 

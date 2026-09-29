@@ -118,6 +118,8 @@ pub struct App {
     pub queue_view: super::QueueView,
     pub queue_layout: crate::config::QueueLayout,
     pub queue_loading: bool,
+    /// The last load failed: with nothing to show, the pane says so until one succeeds or `r` asks again.
+    pub queue_failed: bool,
     /// How many MRs to load ahead after each fresh queue.
     pub prefetch_limit: usize,
     /// A plan held back while an MR was being opened: it goes out once that MR arrived.
@@ -255,6 +257,7 @@ impl App {
             spot_saved: None,
             spot_pending: None,
             queue_loading: true,
+            queue_failed: false,
             open: None,
             opening: None,
             held: None,
