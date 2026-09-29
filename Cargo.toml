@@ -40,6 +40,8 @@ tempfile = "3.20"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "fs", "sync", "io-util"] }
 toml = "1.1"
 toml_edit = "0.25"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 tree-sitter = "0.27"
 tree-sitter-highlight = "0.27"
 tree-sitter-javascript = "0.25"

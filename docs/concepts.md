@@ -107,6 +107,7 @@ flowchart LR
 | Tokens and AI keys | macOS keychain, service `revu` |
 | Config | `~/.config/revu/config.toml` |
 | Cache | `~/Library/Caches/revu/` |
+| Log | `~/Library/Caches/revu/revu.log` |
 
 The cache keeps each MR's diff, threads and Claude's answers.
 Once a day revu drops what it keeps for merged or closed MRs, and for MRs you have not opened in 30 days.

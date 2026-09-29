@@ -162,7 +162,7 @@ impl Transport {
             Some(kind) => request.header(ACCEPT, kind),
             None => request,
         };
-        let response = request.send().await.map_err(scrub)?;
+        let response = crate::log::send(request).await.map_err(scrub)?;
         self.budget.note(budget::header_number(response.headers(), self.flavor.remaining));
         Ok(response)
     }

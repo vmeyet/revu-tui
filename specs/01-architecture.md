@@ -311,6 +311,7 @@ Pinned to what slack-tui compiles with today, so versions are known good togethe
 | owo-colors | plain terminal output |
 | glob | fold patterns |
 | futures-util | select on the event stream |
+| tracing, tracing-subscriber (fmt) | the log file, `REVU_LOG` |
 
 Dev: wiremock, insta, assert_cmd, predicates.
 

@@ -12,6 +12,7 @@ mod forge;
 mod fuzzy;
 mod http;
 mod keymap;
+pub mod log;
 mod mrref;
 mod open;
 mod program;
