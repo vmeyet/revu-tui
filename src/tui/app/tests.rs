@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::*;
 use crate::forge::gitlab::fixture;
-use crate::forge::{DiffFile, Discussion, Emoji, Kind, Mr};
+use crate::forge::{DiffFile, Discussion, Emoji, Kind, Mr, PipelineStatus};
 use crate::review::{Place, Row};
 use crate::tui::help::Help;
 use crate::tui::theme::Theme;
@@ -3000,22 +3000,22 @@ fn the_status_line_lists_views_while_quote_waits() {
 fn stacked_sections() -> Sections {
     let mut sections = scoped_sections();
     let seed = sections.open[0].clone();
-    let link = |number: u64, title: &str, source: &str, target: &str, pipeline: Option<&str>| crate::forge::QueueMr {
+    let link = |number: u64, title: &str, source: &str, target: &str, pipeline: Option<PipelineStatus>| crate::forge::QueueMr {
         number,
         title: title.into(),
         author: "romain.courtois".into(),
         author_name: "Romain".into(),
         source_branch: source.into(),
         target_branch: target.into(),
-        pipeline: pipeline.map(str::to_owned),
+        pipeline,
         draft: false,
         created_at: seed.created_at + chrono::TimeDelta::hours(number.try_into().unwrap()),
         web_url: format!("https://gitlab.com/acme/widgets/-/merge_requests/{number}"),
         ..seed.clone()
     };
     sections.open.extend([
-        link(61, "feat: read shared PDFs from the drive", "pdf-read", "main", Some("SUCCESS")),
-        link(62, "feat: read shared PDFs page by page", "pdf-pages", "pdf-read", Some("FAILED")),
+        link(61, "feat: read shared PDFs from the drive", "pdf-read", "main", Some(PipelineStatus::Success)),
+        link(62, "feat: read shared PDFs page by page", "pdf-pages", "pdf-read", Some(PipelineStatus::Failed)),
         link(63, "feat: read shared PDFs with OCR", "pdf-ocr", "pdf-pages", None),
     ]);
     sections
@@ -3918,7 +3918,7 @@ fn big_m_says_why_it_will_not_merge() {
         (|mr| mr, "cannot merge: only your own MRs merge from revu"),
         (|mr| Mr { mine: true, ..mr }, "cannot merge: it needs 1 more approval"),
         (
-            |mr| Mr { pipeline: Some(crate::forge::Pipeline { status: "failed".into(), web_url: None }), ..approved_and_mine(mr) },
+            |mr| Mr { pipeline: Some(crate::forge::Pipeline { status: PipelineStatus::Failed, web_url: None }), ..approved_and_mine(mr) },
             "cannot merge: its pipeline failed",
         ),
     ];

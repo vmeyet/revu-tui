@@ -30,7 +30,7 @@ src/
     store.rs         SecretStore trait, SecurityCli, MemoryStore   (copied from slack-tui)
   forge/             the seam, see 07-forges.md
     mod.rs           Kind (which forge a host runs), Forge (enum, one arm per backend), re-exports
-    model.rs         the neutral model: MrKey, Mr, Refs, DiffFile, Discussion, Note, Position, LineRef, Draft, NewDraft
+    model.rs         the neutral model: MrKey, Mr, MrState, PipelineStatus, Refs, DiffFile, Discussion, Note, Position, LineRef, Draft, NewDraft
     queue.rs         Queue, QueueMr, Sections and the pure split into sections
     rules.rs         which queue MRs need me now, and why the others do not
     checks.rs        the CI run of the head commit, jobs by stage
@@ -121,7 +121,7 @@ pub struct Mr {                  // forge/model.rs; see 07-forges.md for the res
     pub number: u64,             // GitLab iid, GitHub PR number
     pub title: String,
     pub description: String,     // markdown
-    pub state: String,
+    pub state: MrState,          // Open | Merged | Closed
     pub draft: bool,
     pub author: User,
     pub source_branch: String,
@@ -129,7 +129,7 @@ pub struct Mr {                  // forge/model.rs; see 07-forges.md for the res
     pub web_url: String,
     pub updated_at: DateTime<Utc>,
     pub refs: Refs,              // base, start, head: what notes on lines are made against
-    pub pipeline: Option<Pipeline>,   // status, web_url
+    pub pipeline: Option<Pipeline>,   // status: PipelineStatus, web_url
     pub changes_count: Option<String>,
     pub conflicts: bool,
     pub reviewers: Vec<User>,

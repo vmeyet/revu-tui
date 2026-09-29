@@ -112,7 +112,7 @@ fn row(hosts: &Hosts, mr: &QueueMr, mixed: bool, now: DateTime<Utc>) -> Vec<Cell
         cell(render::truncate(&title, TITLE_W), Style::Plain),
         cell(&mr.author, Style::Plain),
         right(render::age(mr.updated_at, now), Style::Dim),
-        render::pipeline(mr.pipeline.as_deref()),
+        render::pipeline(mr.pipeline),
         right(format!("+{}", mr.additions), Style::Ok),
         right(format!("−{}", mr.deletions), Style::Bad),
         cell(badges(mr), Style::Warn),

@@ -240,19 +240,17 @@ impl Pr {
             user_can_approve: author.username != me,
             approved_by: approvers,
         };
-        let pipeline = wire::pipeline(&self.commits)
-            .map(|status| Pipeline { status: status.to_lowercase(), web_url: Some(format!("{}/checks", self.url)) });
+        let pipeline = wire::pipeline(&self.commits).map(|status| Pipeline { status, web_url: Some(format!("{}/checks", self.url)) });
         forge::Mr {
             project: project.to_owned(),
             number: self.number,
             title: self.title,
             description: self.body.unwrap_or_default(),
             state: match self.state.as_str() {
-                "OPEN" => "opened",
-                "MERGED" => "merged",
-                _ => "closed",
-            }
-            .to_owned(),
+                "OPEN" => forge::MrState::Open,
+                "MERGED" => forge::MrState::Merged,
+                _ => forge::MrState::Closed,
+            },
             draft: self.is_draft,
             mine: author.username == me,
             author,
@@ -910,7 +908,10 @@ mod tests {
         assert_eq!(numbers(&sections.mine), [41]);
         assert_eq!(numbers(&sections.watching), [35]);
         let failing = &sections.to_review[0];
-        assert_eq!((failing.pipeline.as_deref(), failing.unresolved, failing.project.as_str()), (Some("FAILED"), 1, "acme/widgets"));
+        assert_eq!(
+            (failing.pipeline, failing.unresolved, failing.project.as_str()),
+            (Some(forge::PipelineStatus::Failed), 1, "acme/widgets")
+        );
         assert!(sections.done[0].conflicts);
         assert_eq!(sections.done[0].my_state("nina"), Some(ReviewState::Reviewed));
         assert!(sections.mine[0].approved && sections.mine[0].approved_by == ["lea"]);
@@ -979,10 +980,10 @@ mod tests {
             .mount(&server)
             .await;
         let mr = client(&server).mr(&key()).await.unwrap();
-        assert_eq!((mr.project.as_str(), mr.number, mr.state.as_str(), mr.description.as_str()), ("acme/widgets", 42, "opened", ""));
+        assert_eq!((mr.project.as_str(), mr.number, mr.state, mr.description.as_str()), ("acme/widgets", 42, forge::MrState::Open, ""));
         assert_eq!(mr.refs, Refs { base: "aaaa".into(), start: "aaaa".into(), head: "bbbb".into() });
         assert!(mr.conflicts);
-        assert_eq!(mr.pipeline.as_ref().map(|p| p.status.as_str()), Some("success"));
+        assert_eq!(mr.pipeline.as_ref().map(|p| p.status), Some(forge::PipelineStatus::Success));
         assert_eq!(mr.approvals.approved_by.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), ["lea"]);
         assert!(
             !mr.approvals.approved && mr.approvals.approvals_left == 1 && mr.approvals.user_can_approve && !mr.approvals.user_has_approved

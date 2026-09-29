@@ -4,7 +4,7 @@
 //! asking me score 185, mine 87 (the rules skip them, so they skip the fields) and a project's
 //! open MRs 124: each call stays under the limit, one query for all would not.
 use super::Client;
-use crate::forge::{MrKey, Queue, QueueMr, ReviewState, ReviewerState};
+use crate::forge::{MrKey, PipelineStatus, Queue, QueueMr, ReviewState, ReviewerState};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -292,7 +292,7 @@ struct WireInteraction {
 
 #[derive(Deserialize)]
 struct WirePipeline {
-    status: String,
+    status: PipelineStatus,
 }
 
 #[derive(Default, Deserialize)]
@@ -350,7 +350,7 @@ mod tests {
         assert_eq!(first.key(), crate::forge::MrKey::new("acme/widgets", 42));
         assert_eq!(first.my_state("nina"), Some(ReviewState::Unreviewed));
         assert_eq!((first.additions, first.deletions, first.files, first.unresolved), (412, 38, 9, 1));
-        assert_eq!(first.pipeline.as_deref(), Some("SUCCESS"));
+        assert_eq!(first.pipeline, Some(PipelineStatus::Success));
         assert_eq!(queue.assigned[0].files, 0, "missing stats read as zero");
     }
 

@@ -78,7 +78,7 @@ fn mr_block(review: &Review) -> String {
     let mut text = format!("# {} {}\n\n", mr.project, mr.title);
     let _ = writeln!(text, "Author: {} · {} → {}", mr.author.username, mr.source_branch, mr.target_branch);
     if let Some(pipeline) = &mr.pipeline {
-        let _ = writeln!(text, "Pipeline: {}", pipeline.status);
+        let _ = writeln!(text, "Pipeline: {}", pipeline.status.word());
     }
     let _ = writeln!(text, "\n## Description\n\n{}\n\n## Files", cut(&mr.description, DESCRIPTION_CHARS));
     for file in review.files.iter() {

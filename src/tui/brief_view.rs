@@ -146,13 +146,13 @@ fn deployment_line<'a>(deployment: &crate::forge::Deployment, theme: Theme, widt
 }
 
 fn checks_line<'a>(brief: &Brief, theme: Theme, width: usize) -> Line<'a> {
-    let Some(status) = brief.checks.status.as_deref() else {
+    let Some(status) = brief.checks.status else {
         return Line::from(Span::styled("no pipeline on this commit", Style::default().fg(theme.faded)));
     };
     let (glyph, colour) = pipeline_glyph(status, theme);
-    let mut spans = vec![Span::styled(format!("{glyph} {}", status.to_lowercase()), Style::default().fg(colour))];
+    let mut spans = vec![Span::styled(format!("{glyph} {}", status.word()), Style::default().fg(colour))];
     if !brief.checks.failed.is_empty() {
-        let names = truncate(&brief.checks.failed.join(", "), width.saturating_sub(status.width() + 6));
+        let names = truncate(&brief.checks.failed.join(", "), width.saturating_sub(status.word().width() + 6));
         spans.push(Span::styled(format!(" · {names}"), Style::default().fg(theme.danger)));
     }
     Line::from(spans)
