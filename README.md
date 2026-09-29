@@ -9,7 +9,7 @@ Review GitLab merge requests and GitHub pull requests in your terminal, with the
 ## Install
 
 ```sh
-cargo install --git https://github.com/vmeyet/revu-tui
+brew install vmeyet/tap/revu   # or: cargo install --git https://github.com/vmeyet/revu-tui
 revu login --from-glab            # GitLab: reuse the token glab holds
 revu login github.com --from-gh   # GitHub: reuse the token gh holds
 ```
