@@ -6,7 +6,7 @@ pub use store::{SecretStore, SecurityCli};
 
 use crate::config::Config;
 use crate::forge::Kind;
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 use std::fmt;
 
 pub const SERVICE: &str = "revu";
@@ -76,7 +76,7 @@ pub fn token_variable(kind: Kind) -> &'static str {
 /// The token variable of the host's forge wins, then the keychain entry for the chosen host.
 pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, host: Option<&str>) -> Result<(Credentials, Source)> {
     let has_token = |h: &str| env.token_for(Kind::for_host(h, config)).is_some() || store.get(h).ok().flatten().is_some();
-    let host = pick_host(env, config, host, has_token);
+    let host = pick_host(env, config, host, has_token)?;
     let kind = Kind::for_host(&host, config);
     if let Some(token) = env.token_for(kind) {
         return Ok((Credentials { host, token: token.clone() }, Source::Env));
@@ -89,12 +89,30 @@ pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, host: Option
 
 /// The flag, then `GITLAB_HOST`, then the checkout's own host when `usable` says a token is there
 /// for it, then the configured host, then gitlab.com.
-pub fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn(&str) -> bool) -> String {
-    host.map(str::to_owned)
+pub fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn(&str) -> bool) -> Result<String> {
+    let host = host
+        .map(str::to_owned)
         .or_else(|| env.host.clone())
         .or_else(|| env.origin.clone().filter(|origin| usable(origin)))
         .or_else(|| config.host.clone())
-        .unwrap_or_else(|| DEFAULT_HOST.to_owned())
+        .unwrap_or_else(|| DEFAULT_HOST.to_owned());
+    check_host(&host)?;
+    Ok(host)
+}
+
+/// A host names a cache folder, so only a plain `name` or `name:port` passes: `..`, `/` or a path
+/// would reach outside the cache. The URL parser keeps `.` and `..` as names, hence the dot rule.
+pub fn check_host(host: &str) -> Result<()> {
+    let parsed = url::Url::parse(&format!("https://{host}")).ok();
+    let whole = parsed.and_then(|url| authority(&url)).is_some_and(|authority| authority.eq_ignore_ascii_case(host));
+    let dotted = host.starts_with('.') || host.contains("..");
+    ensure!(whole && !dotted, "not a host name: {host:?}");
+    Ok(())
+}
+
+fn authority(url: &url::Url) -> Option<String> {
+    let name = url.host_str()?;
+    Some(url.port().map_or_else(|| name.to_owned(), |port| format!("{name}:{port}")))
 }
 
 #[cfg(test)]
@@ -151,6 +169,26 @@ mod tests {
         store.set("github.com", "ghp_xxxx").unwrap();
         assert_eq!(resolve(&env, &store, &config, None).unwrap().0.host, "github.com");
         assert_eq!(resolve(&env, &store, &config, Some("gitlab.com")).unwrap().0.host, "gitlab.com", "the flag still wins");
+    }
+
+    #[test]
+    fn only_a_plain_host_name_passes() {
+        for host in ["gitlab.com", "gl.acme.dev", "gitlab.acme.dev:8443", "GitLab.com", "localhost"] {
+            assert!(check_host(host).is_ok(), "{host}");
+        }
+        for host in ["", ".", "..", "/", "../etc", "a/b", "a\\b", "a..b", "nina@gitlab.com", "gitlab.com?x", "gitlab.com:x", "gitlab.com/"]
+        {
+            assert!(check_host(host).is_err(), "{host:?}");
+        }
+    }
+
+    #[test]
+    fn a_path_as_host_is_refused_wherever_it_comes_from() {
+        let config = Config { host: Some("..".into()), ..Config::default() };
+        assert!(pick_host(&Env::default(), &config, None, |_| true).is_err(), "from the config");
+        let env = Env { host: Some("/".into()), ..Env::default() };
+        assert!(pick_host(&env, &Config::default(), None, |_| true).is_err(), "from GITLAB_HOST");
+        assert!(pick_host(&Env::default(), &Config::default(), Some("../x"), |_| true).is_err(), "from the flag");
     }
 
     #[test]

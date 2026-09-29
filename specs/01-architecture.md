@@ -249,6 +249,7 @@ enabled = false              # Jev triage of the queue and files; off until true
 ```
 
 Unknown keys fail loudly with the file path and key, as in slack-tui.
+Saving (login, logout, `:set theme=`) rewrites only the keys that changed, comments and layout kept, through a temp file and a rename.
 
 ## Errors
 
@@ -275,6 +276,7 @@ Pinned to what slack-tui compiles with today, so versions are known good togethe
 | tokio 1 (rt-multi-thread, macros, process, time, fs, sync, io-util) | runtime |
 | reqwest 0.13 (rustls, json), no default features | HTTP, GraphQL |
 | serde, serde_json (preserve_order), toml | data |
+| toml_edit | saving the config keeps the user's comments |
 | clap 4 (derive, env), clap_complete | CLI |
 | anyhow | errors |
 | chrono | ages |

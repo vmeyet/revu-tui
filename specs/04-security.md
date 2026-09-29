@@ -49,6 +49,7 @@ TLS via rustls with webpki roots; no `danger_accept_invalid_certs` option exists
 ## Files
 
 - `~/.cache/revu/` directory 0700, files 0600, atomic renames.
+- A host names a cache folder, so only a plain `name` or `name:port` is accepted, from the flag, `GITLAB_HOST`, the checkout or the config: `revu logout ..` fails before it deletes anything.
 - Editor temp files for compose live in `$TMPDIR`, 0600, removed after the editor exits, even on cancel.
 - The cache holds MR content, which is confidential to the project. `revu logout` and `revu cache clear` wipe it.
 

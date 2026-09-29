@@ -35,7 +35,7 @@ impl Ctx {
 
     pub(crate) fn build(env: &Env, store: &dyn SecretStore, config: Config, host: Option<&str>, json: bool) -> Result<Self> {
         let (credentials, source) = auth::resolve(env, store, &config, host)?;
-        let cache = Cache::for_host(&credentials.host);
+        let cache = Cache::for_host(&credentials.host)?;
         let forge = Forge::connect(Kind::for_host(&credentials.host, &config), &credentials)?;
         Ok(Self { forge, credentials, source, config, cache, json, project: None })
     }
@@ -88,7 +88,7 @@ pub(crate) fn others(env: &Env, store: &dyn SecretStore, config: &Config, curren
         .filter_map(|host| {
             let (credentials, _) = auth::resolve(env, store, config, Some(host)).ok()?;
             let forge = Forge::connect(Kind::for_host(host, config), &credentials).ok()?;
-            Some(Home { host: host.clone(), forge, cache: Cache::for_host(host) })
+            Some(Home { host: host.clone(), forge, cache: Cache::for_host(host).ok()? })
         })
         .collect()
 }
