@@ -10,6 +10,7 @@ mod diff;
 mod docs;
 mod forge;
 mod fuzzy;
+mod http;
 mod keymap;
 mod mrref;
 mod open;

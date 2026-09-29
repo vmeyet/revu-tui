@@ -198,7 +198,8 @@ fn slack_tui_key() -> Result<Option<String>> {
 
 /// Lists the models, which costs nothing, so a wrong key is refused before it is stored.
 async fn verify_anthropic(base: &str, key: &Secret) -> Result<()> {
-    let response = reqwest::Client::new()
+    let response = crate::http::client()
+        .build()?
         .get(format!("{base}/v1/models"))
         .header("x-api-key", key.expose())
         .header("anthropic-version", "2023-06-01")

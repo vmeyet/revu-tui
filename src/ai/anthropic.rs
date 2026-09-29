@@ -112,7 +112,7 @@ impl Claude {
 
     /// Pointed at another server: a mock in tests.
     pub(crate) fn with_base(base: &str, key: Secret, model: &str) -> Self {
-        let http = reqwest::Client::builder().connect_timeout(CONNECT_TIMEOUT).build().unwrap_or_default();
+        let http = crate::http::client().connect_timeout(CONNECT_TIMEOUT).build().unwrap_or_default();
         Self { http, base: base.trim_end_matches('/').to_owned(), key, model: model.to_owned() }
     }
 

@@ -59,7 +59,7 @@ pub struct Transport {
 impl Transport {
     /// `headers` carry the token: every request goes to `base`'s scheme, host and port or not at all.
     pub fn new(base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
-        let client = reqwest::Client::builder()
+        let client = crate::http::client()
             .default_headers(headers)
             .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
