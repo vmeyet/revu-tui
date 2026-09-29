@@ -10,7 +10,7 @@ use std::process::Command;
 /// Verifies a token and stores it in the keychain.
 pub async fn run(args: LoginArgs, host_flag: Option<&str>, json: bool) -> Result<()> {
     let mut config = Config::load()?;
-    let host = auth::pick_host(&Env::from_process(), &config, args.host.as_deref().or(host_flag), |_| true);
+    let host = auth::pick_host(&Env::from_process(), &config, args.host.as_deref().or(host_flag), |_| true)?;
     let kind = Kind::for_host(&host, &config);
     let token = read_token(&args, &host, kind)?;
     let credentials = Credentials { host: host.clone(), token };
@@ -44,7 +44,7 @@ fn remember(config: &mut Config, host: &str, username: &str) {
 /// Forgets a host: keychain entry, config and cache.
 pub fn logout(host: Option<&str>) -> Result<()> {
     let mut config = Config::load()?;
-    let host = auth::pick_host(&Env::default(), &config, host, |_| true);
+    let host = auth::pick_host(&Env::default(), &config, host, |_| true)?;
     SecurityCli::new(auth::SERVICE).delete(&host)?;
     if let Some(entry) = config.hosts.get_mut(&host) {
         entry.username = None;
@@ -54,7 +54,7 @@ pub fn logout(host: Option<&str>) -> Result<()> {
         config.username = None;
     }
     config.save()?;
-    Cache::for_host(&host).clear()?;
+    Cache::for_host(&host)?.clear()?;
     println!("logged out of {host}");
     Ok(())
 }

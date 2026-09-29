@@ -61,8 +61,9 @@ impl<T> Entry<T> {
 }
 
 impl Cache {
-    pub fn for_host(host: &str) -> Self {
-        Self::in_dir(root().join(host))
+    pub fn for_host(host: &str) -> Result<Self> {
+        crate::auth::check_host(host)?;
+        Ok(Self::in_dir(root().join(host)))
     }
 
     pub fn in_dir(dir: impl Into<PathBuf>) -> Self {
@@ -427,6 +428,13 @@ mod tests {
         let finished: HashSet<(String, u64)> = [("acme/widgets".to_owned(), 40)].into();
         let gone: Vec<u64> = to_forget(&all, &finished, now, day * 30).into_iter().map(|k| k.number).collect();
         assert_eq!(gone, [40, 42], "41 is open and was read two days ago");
+    }
+
+    #[test]
+    fn a_host_that_is_a_path_gets_no_cache() {
+        assert!(Cache::for_host("..").is_err());
+        assert!(Cache::for_host("/").is_err());
+        assert!(Cache::for_host("gitlab.com").is_ok());
     }
 
     #[test]
