@@ -51,7 +51,35 @@ pub enum Segment {
     New(String),
 }
 
-pub fn segments(old: &str, new: &str) -> Vec<Segment> {
+/// The runs of a changed pair, read back from the changed ranges `mark` stored on both lines.
+pub fn segments(old: &Line, new: &Line) -> Vec<Segment> {
+    let mut found = Vec::new();
+    let (mut old_at, mut new_at) = (0, 0);
+    let mut old_words = old.words.iter().peekable();
+    let mut new_words = new.words.iter().peekable();
+    loop {
+        if let Some(word) = old_words.next_if(|w| w.start == old_at) {
+            found.push(Segment::Old(old.text[word.clone()].to_owned()));
+            old_at = word.end;
+        } else if let Some(word) = new_words.next_if(|w| w.start == new_at) {
+            found.push(Segment::New(new.text[word.clone()].to_owned()));
+            new_at = word.end;
+        } else {
+            let old_until = old_words.peek().map_or(old.text.len(), |w| w.start);
+            let new_until = new_words.peek().map_or(new.text.len(), |w| w.start);
+            let kept = (old_until - old_at).min(new_until - new_at);
+            if kept == 0 {
+                break;
+            }
+            found.push(Segment::Same(old.text[old_at..old_at + kept].to_owned()));
+            old_at += kept;
+            new_at += kept;
+        }
+    }
+    found
+}
+
+fn text_segments(old: &str, new: &str) -> Vec<Segment> {
     let mut found: Vec<Segment> = Vec::new();
     for change in TextDiff::from_words(old, new).iter_all_changes() {
         let text = change.value();
@@ -85,13 +113,12 @@ impl Default for InlineRule {
 }
 
 impl InlineRule {
-    pub fn fits(self, old: &str, new: &str) -> bool {
-        let parts = segments(old, new);
-        let olds = parts.iter().filter(|p| matches!(p, Segment::Old(_))).count();
-        let news = parts.iter().filter(|p| matches!(p, Segment::New(_))).count();
-        let same: usize = parts.iter().map(|p| if let Segment::Same(text) = p { text.len() } else { 0 }).sum();
+    /// Read from the changed ranges `mark` stored on both lines.
+    pub fn fits(self, old: &Line, new: &Line) -> bool {
+        let (olds, news) = (old.words.len(), new.words.len());
+        let same = old.text.len() - old.words.iter().map(ExactSizeIterator::len).sum::<usize>();
         let kept = |len: usize| len > 0 && same * 100 >= usize::from(self.min_same) * len;
-        olds + news > 0 && olds <= self.max_words && news <= self.max_words && kept(old.len()) && kept(new.len())
+        olds + news > 0 && olds <= self.max_words && news <= self.max_words && kept(old.text.len()) && kept(new.text.len())
     }
 }
 
@@ -100,7 +127,7 @@ pub fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
     pairs(&hunk.lines)
         .into_iter()
         .flat_map(|(removed, added)| removed.zip(added))
-        .filter(|&(r, a)| rule.fits(&hunk.lines[r].text, &hunk.lines[a].text))
+        .filter(|&(r, a)| rule.fits(&hunk.lines[r], &hunk.lines[a]))
         .collect()
 }
 
@@ -127,7 +154,7 @@ pub fn same_but_whitespace(old: &str, new: &str) -> bool {
 fn changed_ranges(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
     let (mut old_at, mut new_at) = (0, 0);
     let (mut old_words, mut new_words) = (Vec::new(), Vec::new());
-    for part in segments(old, new) {
+    for part in text_segments(old, new) {
         match part {
             Segment::Same(text) => {
                 old_at += text.len();
@@ -159,6 +186,12 @@ mod tests {
     use super::*;
     use crate::diff::parse;
 
+    /// A removed line and its added twin, marked as a review loads them.
+    fn marked_pair(old: &str, new: &str) -> [Line; 2] {
+        let hunk = mark(&parse(&format!("@@ -1 +1 @@\n-{old}\n+{new}\n"))[0]);
+        [hunk.lines[0].clone(), hunk.lines[1].clone()]
+    }
+
     fn words_of(line: &Line) -> Vec<&str> {
         line.words.iter().map(|r| &line.text[r.clone()]).collect()
     }
@@ -166,6 +199,7 @@ mod tests {
     mod properties {
         #![allow(clippy::unwrap_used, clippy::expect_used)]
         use super::super::*;
+        use super::marked_pair;
         use crate::diff::{arbitrary, parse};
         use proptest::prelude::*;
 
@@ -181,8 +215,14 @@ mod tests {
             #![proptest_config(ProptestConfig::with_cases(256))]
 
             #[test]
+            fn segments_read_from_the_marked_ranges_match_a_fresh_word_diff(old in line(), new in line()) {
+                let [old_line, new_line] = marked_pair(&old, &new);
+                prop_assert_eq!(segments(&old_line, &new_line), text_segments(&old, &new));
+            }
+
+            #[test]
             fn segments_rebuild_both_lines(old in line(), new in line()) {
-                let parts = segments(&old, &new);
+                let parts = text_segments(&old, &new);
                 let old_side = joined(&parts, |p| match p { Segment::Same(t) | Segment::Old(t) => Some(t.as_str()), Segment::New(_) => None });
                 let new_side = joined(&parts, |p| match p { Segment::Same(t) | Segment::New(t) => Some(t.as_str()), Segment::Old(_) => None });
                 prop_assert_eq!(old_side, old);
@@ -191,7 +231,7 @@ mod tests {
 
             #[test]
             fn no_two_neighbours_are_the_same_kind(old in line(), new in line()) {
-                let parts = segments(&old, &new);
+                let parts = text_segments(&old, &new);
                 for pair in parts.windows(2) {
                     prop_assert_ne!(std::mem::discriminant(&pair[0]), std::mem::discriminant(&pair[1]));
                 }
@@ -282,10 +322,8 @@ mod tests {
 
     #[test]
     fn segments_keep_the_shared_text_between_the_changes() {
-        assert_eq!(
-            segments("let b = 2;", "let b = 20;"),
-            vec![Segment::Same("let b = ".into()), Segment::Old("2;".into()), Segment::New("20;".into())]
-        );
+        let [old, new] = marked_pair("let b = 2;", "let b = 20;");
+        assert_eq!(segments(&old, &new), vec![Segment::Same("let b = ".into()), Segment::Old("2;".into()), Segment::New("20;".into())]);
     }
 
     #[test]
@@ -300,16 +338,18 @@ mod tests {
             ("", "x", false, "an empty side keeps nothing"),
         ];
         for (old, new, fits, why) in cases {
-            assert_eq!(rule.fits(old, new), fits, "{why}: {old:?} -> {new:?}");
+            let [old_line, new_line] = marked_pair(old, new);
+            assert_eq!(rule.fits(&old_line, &new_line), fits, "{why}: {old:?} -> {new:?}");
         }
-        assert!(InlineRule { max_words: 3, min_same: 50 }.fits("a b c d e f g h", "a x c y e z g h"), "thresholds come from the rule");
+        let [old, new] = marked_pair("a b c d e f g h", "a x c y e z g h");
+        assert!(InlineRule { max_words: 3, min_same: 50 }.fits(&old, &new), "thresholds come from the rule");
     }
 
     #[test]
     fn only_equal_runs_that_fit_the_rule_are_inline_pairs() {
         let rule = InlineRule::default();
         let hunk =
-            parse("@@ -1,3 +1,3 @@\n-let b = 2;\n-completely old text\n+let b = 20;\n+something else entirely\n let c = 3;\n")[0].clone();
+            mark(&parse("@@ -1,3 +1,3 @@\n-let b = 2;\n-completely old text\n+let b = 20;\n+something else entirely\n let c = 3;\n")[0]);
         assert_eq!(inline_pairs(&hunk, rule), vec![(0, 2)]);
         let unequal = parse(include_str!("fixtures/tabs.diff"))[0].clone();
         assert!(inline_pairs(&unequal, rule).is_empty(), "one removed, two added");

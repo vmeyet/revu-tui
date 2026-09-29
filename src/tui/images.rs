@@ -23,6 +23,8 @@ pub enum Thumb {
 pub struct Thumbs {
     picker: Option<Picker>,
     slots: HashMap<String, Thumb>,
+    /// Counts every picture that changed state, so a layout made before it knows it is stale.
+    changes: u64,
 }
 
 impl fmt::Debug for Thumbs {
@@ -39,11 +41,11 @@ impl Default for Thumbs {
 
 impl Thumbs {
     pub fn off() -> Self {
-        Self { picker: None, slots: HashMap::new() }
+        Self { picker: None, slots: HashMap::new(), changes: 0 }
     }
 
     pub fn with(picker: Picker) -> Self {
-        Self { picker: Some(picker), slots: HashMap::new() }
+        Self { picker: Some(picker), slots: HashMap::new(), changes: 0 }
     }
 
     pub fn enabled(&self) -> bool {
@@ -74,6 +76,7 @@ impl Thumbs {
                 let new = !self.slots.contains_key(url);
                 if new {
                     self.slots.insert(url.clone(), Thumb::Loading);
+                    self.changes += 1;
                 }
                 new
             })
@@ -89,6 +92,11 @@ impl Thumbs {
             _ => Thumb::Failed,
         };
         self.slots.insert(url.to_owned(), thumb);
+        self.changes += 1;
+    }
+
+    pub fn changes(&self) -> u64 {
+        self.changes
     }
 
     pub fn get(&self, url: &str) -> Option<&Thumb> {

@@ -73,8 +73,7 @@ pub fn is_markdown(path: &str) -> bool {
 /// The language of a path, by its extension; nothing is loaded by asking.
 pub fn language_for(path: &str, languages: &'static [Language]) -> Option<&'static Language> {
     let (_, extension) = path.rsplit_once('.')?;
-    let extension = extension.to_ascii_lowercase();
-    languages.iter().find(|language| language.extensions.contains(&extension.as_str()))
+    languages.iter().find(|language| language.extensions.iter().any(|known| known.eq_ignore_ascii_case(extension)))
 }
 
 /// The spans of each line of `source`, split on `\n`; one entry per line, empty for uncoloured ones.
