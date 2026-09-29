@@ -365,11 +365,13 @@ pub enum Incoming {
         sha: String,
         text: String,
     },
-    /// `draft` is the one sent, as it was sent.
+    /// `draft` is the one sent, as it was sent. The forge may fold it into a note it already holds:
+    /// `body` is the text it now holds under `id`.
     DraftSaved {
         key: MrKey,
         draft: Box<Draft>,
         id: u64,
+        body: String,
     },
     Published {
         key: MrKey,

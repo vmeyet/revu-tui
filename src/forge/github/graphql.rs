@@ -63,21 +63,30 @@ query DraftState($owner: String!, $name: String!, $number: Int!) {
 }";
 
 const THREADS: &str = r"
-query Threads($owner: String!, $name: String!, $number: Int!) {
+query Threads($owner: String!, $name: String!, $number: Int!, $threads: String, $reviews: String, $comments: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       id baseRefOid headRefOid
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $threads) {
         nodes {
           id isResolved path line originalLine startLine originalStartLine diffSide startDiffSide
-          comments(first: 100) { nodes { ...comment state } }
+          comments(first: 100) { nodes { ...comment state } pageInfo { ...page } }
         }
+        pageInfo { ...page }
       }
-      reviews(first: 100) { nodes { ...comment state } }
-      comments(first: 100) { nodes { ...comment } }
+      reviews(first: 100, after: $reviews) { nodes { ...comment state } pageInfo { ...page } }
+      comments(first: 100, after: $comments) { nodes { ...comment } pageInfo { ...page } }
     }
   }
-}
+}";
+
+const THREAD_COMMENTS: &str = r"
+query ThreadComments($id: ID!, $after: String) {
+  node(id: $id) { ... on PullRequestReviewThread { comments(first: 100, after: $after) { nodes { ...comment state } pageInfo { ...page } } } }
+}";
+
+const COMMENT_FRAGMENTS: &str = r"
+fragment page on PageInfo { hasNextPage endCursor }
 fragment comment on Comment {
   id body createdAt updatedAt author { login ... on User { name databaseId } }
   ... on Reactable { reactionGroups { content viewerHasReacted reactors { totalCount } } }
@@ -85,6 +94,9 @@ fragment comment on Comment {
   ... on PullRequestReview { fullDatabaseId }
   ... on IssueComment { fullDatabaseId }
 }";
+
+/// Enough for any PR a person reviews; the bound only stops a server that never ends a list.
+const MAX_PAGES: usize = 50;
 
 /// The four searches of the queue, scoped to one repository when asked.
 fn searches(project: Option<&str>) -> Value {
@@ -297,9 +309,9 @@ pub(super) struct PrThreads {
     id: String,
     base_ref_oid: String,
     head_ref_oid: String,
-    review_threads: Nodes<Thread>,
-    reviews: Nodes<Comment>,
-    comments: Nodes<Comment>,
+    review_threads: Page<Thread>,
+    reviews: Page<Comment>,
+    comments: Page<Comment>,
 }
 
 #[derive(Deserialize)]
@@ -309,7 +321,57 @@ struct Thread {
     is_resolved: bool,
     #[serde(flatten)]
     anchor: Anchor,
-    comments: Nodes<Comment>,
+    comments: Page<Comment>,
+}
+
+/// One page of a GraphQL list; an answer without `pageInfo` holds the whole list.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Page<T> {
+    nodes: Vec<T>,
+    #[serde(default)]
+    page_info: PageInfo,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PageInfo {
+    has_next_page: bool,
+    end_cursor: Option<String>,
+}
+
+impl<T> Page<T> {
+    /// The cursor the next page starts after, when there is a next page.
+    fn next(&self) -> Option<&str> {
+        self.page_info.end_cursor.as_deref().filter(|_| self.page_info.has_next_page)
+    }
+
+    /// An empty page past the end keeps the cursor where it was: a null one would start the list over.
+    fn and(self, next: Page<T>) -> Page<T> {
+        let end_cursor = next.page_info.end_cursor.or(self.page_info.end_cursor);
+        Page {
+            nodes: self.nodes.into_iter().chain(next.nodes).collect(),
+            page_info: PageInfo { has_next_page: next.page_info.has_next_page, end_cursor },
+        }
+    }
+}
+
+/// The cursor each list of a PR resumes after; none starts it from the top.
+#[derive(Default)]
+struct After {
+    threads: Option<String>,
+    reviews: Option<String>,
+    comments: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ThreadCommentsData {
+    node: Option<ThreadComments>,
+}
+
+#[derive(Deserialize)]
+struct ThreadComments {
+    comments: Page<Comment>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -380,6 +442,25 @@ impl Comment {
 }
 
 impl PrThreads {
+    /// Where each list picks up, while one of them has more; a list read whole answers an empty page.
+    fn resume(&self) -> Option<After> {
+        let lists = [&self.review_threads.page_info, &self.reviews.page_info, &self.comments.page_info];
+        lists.iter().any(|p| p.has_next_page).then(|| After {
+            threads: self.review_threads.page_info.end_cursor.clone(),
+            reviews: self.reviews.page_info.end_cursor.clone(),
+            comments: self.comments.page_info.end_cursor.clone(),
+        })
+    }
+
+    fn and(self, next: PrThreads) -> PrThreads {
+        PrThreads {
+            review_threads: self.review_threads.and(next.review_threads),
+            reviews: self.reviews.and(next.reviews),
+            comments: self.comments.and(next.comments),
+            ..self
+        }
+    }
+
     fn refs(&self) -> Refs {
         Refs { base: self.base_ref_oid.clone(), start: self.base_ref_oid.clone(), head: self.head_ref_oid.clone() }
     }
@@ -494,6 +575,16 @@ impl CommentPayload {
     }
 }
 
+/// The pending review's text with `note` last: every draft on the PR itself shares it, so they
+/// read back as one. A retry that already put `note` last changes nothing.
+fn with_note(text: &str, note: &str) -> String {
+    let text = text.trim();
+    if text == note || text.ends_with(&format!("\n\n{note}")) {
+        return text.to_owned();
+    }
+    [text, note].iter().filter(|t| !t.is_empty()).copied().collect::<Vec<_>>().join("\n\n")
+}
+
 const COMMENT_FIELDS: &str = "id fullDatabaseId body createdAt updatedAt state author { login ... on User { name databaseId } }";
 
 impl Client {
@@ -556,10 +647,37 @@ impl Client {
         Ok(done)
     }
 
+    /// Every thread, review and comment of the PR, page after page.
     pub(super) async fn threads(&self, key: &MrKey) -> Result<PrThreads> {
+        let mut prs = self.threads_page(key, After::default()).await?;
+        for _ in 0..MAX_PAGES {
+            let Some(resume) = prs.resume() else { break };
+            prs = prs.and(self.threads_page(key, resume).await?);
+        }
+        let threads = futures_util::future::try_join_all(prs.review_threads.nodes.into_iter().map(|t| self.whole_thread(t))).await?;
+        Ok(PrThreads { review_threads: Page { nodes: threads, page_info: PageInfo::default() }, ..prs })
+    }
+
+    async fn threads_page(&self, key: &MrKey, after: After) -> Result<PrThreads> {
         let (owner, name) = owner_and_name(&key.project)?;
-        let data: ThreadsData = self.graphql(THREADS, json!({"owner": owner, "name": name, "number": key.number})).await?;
+        let variables = json!({
+            "owner": owner, "name": name, "number": key.number,
+            "threads": after.threads, "reviews": after.reviews, "comments": after.comments,
+        });
+        let data: ThreadsData = self.graphql(&format!("{THREADS}{COMMENT_FRAGMENTS}"), variables).await?;
         data.repository.and_then(|r| r.pull_request).with_context(|| format!("{}#{} not found", key.project, key.number))
+    }
+
+    /// A thread with the comments past its first page.
+    async fn whole_thread(&self, thread: Thread) -> Result<Thread> {
+        let query = format!("{THREAD_COMMENTS}{COMMENT_FRAGMENTS}");
+        let mut comments = thread.comments;
+        for _ in 0..MAX_PAGES {
+            let Some(after) = comments.next().map(str::to_owned) else { break };
+            let data: ThreadCommentsData = self.graphql(&query, json!({"id": thread.id, "after": after})).await?;
+            comments = comments.and(data.node.with_context(|| format!("thread {} is gone", thread.id))?.comments);
+        }
+        Ok(Thread { comments, ..thread })
     }
 
     pub async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
@@ -580,11 +698,7 @@ impl Client {
         match (&draft.position, &draft.reply_to) {
             (_, Some(thread)) => self.reply_draft(&review.id, thread, &draft.body).await,
             (Some(position), None) => self.thread_draft(&review.id, position, &draft.body).await,
-            (None, None) => {
-                let body =
-                    [review.body.trim(), draft.body.as_str()].iter().filter(|t| !t.is_empty()).copied().collect::<Vec<_>>().join("\n\n");
-                self.summary_draft(&review.id, &body).await
-            }
+            (None, None) => self.summary_draft(&review.id, &with_note(&review.body, &draft.body)).await,
         }
     }
 
@@ -912,8 +1026,12 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string(body.to_owned()))
     }
 
+    fn threads_json() -> Value {
+        serde_json::from_str(include_str!("fixtures/threads.json")).unwrap()
+    }
+
     fn no_pending_review() -> String {
-        let mut value: Value = serde_json::from_str(include_str!("fixtures/threads.json")).unwrap();
+        let mut value = threads_json();
         let reviews = value["data"]["repository"]["pullRequest"]["reviews"]["nodes"].as_array_mut().unwrap();
         reviews.retain(|r| r["state"] != "PENDING");
         value.to_string()
@@ -1000,6 +1118,98 @@ mod tests {
         assert_eq!((reply.id, reply.reply_to.as_deref()), (107, Some("PRRT_1")));
         let summary = client.create_draft(&key(), &NewDraft { body: "Also: docs".into(), ..NewDraft::default() }).await.unwrap();
         assert_eq!(summary.id, 209);
+    }
+
+    fn with_review_text(body: &str) -> String {
+        let mut value = threads_json();
+        let reviews = value["data"]["repository"]["pullRequest"]["reviews"]["nodes"].as_array_mut().unwrap();
+        reviews.iter_mut().filter(|r| r["state"] == "PENDING").for_each(|r| r["body"] = json!(body));
+        value.to_string()
+    }
+
+    #[tokio::test]
+    async fn a_pr_note_retried_after_a_lost_answer_is_not_added_twice() {
+        let server = MockServer::start().await;
+        threads_mock(&with_review_text("Two nits.\n\nAlso: docs")).mount(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("updatePullRequestReview("))
+            .and(body_partial_json(json!({"variables": {"body": "Two nits.\n\nAlso: docs"}})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                json!({"data": {"updatePullRequestReview": {"pullRequestReview": comment_json("PRR_9", 209, "Two nits.\n\nAlso: docs")}}}),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let saved = client(&server).create_draft(&key(), &NewDraft { body: "Also: docs".into(), ..NewDraft::default() }).await.unwrap();
+        assert_eq!((saved.id, saved.body.as_str()), (209, "Two nits.\n\nAlso: docs"), "the whole text comes back as the one draft");
+    }
+
+    #[tokio::test]
+    async fn the_pr_draft_is_rewritten_whole_and_a_second_run_changes_nothing() {
+        let server = MockServer::start().await;
+        threads_mock(include_str!("fixtures/threads.json")).mount(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("updatePullRequestReview("))
+            .and(body_partial_json(json!({"variables": {"id": "PRR_9", "body": "Two nits.\n\nAlso: tests"}})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                json!({"data": {"updatePullRequestReview": {"pullRequestReview": comment_json("PRR_9", 209, "Two nits.\n\nAlso: tests")}}}),
+            ))
+            .expect(2)
+            .mount(&server)
+            .await;
+        let client = client(&server);
+        let edit = NewDraft { body: "Two nits.\n\nAlso: tests".into(), ..NewDraft::default() };
+        let first = client.update_draft(&key(), 209, &edit).await.unwrap();
+        let again = client.update_draft(&key(), 209, &edit).await.unwrap();
+        assert_eq!(first, again, "a second run changes nothing");
+    }
+
+    fn page_info(next: Option<&str>) -> Value {
+        json!({"hasNextPage": next.is_some(), "endCursor": next})
+    }
+
+    #[tokio::test]
+    async fn threads_reviews_comments_and_long_threads_are_read_past_the_first_page() {
+        let server = MockServer::start().await;
+        let mut first = threads_json();
+        let pr = &mut first["data"]["repository"]["pullRequest"];
+        pr["reviewThreads"]["pageInfo"] = page_info(Some("t1"));
+        pr["reviewThreads"]["nodes"][0]["comments"]["pageInfo"] = page_info(Some("r1"));
+        pr["reviews"]["pageInfo"] = page_info(None);
+        pr["comments"]["pageInfo"] = page_info(Some("c1"));
+        let thread = json!({"id": "PRRT_4", "isResolved": false, "path": "src/pay/mod.rs", "line": 9, "diffSide": "RIGHT",
+            "comments": {"nodes": [comment_json("PRRC_8", 108, "and here")], "pageInfo": page_info(None)}});
+        let loose = json!({"id": "IC_2", "fullDatabaseId": "302", "body": "ping", "createdAt": "2026-09-23T10:00:00Z", "updatedAt": "2026-09-23T10:00:00Z", "author": {"login": "lea"}});
+        let second = json!({"data": {"repository": {"pullRequest": {"id": "PR_42", "baseRefOid": "aaaa", "headRefOid": "bbbb",
+            "reviewThreads": {"nodes": [thread], "pageInfo": page_info(None)},
+            "reviews": {"nodes": [], "pageInfo": page_info(None)},
+            "comments": {"nodes": [loose], "pageInfo": page_info(None)}}}}});
+        let page = |after: Value, answer: Value| {
+            Mock::given(method("POST"))
+                .and(path("/graphql"))
+                .and(body_string_contains("query Threads"))
+                .and(body_partial_json(json!({"variables": after})))
+                .respond_with(ResponseTemplate::new(200).set_body_json(answer))
+                .expect(1)
+        };
+        page(json!({"threads": null}), first).mount(&server).await;
+        page(json!({"threads": "t1", "comments": "c1"}), second).mount(&server).await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("query ThreadComments"))
+            .and(body_partial_json(json!({"variables": {"id": "PRRT_1", "after": "r1"}})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": {"node": {"comments": {
+                "nodes": [comment_json("PRRC_6", 106, "and a doc line")], "pageInfo": page_info(None)
+            }}}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let prs = client(&server).threads(&key()).await.unwrap();
+        let drafts: Vec<u64> = prs.drafts().iter().map(|d| d.id).collect();
+        assert_eq!(drafts, [103, 106, 105, 108, 209]);
+        assert!(prs.discussions().iter().any(|d| d.id == "IC_2"));
     }
 
     #[tokio::test]

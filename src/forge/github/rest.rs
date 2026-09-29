@@ -108,6 +108,17 @@ fn repo_path(project: &str) -> String {
     format!("repos/{project}")
 }
 
+/// A file of `project` for the contents API, each segment encoded so a `#`, `?` or space stays in its name.
+fn contents_path(project: &str, path: &str) -> String {
+    let segments: Vec<String> = path.split('/').map(encode).collect();
+    format!("{}/contents/{}", repo_path(project), segments.join("/"))
+}
+
+/// Percent-encoding fit for a path segment as well as a query value: a space is `%20`, never `+`.
+fn encode(text: &str) -> String {
+    url::form_urlencoded::byte_serialize(text.as_bytes()).collect::<String>().replace('+', "%20")
+}
+
 #[derive(Deserialize)]
 struct CheckRuns {
     check_runs: Vec<CheckRun>,
@@ -214,8 +225,8 @@ impl Client {
         if !own_branch || !access.permissions.is_some_and(|p| p.push) {
             bail!("GitHub has no API to apply this suggestion here: o opens it on the web");
         }
-        let path = format!("{repo}/contents/{}", suggestion.path);
-        let file: Contents = self.http.get(&format!("{path}?ref={branch}")).await?;
+        let path = contents_path(&key.project, &suggestion.path);
+        let file: Contents = self.http.get(&format!("{path}?ref={}", encode(branch))).await?;
         let text = decode(&file.content)?;
         let proposal =
             crate::review::suggestion::Proposal { above: suggestion.above, below: suggestion.below, text: suggestion.text.clone() };
@@ -247,8 +258,7 @@ impl Client {
     /// success with an address; GitHub keeps the address on the status, not the deployment.
     pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
         let repo = repo_path(&key.project);
-        let branch: String = url::form_urlencoded::byte_serialize(branch.as_bytes()).collect();
-        let listed: Vec<DeploymentWire> = self.http.get(&format!("{repo}/deployments?ref={branch}&per_page=30")).await?;
+        let listed: Vec<DeploymentWire> = self.http.get(&format!("{repo}/deployments?ref={}&per_page=30", encode(branch))).await?;
         let mut newest: Vec<DeploymentWire> = vec![];
         for deployment in listed {
             if newest.iter().all(|n| n.environment != deployment.environment) {
@@ -281,14 +291,14 @@ impl Client {
     /// The open PR whose head is `branch` in the repository itself, if any.
     pub async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>> {
         let owner = project.split('/').next().unwrap_or_default();
-        let head: String = url::form_urlencoded::byte_serialize(format!("{owner}:{branch}").as_bytes()).collect();
+        let head = encode(&format!("{owner}:{branch}"));
         let found: Vec<PrNumber> = self.http.get(&format!("{}/pulls?state=open&head={head}", repo_path(project))).await?;
         Ok(found.first().map(|p| p.number))
     }
 
     /// The whole file at `sha`, raw, to show the lines around a hunk.
     pub async fn file(&self, project: &str, path: &str, sha: &str) -> Result<String> {
-        self.get_raw(&format!("{}/contents/{path}?ref={sha}", repo_path(project))).await
+        self.get_raw(&format!("{}?ref={}", contents_path(project, path), encode(sha))).await
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
@@ -516,6 +526,18 @@ mod tests {
             .await;
         assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
     }
+
+    #[tokio::test]
+    async fn a_path_or_ref_with_url_characters_stays_whole() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/docs/a%20%231%3F.md"))
+            .and(query_param("ref", "fix/#123-login"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok\n"))
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).file("acme/widgets", "docs/a #1?.md", "fix/#123-login").await.unwrap(), "ok\n");
+    }
     #[tokio::test]
     async fn deployments_take_the_address_from_the_newest_successful_status() {
         let server = MockServer::start().await;
@@ -601,18 +623,18 @@ mod tests {
         repo_and_pull(&server, true, "acme/widgets").await;
         Mock::given(method("GET"))
             .and(path("/repos/acme/widgets/contents/src/a.rs"))
-            .and(query_param("ref", "feat/sum"))
+            .and(query_param("ref", "fix/#123-login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({"content": "YQpi\nCmMK\n", "sha": "blob1"})))
             .mount(&server)
             .await;
         Mock::given(method("PUT"))
             .and(path("/repos/acme/widgets/contents/src/a.rs"))
-            .and(body_partial_json(json!({"content": "YQpCCmMK", "sha": "blob1", "branch": "feat/sum"})))
+            .and(body_partial_json(json!({"content": "YQpCCmMK", "sha": "blob1", "branch": "fix/#123-login"})))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({"commit": {"sha": "c0ffee"}})))
             .expect(1)
             .mount(&server)
             .await;
-        client(&server).apply(&key(), "feat/sum", &suggestion()).await.unwrap();
+        client(&server).apply(&key(), "fix/#123-login", &suggestion()).await.unwrap();
     }
 
     #[tokio::test]

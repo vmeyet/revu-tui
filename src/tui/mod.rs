@@ -1015,11 +1015,11 @@ impl Backend {
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
     async fn save_draft(&self, key: MrKey, draft: Box<Draft>) -> Result<Incoming> {
         let held = self.forge_of(&key).drafts(&key).await?;
-        let id = match held.iter().find(|note| draft.same_as(&Draft::held(note))) {
-            Some(note) => note.id,
-            None => self.forge_of(&key).create_draft(&key, &draft.payload()).await?.id,
+        let saved = match held.into_iter().find(|note| draft.same_as(&Draft::held(note))) {
+            Some(note) => note,
+            None => self.forge_of(&key).create_draft(&key, &draft.payload()).await?,
         };
-        Ok(Incoming::DraftSaved { key, draft, id })
+        Ok(Incoming::DraftSaved { key, draft, id: saved.id, body: saved.body })
     }
 
     async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
@@ -1675,8 +1675,14 @@ mod tests {
             .await;
         let backend = backend_on(&server);
         let same = Box::new(draft_at(12, "nit"));
-        assert_eq!(backend.save_draft(key(), same.clone()).await.unwrap(), Incoming::DraftSaved { key: key(), draft: same, id: 5 });
+        assert_eq!(
+            backend.save_draft(key(), same.clone()).await.unwrap(),
+            Incoming::DraftSaved { key: key(), draft: same, id: 5, body: "nit".into() }
+        );
         let fresh = Box::new(draft_at(13, "other"));
-        assert_eq!(backend.save_draft(key(), fresh.clone()).await.unwrap(), Incoming::DraftSaved { key: key(), draft: fresh, id: 6 });
+        assert_eq!(
+            backend.save_draft(key(), fresh.clone()).await.unwrap(),
+            Incoming::DraftSaved { key: key(), draft: fresh, id: 6, body: "other".into() }
+        );
     }
 }

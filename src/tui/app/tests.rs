@@ -706,7 +706,7 @@ fn with_saved_draft() -> App {
 /// The forge's answer to the one draft save in `actions`.
 fn saved(actions: &[Action], id: u64) -> Incoming {
     let [Action::SaveDraft { key, draft }] = actions else { panic!("{actions:?}") };
-    Incoming::DraftSaved { key: key.clone(), draft: draft.clone(), id }
+    Incoming::DraftSaved { key: key.clone(), draft: draft.clone(), id, body: draft.body.clone() }
 }
 
 #[test]
@@ -730,6 +730,32 @@ fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
     app.apply(saved(&actions, 9));
     assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
     assert_eq!(app.unsaved_drafts(), 0);
+}
+
+#[test]
+fn a_draft_the_forge_folds_into_one_it_already_holds_leaves_one_draft() {
+    let mut app = with_review();
+    let open = app.open.clone().unwrap();
+    let sent = crate::review::Draft::new(None, "Also: docs").with_local_id(2);
+    let drafts = vec![crate::review::Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone()];
+    app.open = Some(open.with_review(open.review.with_drafts(drafts)));
+    let follow = app.apply_draft_saved(&mr_key(), &sent, 209, "Two nits.\n\nAlso: docs");
+    let held: Vec<(Option<u64>, &str)> = app.open.as_ref().unwrap().review.drafts.iter().map(|d| (d.id, d.body.as_str())).collect();
+    assert_eq!(held, [(Some(209), "Two nits.\n\nAlso: docs")], "an edit or a delete of it then keeps both texts");
+    assert_eq!(follow, vec![]);
+}
+
+#[test]
+fn a_folded_draft_edited_while_its_save_ran_updates_only_its_own_text() {
+    let mut app = with_review();
+    let open = app.open.clone().unwrap();
+    let sent = crate::review::Draft::new(None, "Also: docs").with_local_id(2);
+    let drafts =
+        vec![crate::review::Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone().with_body("Also: docs, please")];
+    app.open = Some(open.with_review(open.review.with_drafts(drafts)));
+    let follow = app.apply_draft_saved(&mr_key(), &sent, 209, "Two nits.\n\nAlso: docs");
+    let [Action::UpdateDraft { id: 209, draft, .. }] = follow.as_slice() else { panic!("{follow:?}") };
+    assert_eq!(draft.body, "Two nits.\n\nAlso: docs, please", "the other note on the PR stays");
 }
 
 #[test]

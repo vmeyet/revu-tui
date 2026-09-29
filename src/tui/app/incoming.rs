@@ -52,8 +52,8 @@ impl App {
             }
             Incoming::Done(text) => self.toast(text),
             Incoming::File { key, path, sha, text } => self.apply_file(&key, path, &sha, &text),
-            Incoming::DraftSaved { key, draft, id } => {
-                let follow = self.apply_draft_saved(&key, &draft, id);
+            Incoming::DraftSaved { key, draft, id, body } => {
+                let follow = self.apply_draft_saved(&key, &draft, id, &body);
                 self.composed.extend(follow);
             }
             Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),

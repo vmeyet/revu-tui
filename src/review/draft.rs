@@ -84,11 +84,17 @@ impl Draft {
         Self { body: body.into(), ..self }
     }
 
+    /// Held by the forge under `id`, with the text the forge holds.
+    pub fn held_as(self, id: u64, body: impl Into<String>) -> Self {
+        Self { id: Some(id), body: body.into(), ..self }
+    }
+
     /// The same note as the forge would list it: body, thread and line all equal.
     pub fn same_as(&self, other: &Draft) -> bool {
         self.body == other.body && self.reply_to == other.reply_to && self.anchor == other.anchor
     }
 
+    #[cfg(test)]
     pub fn with_id(self, id: u64) -> Self {
         Self { id: Some(id), ..self }
     }
