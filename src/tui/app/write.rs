@@ -319,7 +319,8 @@ impl App {
 
     /// The save's answer finds its draft by local id. A draft gone meanwhile, or held already under another id,
     /// is deleted from the forge so publishing never shows it; one edited meanwhile is updated there.
-    pub(super) fn apply_draft_saved(&mut self, key: &MrKey, sent: &Draft, id: u64) -> Vec<Action> {
+    /// Any other draft under the same id is the one the forge folded this note into: it goes.
+    pub(super) fn apply_draft_saved(&mut self, key: &MrKey, sent: &Draft, id: u64, body: &str) -> Vec<Action> {
         let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return vec![] };
         let delete = vec![Action::DeleteDraft { key: key.clone(), id }];
         let Some(draft) = open.review.drafts.iter().find(|d| d.local_id == sent.local_id) else { return delete };
@@ -328,7 +329,7 @@ impl App {
             Some(held) if held == id => return vec![],
             Some(_) => return delete,
         }
-        let saved = draft.clone().with_id(id);
+        let saved = draft.clone().held_as(id, refolded(body, &sent.body, &draft.body));
         let drafts = open
             .review
             .drafts
@@ -338,7 +339,7 @@ impl App {
             .cloned()
             .collect();
         self.open = Some(open.with_review(open.review.with_drafts(drafts)));
-        if saved.payload() == sent.payload() {
+        if saved.body == body {
             return vec![];
         }
         vec![Action::UpdateDraft { key: key.clone(), id, draft: Box::new(saved) }]
@@ -396,5 +397,14 @@ impl App {
             Failure::React { thread, index, emoji, on } => self.react_failed(&thread, index, emoji, on, &message),
             Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage | Failure::Ready => self.warn(message),
         }
+    }
+}
+
+/// The text the forge should hold once the note sent as `sent` reads `now`: on GitHub a note on the PR itself
+/// sits at the end of one shared review text, so only that tail changes.
+fn refolded(held: &str, sent: &str, now: &str) -> String {
+    match held.strip_suffix(sent) {
+        Some(rest) => format!("{rest}{now}"),
+        None => now.to_string(),
     }
 }

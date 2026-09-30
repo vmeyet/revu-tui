@@ -89,7 +89,7 @@ async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) ->
 | Diffs | `GET …/diffs` (paged), body per file | `GET repos/…/pulls/:n/files` (paged), `patch` per file; no `patch` means binary or too large |
 | Threads | `GET …/discussions`, notes carry `position` | One GraphQL query: `reviewThreads` (side, line, range, resolved; outdated ones fall back to `originalLine`), review summaries and PR comments as unanchored threads. Thread ids are node ids (`PRRT_…`). |
 | Position out | `base_sha`, `start_sha`, `head_sha`, `old_line`/`new_line`, `line_range` with `line_code = sha1(path)_old_new` | `commit_id = refs.head`, `path`, `side = RIGHT` when `line.new` exists else `LEFT`, `line = line.number()`, `start_line`/`start_side` from `start` |
-| Drafts | `…/draft_notes` CRUD, per user, survive sessions | My pending review: `addPullRequestReview` opens it on the first draft; `addPullRequestReviewThread` (line drafts), `addPullRequestReviewThreadReply` (replies), the review body (drafts on the PR itself, appended); read back from the same `reviewThreads` query, where pending comments carry `state: PENDING`. Edits and deletes go by node id, looked up from the draft's database id. |
+| Drafts | `…/draft_notes` CRUD, per user, survive sessions | My pending review: `addPullRequestReview` opens it on the first draft; `addPullRequestReviewThread` (line drafts), `addPullRequestReviewThreadReply` (replies), the review body (drafts on the PR itself, appended); read back from the same `reviewThreads` query, paged to the end, where pending comments carry `state: PENDING`. Edits and deletes go by node id, looked up from the draft's database id. |
 | Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked | `submitPullRequestReview` with `COMMENT` or `APPROVE`, in one call |
 | Resolve | `PUT …/discussions/:id resolved=` | GraphQL `resolveReviewThread` / `unresolveReviewThread` |
 | Approve | `POST …/approve`, `…/unapprove` | `POST pulls/:n/reviews` with `APPROVE`; there is no unapprove for the reviewer, the error says to request changes or dismiss from the web |
@@ -130,7 +130,7 @@ Cache paths moved from `mr/<project_id>/<iid>/` to `mr/<group+project>/<number>/
 
 ## What differs on GitHub (phase 2)
 
-- **Drafts on the PR itself** live in the pending review's body: several of them read back as one draft, their texts joined.
+- **Drafts on the PR itself** live in the pending review's body: several of them read back as one draft, their texts joined; saving one folds it into that draft, so an edit or a delete covers them all.
 - **Resolve on publish** does not exist on GitHub: a draft's `resolve` flag is ignored.
 - **Moving a draft** is impossible on GitHub: an edit changes the text, the comment stays on its line (verified live).
 - **Unapprove** is refused with the way out; approving one's own PR is refused by GitHub, and the message says so.
