@@ -36,15 +36,16 @@ src/
     checks.rs        the CI run of the head commit, jobs by stage
     budget.rs        rate-limit budget and backoff state
     image.rs         fetching pictures notes point at, capped
+    http.rs          Transport both clients share: origin guard, pagination, rate-limit backoff, HttpError
     gitlab/
-      mod.rs         Client: PRIVATE-TOKEN header, host guard, pagination, rate-limit backoff, line_url
+      mod.rs         Client: PRIVATE-TOKEN header, the GitLab Flavor, line_url
       wire.rs        GitLab JSON (Mr, DiffRefs, Discussion, Note, DraftNote, Position, line_code) and its conversions
       graphql.rs     the queue query; typed answer turned into Queue
       rest.rs        mr, diffs, discussions, drafts, draft CRUD, publish, resolve, approve, comment, merge
       award.rs       reactions (award emoji)
       upload.rs      pictures uploaded to a project
     github/
-      mod.rs         Client: bearer token, host guard, rate-limit backoff, line_url
+      mod.rs         Client: bearer token, the GitHub Flavor, line_url
       wire.rs        GitHub REST and GraphQL shapes and their conversions
       graphql.rs     the queue, one PR, its threads, the pending review
       rest.rs        who I am, changed files, comments, approvals, the contents API

@@ -4,6 +4,7 @@ mod budget;
 pub mod checks;
 pub mod github;
 pub mod gitlab;
+mod http;
 pub mod image;
 mod model;
 mod queue;

@@ -118,7 +118,7 @@ impl Client {
         let mut after: Option<String> = None;
         for _ in 0..MAX_PAGES {
             let variables = json!({"project": key.project, "iid": key.number.to_string(), "after": after});
-            let answer: Answer<NotesData> = self.post_json("graphql", &json!({"query": NOTES, "variables": variables})).await?;
+            let answer: Answer<NotesData> = self.http.post_json(super::GRAPHQL, &json!({"query": NOTES, "variables": variables})).await?;
             let notes = data(answer)?
                 .project
                 .and_then(|p| p.merge_request)
@@ -143,7 +143,7 @@ impl Client {
         let query =
             format!("mutation($id: AwardableID!, $name: String!) {{ {mutation}(input: {{awardableId: $id, name: $name}}) {{ errors }} }}");
         let answer: Answer<serde_json::Value> =
-            self.post_json("graphql", &json!({"query": query, "variables": {"id": node, "name": emoji.gitlab()}})).await?;
+            self.http.post_json(super::GRAPHQL, &json!({"query": query, "variables": {"id": node, "name": emoji.gitlab()}})).await?;
         let errors = data(answer)?[mutation]["errors"].as_array().cloned().unwrap_or_default();
         if let Some(first) = errors.first() {
             bail!("GitLab refused the reaction: {}", first.as_str().unwrap_or("unknown error"));

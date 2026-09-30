@@ -29,6 +29,13 @@ forge = "github"      # a GitHub Enterprise host, which the name alone cannot te
 
 `Kind` also carries what is pure and forge-shaped: the sigil between project and number (`!` or `#`) and the web URL of one diff line.
 
+## One HTTP transport (`src/forge/http.rs`)
+
+Both clients hold a `Transport` and keep only their own endpoints.
+It carries the token headers on a client that follows no redirect, checks every URL against the scheme, host and port of its base, reads lists by `Link: rel="next"`, and waits out one rate limit.
+A `Flavor` holds what differs: the rate-limit header names, whether a 403 with no request left is a rate limit (GitHub) and the forge's error body reader.
+An answer outside 2xx is an `HttpError { request, status, message }` inside the `anyhow::Error`; callers sort it with `downcast_ref`, never by its text.
+
 ## Neutral model (`src/forge/model.rs`, `src/forge/queue.rs`)
 
 | Type | Holds |
