@@ -14,6 +14,7 @@ pub use thread::{Anchor, Side, Thread};
 use crate::diff::fold::{FileMeta, FoldState};
 use crate::diff::words::{self, InlineRule};
 use crate::diff::{self, Hunk, LineKind};
+pub use crate::forge::FileKind;
 use crate::forge::{DiffFile, Discussion, Mr};
 use crate::syntax::{self, Spans};
 use std::collections::{BTreeMap, BTreeSet};
@@ -41,15 +42,6 @@ impl Progress {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FileKind {
-    Added,
-    Deleted,
-    Renamed,
-    Modified,
-    Mode,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct File {
     pub old_path: String,
@@ -69,7 +61,7 @@ impl File {
         let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(diff::words::mark).collect();
         let lines = hunks.iter().map(|h| h.lines.len()).sum::<usize>();
         let count = |kind: LineKind| hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind == kind).count();
-        let kind = kind_of(diff);
+        let kind = diff.change;
         let too_large = diff.too_large || lines > TOO_LARGE_LINES;
         let path = if kind == FileKind::Deleted { &diff.old_path } else { &diff.new_path };
         let syntax = match syntax::language_for(path, &syntax::LANGUAGES) {
@@ -145,20 +137,6 @@ fn colour(language: &syntax::Language, hunk: &Hunk) -> Vec<Spans> {
         lines[index] = spans;
     }
     lines
-}
-
-fn kind_of(diff: &DiffFile) -> FileKind {
-    if diff.new_file {
-        FileKind::Added
-    } else if diff.deleted_file {
-        FileKind::Deleted
-    } else if diff.renamed_file {
-        FileKind::Renamed
-    } else if diff.diff.is_empty() && diff.a_mode != diff.b_mode {
-        FileKind::Mode
-    } else {
-        FileKind::Modified
-    }
 }
 
 /// One row of the review pane, in reading order, after folds. Indexes point into `Review`, so a row is tiny.
@@ -498,7 +476,7 @@ pub(crate) mod tests {
             diff: diff.to_owned(),
             old_path: "src/old.rs".into(),
             new_path: "src/new.rs".into(),
-            renamed_file: true,
+            change: FileKind::Renamed,
             ..DiffFile::default()
         };
         let other =
@@ -516,8 +494,6 @@ pub(crate) mod tests {
             diff: include_str!("fixtures/charge.diff").to_owned(),
             old_path: "src/pay/charge.rs".into(),
             new_path: "src/pay/charge.rs".into(),
-            a_mode: "100644".into(),
-            b_mode: "100644".into(),
             ..DiffFile::default()
         }
     }
@@ -601,16 +577,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn file_kinds_follow_gitlabs_flags() {
-        let kind = |diff: DiffFile| File::from_diff(&diff).kind;
-        assert_eq!(kind(DiffFile { new_file: true, ..charge() }), FileKind::Added);
-        assert_eq!(kind(DiffFile { deleted_file: true, ..charge() }), FileKind::Deleted);
-        assert_eq!(kind(DiffFile { renamed_file: true, ..charge() }), FileKind::Renamed);
-        assert_eq!(kind(DiffFile { diff: String::new(), b_mode: "100755".into(), ..charge() }), FileKind::Mode);
-        assert_eq!(kind(charge()), FileKind::Modified);
-    }
-
-    #[test]
     fn counts_additions_and_deletions() {
         let file = File::from_diff(&charge());
         assert_eq!((file.additions, file.deletions, file.hunks.len()), (4, 2, 2));
@@ -620,9 +586,9 @@ pub(crate) mod tests {
     fn an_empty_diff_is_binary_unless_it_is_a_mode_change_or_a_rename() {
         let empty = |diff: DiffFile| File::from_diff(&DiffFile { diff: String::new(), ..diff }).binary;
         assert!(empty(charge()));
-        assert!(empty(DiffFile { new_file: true, a_mode: "0".into(), ..charge() }));
-        assert!(!empty(DiffFile { b_mode: "100755".into(), ..charge() }));
-        assert!(!empty(DiffFile { renamed_file: true, old_path: "src/pay/old.rs".into(), ..charge() }));
+        assert!(empty(DiffFile { change: FileKind::Added, ..charge() }));
+        assert!(!empty(DiffFile { change: FileKind::Mode, ..charge() }));
+        assert!(!empty(DiffFile { change: FileKind::Renamed, old_path: "src/pay/old.rs".into(), ..charge() }));
         assert!(!File::from_diff(&charge()).binary);
     }
 

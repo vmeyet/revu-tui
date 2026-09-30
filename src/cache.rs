@@ -217,7 +217,7 @@ fn root() -> PathBuf {
 
 /// The one place cache paths are spelled.
 pub mod keys {
-    use crate::forge::MrKey;
+    use crate::forge::{MrKey, Sha};
 
     /// One file per scope, so switching between a repo and every project never shows the other list.
     pub fn queue(project: Option<&str>) -> String {
@@ -266,8 +266,8 @@ pub mod keys {
         format!("{}/mr.json", dir(key))
     }
 
-    pub fn diffs(key: &MrKey, head_sha: &str) -> String {
-        format!("{}/diffs.{head_sha}.json", dir(key))
+    pub fn diffs(key: &MrKey, head: &Sha) -> String {
+        format!("{}/diffs.{head}.json", dir(key))
     }
 
     pub fn discussions(key: &MrKey) -> String {
@@ -303,12 +303,12 @@ pub mod keys {
     }
 
     /// What Jev read in an MR at one head commit.
-    pub fn reading(key: &MrKey, head: &str) -> String {
+    pub fn reading(key: &MrKey, head: &Sha) -> String {
         format!("{}/ai/reading.{head}.json", dir(key))
     }
 
     /// A file at one commit, named by a hash of its path so no path from the forge becomes a directory.
-    pub fn file(key: &MrKey, sha: &str, path: &str) -> String {
+    pub fn file(key: &MrKey, sha: &Sha, path: &str) -> String {
         format!("{}/files/{sha}/{}.json", dir(key), sha1_smol::Sha1::from(path.as_bytes()).digest())
     }
 }
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn round_trip_under_a_nested_key() {
         let (_dir, cache) = cache();
-        let key = keys::diffs(&key(), "abc");
+        let key = keys::diffs(&key(), &"abc".into());
         assert_eq!(cache.read::<Vec<u32>>(&key), None);
         cache.write(&key, &vec![1, 2]).unwrap();
         assert_eq!(cache.read::<Vec<u32>>(&key), Some(vec![1, 2]));

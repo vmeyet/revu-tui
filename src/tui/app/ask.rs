@@ -33,7 +33,7 @@ pub struct PastAnswer {
     pub label: String,
     pub asked_at: DateTime<Utc>,
     /// The commit asked about: once the MR moved on, the answer reads an older push.
-    pub head: String,
+    pub head: crate::forge::Sha,
     pub request: Ask,
     pub text: String,
     pub outcome: Outcome,

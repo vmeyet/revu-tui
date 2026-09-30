@@ -12,8 +12,8 @@ pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{
-    Applicable, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, LineRef, MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft,
-    Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Side, Suggestion, User, tally, toggled,
+    Applicable, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod, MergePlan, Mr, MrKey, MrState,
+    NewDraft, Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Sha, Side, Suggestion, User, tally, toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -166,10 +166,10 @@ impl Forge {
     }
 
     /// The whole file `path` at commit `sha`, for the context around a hunk.
-    pub async fn file(&self, key: &MrKey, path: &str, sha: &str) -> Result<String> {
+    pub async fn file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
         match self {
-            Forge::GitLab(client) => client.file(&key.project, path, sha).await,
-            Forge::GitHub(client) => client.file(&key.project, path, sha).await,
+            Forge::GitLab(client) => client.file(&key.project, path, sha.as_str()).await,
+            Forge::GitHub(client) => client.file(&key.project, path, sha.as_str()).await,
         }
     }
 
@@ -194,18 +194,18 @@ impl Forge {
     }
 
     /// The CI run of the MR's head commit `head`; `None` when nothing ran on it.
-    pub async fn checks(&self, key: &MrKey, head: &str) -> Result<Option<checks::Checks>> {
+    pub async fn checks(&self, key: &MrKey, head: &Sha) -> Result<Option<checks::Checks>> {
         match self {
             Forge::GitLab(client) => client.checks(key).await,
-            Forge::GitHub(client) => client.checks(key, head).await,
+            Forge::GitHub(client) => client.checks(key, head.as_str()).await,
         }
     }
 
     /// The review apps up for the MR of `branch`, each saying whether it runs `head`.
-    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<Deployment>> {
+    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &Sha) -> Result<Vec<Deployment>> {
         match self {
-            Forge::GitLab(client) => client.deployments(key, branch, head).await,
-            Forge::GitHub(client) => client.deployments(key, branch, head).await,
+            Forge::GitLab(client) => client.deployments(key, branch, head.as_str()).await,
+            Forge::GitHub(client) => client.deployments(key, branch, head.as_str()).await,
         }
     }
 
@@ -294,10 +294,10 @@ impl Forge {
     }
 
     /// Merges the MR as `plan` says, only while its head is still `head`: a push in between is refused.
-    pub async fn merge(&self, key: &MrKey, head: &str, plan: MergePlan) -> Result<()> {
+    pub async fn merge(&self, key: &MrKey, head: &Sha, plan: MergePlan) -> Result<()> {
         match self {
-            Forge::GitLab(client) => client.merge(key, head, plan).await,
-            Forge::GitHub(client) => client.merge(key, head, plan).await,
+            Forge::GitLab(client) => client.merge(key, head.as_str(), plan).await,
+            Forge::GitHub(client) => client.merge(key, head.as_str(), plan).await,
         }
     }
 

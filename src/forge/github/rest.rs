@@ -4,7 +4,7 @@ use super::Client;
 use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::http::HttpError;
-use crate::forge::{self, DiffFile, Discussion, MrKey, Note, Position};
+use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
@@ -57,11 +57,13 @@ impl From<File> for DiffFile {
             diff: f.patch.map(|p| if p.is_empty() || p.ends_with('\n') { p } else { format!("{p}\n") }).unwrap_or_default(),
             old_path: f.previous_filename.clone().unwrap_or_else(|| f.filename.clone()),
             new_path: f.filename,
-            new_file: f.status == "added",
-            deleted_file: f.status == "removed",
-            renamed_file: f.status == "renamed",
+            change: match f.status.as_str() {
+                "added" => FileKind::Added,
+                "removed" => FileKind::Deleted,
+                "renamed" => FileKind::Renamed,
+                _ => FileKind::Modified,
+            },
             too_large: withheld,
-            ..DiffFile::default()
         }
     }
 }
@@ -437,8 +439,11 @@ mod tests {
         let paths: Vec<&str> = files.iter().map(|f| f.new_path.as_str()).collect();
         assert_eq!(paths, ["src/pay/charge.rs", "src/pay/key.rs", "src/pay/money.rs", "assets/logo.png", "Cargo.lock"]);
         assert!(files[0].diff.starts_with("@@ -12,3 +12,4 @@") && files[0].diff.ends_with("added\n"));
-        assert!(files[1].new_file);
-        assert_eq!((files[2].renamed_file, files[2].old_path.as_str(), files[2].diff.as_str()), (true, "src/pay/amount.rs", ""));
+        assert_eq!(files[1].change, FileKind::Added);
+        assert_eq!(
+            (files[2].change == FileKind::Renamed, files[2].old_path.as_str(), files[2].diff.as_str()),
+            (true, "src/pay/amount.rs", "")
+        );
         assert!(!files[3].too_large && files[3].diff.is_empty(), "a binary file has no patch and no changes counted");
         assert!(files[4].too_large);
     }

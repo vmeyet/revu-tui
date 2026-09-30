@@ -10,7 +10,7 @@ pub enum Confirm {
     /// The suggestion of a note, on the MR's branch.
     Apply { suggestion: Suggestion, branch: String },
     /// The MR `name` (`!42`) into `into`, only while its head is still `head`.
-    Merge { key: MrKey, name: String, head: String, into: String, plan: MergePlan },
+    Merge { key: MrKey, name: String, head: crate::forge::Sha, into: String, plan: MergePlan },
 }
 
 impl Confirm {

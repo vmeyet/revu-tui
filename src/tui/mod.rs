@@ -31,7 +31,7 @@ use crate::cache::{Cache, Entry, keys};
 use crate::ctx::Ctx;
 use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
-use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections};
+use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections, Sha};
 use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Progress, Review};
 use anyhow::{Context as _, Result};
@@ -110,7 +110,7 @@ struct SavedAnswer {
     #[serde(default)]
     asked_at: Option<DateTime<Utc>>,
     #[serde(default)]
-    head: Option<String>,
+    head: Option<Sha>,
     #[serde(default)]
     request: Option<Ask>,
 }
@@ -710,7 +710,7 @@ impl Backend {
     }
 
     #[allow(clippy::too_many_arguments, reason = "the label and head only go into what is kept")]
-    async fn ask(&self, key: &MrKey, id: u64, request: &Ask, fresh: bool, label: &str, head: &str, send: &impl Fn(Incoming)) {
+    async fn ask(&self, key: &MrKey, id: u64, request: &Ask, fresh: bool, label: &str, head: &Sha, send: &impl Fn(Incoming)) {
         let part = |part: Part| Incoming::Answer { key: key.clone(), id, part };
         let Some(claude) = &self.claude else {
             send(part(Part::Failed("Claude is off".into())));
@@ -746,7 +746,7 @@ impl Backend {
                         usage: outcome.usage,
                         label: Some(label.to_owned()),
                         asked_at: Some(Utc::now()),
-                        head: Some(head.to_owned()),
+                        head: Some(head.clone()),
                         request: Some(request.clone()),
                     };
                     let wanted = key.clone();
@@ -779,7 +779,7 @@ impl Backend {
     async fn read(
         &self,
         key: MrKey,
-        head: String,
+        head: Sha,
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
     ) -> Result<Incoming, Unavailable> {
@@ -944,10 +944,10 @@ impl Backend {
 
     /// The MR alone while its head is still `head`: no diffs, threads or drafts fetched, nothing highlighted again.
     /// Once the head moved, the review is built again, with the new head's diffs from the cache when loading ahead put them there.
-    async fn poll_review(&self, key: MrKey, head: &str) -> Result<Incoming> {
+    async fn poll_review(&self, key: MrKey, head: &Sha) -> Result<Incoming> {
         let forge = self.forge_of(&key);
         let mr = forge.mr(&key).await?;
-        if mr.refs.head == head {
+        if &mr.refs.head == head {
             let (wanted, kept) = (key.clone(), mr.clone());
             self.off(move |b| {
                 let _ = b.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept);
@@ -962,8 +962,8 @@ impl Backend {
     }
 
     /// The diffs of `head`, which never change once pushed: from the cache when it holds them.
-    async fn diffs_at(&self, key: &MrKey, head: &str) -> Result<Vec<DiffFile>> {
-        let (wanted, at) = (key.clone(), head.to_owned());
+    async fn diffs_at(&self, key: &MrKey, head: &Sha) -> Result<Vec<DiffFile>> {
+        let (wanted, at) = (key.clone(), head.clone());
         let cached = self.off(move |b| b.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await.ok().flatten();
         match cached {
             Some(diffs) => Ok(diffs),
@@ -1047,13 +1047,14 @@ impl Backend {
 
     /// The file ready for the reader's program: the checkout's own when it sits on `sha`,
     /// else a private read-only copy of what the forge serves.
-    async fn view(&self, key: MrKey, path: &str, sha: &str, line: u32, note: Option<String>) -> Result<Incoming> {
+    async fn view(&self, key: MrKey, path: &str, sha: &Sha, line: u32, note: Option<String>) -> Result<Incoming> {
         crate::open::safe_path(path)?;
         let checkout = match self.checkout.as_ref().filter(|_| key.host.is_none()) {
             Some(checkout) => checkout.head().await.map(|head| (checkout, head)),
             None => None,
         };
-        let source = crate::open::Source::pick(&key.project, sha, checkout.as_ref().map(|(c, head)| (c.project.as_str(), head.as_str())));
+        let source =
+            crate::open::Source::pick(&key.project, sha.as_str(), checkout.as_ref().map(|(c, head)| (c.project.as_str(), head.as_str())));
         let (file, dir, note) = if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
             (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
         } else {
@@ -1069,13 +1070,13 @@ impl Backend {
     }
 
     /// A file at a commit never changes, so the cache serves it forever.
-    async fn file_text(&self, key: &MrKey, path: &str, sha: &str) -> Result<String> {
+    async fn file_text(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
         let cache_key = keys::file(key, sha, path);
         let (wanted, reading) = (key.clone(), cache_key.clone());
         if let Some(text) = self.off(move |b| b.cache_of(&wanted).read::<String>(&reading)).await.ok().flatten() {
             return Ok(text);
         }
-        let short = sha.get(..8).unwrap_or(sha);
+        let short = sha.as_str().get(..8).unwrap_or(sha.as_str());
         let text = self.forge_of(key).file(key, path, sha).await.with_context(|| format!("{path} at {short} · v tries again"))?;
         anyhow::ensure!(
             text.len() <= crate::open::MAX_BYTES,
@@ -1363,7 +1364,7 @@ mod tests {
         let moved = crate::forge::QueueMr { updated_at: mr.updated_at + chrono::TimeDelta::minutes(5), ..mr };
         assert!(backend.triage(&moved).await.is_err(), "a moved MR needs Jev, which is off here");
         let reading = triage::Reading { waits_on_me: true, risks: BTreeMap::new() };
-        backend.cache.write(&keys::reading(&key(), "abc"), &reading).unwrap();
+        backend.cache.write(&keys::reading(&key(), &"abc".into()), &reading).unwrap();
         let Ok(Incoming::Read { reading: read, .. }) = backend.read(key(), "abc".into(), None, vec![]).await else { panic!("cached") };
         assert!(read.waits_on_me);
     }
@@ -1405,9 +1406,9 @@ mod tests {
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
         let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
-        backend.ask(&key(), 1, &request, false, "explain", "b2", &listen).await;
-        backend.ask(&key(), 2, &request, false, "explain", "b2", &listen).await;
-        backend.ask(&key(), 3, &request, true, "explain", "b2", &listen).await;
+        backend.ask(&key(), 1, &request, false, "explain", &"b2".into(), &listen).await;
+        backend.ask(&key(), 2, &request, false, "explain", &"b2".into(), &listen).await;
+        backend.ask(&key(), 3, &request, true, "explain", &"b2".into(), &listen).await;
         let heard = heard.into_inner().unwrap();
         let cached: Vec<_> = heard
             .iter()
@@ -1493,11 +1494,13 @@ mod tests {
         mount_mr(&server, "2026-09-22T09:00:00Z", [2, 2, 0, 1, 1]).await;
         let dir = tempfile::tempdir().unwrap();
         let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        let Ok(Incoming::Mr { mr, .. }) = backend.poll_review(key(), "bbbb").await else { panic!("the head did not move") };
-        assert_eq!(mr.refs.head, "bbbb");
+        let Ok(Incoming::Mr { mr, .. }) = backend.poll_review(key(), &"bbbb".into()).await else { panic!("the head did not move") };
+        assert_eq!(mr.refs.head.as_str(), "bbbb");
         assert!(backend.state(&key()).opened_at.is_some());
-        backend.cache.write(&keys::diffs(&key(), "bbbb"), &Vec::<DiffFile>::new()).unwrap();
-        let Ok(Incoming::Review { review, cached: None, .. }) = backend.poll_review(key(), "aaaa").await else { panic!("the head moved") };
+        backend.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
+        let Ok(Incoming::Review { review, cached: None, .. }) = backend.poll_review(key(), &"aaaa".into()).await else {
+            panic!("the head moved")
+        };
         assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");
     }
 
@@ -1653,7 +1656,7 @@ mod tests {
             .await;
         let backend = Backend { open: crate::config::Open { default: Some("nvim".into()), files: BTreeMap::new() }, ..backend_on(&server) };
         for _ in 0..2 {
-            let Incoming::ViewReady { view, .. } = backend.view(key(), "src/pay/charge.rs", "bbbb", 12, None).await.unwrap() else {
+            let Incoming::ViewReady { view, .. } = backend.view(key(), "src/pay/charge.rs", &"bbbb".into(), 12, None).await.unwrap() else {
                 panic!("not ready")
             };
             let file = std::path::Path::new(&view.argv[3]);
@@ -1662,7 +1665,7 @@ mod tests {
             assert_eq!(std::fs::metadata(file).unwrap().permissions().mode() & 0o777, 0o400);
             assert_eq!(view.shown, "charge.rs:12");
         }
-        let refused = backend.view(key(), "../../etc/passwd", "bbbb", 1, None).await.unwrap_err();
+        let refused = backend.view(key(), "../../etc/passwd", &"bbbb".into(), 1, None).await.unwrap_err();
         assert!(refused.to_string().contains("does not trust"), "{refused}");
     }
 

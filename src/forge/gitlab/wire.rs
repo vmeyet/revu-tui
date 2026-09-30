@@ -99,7 +99,40 @@ pub struct DiffRefs {
 
 impl From<DiffRefs> for Refs {
     fn from(refs: DiffRefs) -> Self {
-        Self { base: refs.base_sha, start: refs.start_sha, head: refs.head_sha }
+        Self { base: refs.base_sha.into(), start: refs.start_sha.into(), head: refs.head_sha.into() }
+    }
+}
+
+/// One file of `GET …/merge_requests/:iid/diffs`.
+#[derive(Deserialize)]
+pub struct DiffFile {
+    pub diff: String,
+    pub old_path: String,
+    pub new_path: String,
+    #[serde(default)]
+    pub a_mode: String,
+    #[serde(default)]
+    pub b_mode: String,
+    #[serde(default)]
+    pub new_file: bool,
+    #[serde(default)]
+    pub renamed_file: bool,
+    #[serde(default)]
+    pub deleted_file: bool,
+    #[serde(default)]
+    pub too_large: bool,
+}
+
+impl From<DiffFile> for forge::DiffFile {
+    fn from(file: DiffFile) -> Self {
+        let change = match () {
+            () if file.new_file => forge::FileKind::Added,
+            () if file.deleted_file => forge::FileKind::Deleted,
+            () if file.renamed_file => forge::FileKind::Renamed,
+            () if file.diff.is_empty() && file.a_mode != file.b_mode => forge::FileKind::Mode,
+            () => forge::FileKind::Modified,
+        };
+        Self { diff: file.diff, old_path: file.old_path, new_path: file.new_path, change, too_large: file.too_large }
     }
 }
 
@@ -252,7 +285,7 @@ impl Position {
         line.number()?;
         let new_path = self.new_path.clone().or_else(|| self.old_path.clone())?;
         Some(forge::Position {
-            refs: Refs { base: self.base_sha, start: self.start_sha, head: self.head_sha },
+            refs: Refs { base: self.base_sha.into(), start: self.start_sha.into(), head: self.head_sha.into() },
             old_path: self.old_path.unwrap_or_else(|| new_path.clone()),
             new_path,
             line,
@@ -264,9 +297,9 @@ impl Position {
     /// `line_code` of each edge.
     pub fn from_model(position: &forge::Position) -> Self {
         Self {
-            base_sha: position.refs.base.clone(),
-            head_sha: position.refs.head.clone(),
-            start_sha: position.refs.start.clone(),
+            base_sha: position.refs.base.to_string(),
+            head_sha: position.refs.head.to_string(),
+            start_sha: position.refs.start.to_string(),
             position_type: "text".into(),
             old_path: Some(position.old_path.clone()),
             new_path: Some(position.new_path.clone()),
@@ -410,6 +443,21 @@ mod tests {
 
     fn sha(path: &str) -> String {
         sha1_smol::Sha1::from(path.as_bytes()).digest().to_string()
+    }
+
+    #[test]
+    fn file_kinds_follow_the_flags_and_an_empty_body_with_new_modes() {
+        let kind = |extra: serde_json::Value| {
+            let mut file = serde_json::json!({"diff": "@@ -1 +1 @@\n-a\n+b\n", "old_path": "a.rs", "new_path": "a.rs"});
+            file.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            forge::DiffFile::from(parse::<DiffFile>(&file.to_string())).change
+        };
+        assert_eq!(kind(serde_json::json!({"new_file": true})), forge::FileKind::Added);
+        assert_eq!(kind(serde_json::json!({"deleted_file": true})), forge::FileKind::Deleted);
+        assert_eq!(kind(serde_json::json!({"renamed_file": true})), forge::FileKind::Renamed);
+        assert_eq!(kind(serde_json::json!({"diff": "", "a_mode": "100644", "b_mode": "100755"})), forge::FileKind::Mode);
+        assert_eq!(kind(serde_json::json!({"a_mode": "100644", "b_mode": "100755"})), forge::FileKind::Modified);
+        assert_eq!(kind(serde_json::json!({})), forge::FileKind::Modified);
     }
 
     fn refs() -> Refs {

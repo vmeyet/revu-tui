@@ -207,7 +207,8 @@ impl Client {
     }
 
     pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
-        self.http.get_all(&format!("{}/diffs", mr_path(key))).await
+        let files: Vec<wire::DiffFile> = self.http.get_all(&format!("{}/diffs", mr_path(key))).await?;
+        Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
     /// The threads, each note with its reactions; the threads still come when reactions cannot be read.
@@ -498,7 +499,7 @@ mod tests {
             .await;
         let files = client(&server).diffs(&key()).await.unwrap();
         assert_eq!(files.iter().map(|f| f.new_path.as_str()).collect::<Vec<_>>(), ["f1", "f2"]);
-        assert!(files[0].new_file);
+        assert_eq!(files[0].change, forge::FileKind::Added);
     }
 
     fn draft_json(id: u64) -> serde_json::Value {
