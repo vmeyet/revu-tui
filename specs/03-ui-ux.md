@@ -233,6 +233,7 @@ The old file on the left, the new one on the right, as GitLab shows it:
 - Side by side steps aside while a peek is on and comes back with the diff.
 - The cursor stays on its line, or moves to its hunk when that line belongs to the other side.
 - A toast says `after`, `before` or `diff`; the peek is not saved and outlives a refresh.
+- While a peek is on, a bold ` BEFORE ` on `danger` or ` AFTER ` on `success` leads the header's first row, folded and zen included.
 
 ### Anchors in the flow
 

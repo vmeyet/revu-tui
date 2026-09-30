@@ -309,9 +309,12 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     let age = short_age((today - mr.updated_at).to_std().unwrap_or_default());
     let status = mr.pipeline.as_ref().map(|p| p.status);
     let (glyph, colour) = status.map_or(("", theme.faded), |s| pipeline_glyph(s, theme));
-    let branch_room = width.saturating_sub(40);
+    let badge = peek_badge(open.review.peek, theme);
+    let branch_room = width.saturating_sub(40 + badge.iter().map(Span::width).sum::<usize>());
     let branches = format!("{} → {}", mr.source_branch, mr.target_branch);
-    let mut first = vec![Span::raw(" "), Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username)))];
+    let mut first = vec![Span::raw(" ")];
+    first.extend(badge);
+    first.push(Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))));
     if branch_room >= MIN_BRANCH_W {
         first.push(dot());
         first.push(Span::styled(truncate(&branches, branch_room), muted));
@@ -411,8 +414,10 @@ fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<
     let threads = if unresolved > 0 { format!(" · ◆{unresolved}") } else { String::new() };
     let tail = format!(" · {} · +{adds} −{dels}{pipeline}{threads}", mr.author.username);
     let head = format!("{sigil}{} ", mr.number);
-    let title = truncate(&mr.title, width.saturating_sub(head.width() + tail.width()));
-    Line::from(Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded)))
+    let badge = peek_badge(open.review.peek, theme);
+    let room = width.saturating_sub(badge.iter().map(Span::width).sum::<usize>() + head.width() + tail.width());
+    let title = truncate(&mr.title, room);
+    Line::from([badge, vec![Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded))]].concat())
 }
 
 /// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
@@ -421,14 +426,15 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
     let pipeline = mr.pipeline.as_ref().map(|p| pipeline_glyph(p.status, theme));
-    let mut spans = vec![
+    let mut spans = peek_badge(open.review.peek, theme);
+    spans.extend([
         Span::styled("▸ ", Style::default().fg(theme.faded)),
         Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))),
         dot(),
         Span::styled(format!("+{adds}"), Style::default().fg(theme.success)),
         Span::raw(" "),
         Span::styled(format!("−{dels}"), Style::default().fg(theme.danger)),
-    ];
+    ]);
     if let Some((glyph, colour)) = pipeline {
         spans.extend([dot(), Span::styled(glyph, Style::default().fg(colour))]);
     }
@@ -437,6 +443,16 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
         spans.extend([dot(), Span::styled(format!("{unresolved} unresolved"), Style::default().fg(theme.warn))]);
     }
     Line::from(spans)
+}
+
+/// The side a peek reads, loud at the head of the header, then a gap; nothing while the diff shows.
+fn peek_badge<'a>(peek: Option<Side>, theme: Theme) -> Vec<Span<'a>> {
+    let Some(side) = peek else { return vec![] };
+    let (word, ground) = match side {
+        Side::Old => (" BEFORE ", theme.danger),
+        Side::New => (" AFTER ", theme.success),
+    };
+    vec![Span::styled(word, Style::default().fg(theme.base).bg(ground).add_modifier(Modifier::BOLD)), Span::raw(" ")]
 }
 
 pub(super) fn pipeline_glyph(status: PipelineStatus, theme: Theme) -> (&'static str, ratatui::style::Color) {
