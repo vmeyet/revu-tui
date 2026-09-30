@@ -244,6 +244,8 @@ impl App {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('D') => return self.toggle_side_by_side(),
+            KeyCode::Char('>') => return self.cycle_peek(true),
+            KeyCode::Char('<') => return self.cycle_peek(false),
             KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('p') => return self.toggle_pipeline(),

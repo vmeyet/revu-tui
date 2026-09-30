@@ -31,6 +31,8 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("prev_mr", "[m"),
     ("next_mr", "]m"),
     ("side_by_side", "D"),
+    ("peek_after", ">"),
+    ("peek_before", "<"),
     ("tree", "t"),
     ("every_thread", "T"),
     ("pipeline", "p"),
@@ -65,7 +67,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
 ];
 
 /// Every key revu reads outside a text box, in some pane: a user key may not take one of them.
-const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtTpWw+=xcCVsEPAMmedJKRSuYnN?'123456789";
+const TAKEN: &str = "qhHl:z[]ai/*royjkgGDtTpWw+=<>xcCVsEPAMmedJKRSuYnN?'123456789";
 
 /// The second keys each built-in prefix already reads.
 const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "erstah")];

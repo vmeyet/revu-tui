@@ -485,7 +485,8 @@ fn row_line<'a>(
         Row::Line { file, hunk, index } => {
             let file = &review.files[*file];
             let line = &file.hunks[*hunk].lines[*index];
-            let drawn = line_spans(line, file.spans(*hunk, *index), selected || in_range, body, theme);
+            let shown = review.peek.map(|side| peeked(line, side));
+            let drawn = line_spans(shown.as_ref().unwrap_or(line), file.spans(*hunk, *index), selected || in_range, body, theme);
             spans.extend(with_table_lines(drawn, file, &line.text, overflow, theme));
         }
         Row::Pair { file, hunk, removed, added } => {
@@ -501,6 +502,10 @@ fn row_line<'a>(
         }
         Row::Context { file, old, new, .. } => {
             let line = context_line(review, *file, *old, *new);
+            let line = match review.peek {
+                Some(side) => peeked(&line, side),
+                None => line,
+            };
             let file = &review.files[*file];
             spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, overflow, theme));
         }
@@ -953,6 +958,15 @@ fn quiet(line: &DiffLine) -> DiffLine {
     DiffLine { kind: LineKind::Context, words: vec![], ..line.clone() }
 }
 
+/// A line of the side a peek reads, drawn as plain code numbered on that side alone.
+fn peeked(line: &DiffLine, side: Side) -> DiffLine {
+    let (old, new) = match side {
+        Side::Old => (line.old, None),
+        Side::New => (None, line.new),
+    };
+    DiffLine { old, new, ..quiet(line) }
+}
+
 fn with_quiet_sign(mut spans: Vec<Span<'_>>, theme: Theme) -> Vec<Span<'_>> {
     if let Some(sign) = spans.get_mut(1) {
         *sign = Span::styled("≈", Style::default().fg(theme.faded));
@@ -1152,6 +1166,20 @@ mod tests {
             (half(1..21), half(21..text.len()))
         };
         lines.flatten().map(split).collect()
+    }
+
+    #[test]
+    fn a_peek_draws_its_side_without_signs_or_fills_numbered_on_that_side_alone() {
+        let peek = |side| side_by_side_of("@@ -1,2 +1,2 @@\n a\n-b\n+B\n", "a.txt").with_peek(Some(side));
+        let drawn = |review: Review| -> Vec<String> {
+            let anchors = Anchors { markers: review.markers(), stretch: None };
+            let lines = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. }));
+            lines
+                .map(|row| spans_text(&row_line(&review, &anchors, &row, false, false, Overflow::Cut(40), Theme::default()).spans))
+                .collect()
+        };
+        assert_eq!(drawn(peek(Side::Old)), ["      1       a", "      2       b"]);
+        assert_eq!(drawn(peek(Side::New)), ["           1  a", "           2  B"]);
     }
 
     #[test]

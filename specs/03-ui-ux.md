@@ -225,6 +225,15 @@ The old file on the left, the new one on the right, as GitLab shows it:
 - Each half wants at least 50 columns of code, 117 for the diff area with the cursor bar and both gutters. A narrower one (resize, the pane opening, leaving zen) shows inline and toasts `side by side needs a wider window` once; the choice stays saved and comes back once the area is wide again.
 - Saved per MR as `side_by_side`; a state saved as `split` by an older revu reads as side by side, and so does the action `split` in `[keys.bind]` and in the usage counts.
 
+### Before and after
+
+`>` and `<` read one side of the diff alone, as plain code: `>` goes diff, after, before, diff; `<` the other way round.
+
+- Every hunk keeps only the lines of its side, with no sign, no fill and no word marks, only its syntax colours and the number of its side; the lines `=` shows stay around them.
+- Side by side steps aside while a peek is on and comes back with the diff.
+- The cursor stays on its line, or moves to its hunk when that line belongs to the other side.
+- A toast says `after`, `before` or `diff`; the peek is not saved and outlives a refresh.
+
 ### Anchors in the flow
 
 Built (M3b, `09-thread-pane.md`): no row is inserted for a conversation.
@@ -322,6 +331,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
 | `D` | inline diff, or side by side | M3 |
+| `>` `<` | the code after, before, alone | post-M5 |
 | `=` | more context around the hunk | M3 |
 | `+` | react to the thread on the line | M5 |
 | `c` | comment on the line (draft) | M2 |

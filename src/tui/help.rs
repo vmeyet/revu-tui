@@ -63,6 +63,7 @@ pub const GROUPS: [Group; 7] = [
             ("/ n N", "find text in the MR, next, previous"),
             ("i", "the MR cover page"),
             ("D", "inline diff, or side by side"),
+            ("> <", "the code after, before, alone"),
             ("t", "file tree"),
             ("T", "every thread of the MR"),
             ("p", "pipeline"),

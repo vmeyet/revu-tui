@@ -1,7 +1,7 @@
 use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef, Sha};
-use crate::review::{Draft, Review, Row};
+use crate::review::{Draft, Review, Row, Side};
 use std::time::{Duration, Instant};
 
 /// The MR on screen: the review plus where the reader is in it.
@@ -68,6 +68,7 @@ impl Open {
         self.relaid(|old| Review {
             side_by_side: old.side_by_side,
             wide: old.wide,
+            peek: old.peek,
             quiet_whitespace: old.quiet_whitespace,
             context: if same_head { old.context } else { crate::review::Context::default() },
             ..review
@@ -146,8 +147,7 @@ impl Open {
         let anchor = self.row().cloned();
         let review = change(self.review);
         let rows = review.rows();
-        let selected =
-            anchor.and_then(|row| rows.iter().position(|r| same_place(r, &row))).unwrap_or(self.selected).min(rows.len().saturating_sub(1));
+        let selected = anchor.and_then(|row| find_again(&rows, &row)).unwrap_or(self.selected).min(rows.len().saturating_sub(1));
         Self { review, rows, selected, ..self }
     }
 
@@ -200,6 +200,22 @@ pub(super) fn same_place(before: &Row, after: &Row) -> bool {
             file == line_file && hunk == line_hunk && (index == removed || index == added)
         }
         _ => before == after,
+    }
+}
+
+/// Where `row` sits in `rows`: itself or its pair, else the hunk it sat in.
+fn find_again(rows: &[Row], row: &Row) -> Option<usize> {
+    let hunk = row.hunk();
+    let in_hunk = |r: &Row| hunk.is_some() && matches!(r, Row::Hunk { .. }) && r.hunk() == hunk;
+    rows.iter().position(|r| same_place(r, row)).or_else(|| rows.iter().position(in_hunk))
+}
+
+/// The side `>` shows after `peek`, or `<` when not `forward`: diff, after, before, and round.
+fn next_peek(peek: Option<Side>, forward: bool) -> Option<Side> {
+    match (peek, forward) {
+        (None, true) | (Some(Side::Old), false) => Some(Side::New),
+        (Some(Side::New), true) | (None, false) => Some(Side::Old),
+        (Some(Side::Old), true) | (Some(Side::New), false) => None,
     }
 }
 
@@ -345,6 +361,22 @@ impl App {
             (false, _) => "inline diff",
         });
         self.keep(next)
+    }
+
+    /// `>` and `<`: the diff, the code after, the code before, each key the other way round.
+    pub(super) fn cycle_peek(&mut self, forward: bool) -> Vec<Action> {
+        let Some(open) = self.open.take() else { return vec![] };
+        let next = open.relaid(|review| {
+            let peek = next_peek(review.peek, forward);
+            review.with_peek(peek)
+        });
+        self.toast(match next.review.peek {
+            Some(Side::Old) => "before",
+            Some(Side::New) => "after",
+            None => "diff",
+        });
+        self.open = Some(next);
+        vec![]
     }
 
     /// The diff area is drawn wide enough for two sides, or not: side by side falls back to inline
@@ -527,6 +559,36 @@ mod tests {
         let actions = press(&mut app, "D");
         assert!(matches!(actions.as_slice(), [Action::SaveState { side_by_side: false, .. }]));
         assert!(matches!(row_of(&app), Some(Row::Line { index: 5, .. })), "{:?}", row_of(&app));
+    }
+
+    fn peeked(app: &App) -> Vec<usize> {
+        app.open.as_ref().unwrap().rows.iter().filter_map(|r| if let Row::Line { index, .. } = r { Some(*index) } else { None }).collect()
+    }
+
+    #[test]
+    fn angle_brackets_cycle_the_diff_through_after_and_before_each_the_other_way() {
+        let mut app = with_sum_review();
+        let diff = app.open.as_ref().unwrap().rows.clone();
+        press(&mut app, ">");
+        assert_eq!((peeked(&app), app.live_toast().map(|t| t.text.clone())), (vec![0, 1, 3, 4, 6, 7], Some("after".to_owned())));
+        press(&mut app, ">");
+        assert_eq!((peeked(&app), app.live_toast().map(|t| t.text.clone())), (vec![0, 1, 2, 4, 5, 7], Some("before".to_owned())));
+        press(&mut app, ">");
+        assert_eq!(app.open.as_ref().unwrap().rows, diff, "back to the diff");
+        press(&mut app, "<");
+        assert_eq!(peeked(&app), vec![0, 1, 2, 4, 5, 7], "< goes to before first");
+        press(&mut app, "<");
+        assert_eq!(peeked(&app), vec![0, 1, 3, 4, 6, 7]);
+    }
+
+    #[test]
+    fn a_peek_keeps_the_cursor_on_its_line_or_on_its_hunk_when_the_line_hides() {
+        let mut app = with_sum_review();
+        walk_to(&mut app, |r| matches!(r, Row::Line { index: 6, .. }));
+        press(&mut app, ">");
+        assert!(matches!(row_of(&app), Some(Row::Line { index: 6, .. })), "{:?}", row_of(&app));
+        press(&mut app, ">");
+        assert!(matches!(row_of(&app), Some(Row::Hunk { index: 0, .. })), "{:?}", row_of(&app));
     }
 
     #[test]

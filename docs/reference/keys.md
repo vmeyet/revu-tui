@@ -41,6 +41,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `/` `n` `N` | find text in the MR, next, previous |
 | `i` | the MR cover page |
 | `D` | inline diff, or side by side |
+| `>` `<` | the code after, before, alone |
 | `t` | file tree |
 | `T` | every thread of the MR |
 | `p` | pipeline |
@@ -148,6 +149,8 @@ A bound key adds to the default key, it does not replace it.
 | `prev_mr` | `[m` |
 | `next_mr` | `]m` |
 | `side_by_side` | `D` |
+| `peek_after` | `>` |
+| `peek_before` | `<` |
 | `tree` | `t` |
 | `every_thread` | `T` |
 | `pipeline` | `p` |

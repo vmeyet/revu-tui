@@ -183,6 +183,17 @@ impl Row {
             Row::Header | Row::Gap => None,
         }
     }
+
+    /// The file and hunk a row sits in, a hunk row its own.
+    pub fn hunk(&self) -> Option<(usize, usize)> {
+        match self {
+            Row::Hunk { file, index: hunk, .. }
+            | Row::Line { file, hunk, .. }
+            | Row::Pair { file, hunk, .. }
+            | Row::Context { file, hunk, .. } => Some((*file, *hunk)),
+            Row::Header | Row::File { .. } | Row::Gap => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -202,6 +213,8 @@ pub struct Review {
     pub side_by_side: bool,
     /// The diff area holds two sides of code; below, side by side falls back to inline.
     pub wide: bool,
+    /// One side of the diff alone, as plain code: before on the old side, after on the new, `<` `>` in the TUI.
+    pub peek: Option<Side>,
     /// Lines that changed only in whitespace read as one quiet row, `W` in the TUI.
     pub quiet_whitespace: bool,
     /// Unchanged lines shown around hunks, `+` in the TUI.
@@ -234,6 +247,7 @@ impl Review {
             inline: InlineRule::default(),
             side_by_side: false,
             wide: true,
+            peek: None,
             quiet_whitespace: false,
             context: Context::default(),
         }
@@ -255,9 +269,34 @@ impl Review {
         Self { wide, ..self }
     }
 
-    /// Side by side was chosen and the diff is wide enough for it.
+    pub fn with_peek(self, peek: Option<Side>) -> Self {
+        Self { peek, ..self }
+    }
+
+    /// Side by side was chosen, the diff is wide enough for it and no peek reads one side alone.
     pub fn shows_side_by_side(&self) -> bool {
-        self.side_by_side && self.wide
+        self.side_by_side && self.wide && self.peek.is_none()
+    }
+
+    fn shows_line(&self, line: &diff::Line) -> bool {
+        match self.peek {
+            None => true,
+            Some(Side::Old) => line.kind != LineKind::Added,
+            Some(Side::New) => line.kind != LineKind::Removed,
+        }
+    }
+
+    /// The removed and added lines of `hunk` read as one row; none while a peek shows one side.
+    fn pairs(&self, hunk: &Hunk) -> Vec<(usize, usize)> {
+        if self.peek.is_some() {
+            return vec![];
+        }
+        let mut pairs = if self.shows_side_by_side() { words::side_by_side_pairs(hunk) } else { words::inline_pairs(hunk, self.inline) };
+        if self.quiet_whitespace {
+            let quiet: Vec<(usize, usize)> = words::whitespace_pairs(hunk).into_iter().filter(|pair| !pairs.contains(pair)).collect();
+            pairs.extend(quiet);
+        }
+        pairs
     }
 
     pub fn with_context(self, context: Context) -> Self {
@@ -399,14 +438,9 @@ impl Review {
                 let offset = i64::from(hunk.old_start) - i64::from(hunk.new_start);
                 rows.extend((from..hunk.new_start).map(|new| context_row(index, hunk_index, offset, new)));
             }
-            let mut pairs =
-                if self.shows_side_by_side() { words::side_by_side_pairs(hunk) } else { words::inline_pairs(hunk, self.inline) };
-            if self.quiet_whitespace {
-                let quiet: Vec<(usize, usize)> = words::whitespace_pairs(hunk).into_iter().filter(|pair| !pairs.contains(pair)).collect();
-                pairs.extend(quiet);
-            }
-            for line_index in 0..hunk.lines.len() {
-                if pairs.iter().any(|&(_, added)| added == line_index) {
+            let pairs = self.pairs(hunk);
+            for (line_index, line) in hunk.lines.iter().enumerate() {
+                if !self.shows_line(line) || pairs.iter().any(|&(_, added)| added == line_index) {
                     continue;
                 }
                 if let Some(&(removed, added)) = pairs.iter().find(|&&(removed, _)| removed == line_index) {
@@ -720,6 +754,14 @@ pub(crate) mod tests {
         assert_eq!(line_rows(&review), [(0, 0), (1, 4), (2, 2), (3, 3), (5, 5), (6, 7), (8, 8), (9, 9)]);
         let folded = review.clone().with_fold(review.fold.toggle_hunk("a.rs", 0));
         assert!(line_rows(&folded).is_empty(), "a folded hunk hides its rows side by side too");
+    }
+
+    #[test]
+    fn a_peek_keeps_one_side_of_every_hunk_as_plain_lines() {
+        let review = review_of_one("@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n").with_side_by_side(true);
+        assert_eq!(line_rows(&review.clone().with_peek(Some(Side::Old))), [(0, 0), (1, 1), (3, 3)], "before: no added line, no pair");
+        assert_eq!(line_rows(&review.clone().with_peek(Some(Side::New))), [(0, 0), (2, 2), (3, 3)], "after: no removed line");
+        assert!(!review.with_peek(Some(Side::New)).shows_side_by_side(), "a peek reads one side, never two");
     }
 
     #[test]
