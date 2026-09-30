@@ -407,3 +407,177 @@ fn palette_key(key: KeyEvent) -> Option<crate::tui::palette::Mode> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn zh_folds_the_review_header_to_one_row() {
+        let mut app = with_review();
+        press(&mut app, "zh");
+        assert!(app.header_folded);
+        let screen = render(&mut app, 120, 24);
+        assert!(screen.contains("▸ "), "{screen}");
+        press(&mut app, "zh");
+        assert!(!app.header_folded);
+    }
+
+    #[test]
+    fn r_refreshes_once_and_o_y_take_the_mr_url() {
+        let mut app = with_queue();
+        assert_eq!(press(&mut app, "r"), vec![Action::LoadQueue { scope: None, from_cache: false }]);
+        assert_eq!(press(&mut app, "r"), vec![], "not while one is in flight");
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+        let url = "https://gitlab.com/acme/widgets/-/merge_requests/42".to_owned();
+        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(url.clone())]);
+        assert_eq!(press(&mut app, "y"), vec![Action::Yank(url)]);
+    }
+
+    #[test]
+    fn h_l_and_esc_move_the_focus() {
+        let mut app = with_review();
+        press(&mut app, "h");
+        assert_eq!(app.focus, Focus::Queue);
+        press(&mut app, "l");
+        assert_eq!(app.focus, Focus::Review);
+        press(&mut app, "l");
+        assert_eq!(app.focus, Focus::Side, "the file row opens its outdated threads");
+        app.handle_key(code(KeyCode::Esc));
+        assert_eq!(app.focus, Focus::Review, "esc closes the pane first");
+        app.handle_key(code(KeyCode::Esc));
+        assert_eq!(app.focus, Focus::Queue);
+    }
+
+    #[test]
+    fn help_and_quit() {
+        let mut app = app();
+        press(&mut app, "?");
+        assert_eq!(app.help, Some(Help::default()));
+        press(&mut app, "jjk");
+        assert_eq!(app.help, Some(Help { scroll: 1, every_key: false }), "moving keys scroll the list");
+        press(&mut app, "G");
+        assert_eq!(app.help, Some(Help { scroll: crate::tui::help::last_row(false, Focus::Queue), every_key: false }));
+        press(&mut app, "?");
+        assert_eq!(app.help, Some(Help { scroll: 0, every_key: true }), "a second `?` lists every key from the top");
+        press(&mut app, "G");
+        assert_eq!(app.help.map(|h| h.scroll), Some(crate::tui::help::last_row(true, Focus::Queue)));
+        press(&mut app, "?");
+        assert_eq!(app.help, None, "`?` on every key closes it");
+        press(&mut app, "?x");
+        assert_eq!(app.help, None, "any other key closes it");
+        app.handle_key(ctrl('c'));
+        app.handle_key(ctrl('c'));
+        assert!(app.should_quit);
+    }
+
+    /// The group titles the open key list shows, as its uppercase headers.
+    fn help_titles(app: &mut App) -> Vec<&'static str> {
+        let screen = render(app, 160, 45);
+        crate::tui::help::GROUPS.iter().map(|g| g.title).filter(|t| screen.contains(&format!("  {} ", t.to_uppercase()))).collect()
+    }
+
+    #[test]
+    fn the_first_question_mark_lists_the_keys_of_the_focused_pane_and_the_second_every_key() {
+        let mut queue = with_queue();
+        press(&mut queue, "?");
+        assert_eq!(help_titles(&mut queue), ["move", "queue", "search & app"]);
+        let mut diff = with_review();
+        assert_eq!(diff.focus, Focus::Review);
+        press(&mut diff, "?");
+        assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "ask claude", "search & app"]);
+        let mut thread = with_review();
+        press(&mut thread, "]N");
+        thread.handle_key(code(KeyCode::Enter));
+        assert_eq!(thread.focus, Focus::Side);
+        press(&mut thread, "?");
+        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "ask claude", "search & app"]);
+        press(&mut thread, "?");
+        assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(|g| g.title));
+        thread.handle_key(code(KeyCode::Esc));
+        assert_eq!(thread.help, None);
+    }
+
+    #[test]
+    fn right_from_the_queue_opens_the_selected_mr_like_enter() {
+        let mut app = with_queue();
+        assert_eq!(press(&mut app, "l"), vec![Action::Open(mr_key())]);
+        assert_eq!(app.focus, Focus::Review);
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+        press(&mut app, "hj");
+        let next = app.selected_mr().unwrap().key();
+        assert_ne!(next, mr_key());
+        assert_eq!(press(&mut app, "l"), vec![Action::Open(next)], "the diff must follow the queue row, never show the previous MR");
+        assert_eq!(app.focus, Focus::Review);
+    }
+
+    fn with_keys(toml: &str) -> App {
+        let mut app = with_review();
+        app.keymap = keymap(toml);
+        app
+    }
+
+    #[test]
+    fn with_the_azerty_preset_parentheses_jump_like_brackets() {
+        let mut plain = with_review();
+        let before = plain.open.as_ref().unwrap().row().cloned();
+        press(&mut plain, ")n");
+        assert_eq!(plain.open.as_ref().unwrap().row().cloned(), before, "without the preset `)n` does nothing");
+        let mut app = with_keys(r#"layout = "azerty""#);
+        press(&mut app, ")c)c)n");
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`)c` twice then `)n`, as `]c]c]n` would");
+        press(&mut app, ")N");
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "`)N` stops on the resolved thread");
+        press(&mut app, "(N");
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`(N` goes back");
+        press(&mut app, "]N");
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "brackets keep working");
+    }
+
+    #[test]
+    fn a_bound_key_does_what_its_action_does_and_a_two_key_one_waits() {
+        let mut app = with_keys(r#"bind = { next_hunk = "F", next_any_thread = ["ft", "ctrl-e"] }"#);
+        press(&mut app, "F");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
+        press(&mut app, "f");
+        assert!(app.held.is_some(), "`f` waits for its second key");
+        press(&mut app, "t");
+        assert!(app.held.is_none());
+        assert_eq!(
+            app.open.as_ref().unwrap().row(),
+            Some(&Row::Line { file: 0, hunk: 0, index: 1 }),
+            "`ft` is `]N`: the marked line after the hunk"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`ctrl-e` is `]N` too, and wraps to the MR's thread");
+    }
+
+    #[test]
+    fn a_key_bound_to_help_widens_and_closes_the_list_like_the_question_mark() {
+        let mut app = with_queue();
+        app.keymap = keymap("[bind]\nhelp = \"F\"");
+        press(&mut app, "F");
+        assert_eq!(app.help, Some(Help::default()));
+        press(&mut app, "F");
+        assert_eq!(app.help, Some(Help { scroll: 0, every_key: true }));
+        press(&mut app, "F");
+        assert_eq!(app.help, None);
+    }
+
+    #[test]
+    fn page_down_and_space_page_like_ctrl_d_and_count_as_page_down() {
+        let mut paged = counting();
+        let mut spaced = with_long_review();
+        let mut ctrl_d = with_long_review();
+        paged.handle_key(code(KeyCode::PageDown));
+        press(&mut spaced, " ");
+        ctrl_d.handle_key(ctrl('d'));
+        let selected = |app: &App| app.open.as_ref().unwrap().selected;
+        assert_eq!((selected(&paged), selected(&spaced)), (selected(&ctrl_d), selected(&ctrl_d)));
+        paged.handle_key(code(KeyCode::PageUp));
+        assert_eq!(selected(&paged), selected(&with_long_review()));
+        let counts = paged.take_usage().unwrap();
+        assert_eq!((counts.actions.get("page_down"), counts.actions.get("page_up")), (Some(&1), Some(&1)));
+    }
+}

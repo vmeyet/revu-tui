@@ -155,3 +155,136 @@ pub struct Prompt {
 pub fn failure(thread: String, index: usize, emoji: Emoji, on: bool) -> Failure {
     Failure::React { thread, index, emoji, on }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    /// A thread open in the pane whose one note already has `👍 2`, one of them mine.
+    fn with_reactions() -> App {
+        let mut app = with_suggestion("Nice", json!([]));
+        let mut all = discussions();
+        let mut note: serde_json::Value = serde_json::from_str(include_str!("../../forge/gitlab/fixtures/diff_note.json")).unwrap();
+        note["id"] = json!("5ugg");
+        note["notes"][0]["body"] = json!("Nice");
+        note["notes"][0]["position"]["new_line"] = json!(13);
+        let mut thread = fixture::discussion(&note.to_string());
+        thread.notes[0].node = Some("gid://gitlab/DiffNote/1".into());
+        thread.notes[0].reactions = vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }];
+        all.push(thread);
+        app.apply(Incoming::Discussions { key: mr_key(), discussions: all });
+        app
+    }
+
+    fn reactions_of(app: &App) -> Vec<crate::forge::Reaction> {
+        app.open.as_ref().unwrap().review.thread("5ugg").unwrap().notes[0].reactions.clone()
+    }
+
+    #[test]
+    fn plus_opens_the_picker_and_a_digit_toggles_my_reaction_at_once() {
+        let mut app = with_reactions();
+        let screen = render(&mut app, 150, 24);
+        assert!(screen.contains("👍") && screen.contains(" 2"), "the count shows under the note:\n{screen}");
+        assert_eq!(press(&mut app, "+"), vec![]);
+        assert!(render(&mut app, 150, 24).contains("react"), "the picker takes the status line");
+        let actions = press(&mut app, "7");
+        let [Action::React { emoji, on, note, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((*emoji, *on, note.node.as_deref()), (Emoji::Rocket, true, Some("gid://gitlab/DiffNote/1")));
+        assert!(reactions_of(&app).contains(&crate::forge::Reaction { emoji: Emoji::Rocket, count: 1, mine: true }));
+        assert!(app.react.is_none(), "one pick closes the picker");
+        press(&mut app, "+");
+        assert!(app.react.is_some(), "the picker opens again");
+        let actions = app.handle_key(code(KeyCode::Enter));
+        let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((*emoji, *on), (Emoji::ThumbsUp, false), "enter on my own reaction takes it off");
+        assert_eq!(reactions_of(&app)[0], crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 1, mine: false });
+    }
+
+    #[test]
+    fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_does_nothing() {
+        let mut app = with_reactions();
+        app.close_pane();
+        app.zen = true;
+        let mut open = app.open.clone().unwrap();
+        let place = Place::Line { file: 0, new: Some(13), old: None };
+        open.selected = open.rows.iter().position(|r| open.review.place_of(r).as_ref() == Some(&place)).unwrap();
+        app.open = Some(open);
+        assert_eq!(press(&mut app, "+"), vec![]);
+        assert_eq!(app.react.as_ref().map(|p| (p.thread.as_str(), p.note)), Some(("5ugg", 0)), "the line's first note");
+        assert_eq!(app.focus, Focus::Review, "the diff keeps the focus");
+        assert!(render(&mut app, 150, 24).contains("react"), "zen shows the picker");
+        let actions = press(&mut app, "7");
+        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Rocket, on: true, .. }]), "{actions:?}");
+        let mut open = app.open.clone().unwrap();
+        open.selected = open.rows.iter().position(|r| matches!(r, Row::Line { .. }) && !open.is_marked(r)).unwrap();
+        app.open = Some(open);
+        assert_eq!(press(&mut app, "+"), vec![]);
+        assert!(app.react.is_none(), "a line without a thread");
+    }
+
+    #[test]
+    fn on_gitlab_slash_searches_every_emoji_by_name() {
+        let mut app = with_reactions();
+        press(&mut app, "+");
+        assert!(render(&mut app, 150, 24).contains("/ any emoji"), "the picker says it can search");
+        press(&mut app, "/100");
+        let screen = render(&mut app, 150, 24);
+        assert!(screen.contains("/100▏") && screen.contains("💯"), "{screen}");
+        let actions = app.handle_key(code(KeyCode::Enter));
+        let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((emoji.gitlab(), *on), ("100", true));
+        assert!(reactions_of(&app).iter().any(|r| r.emoji.glyph() == "💯" && r.mine), "the count moves at once");
+        press(&mut app, "+");
+        press(&mut app, "/r");
+        app.handle_key(code(KeyCode::Backspace));
+        assert_eq!(app.react.as_ref().unwrap().search.as_ref().map(|s| s.query.as_str()), Some(""));
+        app.handle_key(code(KeyCode::Backspace));
+        assert_eq!(app.react.as_ref().unwrap().search, None, "an empty search goes back to the eight");
+        press(&mut app, "zzz");
+        assert!(app.react.is_none(), "outside a search, other keys close the picker");
+    }
+
+    #[test]
+    fn on_github_the_picker_keeps_the_eight() {
+        let mut app = with_reactions();
+        app.hosts = crate::forge::Hosts::one("gitlab.com", Kind::GitHub);
+        press(&mut app, "+");
+        assert!(!render(&mut app, 150, 24).contains("any emoji"));
+        press(&mut app, "/");
+        assert!(app.react.is_none(), "no search: the key closes the picker");
+    }
+
+    #[test]
+    fn the_picker_moves_with_h_and_l_and_esc_closes_it_without_a_change() {
+        let mut app = with_reactions();
+        press(&mut app, "+");
+        press(&mut app, "lll");
+        assert_eq!(app.react.as_ref().unwrap().selected, 3);
+        assert_eq!(app.handle_key(code(KeyCode::Esc)), vec![]);
+        assert!(app.react.is_none());
+        assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);
+    }
+
+    #[test]
+    fn a_refused_reaction_puts_the_count_back() {
+        let mut app = with_reactions();
+        press(&mut app, "+");
+        press(&mut app, "6");
+        assert_eq!(reactions_of(&app).len(), 2);
+        app.apply(Incoming::Failed {
+            what: crate::tui::app::react_failure("5ugg".into(), 0, Emoji::Hooray, true),
+            message: "GitLab refused the reaction".into(),
+        });
+        assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);
+        assert!(app.live_toast().unwrap().text.starts_with("no reaction:"));
+    }
+
+    #[test]
+    fn ascii_draws_reactions_in_plain_words() {
+        let mut app = with_reactions();
+        app.ascii = true;
+        let screen = render(&mut app, 150, 24);
+        assert!(screen.contains("+1 2") && !screen.contains("👍"), "{screen}");
+    }
+}

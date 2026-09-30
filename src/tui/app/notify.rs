@@ -39,3 +39,45 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    fn announce(app: &mut App, sections: crate::forge::Sections) -> Vec<Action> {
+        app.apply(Incoming::Queue { scope: app.scope(), me: "nina".into(), sections, opened: HashMap::new(), cached: false });
+        app.take_actions().into_iter().filter(|a| matches!(a, Action::Notify { .. })).collect()
+    }
+
+    #[test]
+    fn an_mr_landing_in_to_review_is_announced_once() {
+        let mut app = app();
+        let full = sections();
+        let mut before = full.clone();
+        let newcomer = before.to_review.remove(0);
+        assert_eq!(announce(&mut app, before.clone()), vec![], "the first answer only records");
+        let notices = announce(&mut app, full.clone());
+        let [Action::Notify { title, body }] = notices.as_slice() else { panic!("{notices:?}") };
+        assert_eq!(title, "revu · to review");
+        assert_eq!(body, &format!("!{} {} · {}", newcomer.number, newcomer.title, newcomer.author));
+        assert_eq!(announce(&mut app, full), vec![], "never twice for one MR");
+    }
+
+    #[test]
+    fn several_arrivals_share_one_notification_and_off_means_off() {
+        let mut app = app();
+        let full = sections();
+        let empty = crate::forge::Sections { to_review: vec![], ..full.clone() };
+        announce(&mut app, empty.clone());
+        let mut more = full.clone();
+        more.to_review.push(crate::forge::QueueMr { number: 77, title: "chore: bump".into(), ..full.to_review[0].clone() });
+        let notices = announce(&mut app, more);
+        let [Action::Notify { title, body }] = notices.as_slice() else { panic!("{notices:?}") };
+        assert_eq!(title, "revu · 2 MRs to review");
+        assert_eq!(body.lines().count(), 2);
+        let mut quiet = App::new(Settings { notify: false, ..settings() });
+        announce(&mut quiet, empty);
+        assert_eq!(announce(&mut quiet, full), vec![]);
+    }
+}

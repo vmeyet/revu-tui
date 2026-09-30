@@ -63,6 +63,7 @@ fn hunk_above(rows: &[Row], file: usize, scroll: usize, selected: usize) -> Opti
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::app::test_support::*;
 
     /// Two files: the first with two hunks of four lines, the second with one hunk of two.
     fn rows() -> Vec<Row> {
@@ -133,5 +134,47 @@ mod tests {
     fn pins_count_their_rows() {
         assert_eq!(Pins::default().count(), 0);
         assert_eq!(Pins { file: Some(1), hunk: Some(2) }.count(), 2);
+    }
+
+    /// The text of the line under the cursor, as the diff draws it.
+    fn cursor_text(app: &App) -> String {
+        let open = app.open.as_ref().unwrap();
+        match open.row() {
+            Some(Row::Line { file, hunk, index }) => open.review.files[*file].hunks[*hunk].lines[*index].text.trim().to_owned(),
+            _ => String::new(),
+        }
+    }
+
+    #[test]
+    fn the_cursor_line_stays_on_screen_below_the_pins() {
+        let mut app = with_long_review();
+        for _ in 0..70 {
+            press(&mut app, "j");
+            let screen = render(&mut app, 120, 30);
+            let text = cursor_text(&app);
+            assert!(text.is_empty() || screen.contains(&text), "`{text}` is hidden:\n{screen}");
+        }
+    }
+
+    #[test]
+    fn za_under_a_pinned_file_folds_that_file_and_lands_on_its_row() {
+        let mut app = with_long_review();
+        to_step(&mut app, 40);
+        render(&mut app, 120, 30);
+        assert!(app.open.as_ref().unwrap().pinned_file.is_some());
+        press(&mut app, "za");
+        let open = app.open.as_ref().unwrap();
+        assert!(!open.review.fold.file_is_open("src/pay/charge.rs"));
+        assert!(matches!(open.row(), Some(Row::File { index: 0, .. })), "{:?}", open.row());
+        assert_eq!(open.pinned_file, None);
+    }
+
+    #[test]
+    fn zo_under_a_pinned_file_keeps_its_usual_meaning() {
+        let mut app = with_long_review();
+        to_step(&mut app, 40);
+        render(&mut app, 120, 30);
+        press(&mut app, "zo");
+        assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
     }
 }

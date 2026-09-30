@@ -439,3 +439,200 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn tab_and_brackets_jump_between_files_hunks_and_threads() {
+        let mut app = with_review();
+        press(&mut app, "]c");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
+        press(&mut app, "]c");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 1, .. })));
+        press(&mut app, "]N");
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "wraps to the thread on the MR");
+        press(&mut app, "]N");
+        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "then the marked removed line");
+        app.handle_key(code(KeyCode::Tab));
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 1, .. })));
+        app.handle_key(code(KeyCode::BackTab));
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
+    }
+
+    #[test]
+    fn bracket_f_finds_files_with_unresolved_threads() {
+        let mut app = with_review();
+        press(&mut app, "G");
+        press(&mut app, "]f");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
+        press(&mut app, "]f");
+        assert!(app.live_toast().is_some(), "only one such file: nothing to jump to");
+    }
+
+    #[test]
+    fn folds_save_state_and_keep_the_cursor_on_the_same_place() {
+        let mut app = with_review();
+        let actions = press(&mut app, "za");
+        assert!(matches!(actions.as_slice(), [Action::SaveState { key, .. }] if *key == mr_key()));
+        let open = app.open.as_ref().unwrap();
+        assert_eq!(open.row(), Some(&Row::File { index: 0, open: false }));
+        assert_eq!(open.rows.len(), 5, "header, gap, file, gap, file");
+        assert_eq!(press(&mut app, "zc"), vec![], "already closed");
+        press(&mut app, "zo");
+        assert!(app.open.as_ref().unwrap().rows.len() > 5);
+        press(&mut app, "zM");
+        assert_eq!(app.open.as_ref().unwrap().rows.len(), 5);
+        press(&mut app, "zR");
+        assert!(app.open.as_ref().unwrap().review.fold.file_is_open("Cargo.lock"));
+    }
+
+    #[test]
+    fn o_and_y_on_a_line_use_the_line_url() {
+        let mut app = with_review();
+        press(&mut app, "]cj");
+        let url = match press(&mut app, "y").as_slice() {
+            [Action::Yank(url)] => url.clone(),
+            other => panic!("{other:?}"),
+        };
+        let digest = sha1_smol::Sha1::from("src/pay/charge.rs".as_bytes()).digest().to_string();
+        assert_eq!(url, format!("https://gitlab.com/acme/widgets/-/merge_requests/42/diffs#{digest}_12_12"));
+    }
+
+    #[test]
+    fn a_one_word_change_reads_as_one_row_with_its_thread_under_it() {
+        let app = with_sum_review();
+        let rows = &app.open.as_ref().unwrap().rows;
+        let pair = rows.iter().position(|r| matches!(r, Row::Pair { removed: 2, added: 3, .. })).expect("the b line pairs up");
+        let open = app.open.as_ref().unwrap();
+        assert!(open.review.marker_of(&open.review.markers(), &rows[pair]).is_some(), "the thread on the added line marks the pair");
+        let lines: Vec<usize> = rows.iter().filter_map(|r| if let Row::Line { index, .. } = r { Some(*index) } else { None }).collect();
+        assert_eq!(lines, vec![0, 1, 4, 5, 6, 7], "the rewritten d line stays on two rows");
+    }
+
+    fn row_of(app: &App) -> Option<Row> {
+        app.open.as_ref().unwrap().row().cloned()
+    }
+
+    #[test]
+    fn big_d_sets_the_old_file_beside_the_new_and_back_keeping_the_cursor_and_saving_the_choice() {
+        let mut app = with_sum_review();
+        walk_to(&mut app, |r| matches!(r, Row::Line { index: 6, .. }));
+        let actions = press(&mut app, "D");
+        assert!(matches!(actions.as_slice(), [Action::SaveState { side_by_side: true, .. }]), "{actions:?}");
+        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("side by side"));
+        assert!(matches!(row_of(&app), Some(Row::Pair { removed: 5, added: 6, .. })), "the rewritten d line sits beside its old text");
+        let actions = press(&mut app, "D");
+        assert!(matches!(actions.as_slice(), [Action::SaveState { side_by_side: false, .. }]));
+        assert!(matches!(row_of(&app), Some(Row::Line { index: 5, .. })), "{:?}", row_of(&app));
+    }
+
+    #[test]
+    fn a_refresh_keeps_the_side_by_side_choice() {
+        let mut app = with_sum_review();
+        press(&mut app, "D");
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(sum_review()), cached: None });
+        assert!(app.open.as_ref().unwrap().review.shows_side_by_side());
+    }
+
+    #[test]
+    fn side_by_side_falls_back_to_inline_in_a_narrow_diff_saying_so_once() {
+        let mut app = with_sum_review();
+        press(&mut app, "D");
+        app.fit_diff(false);
+        let open = app.open.as_ref().unwrap();
+        assert!(open.review.side_by_side && !open.rows.iter().any(|r| matches!(r, Row::Pair { removed: 5, .. })), "inline rows");
+        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("side by side needs a wider window"));
+        app.toast("seen");
+        app.fit_diff(false);
+        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("seen"), "no second toast while it stays narrow");
+        app.fit_diff(true);
+        assert!(app.open.as_ref().unwrap().rows.iter().any(|r| matches!(r, Row::Pair { removed: 5, .. })), "back side by side");
+    }
+
+    #[test]
+    fn c_on_a_side_by_side_row_comments_the_new_side_and_big_c_the_old_side() {
+        let mut app = with_sum_review();
+        press(&mut app, "D");
+        walk_to(&mut app, |r| matches!(r, Row::Pair { removed: 5, .. }));
+        press(&mut app, "c");
+        assert_eq!(app.input_label(), "new thread · sum.rs:5");
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "C");
+        assert_eq!(app.input_label(), "new thread · sum.rs:-5");
+    }
+
+    #[test]
+    fn c_on_a_pair_comments_the_new_side_and_big_c_the_old_side() {
+        let mut app = with_sum_review();
+        on_pair(&mut app);
+        press(&mut app, "c");
+        assert_eq!(app.input_label(), "new thread · sum.rs:3");
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "C");
+        assert_eq!(app.input_label(), "new thread · sum.rs:-3");
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "k");
+        press(&mut app, "C");
+        assert_eq!(app.input_label(), "", "C only means something on a pair");
+    }
+
+    #[test]
+    fn v_treats_a_pair_as_its_added_line() {
+        let mut app = with_sum_review();
+        walk_to(&mut app, |r| matches!(r, Row::Line { index: 1, .. }));
+        press(&mut app, "Vjjc");
+        let Some(Input::Comment { position }) = &app.input else { panic!("no comment input") };
+        let start = position.start.expect("a range");
+        assert_eq!((start.new, position.line.new), (Some(2), Some(4)), "from line 2 through the pair to line 4");
+    }
+
+    #[test]
+    fn moving_and_jumping_step_over_pair_rows_like_lines() {
+        let mut app = with_sum_review();
+        on_pair(&mut app);
+        press(&mut app, "j");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })), "no thread row after the pair");
+        press(&mut app, "kk");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { index: 1, .. })));
+        press(&mut app, "[c");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { .. })));
+    }
+
+    #[test]
+    fn big_w_hides_whitespace_only_changes_and_back() {
+        let mut app = with_review();
+        press(&mut app, "W");
+        assert!(app.open.as_ref().unwrap().review.quiet_whitespace);
+        assert!(app.live_toast().unwrap().text.contains("hidden"));
+        press(&mut app, "W");
+        assert!(!app.open.as_ref().unwrap().review.quiet_whitespace);
+    }
+
+    #[test]
+    fn equals_loads_the_file_once_and_shows_ten_more_lines_around_the_hunk() {
+        let mut app = with_review();
+        press(&mut app, "]cj");
+        let actions = press(&mut app, "=");
+        let open = app.open.clone().unwrap();
+        let path = open.review.files[0].new_path.clone();
+        assert!(
+            matches!(actions.as_slice(), [Action::LoadFile { path: p, sha, .. }] if *p == path && *sha == open.review.mr.refs.head),
+            "{actions:?}"
+        );
+        let text: String = (1..=40).map(|n| format!("line {n}\n")).collect();
+        let contexts = |app: &App| app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
+        app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "old".into(), text: text.clone() });
+        assert_eq!(contexts(&app), 0, "a file read at another head is dropped");
+        app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "bbbb".into(), text });
+        assert_eq!(contexts(&app), 20, "ten above, ten below");
+        assert_eq!(press(&mut app, "="), vec![], "the file is read once");
+        let screen = render(&mut app, 120, 40);
+        assert!(screen.contains("line 2"), "{screen}");
+        let pushed = Mr { refs: crate::forge::Refs { head: "cccc".into(), ..mr().refs }, ..mr() };
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(pushed, &diffs(), discussions(), &[])), cached: None });
+        assert_eq!(contexts(&app), 0, "after a push the lines around hunks are read again");
+    }
+}

@@ -91,6 +91,7 @@ fn id_of(mr: &QueueMr) -> String {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::app::test_support::*;
     use chrono::{Duration, TimeZone, Utc};
 
     fn mr(number: u64, author: &str, source: &str, target: &str) -> QueueMr {
@@ -184,5 +185,50 @@ mod tests {
     fn an_mr_targeting_its_own_branch_is_alone() {
         let a = mr(1, "nina", "same", "same");
         assert_eq!(shape(&group(&[&a])), vec![vec![1]]);
+    }
+
+    #[test]
+    fn a_chain_of_one_authors_mrs_is_one_folded_row() {
+        let app = stacked_app();
+        let rows = app.queue_rows();
+        let QueueRow::Stack { id, mrs, open } = &rows[stack_row(&app)] else { panic!() };
+        assert_eq!((id.as_str(), mrs.iter().map(|m| m.number).collect::<Vec<_>>(), *open), ("acme/widgets!61", vec![61, 62, 63], false));
+        assert!(!rows.iter().any(|r| matches!(r, QueueRow::Stacked(_))), "folded by default");
+        assert!(!rows.iter().any(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 62)), "its MRs are not rows of their own");
+        assert_eq!(app.stack_badge(mrs), Some(Badge::Failed), "the worst badge of the stack");
+    }
+
+    #[test]
+    fn enter_and_zo_unfold_a_stack_base_first_and_zc_folds_it_back_onto_its_row() {
+        let mut app = stacked_app();
+        app.queue_selected = stack_row(&app);
+        let actions = app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(actions.as_slice(), [Action::SaveQueueView { view, .. }] if view.open_stacks.contains("acme/widgets!61")));
+        let members: Vec<u64> =
+            app.queue_rows().iter().filter_map(|r| if let QueueRow::Stacked(mr) = r { Some(mr.number) } else { None }).collect();
+        assert_eq!(members, vec![61, 62, 63]);
+        press(&mut app, "jj");
+        assert_eq!(app.selected_mr().map(|mr| mr.number), Some(62), "an unfolded MR is a row the cursor takes and opens");
+        press(&mut app, "zc");
+        assert_eq!(app.queue_selected, stack_row(&app), "the cursor lands on the stack's row");
+        assert!(!app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stacked(_))));
+        press(&mut app, "zo");
+        assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stacked(_))));
+    }
+
+    #[test]
+    fn an_unfolded_stack_is_remembered_with_the_queue_view() {
+        let mut app = stacked_app();
+        let view = QueueView { open_stacks: std::collections::BTreeSet::from(["acme/widgets!61".to_owned()]), ..QueueView::default() };
+        app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view });
+        assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stack { open: true, .. })));
+    }
+
+    #[test]
+    fn zo_on_a_section_header_still_folds_the_section() {
+        let mut app = stacked_app();
+        app.queue_selected = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: "OPEN", .. })).unwrap();
+        press(&mut app, "zc");
+        assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", open: false, .. })));
     }
 }
