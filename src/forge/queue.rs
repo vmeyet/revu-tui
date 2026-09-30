@@ -1,6 +1,6 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
-use super::MrKey;
 use super::rules::{self, Reason, Rules};
+use super::{MrKey, MrState, PipelineStatus};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -45,8 +45,8 @@ pub struct QueueMr {
     #[serde(default)]
     pub approvals_left: Option<u32>,
     pub reviewers: Vec<ReviewerState>,
-    /// Upper case, as GitLab's GraphQL spells it: `SUCCESS`, `FAILED`, `RUNNING`, `PENDING`, `CANCELED`…
-    pub pipeline: Option<String>,
+    #[serde(serialize_with = "upper_case")]
+    pub pipeline: Option<PipelineStatus>,
     pub additions: u32,
     pub deletions: u32,
     pub files: u32,
@@ -59,6 +59,12 @@ pub struct QueueMr {
     /// Why the "needs me" rules moved it, or sorted it last; set when the sections are built.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub reason: Option<Reason>,
+}
+
+/// `revu list --json` has spelled a row's pipeline in upper case since before it had a type.
+#[allow(clippy::ref_option, clippy::trivially_copy_pass_by_ref, reason = "serde's serialize_with hands a reference")]
+fn upper_case<S: serde::Serializer>(status: &Option<PipelineStatus>, serializer: S) -> Result<S::Ok, S::Error> {
+    status.map(|s| s.word().to_ascii_uppercase()).serialize(serializer)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,7 +182,7 @@ impl QueueMr {
     /// A queue row for an MR fetched on its own, as the ready command names MRs outside my lists.
     /// What only a list answers (comments, sizes, threads) is left empty; `None` once it is closed.
     pub fn from_mr(mr: &super::Mr, host: Option<String>) -> Option<Self> {
-        if mr.state != "opened" {
+        if mr.state != MrState::Open {
             return None;
         }
         Some(Self {
@@ -198,7 +204,7 @@ impl QueueMr {
             approved_by: mr.approvals.approved_by.iter().map(|u| u.username.clone()).collect(),
             approvals_left: Some(mr.approvals.approvals_left),
             reviewers: vec![],
-            pipeline: mr.pipeline.as_ref().map(|p| p.status.to_uppercase()),
+            pipeline: mr.pipeline.as_ref().map(|p| p.status),
             additions: 0,
             deletions: 0,
             files: 0,
@@ -335,7 +341,7 @@ mod tests {
         let stale = judged(|mr| if mr.number == 51 { QueueMr { updated_at: day(1), ..mr } } else { mr });
         assert_eq!(numbers(&stale.open), [] as [u64; 0]);
         assert_eq!((numbers(&stale.other), reasons(&stale.other)), (vec![51], vec!["stale 22d".to_owned()]));
-        let failed = judged(|mr| if mr.number == 51 { QueueMr { pipeline: Some("FAILED".into()), ..mr } } else { mr });
+        let failed = judged(|mr| if mr.number == 51 { QueueMr { pipeline: Some(PipelineStatus::Failed), ..mr } } else { mr });
         assert_eq!(reasons(&failed.other), ["pipeline failed"]);
         let approved =
             judged(|mr| if mr.number == 51 { QueueMr { approved_by: vec!["omar".into()], approvals_left: Some(0), ..mr } } else { mr });
@@ -355,7 +361,8 @@ mod tests {
         let queue = scoped();
         let review_requested =
             queue.review_requested.into_iter().map(|mr| if mr.number == 42 { QueueMr { draft: true, ..mr } } else { mr }).collect();
-        let authored = queue.authored.into_iter().map(|mr| QueueMr { updated_at: day(1), pipeline: Some("FAILED".into()), ..mr }).collect();
+        let authored =
+            queue.authored.into_iter().map(|mr| QueueMr { updated_at: day(1), pipeline: Some(PipelineStatus::Failed), ..mr }).collect();
         let sections = Queue { review_requested, authored, ..scoped() }.sections_with(&[], &Rules::default(), day(23));
         assert!(numbers(&sections.drafts).contains(&42));
         assert!(!numbers(&sections.to_review).contains(&42));
@@ -384,8 +391,10 @@ mod tests {
 
     #[test]
     fn a_named_mr_the_rules_moved_out_stays_out_of_ready() {
-        let queue =
-            Queue { open: scoped().open.into_iter().map(|mr| QueueMr { pipeline: Some("FAILED".into()), ..mr }).collect(), ..scoped() };
+        let queue = Queue {
+            open: scoped().open.into_iter().map(|mr| QueueMr { pipeline: Some(PipelineStatus::Failed), ..mr }).collect(),
+            ..scoped()
+        };
         let sections = queue.sections_with(&[], &Rules::default(), day(23));
         let ready = sections.with_ready(&[MrKey::new("acme/widgets", 51)], vec![], "nina", &Rules::default(), day(23));
         assert!(ready.ready.is_empty());
@@ -396,7 +405,7 @@ mod tests {
     fn named_mrs_outside_my_lists_join_ready_once_judged() {
         let sections = scoped().sections_with(&[], &Rules::default(), day(23));
         let outside = QueueMr { project: "acme/billing".into(), number: 9, author: "sam".into(), ..scoped().open[2].clone() };
-        let failing = QueueMr { number: 10, pipeline: Some("FAILED".into()), ..outside.clone() };
+        let failing = QueueMr { number: 10, pipeline: Some(PipelineStatus::Failed), ..outside.clone() };
         let unnamed = QueueMr { number: 11, ..outside.clone() };
         let named = [MrKey::new("acme/billing", 9), MrKey::new("acme/billing", 10)];
         let ready = sections.with_ready(&named, vec![outside, failing, unnamed], "nina", &Rules::default(), day(23));
@@ -428,5 +437,13 @@ mod tests {
         assert_eq!(merged.to_review.len(), here.to_review.len() * 2);
         assert!(merged.mine.windows(2).all(|w| w[0].updated_at >= w[1].updated_at));
         assert_eq!(merged.to_review.iter().filter(|mr| mr.host.is_some()).count(), here.to_review.len());
+    }
+
+    #[test]
+    fn a_row_keeps_its_upper_case_pipeline_in_json_and_reads_back_from_an_old_cache() {
+        let row = QueueMr { pipeline: Some(PipelineStatus::Failed), ..queue().authored[0].clone() };
+        let saved = serde_json::to_value(&row).unwrap();
+        assert_eq!(saved["pipeline"], "FAILED");
+        assert_eq!(serde_json::from_value::<QueueMr>(saved).unwrap(), row);
     }
 }

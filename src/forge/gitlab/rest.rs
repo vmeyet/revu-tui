@@ -317,8 +317,10 @@ fn cannot_approve(err: anyhow::Error) -> anyhow::Error {
     }
 }
 
+/// Form encoding writes a space as `+`, which a URL path keeps as a plus; a `+` in the text is
+/// already `%2B`, so every `+` left is a space.
 fn url_encode(text: &str) -> String {
-    url::form_urlencoded::byte_serialize(text.as_bytes()).collect()
+    url::form_urlencoded::byte_serialize(text.as_bytes()).collect::<String>().replace('+', "%20")
 }
 
 #[cfg(test)]
@@ -406,6 +408,11 @@ mod tests {
     }
 
     #[test]
+    fn a_space_in_a_path_is_encoded_for_a_url_path() {
+        assert_eq!(url_encode("docs/read me+notes.md"), "docs%2Fread%20me%2Bnotes.md");
+    }
+
+    #[test]
     fn the_squash_and_branch_settings_become_the_merge_plan() {
         let mut mr = mr_json();
         mr["squash_on_merge"] = json!(true);
@@ -462,7 +469,7 @@ mod tests {
         assert_eq!((mr.project.as_str(), mr.number), ("acme/widgets", 42));
         assert!(!mr.mine, "omar wrote it, not vivien; /user is asked once for both reads");
         assert_eq!((mr.changes_count.as_deref(), mr.labels.as_slice()), (Some("9"), &["payments".to_owned()][..]));
-        assert_eq!(mr.pipeline.as_ref().map(|p| p.status.as_str()), Some("success"));
+        assert_eq!(mr.pipeline.as_ref().map(|p| p.status), Some(forge::PipelineStatus::Success));
         assert_eq!(mr.refs, Refs { base: "aaaa".into(), start: "aaaa".into(), head: "bbbb".into() });
         assert!(mr.approvals.approved && mr.approvals.user_can_approve);
         assert_eq!(mr.approvals.approved_by[0].username, "lea");

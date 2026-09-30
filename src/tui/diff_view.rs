@@ -6,7 +6,7 @@ use super::theme::Theme;
 use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate, truncate_tabs};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
-use crate::forge::{Deployment, Kind};
+use crate::forge::{Deployment, Kind, PipelineStatus};
 use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
 use crate::syntax::{self, Token};
 use chrono::{DateTime, Utc};
@@ -307,8 +307,8 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
     let age = short_age((today - mr.updated_at).to_std().unwrap_or_default());
-    let pipeline = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
-    let (glyph, colour) = pipeline_glyph(&pipeline, theme);
+    let status = mr.pipeline.as_ref().map(|p| p.status);
+    let (glyph, colour) = status.map_or(("", theme.faded), |s| pipeline_glyph(s, theme));
     let branch_room = width.saturating_sub(40);
     let branches = format!("{} → {}", mr.source_branch, mr.target_branch);
     let mut first = vec![Span::raw(" "), Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username)))];
@@ -326,7 +326,7 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
         dot(),
         Span::styled(format!("{} files", open.review.files.len()), muted),
         dot(),
-        Span::styled(format!("{glyph} {}", pipeline.to_lowercase()), Style::default().fg(colour)),
+        Span::styled(format!("{glyph} {}", status.map_or("", PipelineStatus::word)), Style::default().fg(colour)),
     ]);
     let first = Line::from(first);
     let approvals = &mr.approvals;
@@ -406,9 +406,7 @@ fn deployment_link(open: &Open, header: &[Line], area: Rect) -> Option<super::ui
 fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<'a> {
     let mr = &open.review.mr;
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
-    let status = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
-    let (glyph, _) = pipeline_glyph(&status, theme);
-    let pipeline = if glyph.is_empty() { String::new() } else { format!(" {glyph}") };
+    let pipeline = mr.pipeline.as_ref().map(|p| format!(" {}", pipeline_glyph(p.status, theme).0)).unwrap_or_default();
     let unresolved = open.review.unresolved();
     let threads = if unresolved > 0 { format!(" · ◆{unresolved}") } else { String::new() };
     let tail = format!(" · {} · +{adds} −{dels}{pipeline}{threads}", mr.author.username);
@@ -422,8 +420,7 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     let mr = &open.review.mr;
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
-    let pipeline = mr.pipeline.as_ref().map(|p| p.status.clone()).unwrap_or_default();
-    let (glyph, colour) = pipeline_glyph(&pipeline, theme);
+    let pipeline = mr.pipeline.as_ref().map(|p| pipeline_glyph(p.status, theme));
     let mut spans = vec![
         Span::styled("▸ ", Style::default().fg(theme.faded)),
         Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))),
@@ -432,7 +429,7 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
         Span::raw(" "),
         Span::styled(format!("−{dels}"), Style::default().fg(theme.danger)),
     ];
-    if !glyph.is_empty() {
+    if let Some((glyph, colour)) = pipeline {
         spans.extend([dot(), Span::styled(glyph, Style::default().fg(colour))]);
     }
     let unresolved = open.review.unresolved();
@@ -442,12 +439,11 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     Line::from(spans)
 }
 
-pub(super) fn pipeline_glyph(status: &str, theme: Theme) -> (&'static str, ratatui::style::Color) {
-    match status.to_ascii_lowercase().as_str() {
-        "success" => ("✓", theme.success),
-        "failed" => ("✗", theme.danger),
-        "running" | "pending" | "created" | "preparing" | "waiting_for_resource" => ("⠋", theme.muted),
-        "" => ("", theme.faded),
+pub(super) fn pipeline_glyph(status: PipelineStatus, theme: Theme) -> (&'static str, ratatui::style::Color) {
+    match status {
+        PipelineStatus::Success => ("✓", theme.success),
+        PipelineStatus::Failed => ("✗", theme.danger),
+        running if running.is_running() => ("⠋", theme.muted),
         _ => ("○", theme.muted),
     }
 }

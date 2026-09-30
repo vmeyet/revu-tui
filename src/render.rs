@@ -1,4 +1,5 @@
 //! Plain-terminal output for the scriptable commands: colours only on a tty, columns aligned by width.
+use crate::forge::PipelineStatus;
 use chrono::{DateTime, Utc};
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
@@ -103,14 +104,14 @@ pub fn age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
     }
 }
 
-/// One glyph for a pipeline status, GraphQL (`SUCCESS`) or REST (`success`) spelling.
-pub fn pipeline(status: Option<&str>) -> Cell {
-    match status.map(str::to_ascii_lowercase).as_deref() {
-        Some("success") => cell("✓", Style::Ok),
-        Some("failed") => cell("✗", Style::Bad),
-        Some("running" | "pending" | "created" | "waiting_for_resource" | "preparing") => cell("●", Style::Warn),
-        Some("canceled" | "skipped" | "manual" | "scheduled") => cell("–", Style::Dim),
-        _ => cell("", Style::Plain),
+/// One glyph for a pipeline status.
+pub fn pipeline(status: Option<PipelineStatus>) -> Cell {
+    match status {
+        Some(PipelineStatus::Success) => cell("✓", Style::Ok),
+        Some(PipelineStatus::Failed) => cell("✗", Style::Bad),
+        Some(running) if running.is_running() => cell("●", Style::Warn),
+        Some(_) => cell("–", Style::Dim),
+        None => cell("", Style::Plain),
     }
 }
 
@@ -162,10 +163,11 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_glyphs_ignore_case() {
-        assert_eq!(pipeline(Some("SUCCESS")).text, "✓");
-        assert_eq!(pipeline(Some("failed")).text, "✗");
-        assert_eq!(pipeline(Some("RUNNING")).text, "●");
+    fn each_pipeline_status_has_its_glyph() {
+        assert_eq!(pipeline(Some(PipelineStatus::Success)).text, "✓");
+        assert_eq!(pipeline(Some(PipelineStatus::Failed)).text, "✗");
+        assert_eq!(pipeline(Some(PipelineStatus::Preparing)).text, "●");
+        assert_eq!(pipeline(Some(PipelineStatus::Manual)).text, "–");
         assert_eq!(pipeline(None).text, "");
     }
 

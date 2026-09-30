@@ -63,7 +63,11 @@ impl Mr {
             number: self.iid,
             title: self.title,
             description: self.description.unwrap_or_default(),
-            state: self.state,
+            state: match self.state.as_str() {
+                "merged" => forge::MrState::Merged,
+                "closed" => forge::MrState::Closed,
+                _ => forge::MrState::Open,
+            },
             draft: self.draft,
             author: self.author.into(),
             source_branch: self.source_branch,
@@ -101,7 +105,7 @@ impl From<DiffRefs> for Refs {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Pipeline {
-    pub status: String,
+    pub status: forge::PipelineStatus,
     #[serde(default)]
     pub web_url: Option<String>,
 }

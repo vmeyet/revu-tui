@@ -12,8 +12,8 @@ pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{
-    Applicable, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, LineRef, MergeMethod, MergePlan, Mr, MrKey, NewDraft, Note,
-    Pipeline, Position, Reaction, Refs, Side, Suggestion, User, tally, toggled,
+    Applicable, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, LineRef, MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft,
+    Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Side, Suggestion, User, tally, toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 

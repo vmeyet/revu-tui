@@ -1,5 +1,5 @@
 //! GitHub's shapes, as REST and GraphQL send them, and their turn into the neutral model.
-use crate::forge::{self, LineRef, Position, QueueMr, Refs, ReviewState, ReviewerState, Side};
+use crate::forge::{self, LineRef, PipelineStatus, Position, QueueMr, Refs, ReviewState, ReviewerState, Side};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -216,17 +216,14 @@ fn approvals_left(decision: Option<&str>) -> Option<u32> {
     }
 }
 
-/// Check-run rollups in the spelling the queue badges read: `SUCCESS`, `FAILED`, `RUNNING`.
-pub fn pipeline(commits: &Nodes<CommitNode>) -> Option<String> {
+/// The check-run rollup of the newest commit, as a pipeline status.
+pub fn pipeline(commits: &Nodes<CommitNode>) -> Option<PipelineStatus> {
     let state = commits.nodes.last()?.commit.status_check_rollup.as_ref()?.state.as_str();
-    Some(
-        match state {
-            "SUCCESS" => "SUCCESS",
-            "FAILURE" | "ERROR" => "FAILED",
-            _ => "RUNNING",
-        }
-        .to_owned(),
-    )
+    Some(match state {
+        "SUCCESS" => PipelineStatus::Success,
+        "FAILURE" | "ERROR" => PipelineStatus::Failed,
+        _ => PipelineStatus::Running,
+    })
 }
 
 impl From<QueuePr> for QueueMr {
@@ -429,10 +426,14 @@ mod tests {
         let rollup = |state: &str| -> Nodes<CommitNode> {
             serde_json::from_value(serde_json::json!({"nodes": [{"commit": {"statusCheckRollup": {"state": state}}}]})).unwrap()
         };
-        for (state, expected) in
-            [("SUCCESS", "SUCCESS"), ("FAILURE", "FAILED"), ("ERROR", "FAILED"), ("PENDING", "RUNNING"), ("EXPECTED", "RUNNING")]
-        {
-            assert_eq!(pipeline(&rollup(state)).as_deref(), Some(expected), "{state}");
+        for (state, expected) in [
+            ("SUCCESS", PipelineStatus::Success),
+            ("FAILURE", PipelineStatus::Failed),
+            ("ERROR", PipelineStatus::Failed),
+            ("PENDING", PipelineStatus::Running),
+            ("EXPECTED", PipelineStatus::Running),
+        ] {
+            assert_eq!(pipeline(&rollup(state)), Some(expected), "{state}");
         }
         let none: Nodes<CommitNode> =
             serde_json::from_value(serde_json::json!({"nodes": [{"commit": {"statusCheckRollup": null}}]})).unwrap();

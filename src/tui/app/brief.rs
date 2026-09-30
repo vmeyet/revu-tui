@@ -3,7 +3,7 @@
 //! to one in the diff. It opens only on demand: an MR opens on its diff.
 use super::{Action, App, Focus};
 use crate::forge::checks::JobState;
-use crate::forge::{MrKey, QueueMr, ReviewState};
+use crate::forge::{MrKey, PipelineStatus, QueueMr, ReviewState};
 use crate::review::{Place, Review, Row};
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -45,7 +45,7 @@ pub struct Brief {
 /// The pipeline in one line: its status, and the names of the jobs that failed once fetched.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Checks {
-    pub status: Option<String>,
+    pub status: Option<PipelineStatus>,
     pub failed: Vec<String>,
 }
 
@@ -87,7 +87,7 @@ impl Brief {
             description: mr.description.clone(),
             web_url: mr.web_url.clone(),
             updated_at: mr.updated_at,
-            checks: Checks { status: mr.pipeline.clone(), failed: vec![] },
+            checks: Checks { status: mr.pipeline, failed: vec![] },
             review: ReviewLine {
                 approved_by: mr.approved_by.clone(),
                 approvals_left: mr.approvals_left,
@@ -123,7 +123,7 @@ impl Brief {
             description: mr.description.clone(),
             web_url: mr.web_url.clone(),
             updated_at: mr.updated_at,
-            checks: Checks { status: mr.pipeline.as_ref().map(|p| p.status.clone()), failed },
+            checks: Checks { status: mr.pipeline.as_ref().map(|p| p.status), failed },
             review: ReviewLine {
                 approved_by: mr.approvals.approved_by.iter().map(|u| u.username.clone()).collect(),
                 approvals_left: Some(mr.approvals.approvals_left),

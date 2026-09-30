@@ -86,7 +86,7 @@ pub(crate) fn text(kind: Kind, mr: &Mr, diffs: &[DiffFile], discussions: &[Discu
 }
 
 fn meta(mr: &Mr, threads: usize, open: usize, now: DateTime<Utc>) -> String {
-    let pipeline = mr.pipeline.as_ref().map(|p| format!("pipeline {}", p.status.to_ascii_lowercase()));
+    let pipeline = mr.pipeline.as_ref().map(|p| format!("pipeline {}", p.status.word()));
     let approvals = match mr.approvals.approved_by.len() {
         0 if mr.approvals.approved => Some("approved".to_owned()),
         0 => None,

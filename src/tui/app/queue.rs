@@ -1,7 +1,7 @@
 use super::order::{self, Order};
 use super::stack::{self, Item};
 use super::{Action, App};
-use crate::forge::{QueueMr, Sections};
+use crate::forge::{PipelineStatus, QueueMr, Sections};
 
 /// The one glyph at the right edge of a queue row, most pressing first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -198,9 +198,8 @@ impl App {
     }
 
     pub fn badge(&self, mr: &QueueMr) -> Option<Badge> {
-        let pipeline = mr.pipeline.as_deref().map(str::to_ascii_lowercase);
-        let failed = mr.conflicts || pipeline.as_deref() == Some("failed");
-        let running = matches!(pipeline.as_deref(), Some("running" | "pending" | "created" | "waiting_for_resource" | "preparing"));
+        let failed = mr.conflicts || mr.pipeline == Some(PipelineStatus::Failed);
+        let running = mr.pipeline.is_some_and(PipelineStatus::is_running);
         let activity = self.opened.get(&mr.key()).is_some_and(|opened| mr.updated_at > *opened);
         [(failed, Badge::Failed), (running, Badge::Running), (activity, Badge::Activity), (mr.draft, Badge::Draft)]
             .into_iter()

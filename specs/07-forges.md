@@ -41,7 +41,9 @@ An answer outside 2xx is an `HttpError { request, status, message }` inside the 
 | Type | Holds |
 |---|---|
 | `MrKey { project, number }` | The one address of an MR: `group/sub/project` + iid on GitLab, `owner/repo` + number on GitHub. Keys the cache and every forge call. |
-| `Mr` | Header data: title, description, author, branches, `refs`, pipeline, conflicts, labels, `approvals`. |
+| `Mr` | Header data: title, description, `state`, author, branches, `refs`, pipeline, conflicts, labels, `approvals`. |
+| `MrState` | `Open`, `Merged`, `Closed`. GitLab's `locked` (merging) reads as open. |
+| `PipelineStatus` | GitLab's pipeline statuses, one variant each; `is_running()` says which still wait. A GitHub check rollup is `Success`, `Failed` or `Running`. |
 | `Refs { base, start, head }` | The diff a review reads. GitLab tells `start` apart from `base`; GitHub repeats `base`. |
 | `DiffFile` | One file: unified body from the first `@@`, both paths, added/deleted/renamed flags, modes when known, `too_large`. |
 | `Discussion { id, notes }`, `Note` | A thread and its notes; `Note.position` says where the first one hangs. |
@@ -126,6 +128,7 @@ A checkout's queue keeps to the checkout's own host; a host that fails to answer
 
 Nothing on screen or in plain output: `revu list`, `list --all`, `show`, `diff` and the TUI frames are byte-identical on the same data.
 `--json` output speaks the neutral model: `number` instead of `iid`, `project` (the path) instead of `project_id`, no numeric `id`.
+`MrState` and `PipelineStatus` keep the words they had as strings: `opened`, `merged`, `closed`; a pipeline in lower case in `show`, upper case in `list`, read back in either case.
 Cache paths moved from `mr/<project_id>/<iid>/` to `mr/<group+project>/<number>/`; old entries are ignored, so saved folds and viewed files of MRs opened before the upgrade start fresh.
 
 ## What differs on GitHub (phase 2)

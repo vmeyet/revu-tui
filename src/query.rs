@@ -11,7 +11,7 @@
 //! | `size:small`, `size:large` | up to 100 changed lines, or 500 and more |
 //! | `is:failing` | whose pipeline failed or that conflict |
 //! | `is:mine` | I wrote |
-use crate::forge::QueueMr;
+use crate::forge::{PipelineStatus, QueueMr};
 
 /// Up to this many changed lines is a small MR.
 const SMALL: u32 = 100;
@@ -63,7 +63,7 @@ impl Query {
                 Size::Small => size <= SMALL,
                 Size::Large => size >= LARGE,
             })
-            && (!self.failing || mr.conflicts || mr.pipeline.as_deref().is_some_and(|p| p.eq_ignore_ascii_case("failed")))
+            && (!self.failing || mr.conflicts || mr.pipeline == Some(PipelineStatus::Failed))
             && (!self.mine || mr.author == me)
     }
 

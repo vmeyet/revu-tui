@@ -1,5 +1,6 @@
 //! The "needs me" rules: which queue MRs are worth my attention now, and why the others are not.
 //! Plain rules over what the forge already answers: instant, free, and each one says why.
+use super::PipelineStatus;
 use super::queue::{QueueMr, ReviewState};
 use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
@@ -120,7 +121,7 @@ fn not_ready(mr: &QueueMr, rules: &Rules) -> Option<Reason> {
     if mr.draft {
         return Some(Reason::Draft);
     }
-    if mr.pipeline.as_deref() == Some("FAILED") {
+    if mr.pipeline == Some(PipelineStatus::Failed) {
         return Some(Reason::PipelineFailed);
     }
     let first_paragraph = mr.description.split("\n\n").next().unwrap_or("");
@@ -199,7 +200,7 @@ mod tests {
             approved_by: vec![],
             approvals_left: Some(1),
             reviewers: vec![],
-            pipeline: Some("SUCCESS".into()),
+            pipeline: Some(PipelineStatus::Success),
             additions: 10,
             deletions: 2,
             files: 1,
@@ -228,7 +229,7 @@ mod tests {
             (QueueMr { approved_by: vec!["omar".into()], approvals_left: Some(0), ..mr() }, "1 approval, needs none"),
             (QueueMr { notes: 4, commenters: vec!["nina".into(), "omar".into(), "lea".into(), "sam".into()], ..mr() }, "reviewed by 3"),
             (QueueMr { draft: true, ..mr() }, "draft"),
-            (QueueMr { pipeline: Some("FAILED".into()), ..mr() }, "pipeline failed"),
+            (QueueMr { pipeline: Some(PipelineStatus::Failed), ..mr() }, "pipeline failed"),
             (QueueMr { title: "[WIP] charge cards".into(), ..mr() }, "\"wip\" in title"),
             (QueueMr { description: "Do not review until the API lands.".into(), ..mr() }, "\"do not review\" in description"),
         ];
@@ -249,7 +250,7 @@ mod tests {
             (QueueMr { notes: 5, commenters: vec!["nina".into()], ..mr() }, "only the author talks"),
             (QueueMr { title: "fix: stop wiping the cart".into(), ..mr() }, "wip inside a word"),
             (QueueMr { description: "Part one.\n\nNot ready: part two, later.".into(), ..mr() }, "not ready past the first paragraph"),
-            (QueueMr { pipeline: Some("RUNNING".into()), ..mr() }, "running is not failed"),
+            (QueueMr { pipeline: Some(PipelineStatus::Running), ..mr() }, "running is not failed"),
         ];
         for (mr, case) in cases {
             assert_eq!(reason(&mr), None, "{case}");

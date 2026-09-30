@@ -34,7 +34,7 @@ pub struct Mr {
     pub number: u64,
     pub title: String,
     pub description: String,
-    pub state: String,
+    pub state: MrState,
     pub draft: bool,
     pub author: User,
     pub source_branch: String,
@@ -64,10 +64,10 @@ impl Mr {
         let approvals = &self.approvals;
         let reason = match () {
             () if !self.mine => "only your own MRs merge from revu".to_owned(),
-            () if self.state != "opened" => format!("this MR is {}", self.state),
+            () if self.state != MrState::Open => format!("this MR is {}", self.state.word()),
             () if self.draft => "a draft cannot merge: mark it ready first".to_owned(),
             () if self.conflicts => "it has conflicts with its target branch".to_owned(),
-            () if self.pipeline.as_ref().is_some_and(|p| p.status == "failed") => "its pipeline failed".to_owned(),
+            () if self.pipeline.as_ref().is_some_and(|p| p.status == PipelineStatus::Failed) => "its pipeline failed".to_owned(),
             () if approvals.approved_by.is_empty() => "nobody approved it yet".to_owned(),
             () if approvals.approvals_left > 0 => {
                 format!("it needs {} more approval{}", approvals.approvals_left, if approvals.approvals_left == 1 { "" } else { "s" })
@@ -81,8 +81,28 @@ impl Mr {
     pub fn draft_refusal(&self) -> Option<String> {
         match () {
             () if !self.mine => Some("it is not yours".to_owned()),
-            () if self.state != "opened" => Some(format!("this MR is {}", self.state)),
+            () if self.state != MrState::Open => Some(format!("this MR is {}", self.state.word())),
             () => None,
+        }
+    }
+}
+
+/// Where an MR stands; stored as GitLab named it before it had a type, so old caches and `--json` readers keep working.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MrState {
+    #[serde(rename = "opened")]
+    Open,
+    Merged,
+    Closed,
+}
+
+impl MrState {
+    pub fn word(self) -> &'static str {
+        match self {
+            MrState::Open => "open",
+            MrState::Merged => "merged",
+            MrState::Closed => "closed",
         }
     }
 }
@@ -124,8 +144,94 @@ pub struct Refs {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pipeline {
-    pub status: String,
+    pub status: PipelineStatus,
     pub web_url: Option<String>,
+}
+
+/// Where a pipeline stands. GitLab has all of these; GitHub's check rollup is only ever success,
+/// failed or running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PipelineStatus {
+    Created,
+    WaitingForResource,
+    WaitingForCallback,
+    Preparing,
+    Pending,
+    Running,
+    Success,
+    Failed,
+    Canceling,
+    Canceled,
+    Skipped,
+    Manual,
+    Scheduled,
+}
+
+impl PipelineStatus {
+    const ALL: [PipelineStatus; 13] = [
+        PipelineStatus::Created,
+        PipelineStatus::WaitingForResource,
+        PipelineStatus::WaitingForCallback,
+        PipelineStatus::Preparing,
+        PipelineStatus::Pending,
+        PipelineStatus::Running,
+        PipelineStatus::Success,
+        PipelineStatus::Failed,
+        PipelineStatus::Canceling,
+        PipelineStatus::Canceled,
+        PipelineStatus::Skipped,
+        PipelineStatus::Manual,
+        PipelineStatus::Scheduled,
+    ];
+
+    pub fn word(self) -> &'static str {
+        match self {
+            PipelineStatus::Created => "created",
+            PipelineStatus::WaitingForResource => "waiting_for_resource",
+            PipelineStatus::WaitingForCallback => "waiting_for_callback",
+            PipelineStatus::Preparing => "preparing",
+            PipelineStatus::Pending => "pending",
+            PipelineStatus::Running => "running",
+            PipelineStatus::Success => "success",
+            PipelineStatus::Failed => "failed",
+            PipelineStatus::Canceling => "canceling",
+            PipelineStatus::Canceled => "canceled",
+            PipelineStatus::Skipped => "skipped",
+            PipelineStatus::Manual => "manual",
+            PipelineStatus::Scheduled => "scheduled",
+        }
+    }
+
+    /// The status a word names in either case, as GitLab's REST (`failed`) and GraphQL (`FAILED`)
+    /// spell it; a word this list does not know yet is taken for a pipeline still on its way.
+    pub fn from_word(word: &str) -> Self {
+        Self::ALL.into_iter().find(|status| status.word().eq_ignore_ascii_case(word)).unwrap_or(PipelineStatus::Pending)
+    }
+
+    /// Not done yet: the badge waits on it.
+    pub fn is_running(self) -> bool {
+        matches!(
+            self,
+            PipelineStatus::Created
+                | PipelineStatus::WaitingForResource
+                | PipelineStatus::WaitingForCallback
+                | PipelineStatus::Preparing
+                | PipelineStatus::Pending
+                | PipelineStatus::Running
+        )
+    }
+}
+
+impl Serialize for PipelineStatus {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.word())
+    }
+}
+
+impl<'de> Deserialize<'de> for PipelineStatus {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::from_word(&String::deserialize(deserializer)?))
+    }
 }
 
 /// Where the MR's branch was deployed and can be tried: a review app, a preview, a storybook.
@@ -539,7 +645,7 @@ mod tests {
             number: 42,
             title: "feat: charge cards".into(),
             description: String::new(),
-            state: "opened".into(),
+            state: MrState::Open,
             draft: false,
             author: User { id: 5, username: "nina".into(), name: "Nina".into() },
             source_branch: "feat/checkout".into(),
@@ -547,7 +653,7 @@ mod tests {
             web_url: String::new(),
             updated_at: DateTime::default(),
             refs: Refs { base: "a".into(), start: "a".into(), head: "b".into() },
-            pipeline: Some(Pipeline { status: "success".into(), web_url: None }),
+            pipeline: Some(Pipeline { status: PipelineStatus::Success, web_url: None }),
             changes_count: None,
             conflicts: false,
             reviewers: vec![],
@@ -563,17 +669,17 @@ mod tests {
         assert_eq!(mergeable().merge_refusal(), None);
         let cases: [(Mr, &str); 7] = [
             (Mr { mine: false, ..mergeable() }, "only your own MRs merge from revu"),
-            (Mr { state: "merged".into(), ..mergeable() }, "this MR is merged"),
+            (Mr { state: MrState::Merged, ..mergeable() }, "this MR is merged"),
             (Mr { draft: true, ..mergeable() }, "a draft cannot merge: mark it ready first"),
             (Mr { conflicts: true, ..mergeable() }, "it has conflicts with its target branch"),
-            (Mr { pipeline: Some(Pipeline { status: "failed".into(), web_url: None }), ..mergeable() }, "its pipeline failed"),
+            (Mr { pipeline: Some(Pipeline { status: PipelineStatus::Failed, web_url: None }), ..mergeable() }, "its pipeline failed"),
             (Mr { approvals: Approvals { approved: true, ..Approvals::default() }, ..mergeable() }, "nobody approved it yet"),
             (Mr { approvals: Approvals { approvals_left: 2, ..mergeable().approvals }, ..mergeable() }, "it needs 2 more approvals"),
         ];
         for (mr, reason) in cases {
             assert_eq!(mr.merge_refusal().as_deref(), Some(reason));
         }
-        let running = Mr { pipeline: Some(Pipeline { status: "running".into(), web_url: None }), ..mergeable() };
+        let running = Mr { pipeline: Some(Pipeline { status: PipelineStatus::Running, web_url: None }), ..mergeable() };
         assert_eq!(running.merge_refusal(), None, "a running pipeline is the forge's call: it may merge when it passes");
     }
 
@@ -582,6 +688,15 @@ mod tests {
         assert_eq!(mergeable().draft_refusal(), None);
         assert_eq!(Mr { draft: true, ..mergeable() }.draft_refusal(), None);
         assert_eq!(Mr { mine: false, ..mergeable() }.draft_refusal().as_deref(), Some("it is not yours"));
-        assert_eq!(Mr { state: "closed".into(), ..mergeable() }.draft_refusal().as_deref(), Some("this MR is closed"));
+        assert_eq!(Mr { state: MrState::Closed, ..mergeable() }.draft_refusal().as_deref(), Some("this MR is closed"));
+    }
+
+    #[test]
+    fn states_are_stored_in_the_words_old_caches_hold() {
+        assert_eq!(serde_json::to_string(&[MrState::Open, MrState::Merged, MrState::Closed]).unwrap(), r#"["opened","merged","closed"]"#);
+        let read: Vec<PipelineStatus> = serde_json::from_str(r#"["success","FAILED","waiting_for_resource","blocked"]"#).unwrap();
+        assert_eq!(read, [PipelineStatus::Success, PipelineStatus::Failed, PipelineStatus::WaitingForResource, PipelineStatus::Pending]);
+        assert_eq!(serde_json::to_string(&read).unwrap(), r#"["success","failed","waiting_for_resource","pending"]"#);
+        assert!(read[2].is_running() && !read[1].is_running());
     }
 }
