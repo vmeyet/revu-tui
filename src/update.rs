@@ -8,6 +8,9 @@ use std::process::Command;
 /// Where `revu update` installs from.
 pub const REPO: &str = "https://github.com/vmeyet/revu-tui";
 
+/// The Homebrew formula `revu update` upgrades when brew installed the running binary.
+pub const FORMULA: &str = "vmeyet/tap/revu";
+
 /// cargo's build folder, kept in the cache between updates so only revu recompiles.
 /// Hosts are the other names at the cache root and always hold a dot, so this one cannot collide.
 const BUILD_FOLDER: &str = "cargo_target";
@@ -29,6 +32,25 @@ pub fn install() -> Result<()> {
         .context("running cargo install")?;
     if !status.success() {
         bail!("cargo install failed");
+    }
+    Ok(())
+}
+
+/// Whether brew installed the running binary, so brew is the one to upgrade it.
+pub fn installed_by_brew() -> bool {
+    std::env::current_exe().and_then(std::fs::canonicalize).is_ok_and(|exe| is_in_brew_cellar(&exe))
+}
+
+fn is_in_brew_cellar(exe: &Path) -> bool {
+    exe.components().any(|part| part.as_os_str() == "Cellar")
+}
+
+/// Upgrades the formula with brew, or reinstalls it when `force` asks to install the same version again.
+pub fn brew(force: bool) -> Result<()> {
+    let action = if force { "reinstall" } else { "upgrade" };
+    let status = Command::new("brew").args([action, FORMULA]).status().context("running brew")?;
+    if !status.success() {
+        bail!("brew {action} {FORMULA} failed");
     }
     Ok(())
 }
@@ -97,6 +119,16 @@ mod tests {
         let build = tempfile::tempdir().unwrap();
         forget_revu(&build.path().join("missing")).unwrap();
         forget_revu(build.path()).unwrap();
+    }
+
+    #[test]
+    fn a_binary_in_the_brew_cellar_is_installed_by_brew() {
+        assert!(is_in_brew_cellar(Path::new("/opt/homebrew/Cellar/revu/0.2.0/bin/revu")));
+    }
+
+    #[test]
+    fn a_binary_built_by_cargo_is_not_installed_by_brew() {
+        assert!(!is_in_brew_cellar(Path::new("/Users/nina/.cargo/bin/revu")));
     }
 
     #[test]

@@ -9,13 +9,14 @@ Review GitLab merge requests and GitHub pull requests in your terminal, with the
 ## Install
 
 ```sh
-cargo install --git https://github.com/vmeyet/revu-tui
+brew install vmeyet/tap/revu   # or: cargo install --git https://github.com/vmeyet/revu-tui
 revu login --from-glab            # GitLab: reuse the token glab holds
 revu login github.com --from-gh   # GitHub: reuse the token gh holds
 ```
 
 You need Rust 1.90 or newer.
 `revu update` installs the latest version later.
+When brew installed revu, `revu update` runs `brew upgrade` for you.
 
 ## A 30-second tour
 

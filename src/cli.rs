@@ -63,7 +63,7 @@ pub enum Command {
         /// The shell to write the script for.
         shell: clap_complete::Shell,
     },
-    /// Rebuild and install the latest `revu` with cargo.
+    /// Install the latest `revu`: with brew when brew installed it, else rebuilt with cargo.
     Update(UpdateArgs),
     /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.
     Usage(UsageArgs),
@@ -94,7 +94,7 @@ pub struct UsageArgs {
 /// Flags of `revu update`.
 #[derive(Args, Debug)]
 pub struct UpdateArgs {
-    /// Install even when the running binary is already the latest commit.
+    /// Install even when the running binary is already the latest commit (`brew reinstall` under brew).
     #[arg(short, long)]
     pub force: bool,
 }

@@ -6,6 +6,7 @@ rust-version = "1.90"
 description = "Review GitLab merge requests and GitHub pull requests from your terminal: a TUI plus scriptable commands."
 license = "MIT"
 repository = "https://github.com/vmeyet/revu-tui"
+homepage = "https://github.com/vmeyet/revu-tui"
 readme = "README.md"
 
 [[bin]]
@@ -88,3 +89,6 @@ struct_field_names = "allow"
 struct_excessive_bools = "allow"
 too_many_lines = "allow"
 unreadable_literal = "allow"
+
+[profile.dist]
+inherits = "release"
