@@ -63,7 +63,9 @@ src/
     draft.rs, suggestion.rs, image.rs, tree.rs   drafts, suggestion blocks, pictures, the file tree
   commands/          one file per subcommand
   tui/
-    mod.rs           run(): terminal setup, event loop, Action runner
+    mod.rs           run(): terminal setup, event loop
+    actions.rs       the Action runner: each action in its own task, answering through Incoming
+    backend.rs       Backend: the forge, the cache and the AI behind the actions
     app/             the pure state machine: keys in, actions out, incoming answers applied
       mod.rs         Focus, Input, Action, Incoming enums
       state.rs       App struct, Default
