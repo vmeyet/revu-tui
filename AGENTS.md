@@ -17,7 +17,7 @@ The design lives in `specs/`; read `specs/06-roadmap.md` first, it says what to 
 - Rust 2024, `rustfmt.toml` as committed (140 columns, `use_small_heuristics = "Max"`).
 - Lints are pedantic (`[lints]` in Cargo.toml): `cargo clippy --all-targets -- -D warnings` must be clean, and `unwrap`/`expect` only live in tests.
 - No comments that say what the code does; a comment must say why, and only when no name can.
-- Immutability across function boundaries: never hand a mutable value to a sibling or child; side effects at the edges (`main.rs`, `commands/`, `tui/mod.rs` action runner).
+- Immutability across function boundaries: never hand a mutable value to a sibling or child; side effects at the edges (`main.rs`, `commands/`, `tui/actions.rs` action runner).
 - Flat bodies of named steps at one level of abstraction; signatures designed from the call site.
 - One word per concept, the words in `specs/00-vision.md` § Vocabulary.
 - Anything that can run twice (draft sync, cache writes, logout) is safe to run twice.
