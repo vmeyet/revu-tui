@@ -299,7 +299,7 @@ Pinned to what slack-tui compiles with today, so versions are known good togethe
 |---|---|
 | ratatui 0.30, crossterm 0.29 (event-stream) | TUI |
 | tokio 1 (rt-multi-thread, macros, process, time, fs, sync, io-util) | runtime |
-| reqwest 0.13 (rustls, json), no default features | HTTP, GraphQL |
+| reqwest 0.13 (rustls on ring, json), no default features | HTTP, GraphQL |
 | serde, serde_json (preserve_order), toml | data |
 | toml_edit | saving the config keeps the user's comments |
 | clap 4 (derive, env), clap_complete | CLI |

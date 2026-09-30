@@ -15,7 +15,7 @@ pub const TIMEOUT: Duration = Duration::from_secs(15);
 /// A client without the token and without redirects, for the signed links a forge hands out:
 /// such a link carries its own right to read, so nothing else needs to travel with it.
 pub fn bare_client() -> Result<reqwest::Client> {
-    reqwest::Client::builder()
+    crate::http::client()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(TIMEOUT)
         .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
