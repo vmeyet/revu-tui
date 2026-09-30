@@ -321,3 +321,364 @@ impl App {
         vec![Action::Open(key)]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn the_queue_lands_in_sections_and_the_cursor_on_the_first_mr() {
+        let app = with_queue();
+        assert!(!app.queue_loading);
+        assert!(app.poll.queue_due.is_some());
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
+        let rows = app.queue_rows();
+        assert!(matches!(rows[0], QueueRow::Section { name: "TO REVIEW", count: 1, open: true }));
+        assert!(rows.iter().any(|r| matches!(r, QueueRow::Section { name: "DONE", open: false, .. })));
+    }
+
+    #[test]
+    fn j_and_k_skip_section_headers_and_stop_at_the_ends() {
+        let mut app = with_queue();
+        press(&mut app, "j");
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(41), "MINE header is skipped");
+        press(&mut app, "kkk");
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
+        press(&mut app, "G");
+        assert!(app.selected_mr().is_none(), "the last row is the folded Done header");
+        press(&mut app, "k");
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(35));
+        press(&mut app, "g");
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(42));
+    }
+
+    #[test]
+    fn zo_and_zc_fold_the_section_under_the_cursor() {
+        let mut app = with_queue();
+        press(&mut app, "G");
+        assert!(app.selected_mr().is_none(), "the folded Done header takes the cursor");
+        press(&mut app, "zo");
+        assert!(!app.queue_view.closed_sections.contains("DONE"));
+        press(&mut app, "G");
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(40));
+        press(&mut app, "zc");
+        assert!(app.queue_view.closed_sections.contains("DONE"));
+        assert!(matches!(app.queue_rows()[app.queue_selected], QueueRow::Section { name: "DONE", .. }), "the cursor stays on its header");
+        press(&mut app, "g");
+        press(&mut app, "zc");
+        assert!(app.queue_view.closed_sections.contains("TO REVIEW"), "any section folds, not only Done");
+        assert!(matches!(app.queue_rows()[app.queue_selected], QueueRow::Section { name: "TO REVIEW", .. }));
+        app.handle_key(code(KeyCode::Enter));
+        assert!(!app.queue_view.closed_sections.contains("TO REVIEW"), "enter on a folded header opens it");
+    }
+
+    #[test]
+    fn a_folded_section_is_saved_and_comes_back_folded() {
+        let mut app = with_queue();
+        let actions = press(&mut app, "gzc");
+        let [Action::SaveQueueView { view, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert!(view.closed_sections.contains("TO REVIEW"));
+        let mut next = with_queue();
+        next.apply(Incoming::QueueView { scope: next.scope(), view: view.clone() });
+        assert!(
+            next.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "TO REVIEW", open: false, .. })),
+            "folded after a restart"
+        );
+    }
+
+    #[test]
+    fn a_view_saved_before_folds_were_kept_folds_done_drafts_and_other() {
+        let old: QueueView = serde_json::from_str(r#"{"order":"updated","by_author":true}"#).unwrap();
+        assert_eq!(old.closed_sections, QueueView::default().closed_sections);
+        assert!(old.closed_sections.contains("DONE") && !old.closed_sections.contains("OPEN"));
+    }
+
+    #[test]
+    fn the_filter_narrows_live_and_esc_clears_it() {
+        let mut app = with_queue();
+        press(&mut app, "/runner");
+        assert!(app.filtering);
+        assert_eq!(app.selected_mr().map(|m| m.number), Some(35));
+        app.handle_key(code(KeyCode::Enter));
+        assert!(!app.filtering && app.filter == "runner");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.filter.is_empty());
+        press(&mut app, "/omar");
+        let iids: Vec<u64> = app.queue_rows().iter().filter_map(|r| if let QueueRow::Mr(m) = r { Some(m.number) } else { None }).collect();
+        assert_eq!(iids, [42, 35], "author matches too");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.filter.is_empty() && !app.filtering);
+    }
+
+    #[test]
+    fn badges_follow_the_spec_order() {
+        let mut app = with_queue();
+        assert_eq!(app.badge(&queued(40)), Some(Badge::Failed));
+        assert_eq!(app.badge(&queued(35)), Some(Badge::Running));
+        assert_eq!(app.badge(&queued(42)), None);
+        app.opened.insert(mr_key(), "2026-09-21T00:00:00Z".parse().unwrap());
+        assert_eq!(app.badge(&queued(42)), Some(Badge::Activity), "updated after it was last opened");
+        app.opened.insert(mr_key(), today());
+        assert_eq!(app.badge(&queued(42)), None);
+    }
+
+    fn queued(iid: u64) -> crate::forge::QueueMr {
+        let sections = sections();
+        [sections.to_review, sections.mine, sections.watching, sections.done].into_iter().flatten().find(|m| m.number == iid).unwrap()
+    }
+
+    #[test]
+    fn my_mr_carries_the_approval_mark_once_the_forge_would_merge_it() {
+        let app = with_queue();
+        let mine = queued(41);
+        assert_eq!(mine.author, app.me);
+        assert!(!app.approved(&mine), "not approved");
+        assert!(app.approved(&crate::forge::QueueMr { approved: true, approved_by: vec!["lea".into()], ..mine.clone() }));
+        assert!(!app.approved(&crate::forge::QueueMr { approved: true, ..mine }), "no approval rule and nobody approved");
+    }
+
+    #[test]
+    fn someone_elses_mr_carries_the_approval_mark_when_i_approved_it() {
+        let app = with_queue();
+        let theirs = queued(42);
+        assert!(!app.approved(&theirs));
+        assert!(
+            !app.approved(&crate::forge::QueueMr { approved: true, approved_by: vec!["lea".into()], ..theirs.clone() }),
+            "approved, not by me"
+        );
+        assert!(app.approved(&crate::forge::QueueMr { approved_by: vec!["nina".into()], ..theirs }));
+    }
+
+    #[test]
+    fn a_failed_mr_i_approved_shows_both_marks() {
+        let mut app = with_queue();
+        let failed = queued(40);
+        assert_eq!((app.badge(&failed), app.approved(&failed)), (Some(Badge::Failed), true));
+        press(&mut app, "Gzo");
+        let screen = render(&mut app, 100, 20);
+        assert!(screen.contains("✓ ✗ │"), "{screen}");
+    }
+
+    #[test]
+    fn in_a_checkout_the_queue_starts_on_its_project_and_star_widens_it() {
+        let mut app = scoped_app();
+        let scope = Some("acme/widgets".to_owned());
+        assert_eq!(app.start(), vec![Action::LoadQueue { scope: scope.clone(), from_cache: true }]);
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", count: 1, .. })));
+        assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "DRAFTS", count: 1, open: false })));
+        assert_eq!(press(&mut app, "*"), vec![Action::LoadQueue { scope: None, from_cache: true }]);
+        assert_eq!(app.sections, None, "the project's list is gone before the wider one paints");
+        assert_eq!(press(&mut app, "*"), vec![Action::LoadQueue { scope, from_cache: true }]);
+    }
+
+    #[test]
+    fn an_answer_for_the_other_scope_is_dropped_and_a_cached_one_never_hides_a_fresh_one() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(None, sections(), false));
+        assert_eq!(app.sections, None, "the answer to a scope we left");
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), true));
+        assert!(app.sections.is_some() && app.queue_loading, "the cache paints while the fetch runs");
+        app.apply(queue_answer(Some("acme/widgets"), Sections::default(), false));
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), true));
+        assert_eq!(app.sections, Some(Sections::default()), "a late cache answer never replaces a fresh one");
+        assert!(!app.queue_loading);
+    }
+
+    #[test]
+    fn star_outside_a_checkout_says_why_it_does_nothing() {
+        let mut app = with_queue();
+        assert_eq!(press(&mut app, "*"), vec![]);
+        assert!(app.live_toast().unwrap().text.contains("checkout"));
+    }
+
+    #[test]
+    fn the_queue_names_me_when_no_login_did() {
+        let mut app = App::new(Settings { me: String::new(), ..settings() });
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+        assert_eq!(app.me, "nina");
+        app.apply(Incoming::Queue { scope: None, me: "someone".into(), sections: sections(), opened: HashMap::new(), cached: false });
+        assert_eq!(app.me, "nina", "a stored name is never replaced");
+    }
+
+    #[test]
+    fn a_queue_across_hosts_tags_each_row_and_opens_it_on_its_host() {
+        let hosts = crate::forge::Hosts {
+            others: vec![("github.com".into(), Kind::GitHub)],
+            ..crate::forge::Hosts::one("gitlab.com", Kind::GitLab)
+        };
+        let mut app = App::new(Settings { hosts, ..settings() });
+        let here = sections();
+        let queue = fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json"));
+        let there = queue.on_host("github.com").sections(&[]);
+        let merged = crate::forge::Sections::merge(vec![here, there]);
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: merged, opened: HashMap::new(), cached: false });
+        let screen = render(&mut app, 120, 40);
+        assert!(screen.contains("#42") && screen.contains("!42"), "the sigil tells the forges apart:\n{screen}");
+        app.queue_layout = crate::config::QueueLayout::Compact;
+        let screen = render(&mut app, 120, 20);
+        assert!(screen.contains("github") && screen.contains("gitlab"), "{screen}");
+        let github_row = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.host.is_some())).unwrap();
+        app.queue_selected = github_row;
+        let actions = app.handle_key(code(KeyCode::Enter));
+        let [Action::Open(key)] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!(key.host.as_deref(), Some("github.com"));
+    }
+
+    fn two_hosts() -> crate::forge::Hosts {
+        crate::forge::Hosts { others: vec![("github.com".into(), Kind::GitHub)], ..crate::forge::Hosts::one("gitlab.com", Kind::GitLab) }
+    }
+
+    #[test]
+    fn inside_a_checkout_rows_carry_no_host_tag_even_with_two_hosts_logged_in() {
+        let mut app = App::new(Settings { project: Some("acme/widgets".into()), hosts: two_hosts(), ..settings() });
+        app.today = today();
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        let mr = app.sections.as_ref().unwrap().open[0].clone();
+        assert_eq!(app.host_tag(&mr), None);
+        let screen = render(&mut app, 120, 20);
+        assert!(!screen.contains("gitlab "), "{screen}");
+    }
+
+    #[test]
+    fn the_merged_queue_tags_each_row_with_its_host() {
+        let mut app = App::new(Settings { hosts: two_hosts(), ..settings() });
+        app.today = today();
+        let mut merged = sections();
+        let mut there = merged.to_review[0].clone();
+        there.host = Some("github.com".into());
+        there.number = 7;
+        merged.mine.push(there.clone());
+        app.apply(queue_answer(None, merged, false));
+        assert_eq!(app.host_tag(&there).as_deref(), Some("github"));
+        let here = app.sections.as_ref().unwrap().to_review[0].clone();
+        assert_eq!(app.host_tag(&here).as_deref(), Some("gitlab"));
+    }
+
+    #[test]
+    fn others_drafts_wait_folded_in_their_own_section_and_mine_stay_mine() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        let rows = app.queue_rows();
+        let drafts = rows.iter().position(|r| matches!(r, QueueRow::Section { name: "DRAFTS", open: false, count: 1 })).unwrap();
+        let done = rows.iter().position(|r| matches!(r, QueueRow::Section { name: "DONE", .. })).unwrap();
+        let open = rows.iter().position(|r| matches!(r, QueueRow::Section { name: "OPEN", .. })).unwrap();
+        assert!(open < drafts && drafts < done);
+        assert!(rows.iter().any(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 41 && mr.draft)), "my own draft is in Mine");
+    }
+
+    #[test]
+    fn go_and_the_jump_reach_a_draft_folded_away_in_drafts() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        assert_eq!(app.completions_for("go "), ["!42", "!41", "!51", "!50", "!40"]);
+        press(&mut app, ":");
+        type_text(&mut app, "go !50");
+        assert_eq!(app.opening, Some(MrKey::new("acme/widgets", 50)));
+    }
+
+    #[test]
+    fn the_queue_filter_speaks_the_query_language_and_esc_clears_it() {
+        let mut app = with_queue();
+        press(&mut app, "/");
+        type_text(&mut app, "@omar is:failing");
+        let shown: Vec<u64> =
+            app.queue_rows().iter().filter_map(|r| if let QueueRow::Mr(mr) = r { Some(mr.number) } else { None }).collect();
+        assert!(shown.iter().all(|n| [42, 35].contains(n)), "{shown:?}");
+        assert_eq!(app.queue_view_label().as_deref(), Some("@omar is:failing"));
+        press(&mut app, "/");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.filter.is_empty() && app.queue_view_label().is_none());
+    }
+
+    fn with_views() -> App {
+        let views = vec![("backlog".to_owned(), "size:small".to_owned()), ("omar".to_owned(), "@omar".to_owned())];
+        let mut app = App::new(Settings { views, ..settings() });
+        app.today = today();
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+        app
+    }
+
+    #[test]
+    fn quote_then_a_letter_or_a_digit_applies_a_saved_view() {
+        let mut app = with_views();
+        press(&mut app, "'");
+        assert!(app.views_hint().contains("b backlog · o omar"), "{}", app.views_hint());
+        press(&mut app, "o");
+        assert_eq!((app.filter.as_str(), app.view.as_deref()), ("@omar", Some("omar")));
+        assert_eq!(app.queue_view_label().as_deref(), Some("omar"), "the title names the view");
+        press(&mut app, "1");
+        assert_eq!(app.view.as_deref(), Some("backlog"), "digits take views in name order");
+        press(&mut app, "'z");
+        assert!(app.live_toast().unwrap().text.contains("no view on `z`"));
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.filter.is_empty() && app.view.is_none());
+    }
+
+    #[test]
+    fn the_status_line_lists_views_while_quote_waits() {
+        let mut app = with_views();
+        press(&mut app, "'");
+        let screen = render(&mut app, 100, 12);
+        assert!(screen.lines().last().unwrap().contains("' views: b backlog · o omar"), "{screen}");
+    }
+
+    #[test]
+    fn what_the_rules_move_out_waits_folded_in_other_and_reviewed_mrs_sort_last() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), ruled_sections(), false));
+        let rows = app.queue_rows();
+        assert!(rows.iter().any(|r| matches!(r, QueueRow::Section { name: "OTHER", count: 1, open: false })));
+        let open: Vec<u64> = rows
+            .iter()
+            .skip_while(|r| !matches!(r, QueueRow::Section { name: "OPEN", .. }))
+            .skip(1)
+            .take_while(|r| matches!(r, QueueRow::Mr(_)))
+            .map(|r| match r {
+                QueueRow::Mr(mr) => mr.number,
+                _ => 0,
+            })
+            .collect();
+        assert_eq!(open.last(), Some(&52), "reviewed by others sorts last: {open:?}");
+        assert!(open.contains(&53));
+    }
+
+    #[test]
+    fn the_status_line_says_why_the_selected_mr_sits_there() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), ruled_sections(), false));
+        let at = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 52)).unwrap();
+        app.queue_selected = at;
+        assert_eq!(app.selected_reason().as_deref(), Some("reviewed by 2"));
+        assert!(render(&mut app, 120, 30).lines().last().unwrap().contains("reviewed by 2"));
+        app.queue_selected = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 53)).unwrap();
+        assert_eq!(app.selected_reason(), None);
+    }
+
+    #[test]
+    fn ready_sits_right_after_mine_and_a_failing_command_only_warns() {
+        let mut app = scoped_app();
+        let sections = scoped_sections();
+        let picked = sections.open.iter().find(|mr| !mr.draft).cloned().unwrap();
+        let sections = Sections {
+            ready: vec![picked.clone()],
+            open: sections.open.iter().filter(|mr| mr.number != picked.number).cloned().collect(),
+            ..sections
+        };
+        app.apply(queue_answer(Some("acme/widgets"), sections, false));
+        let names: Vec<&str> = app
+            .queue_rows()
+            .iter()
+            .filter_map(|r| match r {
+                QueueRow::Section { name, .. } => Some(*name),
+                _ => None,
+            })
+            .collect();
+        let at = |name| names.iter().position(|n| *n == name).unwrap();
+        assert_eq!(at("READY"), at("MINE") + 1);
+        app.apply(Incoming::Failed { what: Failure::Ready, message: "ready command `slack` failed: not logged in".into() });
+        assert!(app.live_toast().unwrap().text.contains("not logged in"));
+        assert!(app.sections.as_ref().is_some_and(|s| s.ready.len() == 1), "Ready keeps its last answer");
+    }
+}

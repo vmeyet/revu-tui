@@ -114,3 +114,227 @@ impl App {
 
 /// How long the zen switch line stays on top.
 const ZEN_BANNER: std::time::Duration = std::time::Duration::from_millis(1_500);
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn zen_gives_side_by_side_the_whole_screen_whatever_its_width_setting() {
+        let mut app = with_sum_review();
+        app.zen_width = Some(90);
+        press(&mut app, "zzD");
+        let screen = render(&mut app, 138, 18);
+        assert!(app.open.as_ref().unwrap().review.shows_side_by_side(), "{screen}");
+        assert!(screen.lines().any(|l| l.contains("-    let b = 2;") && l.contains("+    let b = 20;")), "{screen}");
+    }
+
+    #[test]
+    fn zz_reads_the_diff_alone_and_h_brings_the_queue_back() {
+        let mut app = with_queue();
+        press(&mut app, "zz");
+        assert!(!app.zen, "nothing to read before an MR is open");
+        let mut app = with_review();
+        press(&mut app, "zz");
+        assert!(app.zen);
+        let screen = render(&mut app, 160, 20);
+        assert!(!screen.contains("Queue"), "{screen}");
+        press(&mut app, "h");
+        assert!(!app.zen);
+        assert_eq!(app.focus, Focus::Queue);
+    }
+
+    #[test]
+    fn zz_zen_order_is_the_queue_as_shown() {
+        let mut app = with_review();
+        press(&mut app, "zz");
+        let order = app.zen_order();
+        let shown: Vec<MrKey> = app
+            .queue_rows()
+            .iter()
+            .filter_map(|row| match row {
+                QueueRow::Mr(mr) | QueueRow::Stacked(mr) => Some(mr.key()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(order, shown, "every MR row, top to bottom, nothing from the folded sections");
+        let done = app.sections.clone().unwrap().done;
+        assert!(done.iter().all(|mr| !order.contains(&mr.key())), "Done is folded: its MRs are skipped");
+    }
+
+    #[test]
+    fn brackets_m_in_zen_open_the_next_and_previous_mr_and_stay_in_zen() {
+        let mut app = with_review();
+        press(&mut app, "zz");
+        let order = app.zen_order();
+        assert!(order.len() > 1, "the fixture queue holds more than one MR");
+        assert_eq!(order[0], mr_key());
+        assert_eq!(press(&mut app, "]m"), vec![Action::Open(order[1].clone())]);
+        assert!(app.zen, "the MR changes, zen stays");
+        let banner = app.zen_banner(app.now).unwrap().to_owned();
+        assert!(banner.contains(&format!("2/{}", order.len())), "{banner}");
+        assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(order[1].clone()), "leaving zen shows the queue on it");
+        app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
+        assert_eq!(press(&mut app, "[m"), vec![Action::Open(order[0].clone())]);
+        app.apply(Incoming::Review { key: order[0].clone(), review: Box::new(review()), cached: None });
+        assert!(press(&mut app, "[m").is_empty());
+        assert!(app.live_toast().unwrap().text.contains("first MR"));
+    }
+
+    #[test]
+    fn brackets_m_outside_zen_open_the_next_mr_without_a_banner() {
+        let mut app = with_review();
+        let order = app.zen_order();
+        assert_eq!(press(&mut app, "]m"), vec![Action::Open(order[1].clone())]);
+        assert!(!app.zen && app.zen_banner(app.now).is_none());
+        assert_eq!(app.focus, Focus::Review);
+        app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
+        app.focus = Focus::Queue;
+        assert_eq!(press(&mut app, "[m"), vec![Action::Open(order[0].clone())], "the queue reads it too");
+    }
+
+    #[test]
+    fn arrows_in_zen_move_focus_as_outside_it() {
+        let mut app = with_review();
+        press(&mut app, "zz]N");
+        assert!(app.handle_key(code(KeyCode::Right)).is_empty(), "→ never changes MR");
+        assert!(app.open.as_ref().unwrap().pane.is_some(), "→ on a marked line opens the pane");
+        assert_eq!(app.focus, Focus::Side);
+        app.handle_key(code(KeyCode::Left));
+        assert_eq!(app.focus, Focus::Review);
+        assert!(app.zen);
+        assert!(app.handle_key(code(KeyCode::Left)).is_empty());
+        assert!(!app.zen, "← from the diff leaves zen, as h does");
+        assert_eq!(app.focus, Focus::Queue);
+    }
+
+    #[test]
+    fn esc_and_h_leave_zen() {
+        let mut app = with_review();
+        press(&mut app, "zz");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(!app.zen);
+        assert_eq!(app.focus, Focus::Review, "esc leaves zen and stays on the diff");
+        press(&mut app, "zz");
+        press(&mut app, "h");
+        assert!(!app.zen);
+        assert_eq!(app.focus, Focus::Queue);
+    }
+
+    #[test]
+    fn starting_on_an_mr_opens_it_in_zen_with_the_queue_loading_behind() {
+        let target = with_queue().zen_order()[1].clone();
+        let mut app = app();
+        assert_eq!(app.start_on(target.clone()), vec![Action::LoadQueue { scope: None, from_cache: true }, Action::Open(target.clone())]);
+        assert!(app.zen);
+        assert_eq!(app.focus, Focus::Review);
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+        app.apply(Incoming::Review { key: target.clone(), review: Box::new(review()), cached: None });
+        assert_eq!(app.open.as_ref().map(|o| o.key.clone()), Some(target.clone()), "the queue arriving leaves the MR open");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(!app.zen);
+        assert_eq!(app.focus, Focus::Review, "esc leaves zen onto the diff");
+        assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(target), "the queue shows it selected, as if opened from it");
+    }
+
+    #[test]
+    fn starting_on_an_mr_that_fails_to_open_leaves_zen_for_the_queue() {
+        let mut app = app();
+        app.start_on(mr_key());
+        app.apply(Incoming::Failed { what: Failure::Open, message: "404 Not Found".into() });
+        assert!(!app.zen, "zen hides the queue, the only place left to go");
+        assert_eq!(app.focus, Focus::Queue);
+    }
+
+    #[test]
+    fn notifications_wait_for_zen_to_end() {
+        let mut app = with_review();
+        let full = sections();
+        let before = crate::forge::Sections { to_review: vec![], ..full.clone() };
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: before, opened: HashMap::new(), cached: false });
+        app.take_actions();
+        press(&mut app, "zz");
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: full, opened: HashMap::new(), cached: false });
+        assert!(app.take_actions().iter().all(|a| !matches!(a, Action::Notify { .. })), "zen is quiet");
+        let released = press(&mut app, "zz");
+        assert!(matches!(released.as_slice(), [Action::Notify { .. }]), "{released:?}");
+    }
+
+    #[test]
+    fn in_zen_h_and_l_move_between_the_diff_and_the_pane_under_it() {
+        let mut app = zen_on_a_thread();
+        render(&mut app, 138, 40);
+        press(&mut app, "h");
+        assert_eq!((app.focus, app.zen), (Focus::Review, true), "h from the pane stays in zen");
+        assert!(render(&mut app, 138, 40).contains("─ charge.rs:-13 · 1 thread"), "the pane stays under the diff");
+        press(&mut app, "l");
+        assert_eq!(app.focus, Focus::Side);
+        app.handle_key(code(KeyCode::Left));
+        assert_eq!(app.focus, Focus::Review);
+        app.handle_key(code(KeyCode::Right));
+        assert_eq!(app.focus, Focus::Side);
+    }
+
+    #[test]
+    fn in_zen_a_new_thread_box_keeps_a_row_to_type_in() {
+        let mut app = with_review();
+        let file = DiffFile {
+            diff: "@@ -1,2 +1,3 @@\n a\n-b\n+c\n+d\n".into(),
+            old_path: "src/quiet.rs".into(),
+            new_path: "src/quiet.rs".into(),
+            ..DiffFile::default()
+        };
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(mr(), &[file], vec![], &[])), cached: None });
+        app.review_jump_to(|row| matches!(row, Row::Line { .. }));
+        press(&mut app, "zzc");
+        for (width, height) in [(138, 40), (120, 25)] {
+            let screen = render(&mut app, width, height);
+            let lines: Vec<&str> = screen.lines().collect();
+            let top = lines.iter().position(|l| l.contains("╭ new thread")).unwrap_or_else(|| panic!("a box:\n{screen}"));
+            assert!(lines[top + 1].contains('│'), "{width}x{height}: a row to type in under the box's top:\n{screen}");
+        }
+    }
+
+    #[test]
+    fn in_zen_the_wheel_and_a_drag_stay_in_the_part_under_the_pointer() {
+        let mut app = with_review();
+        press(&mut app, "zzT");
+        render(&mut app, 138, 40);
+        let (diff, pane) = (app.areas.review, app.areas.side);
+        let selected = app.open.as_ref().unwrap().selected;
+        wheel(&mut app, true, pane.x + 5, pane.y + 2);
+        assert_eq!(app.open.as_ref().unwrap().selected, selected, "the diff stays");
+        assert_ne!(focused_thread(&app).as_deref(), Some("6a9c1750b2d6e4f0"), "the list moved");
+        wheel(&mut app, true, diff.x + 5, diff.y + 5);
+        assert_ne!(app.open.as_ref().unwrap().selected, selected, "the diff moved");
+        assert_eq!(app.focus, Focus::Side);
+        let code = spot(&mut app, "let client = Client::new()", 138, 40);
+        let actions = drag(&mut app, code, (code.0, pane.y + 3), 138, 40);
+        let Some(Action::Copy { text, .. }) = actions.first() else { panic!("a copy: {actions:?}") };
+        assert!(text.starts_with("let client = Client::new();") && !text.contains("Why drop"), "{text}");
+    }
+
+    #[test]
+    fn the_zen_header_counts_unresolved_threads() {
+        let mut app = with_review();
+        press(&mut app, "zz");
+        let header = |app: &mut App| render(app, 160, 45).lines().find(|l| !l.trim().is_empty()).unwrap().trim_end().to_owned();
+        assert!(header(&mut app).ends_with("omar · +5 −3 ✓ · ◆1"), "{}", header(&mut app));
+        resolve_the_diff_note(&mut app);
+        assert!(header(&mut app).ends_with("omar · +5 −3 ✓"), "no count once all are resolved");
+    }
+
+    #[test]
+    fn a_toast_in_zen_shows_briefly_on_the_bottom_row() {
+        let mut app = with_review();
+        press(&mut app, "zz]m");
+        let _ = render(&mut app, 160, 45);
+        press(&mut app, "w");
+        let screen = render(&mut app, 160, 45);
+        assert!(screen.lines().last().unwrap().contains("long lines wrap"), "{screen}");
+        app.now += std::time::Duration::from_secs(3);
+        let screen = render(&mut app, 160, 45);
+        assert!(!screen.contains("long lines wrap"), "gone after two seconds");
+    }
+}

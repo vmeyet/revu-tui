@@ -154,3 +154,105 @@ impl App {
 fn load(open: &Open) -> Action {
     Action::LoadChecks { key: open.key.clone(), head: open.review.mr.refs.head.clone() }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn review_apps_show_in_the_header_the_pipeline_and_the_cover_and_reload_once_a_run_ends() {
+        use crate::forge::Deployment;
+        let mut app = with_pipeline();
+        assert!(app.take_actions().iter().any(|a| matches!(a, Action::LoadDeployments { .. })), "a finished run");
+        let deployments = vec![
+            Deployment { environment: "storybook/feat-checkout".into(), url: "https://sb.acme.test/feat-checkout".into(), current: false },
+            Deployment { environment: "review/feat-checkout".into(), url: "https://feat-checkout.review.acme.test".into(), current: true },
+        ];
+        app.apply(Incoming::Deployments { key: mr_key(), deployments });
+        let screen = render(&mut app, 200, 30);
+        assert!(screen.contains("⧉ review/feat-checkout +1"), "the review app comes first in the header:\n{screen}");
+        assert!(screen.contains("REVIEW APPS") && screen.contains("https://sb.acme.test/feat-checkout"), "{screen}");
+        assert!(screen.contains("⧉ storybook/feat-checkout · older push"), "{screen}");
+        assert!(app.links.iter().any(|l| l.text == "⧉ review/feat-checkout" && l.url == "https://feat-checkout.review.acme.test"));
+        press(&mut app, "p");
+        press(&mut app, "i");
+        let cover = render(&mut app, 200, 50);
+        assert!(cover.contains("REVIEW APPS") && cover.contains("https://feat-checkout.review.acme.test"), "{cover}");
+        assert!(!cover.contains("https://sb.acme.test"), "the cover shows the one to try");
+    }
+
+    #[test]
+    fn a_click_on_a_review_app_opens_it_from_the_pipeline_and_the_cover() {
+        use crate::forge::Deployment;
+        use crossterm::event::{MouseButton, MouseEventKind};
+        let mut app = with_pipeline();
+        let url = "https://feat-checkout.review.acme.test";
+        let deployments = vec![Deployment { environment: "review/feat-checkout".into(), url: url.into(), current: true }];
+        app.apply(Incoming::Deployments { key: mr_key(), deployments });
+        let click = |app: &mut App, at: (u16, u16)| {
+            mouse(app, MouseEventKind::Down(MouseButton::Left), at);
+            mouse(app, MouseEventKind::Up(MouseButton::Left), at)
+        };
+        for (keys, height) in [("", 30), ("pi", 50)] {
+            press(&mut app, keys);
+            render(&mut app, 200, height);
+            let link = app.links.iter().find(|l| l.text == url).unwrap_or_else(|| panic!("after {keys:?}: {:?}", app.links)).clone();
+            assert_eq!(click(&mut app, (link.x + 2, link.y)), vec![Action::OpenUrl(url.into())], "after {keys:?}");
+        }
+    }
+
+    #[test]
+    fn p_opens_the_pipeline_on_its_first_failure_and_o_opens_that_job() {
+        let mut app = with_pipeline();
+        assert_eq!(app.focus, Focus::Side);
+        let pipeline = app.open.as_ref().unwrap().pipeline.clone().unwrap();
+        assert_eq!(pipeline.jobs()[pipeline.selected].name, "flaky", "the cursor lands on the failure");
+        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl("https://ci.example/flaky".into())]);
+        press(&mut app, "j");
+        assert_eq!(press(&mut app, "y"), vec![Action::Yank("https://ci.example/unit".into())]);
+        press(&mut app, "p");
+        assert!(app.open.as_ref().unwrap().pipeline.is_none());
+        assert_eq!(app.focus, Focus::Review);
+    }
+
+    #[test]
+    fn a_run_still_going_is_asked_again_while_the_pane_shows_it() {
+        use crate::forge::checks::JobState;
+        let mut app = with_review();
+        press(&mut app, "p");
+        let mut going = run();
+        going.stages[1].jobs[0].state = JobState::Running;
+        app.apply(Incoming::Checks { key: mr_key(), checks: Some(going) });
+        assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadChecks { .. })), "not before its time");
+        app.now += Duration::from_secs(16);
+        assert!(app.tick().iter().any(|a| matches!(a, Action::LoadChecks { .. })));
+        assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadChecks { .. })), "asked once");
+        app.apply(Incoming::Checks { key: mr_key(), checks: Some(run()) });
+        app.now += Duration::from_secs(60);
+        assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadChecks { .. })), "a finished run is left alone");
+    }
+
+    #[test]
+    fn r_asks_again_and_a_failure_or_no_run_says_so_in_the_pane() {
+        let mut app = with_pipeline();
+        assert!(matches!(press(&mut app, "r").as_slice(), [Action::LoadChecks { .. }]));
+        app.apply(Incoming::Failed { what: Failure::Checks, message: "HTTP 500".into() });
+        assert_eq!(app.open.as_ref().unwrap().pipeline.as_ref().unwrap().run, Run::Failed("HTTP 500".into()));
+        app.apply(Incoming::Checks { key: mr_key(), checks: None });
+        assert_eq!(app.open.as_ref().unwrap().pipeline.as_ref().unwrap().run, Run::Nothing);
+    }
+
+    #[test]
+    fn the_pipeline_and_the_file_tree_share_the_right_pane() {
+        let mut app = with_pipeline();
+        press(&mut app, "h");
+        press(&mut app, "t");
+        let open = app.open.as_ref().unwrap();
+        assert!(open.tree.is_some() && open.pipeline.is_none());
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "p");
+        let open = app.open.as_ref().unwrap();
+        assert!(open.pipeline.is_some() && open.tree.is_none());
+    }
+}

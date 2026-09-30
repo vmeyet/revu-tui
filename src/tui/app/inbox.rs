@@ -175,6 +175,7 @@ pub fn progress_bar(viewed: usize, files: usize, width: usize) -> (String, Strin
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::app::test_support::*;
 
     #[test]
     fn the_bar_fills_with_the_share_viewed() {
@@ -183,5 +184,156 @@ mod tests {
         assert_eq!(progress_bar(12, 12, 10), ("━".repeat(10), String::new()));
         assert_eq!(progress_bar(1, 12, 10).0.chars().count(), 1, "one viewed file already shows");
         assert_eq!(progress_bar(3, 0, 10).0, "", "no file, no progress");
+    }
+
+    fn inbox_sections() -> Sections {
+        let base = sections().to_review[0].clone();
+        let mr = |number: u64, approved: bool| crate::forge::QueueMr {
+            number,
+            approved_by: if approved { vec!["nina".into()] } else { vec![] },
+            ..base.clone()
+        };
+        Sections {
+            ready: vec![mr(50, false)],
+            to_review: vec![mr(42, false), mr(43, true), mr(44, false)],
+            mine: sections().mine,
+            ..Sections::default()
+        }
+    }
+
+    fn with_inbox() -> App {
+        let mut app = app();
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: inbox_sections(), opened: HashMap::new(), cached: false });
+        app.take_actions();
+        app
+    }
+
+    fn opened_at(app: &mut App, number: u64) {
+        let key = MrKey::new("acme/widgets", number);
+        app.open_key(key.clone());
+        app.apply(Incoming::Review { key, review: Box::new(review()), cached: None });
+        app.take_actions();
+    }
+
+    fn numbers(actions: &[Action]) -> Vec<u64> {
+        actions.iter().filter_map(|a| if let Action::Open(key) = a { Some(key.number) } else { None }).collect()
+    }
+
+    #[test]
+    fn review_mode_walks_ready_then_to_review_and_skips_what_i_approved() {
+        let order: Vec<u64> = with_inbox().review_order().iter().map(|k| k.number).collect();
+        assert_eq!(order, [50, 42, 44]);
+    }
+
+    #[test]
+    fn bracket_r_opens_the_next_and_previous_mr_that_needs_me_in_place() {
+        let mut app = with_inbox();
+        opened_at(&mut app, 42);
+        assert_eq!(numbers(&press(&mut app, "]r")), [44]);
+        assert_eq!(app.focus, Focus::Review, "no trip back to the queue");
+        let mut app = with_inbox();
+        opened_at(&mut app, 42);
+        assert_eq!(numbers(&press(&mut app, "[r")), [50]);
+        let mut app = with_inbox();
+        opened_at(&mut app, 44);
+        assert!(numbers(&press(&mut app, "]r")).is_empty());
+        assert!(app.live_toast().unwrap().text.contains("last MR"));
+    }
+
+    #[test]
+    fn bracket_r_from_the_queue_starts_with_the_first_mr_that_needs_me() {
+        let mut app = with_inbox();
+        app.focus = Focus::Queue;
+        app.queue_selected = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 41)).unwrap();
+        assert_eq!(numbers(&press(&mut app, "]r")), [50], "from an MR outside the list, the first one");
+    }
+
+    #[test]
+    fn a_publish_offers_the_next_mr_and_enter_opens_it_while_esc_stays() {
+        let mut app = with_inbox();
+        opened_at(&mut app, 42);
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 2 });
+        assert_eq!(app.offer.as_ref().map(|k| k.number), Some(44));
+        assert!(render(&mut app, 120, 20).contains("enter next MR · esc stay"));
+        assert_eq!(numbers(&app.handle_key(code(KeyCode::Enter))), [44]);
+        let mut app = with_inbox();
+        opened_at(&mut app, 42);
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 1 });
+        assert!(app.handle_key(code(KeyCode::Esc)).is_empty());
+        assert_eq!(app.offer, None);
+        let mut app = with_inbox();
+        opened_at(&mut app, 44);
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 44), approved: false, count: 1 });
+        assert_eq!(app.offer, None, "no offer when nothing comes next");
+    }
+
+    #[test]
+    fn another_key_declines_the_offer_and_still_does_its_job() {
+        let mut app = with_inbox();
+        opened_at(&mut app, 42);
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 1 });
+        let before = app.open.as_ref().unwrap().selected;
+        press(&mut app, "j");
+        assert_eq!(app.offer, None);
+        assert_ne!(app.open.as_ref().unwrap().selected, before);
+    }
+
+    #[test]
+    fn the_cursor_comes_back_where_i_left_it_even_after_a_commit_on_another_file() {
+        let mut app = with_review();
+        on_line(&mut app);
+        let spot = app.spot().unwrap();
+        let mut later = diffs();
+        later[1].diff = "@@ -1,2 +1,3 @@\n a\n+b\n c\n".into();
+        let fresh = Review::new(mr(), &later, discussions(), &["*.lock".into()]);
+        let mut app = with_queue();
+        app.open_key(mr_key());
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(fresh), cached: None });
+        app.apply(Incoming::Resume { key: mr_key(), spot: spot.clone() });
+        assert_eq!(app.spot(), Some(spot), "same file, same line");
+    }
+
+    #[test]
+    fn resuming_never_moves_a_cursor_the_reader_already_moved() {
+        let mut app = with_review();
+        on_line(&mut app);
+        let moved = app.open.as_ref().unwrap().selected;
+        app.apply(Incoming::Resume { key: mr_key(), spot: Spot { path: "Cargo.lock".into(), old: None, new: None } });
+        assert_eq!(app.open.as_ref().unwrap().selected, moved);
+    }
+
+    #[test]
+    fn a_resting_cursor_is_saved_once_and_the_opening_place_is_not() {
+        let mut app = with_review();
+        app.now += std::time::Duration::from_secs(5);
+        assert!(!app.tick().iter().any(|a| matches!(a, Action::SaveState { .. })), "nothing moved yet");
+        on_line(&mut app);
+        app.tick();
+        app.now += std::time::Duration::from_secs(2);
+        let saved: Vec<Action> = app.tick().into_iter().filter(|a| matches!(a, Action::SaveState { spot: Some(_), .. })).collect();
+        assert_eq!(saved.len(), 1);
+        app.now += std::time::Duration::from_secs(2);
+        assert!(!app.tick().iter().any(|a| matches!(a, Action::SaveState { .. })), "saved once");
+    }
+
+    #[test]
+    fn switching_mr_saves_where_i_stood_first() {
+        let mut app = with_inbox();
+        opened_at(&mut app, 42);
+        press(&mut app, "]cj");
+        let actions = press(&mut app, "]r");
+        assert!(
+            matches!(actions.as_slice(), [Action::SaveState { key, spot: Some(_), .. }, Action::Open(_)] if key.number == 42),
+            "{actions:?}"
+        );
+    }
+
+    #[test]
+    fn a_viewed_auto_folded_file_joins_the_count() {
+        let mut app = with_review();
+        press(&mut app, "zvjzv");
+        let screen = render(&mut app, 160, 24);
+        assert!(screen.contains("viewed 2/2 ━"), "{screen}");
+        assert!(!screen.contains("folded ━"), "{screen}");
     }
 }

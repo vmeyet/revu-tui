@@ -142,3 +142,96 @@ fn target_names(targets: &[Target]) -> String {
     let names: Vec<&str> = targets.iter().filter_map(|t| t.name.as_deref()).collect();
     if names.is_empty() { "only the bare [share] target exists".to_owned() } else { format!("the targets are {}", names.join(", ")) }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn y_without_a_share_target_says_how_to_add_one() {
+        let mut app = sharing_queue(vec![]);
+        assert!(press(&mut app, "Y").is_empty());
+        assert!(app.sharing.is_none());
+        assert!(app.live_toast().unwrap().text.contains("[share] command"));
+    }
+
+    #[test]
+    fn y_then_a_note_then_the_preview_then_y_sends_once() {
+        let mut app = sharing_queue(vec![share_target(None)]);
+        press(&mut app, "Y");
+        assert!(matches!(app.sharing.as_ref().unwrap().stage, ShareStage::Note { .. }), "one target: straight to the note");
+        assert!(type_text(&mut app, "needs a second pair of eyes").is_empty(), "enter only shows the preview");
+        let Some(ShareStage::Preview { message, .. }) = app.sharing.as_ref().map(|s| &s.stage) else { panic!("no preview") };
+        let reference = app.sharing.as_ref().unwrap().fields.reference.clone();
+        assert!(message.starts_with(&format!("[{reference} ")) && message.ends_with("\n_needs a second pair of eyes_"), "{message}");
+        let message = message.clone();
+        let actions = press(&mut app, "y");
+        assert_eq!(actions.len(), 1);
+        let Action::Share { target, message: sent, done } = &actions[0] else { panic!("{actions:?}") };
+        assert_eq!((target.as_ref(), sent, done.as_str()), (&share_target(None), &message, format!("shared {reference}").as_str()));
+        assert!(app.sharing.is_none());
+    }
+
+    #[test]
+    fn an_empty_note_drops_the_note_line() {
+        let mut app = sharing_queue(vec![share_target(None)]);
+        press(&mut app, "Y");
+        app.handle_key(code(KeyCode::Enter));
+        let Some(ShareStage::Preview { message, .. }) = app.sharing.as_ref().map(|s| &s.stage) else { panic!("no preview") };
+        assert_eq!(message.lines().count(), 1, "{message}");
+    }
+
+    #[test]
+    fn esc_at_any_step_sends_nothing() {
+        let two = vec![share_target(None), share_target(Some("team"))];
+        for steps in [&[][..], &[KeyCode::Enter][..], &[KeyCode::Enter, KeyCode::Enter][..]] {
+            let mut app = sharing_queue(two.clone());
+            let mut actions = press(&mut app, "Y");
+            for step in steps {
+                actions.extend(app.handle_key(code(*step)));
+            }
+            assert!(app.sharing.is_some(), "still open after {steps:?}");
+            actions.extend(app.handle_key(code(KeyCode::Esc)));
+            assert!(actions.is_empty() && app.sharing.is_none(), "{steps:?}: {actions:?}");
+        }
+    }
+
+    #[test]
+    fn several_targets_are_picked_by_move_or_digit_and_share_names_one() {
+        let two = vec![share_target(None), share_target(Some("team"))];
+        let mut app = sharing_queue(two.clone());
+        press(&mut app, "Y");
+        assert!(matches!(app.sharing.as_ref().unwrap().stage, ShareStage::Pick { .. }));
+        press(&mut app, "j");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(&app.sharing.as_ref().unwrap().stage, ShareStage::Note { target, .. } if target.name.as_deref() == Some("team")));
+        let mut app = sharing_queue(two.clone());
+        press(&mut app, "Y2");
+        assert!(matches!(&app.sharing.as_ref().unwrap().stage, ShareStage::Note { target, .. } if target.name.as_deref() == Some("team")));
+        let mut app = sharing_queue(two);
+        press(&mut app, ":share team");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(&app.sharing.as_ref().unwrap().stage, ShareStage::Note { target, .. } if target.name.as_deref() == Some("team")));
+        assert_eq!(app.sharing.as_ref().unwrap().title(), format!("share {} to team", app.sharing.as_ref().unwrap().fields.reference));
+    }
+
+    #[test]
+    fn e_in_the_preview_goes_back_to_the_note_with_its_text() {
+        let mut app = sharing_queue(vec![share_target(None)]);
+        press(&mut app, "Y");
+        type_text(&mut app, "wip");
+        press(&mut app, "e");
+        let Some(ShareStage::Note { note, .. }) = app.sharing.as_ref().map(|s| &s.stage) else { panic!("not back to the note") };
+        assert_eq!(note.text(), "wip");
+    }
+
+    #[test]
+    fn in_the_review_y_shares_the_open_mr() {
+        let mut app = with_review();
+        app.share_targets = vec![share_target(None)];
+        let title = app.open.as_ref().unwrap().review.mr.title.clone();
+        press(&mut app, "Y");
+        assert_eq!(app.sharing.as_ref().unwrap().fields.title, title);
+    }
+}

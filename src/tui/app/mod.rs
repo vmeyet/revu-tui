@@ -27,6 +27,8 @@ mod share;
 mod stack;
 mod state;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod tests;
 mod tree;
 mod triage;

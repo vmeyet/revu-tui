@@ -394,3 +394,61 @@ impl App {
         self.queue_loading || self.opening.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn starts_by_loading_the_queue() {
+        assert_eq!(app().start(), vec![Action::LoadQueue { scope: None, from_cache: true }]);
+    }
+
+    #[test]
+    fn polling_fires_once_per_due_date_and_backs_off_on_failure() {
+        let mut app = with_review();
+        assert_eq!(app.tick(), vec![]);
+        app.now += Duration::from_secs(31);
+        assert_eq!(app.tick(), vec![Action::RefreshDiscussions(mr_key())]);
+        assert_eq!(app.tick(), vec![]);
+        app.now += Duration::from_secs(30);
+        let actions = app.tick();
+        assert!(
+            actions.contains(&Action::LoadQueue { scope: None, from_cache: false })
+                && actions.contains(&Action::PollMr { key: mr_key(), head: "bbbb".into() }),
+            "{actions:?}"
+        );
+        app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
+        assert!(app.offline.is_some());
+        app.now += Duration::from_secs(120);
+        assert_eq!(app.tick(), vec![], "backed off for five minutes");
+        app.now += Duration::from_secs(200);
+        assert!(!app.tick().is_empty());
+    }
+
+    #[test]
+    fn few_requests_left_slow_polling_and_a_wait_shows_in_the_status_line() {
+        let mut app = with_queue();
+        app.rate = crate::forge::RateLimit { remaining: Some(12), wait: None };
+        app.schedule_queue();
+        assert_eq!(app.poll.queue_due, Some(app.now + Duration::from_secs(300)), "five times slower");
+        assert!(render(&mut app, 120, 20).contains("12 requests left"));
+        app.rate = crate::forge::RateLimit { remaining: Some(0), wait: Some(Duration::from_secs(42)) };
+        let screen = render(&mut app, 120, 20);
+        assert!(screen.contains("⏳") && screen.contains("42s"), "{screen}");
+    }
+
+    #[test]
+    fn the_pane_asks_for_each_of_its_pictures_once() {
+        let mut app = with_note("Look:\n![chart](/uploads/0123456789abcdef0123456789abcdef/chart.png)");
+        assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadImage { .. })), "a terminal without pictures asks for none");
+        app.thumbs = crate::tui::images::tests::test_thumbs();
+        let url = "/uploads/0123456789abcdef0123456789abcdef/chart.png".to_owned();
+        let asked: Vec<Action> = app.tick().into_iter().filter(|a| matches!(a, Action::LoadImage { .. })).collect();
+        assert_eq!(asked, vec![Action::LoadImage { key: mr_key(), url: url.clone() }]);
+        assert!(app.tick().iter().all(|a| !matches!(a, Action::LoadImage { .. })), "asked once");
+        app.apply(Incoming::Image { url: url.clone(), image: Some(image::DynamicImage::new_rgb8(200, 100)) });
+        assert!(matches!(app.thumbs.get(&url), Some(crate::tui::images::Thumb::Ready(..))));
+    }
+}

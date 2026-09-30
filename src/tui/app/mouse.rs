@@ -108,3 +108,75 @@ impl App {
         self.help.is_some() || self.publish.is_some() || self.brief.is_some() || self.palette.is_some() || self.sharing.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn the_wheel_scrolls_the_pane_under_the_pointer_and_leaves_the_focus() {
+        let mut app = with_long_review();
+        let mut walked = with_long_review();
+        render(&mut app, 160, 30);
+        wheel(&mut app, true, 80, 10);
+        press(&mut walked, "jjj");
+        assert_eq!(app.open.as_ref().unwrap().selected, walked.open.as_ref().unwrap().selected, "a notch is three rows of the diff");
+        let queue_row = app.queue_selected;
+        wheel(&mut app, true, 5, 5);
+        assert_ne!(app.queue_selected, queue_row, "the queue moves under the pointer");
+        assert_eq!(app.focus, Focus::Review, "the keys stay in the diff");
+        wheel(&mut app, false, 5, 5);
+        assert_eq!(app.queue_selected, queue_row);
+    }
+
+    #[test]
+    fn the_wheel_does_nothing_under_an_overlay() {
+        let mut app = with_long_review();
+        render(&mut app, 160, 30);
+        let before = app.open.as_ref().unwrap().selected;
+        press(&mut app, "?");
+        wheel(&mut app, true, 80, 10);
+        assert_eq!(app.open.as_ref().unwrap().selected, before);
+    }
+
+    #[test]
+    fn a_click_without_a_drag_or_from_the_gutter_copies_nothing() {
+        use crossterm::event::{MouseButton, MouseEventKind};
+        let mut app = with_review();
+        let at = spot(&mut app, "let client = Client::new()", 120, 24);
+        mouse(&mut app, MouseEventKind::Down(MouseButton::Left), at);
+        assert_eq!(mouse(&mut app, MouseEventKind::Up(MouseButton::Left), at), vec![]);
+        assert!(app.drag.is_none());
+        let gutter = (at.0 - 8, at.1);
+        assert_eq!(drag(&mut app, gutter, (at.0 + 5, at.1), 120, 24), vec![]);
+    }
+
+    #[test]
+    fn a_click_on_a_link_opens_it_and_a_drag_over_it_does_not() {
+        use crossterm::event::{MouseButton, MouseEventKind};
+        let mut app = with_review();
+        render(&mut app, 160, 30);
+        let title = app.links.iter().find(|link| link.text == "acme/widgets!42").expect("the diff's title links to the MR").clone();
+        let at = (title.x + 3, title.y);
+        mouse(&mut app, MouseEventKind::Down(MouseButton::Left), at);
+        assert_eq!(mouse(&mut app, MouseEventKind::Up(MouseButton::Left), at), vec![Action::OpenUrl(title.url)]);
+        let code = spot(&mut app, "let client = Client::new()", 160, 30);
+        let dragged = drag(&mut app, code, at, 160, 30);
+        assert!(dragged.iter().all(|action| !matches!(action, Action::OpenUrl(_))), "{dragged:?}");
+    }
+
+    #[test]
+    fn a_drag_side_by_side_stays_in_the_half_it_started_in() {
+        let mut app = with_review();
+        app.focus = Focus::Review;
+        press(&mut app, "D");
+        let old = spot(&mut app, "let client = Client::new()", 320, 24);
+        let new = spot(&mut app, "let client = Client::with_key", 320, 24);
+        assert_eq!(old.1, new.1, "both halves on one row");
+        let actions = drag(&mut app, (old.0, old.1 - 1), (new.0 + 3, new.1), 320, 24);
+        let Some(Action::Copy { text, .. }) = actions.first() else { panic!("a copy: {actions:?}") };
+        assert!(text.ends_with("\n    let client = Client::new();"), "{text}");
+        assert!(!text.contains("with_key"), "{text}");
+    }
+}
