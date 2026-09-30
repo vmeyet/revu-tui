@@ -309,9 +309,12 @@ fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usiz
     let age = short_age((today - mr.updated_at).to_std().unwrap_or_default());
     let status = mr.pipeline.as_ref().map(|p| p.status);
     let (glyph, colour) = status.map_or(("", theme.faded), |s| pipeline_glyph(s, theme));
-    let branch_room = width.saturating_sub(40);
+    let badge = peek_badge(open.review.peek, theme);
+    let branch_room = width.saturating_sub(40 + badge.iter().map(Span::width).sum::<usize>());
     let branches = format!("{} → {}", mr.source_branch, mr.target_branch);
-    let mut first = vec![Span::raw(" "), Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username)))];
+    let mut first = vec![Span::raw(" ")];
+    first.extend(badge);
+    first.push(Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))));
     if branch_room >= MIN_BRANCH_W {
         first.push(dot());
         first.push(Span::styled(truncate(&branches, branch_room), muted));
@@ -411,8 +414,10 @@ fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<
     let threads = if unresolved > 0 { format!(" · ◆{unresolved}") } else { String::new() };
     let tail = format!(" · {} · +{adds} −{dels}{pipeline}{threads}", mr.author.username);
     let head = format!("{sigil}{} ", mr.number);
-    let title = truncate(&mr.title, width.saturating_sub(head.width() + tail.width()));
-    Line::from(Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded)))
+    let badge = peek_badge(open.review.peek, theme);
+    let room = width.saturating_sub(badge.iter().map(Span::width).sum::<usize>() + head.width() + tail.width());
+    let title = truncate(&mr.title, room);
+    Line::from([badge, vec![Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded))]].concat())
 }
 
 /// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
@@ -421,14 +426,15 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
     let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
     let pipeline = mr.pipeline.as_ref().map(|p| pipeline_glyph(p.status, theme));
-    let mut spans = vec![
+    let mut spans = peek_badge(open.review.peek, theme);
+    spans.extend([
         Span::styled("▸ ", Style::default().fg(theme.faded)),
         Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))),
         dot(),
         Span::styled(format!("+{adds}"), Style::default().fg(theme.success)),
         Span::raw(" "),
         Span::styled(format!("−{dels}"), Style::default().fg(theme.danger)),
-    ];
+    ]);
     if let Some((glyph, colour)) = pipeline {
         spans.extend([dot(), Span::styled(glyph, Style::default().fg(colour))]);
     }
@@ -437,6 +443,16 @@ fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
         spans.extend([dot(), Span::styled(format!("{unresolved} unresolved"), Style::default().fg(theme.warn))]);
     }
     Line::from(spans)
+}
+
+/// The side a peek reads, loud at the head of the header, then a gap; nothing while the diff shows.
+fn peek_badge<'a>(peek: Option<Side>, theme: Theme) -> Vec<Span<'a>> {
+    let Some(side) = peek else { return vec![] };
+    let (word, ground) = match side {
+        Side::Old => (" BEFORE ", theme.danger),
+        Side::New => (" AFTER ", theme.success),
+    };
+    vec![Span::styled(word, Style::default().fg(theme.base).bg(ground).add_modifier(Modifier::BOLD)), Span::raw(" ")]
 }
 
 pub(super) fn pipeline_glyph(status: PipelineStatus, theme: Theme) -> (&'static str, ratatui::style::Color) {
@@ -485,7 +501,8 @@ fn row_line<'a>(
         Row::Line { file, hunk, index } => {
             let file = &review.files[*file];
             let line = &file.hunks[*hunk].lines[*index];
-            let drawn = line_spans(line, file.spans(*hunk, *index), selected || in_range, body, theme);
+            let shown = review.peek.map(|side| peeked(line, side));
+            let drawn = line_spans(shown.as_ref().unwrap_or(line), file.spans(*hunk, *index), selected || in_range, body, theme);
             spans.extend(with_table_lines(drawn, file, &line.text, overflow, theme));
         }
         Row::Pair { file, hunk, removed, added } => {
@@ -501,6 +518,10 @@ fn row_line<'a>(
         }
         Row::Context { file, old, new, .. } => {
             let line = context_line(review, *file, *old, *new);
+            let line = match review.peek {
+                Some(side) => peeked(&line, side),
+                None => line,
+            };
             let file = &review.files[*file];
             spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, overflow, theme));
         }
@@ -953,6 +974,15 @@ fn quiet(line: &DiffLine) -> DiffLine {
     DiffLine { kind: LineKind::Context, words: vec![], ..line.clone() }
 }
 
+/// A line of the side a peek reads, drawn as plain code numbered on that side alone.
+fn peeked(line: &DiffLine, side: Side) -> DiffLine {
+    let (old, new) = match side {
+        Side::Old => (line.old, None),
+        Side::New => (None, line.new),
+    };
+    DiffLine { old, new, ..quiet(line) }
+}
+
 fn with_quiet_sign(mut spans: Vec<Span<'_>>, theme: Theme) -> Vec<Span<'_>> {
     if let Some(sign) = spans.get_mut(1) {
         *sign = Span::styled("≈", Style::default().fg(theme.faded));
@@ -1152,6 +1182,20 @@ mod tests {
             (half(1..21), half(21..text.len()))
         };
         lines.flatten().map(split).collect()
+    }
+
+    #[test]
+    fn a_peek_draws_its_side_without_signs_or_fills_numbered_on_that_side_alone() {
+        let peek = |side| side_by_side_of("@@ -1,2 +1,2 @@\n a\n-b\n+B\n", "a.txt").with_peek(Some(side));
+        let drawn = |review: Review| -> Vec<String> {
+            let anchors = Anchors { markers: review.markers(), stretch: None };
+            let lines = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. }));
+            lines
+                .map(|row| spans_text(&row_line(&review, &anchors, &row, false, false, Overflow::Cut(40), Theme::default()).spans))
+                .collect()
+        };
+        assert_eq!(drawn(peek(Side::Old)), ["      1       a", "      2       b"]);
+        assert_eq!(drawn(peek(Side::New)), ["           1  a", "           2  B"]);
     }
 
     #[test]

@@ -639,3 +639,27 @@ fn snapshot_every_thread_mine() {
     assert!(none.contains("the whole MR · mine · 0 of 3 threads") && none.contains("you take part in no thread · m shows them all"));
     insta::assert_snapshot!("every_thread_mine_empty", none);
 }
+
+#[test]
+fn a_peek_badges_the_first_header_row_in_every_layout_and_leaves_the_pipeline_link_on_its_word() {
+    let mut app = with_review();
+    let first_row =
+        |app: &mut App| render(app, 160, 45).lines().find(|l| l.contains("omar") && !l.contains("omar · !")).unwrap().to_owned();
+    assert!(!first_row(&mut app).contains("BEFORE"), "no badge while the diff shows");
+    press(&mut app, "<");
+    insta::assert_snapshot!("review_peek_before", render(&mut app, 160, 24));
+    let buffer = cells(&mut app, 160, 24);
+    let link = app.links.iter().find(|l| l.url.contains("/pipelines/")).unwrap();
+    let under: String = (link.x..link.x + link.text.chars().count() as u16).map(|x| buffer[(x, link.y)].symbol().to_owned()).collect();
+    assert_eq!(under, link.text, "the link still covers the pipeline word");
+    let badge = (0..160).find(|&x| buffer[(x, link.y)].symbol() == "B").unwrap();
+    let cell = &buffer[(badge, link.y)];
+    assert_eq!((cell.fg, cell.bg), (app.theme.base, app.theme.danger), "BEFORE sits on the removed colour");
+    assert!(cell.modifier.contains(ratatui::style::Modifier::BOLD));
+    press(&mut app, ">>");
+    assert!(first_row(&mut app).contains(" AFTER "), "{}", first_row(&mut app));
+    press(&mut app, "zh");
+    assert!(first_row(&mut app).contains(" AFTER "), "folded: {}", first_row(&mut app));
+    press(&mut app, "zhzz");
+    assert!(first_row(&mut app).contains(" AFTER "), "zen: {}", first_row(&mut app));
+}

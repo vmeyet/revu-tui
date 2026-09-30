@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 66
 expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -33,16 +34,16 @@ expression: "render(&mut app, 160, 45)"
 │                       │      / n N  find text in the MR, next, previous                                                              │                       │
 │                       │          i  the MR cover page                              ASK CLAUDE                                        │                       │
 │                       │          D  inline diff, or side by side                     a e r s  explain, risks, summary                │                       │
-│                       │          t  file tree                                        a t c a  thread, comment, anything              │                       │
-│                       │          T  every thread of the MR                               a h  answers kept for this MR               │                       │
-│                       │          p  pipeline                                         c ⏎ R y  answer: draft, follow up, again, copy  │                       │
-│                       │         zz  zen: the diff alone, quiet                                                                       │                       │
-│                       │        w W  wrap long lines, hide whitespace changes       SEARCH & APP                                      │                       │
-│                       │        = +  more lines, react on a thread                         ^k  MRs · / files · > commands             │                       │
-│                       │         ^v  the file in your own program                           :  commands: :go !42, :set theme=nord     │                       │
-│                       │   za zc zo  toggle, close, open the fold                         o y  open in the browser, copy the link     │                       │
+│                       │        > <  the code after, before, alone                    a t c a  thread, comment, anything              │                       │
+│                       │          t  file tree                                            a h  answers kept for this MR               │                       │
+│                       │          T  every thread of the MR                           c ⏎ R y  answer: draft, follow up, again, copy  │                       │
+│                       │          p  pipeline                                                                                         │                       │
+│                       │         zz  zen: the diff alone, quiet                     SEARCH & APP                                      │                       │
+│                       │        w W  wrap long lines, hide whitespace changes              ^k  MRs · / files · > commands             │                       │
+│                       │        = +  more lines, react on a thread                          :  commands: :go !42, :set theme=nord     │                       │
+│                       │         ^v  the file in your own program                         o y  open in the browser, copy the link     │                       │
 │                       │                                                                                                              │                       │
-│                       ╰───────────────────────────────────────────────────────────────────────── 1–35 of 38 · j k scroll · esc close ╯                       │
+│                       ╰───────────────────────────────────────────────────────────────────────── 1–35 of 39 · j k scroll · esc close ╯                       │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
