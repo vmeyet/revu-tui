@@ -17,8 +17,8 @@ impl Open {
         self.tree.as_ref().map_or_else(Vec::new, |t| tree::rows(&self.review.files, &t.folds))
     }
 
-    fn with_tree(&self, tree: Option<Tree>) -> Self {
-        Self { tree, ..self.clone() }
+    fn with_tree(self, tree: Option<Tree>) -> Self {
+        Self { tree, ..self }
     }
 }
 
@@ -27,7 +27,7 @@ impl App {
     pub(super) fn toggle_tree(&mut self) {
         let Some(open) = &self.open else { return };
         if open.tree.is_some() {
-            self.open = Some(open.with_tree(None));
+            self.update_open(|open| open.with_tree(None));
             self.focus = Focus::Review;
             return;
         }
@@ -36,12 +36,12 @@ impl App {
         let folds = TreeFolds::default().revealing(&path);
         let rows = tree::rows(&open.review.files, &folds);
         let selected = rows.iter().position(|r| matches!(r, TreeRow::File { index, .. } if Some(*index) == here)).unwrap_or(0);
-        self.open = Some(Open { pane: None, answer: None, pipeline: None, ..open.with_tree(Some(Tree { folds, selected })) });
+        self.update_open(|open| Open { pane: None, answer: None, pipeline: None, ..open.with_tree(Some(Tree { folds, selected })) });
         self.focus = Focus::Side;
     }
 
     pub(super) fn handle_tree_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        let Some(open) = self.open.clone() else { return vec![] };
+        let Some(open) = &self.open else { return vec![] };
         let Some(tree) = open.tree.clone() else { return vec![] };
         let rows = open.tree_rows();
         let last = rows.len().saturating_sub(1);
@@ -69,7 +69,7 @@ impl App {
         if next.is_none() {
             self.focus = Focus::Review;
         }
-        self.open = Some(open.with_tree(next));
+        self.update_open(|open| open.with_tree(next));
         vec![]
     }
 
@@ -100,7 +100,7 @@ impl App {
         if !now_viewed {
             viewed.remove(&path);
         }
-        self.open = Some(open.with_review(open.review.with_viewed(viewed)));
+        self.update_open(|open| open.relaid(|review| review.with_viewed(viewed)));
         let actions = self.set_file_fold(&path, if now_viewed { Fold::Closed } else { Fold::Open });
         self.review_jump_to(|row| matches!(row, Row::File { index: i, .. } if *i == index));
         actions

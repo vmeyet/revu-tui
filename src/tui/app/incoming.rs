@@ -42,8 +42,8 @@ impl App {
                 self.progress.extend(open);
             }
             Incoming::Discussions { key, discussions } => {
-                if let Some(open) = self.open.as_ref().filter(|o| o.key == key) {
-                    let fresh = open.review.with_discussions(discussions);
+                if let Some(open) = self.open.take_if(|o| o.key == key) {
+                    let fresh = open.review.clone().with_discussions(discussions);
                     self.news = news(&open.review, &fresh).or(self.news.take());
                     self.open = Some(open.with_review(fresh));
                     self.offline = None;
@@ -62,9 +62,7 @@ impl App {
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
             Incoming::PastAnswers { key, answers } => self.apply_past_answers(&key, answers),
             Incoming::Deployments { key, deployments } => {
-                if let Some(open) = self.open.clone().filter(|o| o.key == key) {
-                    self.open = Some(Open { deployments: Some(deployments), ..open });
-                }
+                self.update_open_of(&key, |open| Open { deployments: Some(deployments), ..open });
             }
             Incoming::Image { url, image } => self.thumbs.arrived(&url, image),
             Incoming::Applied { key, branch } => {
@@ -124,13 +122,17 @@ impl App {
         if cached.is_none() {
             self.news = self.open.as_ref().filter(|o| o.key == key).and_then(|o| news(&o.review, &review)).or(self.news.take());
         }
-        let next = match self.open.as_ref().filter(|o| o.key == key) {
-            Some(open) => open.with_review(carry_over(&open.review, &review)),
+        let current = self.open.take_if(|o| o.key == key);
+        let fresh_open = current.is_none();
+        let pushed = current.as_ref().is_some_and(|o| o.review.mr.refs.head != review.mr.refs.head);
+        let next = match current {
+            Some(open) => {
+                let carried = carry_over(&open.review, review);
+                open.with_review(carried)
+            }
             None => Open::new(key.clone(), review),
         };
         self.count_viewed(&key, &next.review);
-        let fresh_open = self.open.as_ref().is_none_or(|o| o.key != key);
-        let pushed = self.open.as_ref().is_some_and(|o| o.key == key && o.review.mr.refs.head != next.review.mr.refs.head);
         self.open = Some(Open { cached: cached.map(|age| (self.now, age)), ..next });
         if fresh_open {
             self.spot_saved = self.spot().map(|spot| (key.clone(), spot));
@@ -201,7 +203,7 @@ fn news(old: &Review, fresh: &Review) -> Option<String> {
 
 /// Fresh data keeps the folds of every file that did not change, so a poll never unfolds what was read,
 /// and the drafts the forge does not hold yet, so a poll never loses one.
-fn carry_over(old: &Review, fresh: &Review) -> Review {
+fn carry_over(old: &Review, fresh: Review) -> Review {
     let mut fold = fresh.fold.clone();
     for file in old.files.iter() {
         let unchanged = fresh.files.iter().any(|f| f.new_path == file.new_path && f.hunks == file.hunks);
@@ -215,5 +217,7 @@ fn carry_over(old: &Review, fresh: &Review) -> Review {
             fold.hunks.insert(file.new_path.clone(), hunks.clone());
         }
     }
-    fresh.with_fold(fold).with_viewed(fresh.still_viewed(&old.viewed_fingerprints())).with_drafts(draft::carry(&fresh.drafts, &old.drafts))
+    let viewed = fresh.still_viewed(&old.viewed_fingerprints());
+    let drafts = draft::carry(&fresh.drafts, &old.drafts);
+    fresh.with_fold(fold).with_viewed(viewed).with_drafts(drafts)
 }

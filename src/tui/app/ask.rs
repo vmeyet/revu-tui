@@ -67,6 +67,15 @@ impl Open {
             answer => Self { answer, ..self },
         }
     }
+
+    /// The answer takes the right pane from the threads, the tree and the pipeline.
+    fn showing_answer(self, answer: Answer) -> Self {
+        Self { answer: Some(answer), pane: None, tree: None, pipeline: None, ..self }
+    }
+
+    fn without_answer(self) -> Self {
+        Self { answer: None, ..self }
+    }
 }
 
 /// Where an answer can become a draft.
@@ -154,11 +163,12 @@ impl App {
 
     /// `enter` in the answer: the next question goes on the same conversation.
     pub(super) fn follow_up(&mut self, question: String) -> Vec<Action> {
-        let Some(answer) = self.open.as_ref().and_then(|o| o.answer.clone()) else { return vec![] };
+        let Some(answer) = self.open.as_ref().and_then(|o| o.answer.as_ref()) else { return vec![] };
         let mut request = answer.request.clone();
         request.turns.push(Turn { role: Role::Assistant, text: answer.text.clone() });
         request.turns.push(Turn { role: Role::User, text: question });
-        self.start_answer(answer.label, request, answer.target, false)
+        let (label, target) = (answer.label.clone(), answer.target.clone());
+        self.start_answer(label, request, target, false)
     }
 
     fn start_answer(&mut self, label: String, request: Ask, target: Target, fresh: bool) -> Vec<Action> {
@@ -180,9 +190,10 @@ impl App {
             target,
         };
         let (key, head) = (open.key.clone(), open.review.mr.refs.head.clone());
-        self.open = Some(Open { answer: Some(answer.clone()), pane: None, tree: None, pipeline: None, ..open.clone() });
+        let ask = Action::Ask { key, id: self.next_answer, request: Box::new(request), fresh, label: answer.label.clone(), head };
+        self.update_open(|open| open.showing_answer(answer));
         self.focus = Focus::Side;
-        vec![Action::Ask { key, id: self.next_answer, request: Box::new(request), fresh, label: answer.label, head }]
+        vec![ask]
     }
 
     /// The answers kept for the open MR, listed in the search box to pick one; a word when none is.
@@ -200,7 +211,7 @@ impl App {
 
     /// A kept answer back in the pane, as it was, ready for a follow-up.
     pub(super) fn show_past_answer(&mut self, index: usize) {
-        let (Some(open), Some(past)) = (&self.open, self.past_answers.get(index)) else { return };
+        let Some(past) = self.past_answers.get(index).filter(|_| self.open.is_some()) else { return };
         self.next_answer += 1;
         let answer = Answer {
             id: self.next_answer,
@@ -212,7 +223,7 @@ impl App {
             scroll: 0,
             target: Target::Nowhere,
         };
-        self.open = Some(Open { answer: Some(answer), pane: None, tree: None, pipeline: None, ..open.clone() });
+        self.update_open(|open| open.showing_answer(answer));
         self.focus = Focus::Side;
     }
 
@@ -223,7 +234,7 @@ impl App {
 
     pub(super) fn handle_answer_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        let Some(answer) = self.open.as_ref().and_then(|o| o.answer.clone()) else { return vec![] };
+        let Some(answer) = self.open.as_ref().and_then(|o| o.answer.as_ref()) else { return vec![] };
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.scroll_answer(1),
             KeyCode::Char('k') | KeyCode::Up => self.scroll_answer(-1),
@@ -231,10 +242,13 @@ impl App {
             KeyCode::Char('u') if ctrl => self.scroll_answer(-(HALF_PAGE as isize)),
             KeyCode::Char('g') => self.scroll_answer(isize::MIN / 2),
             KeyCode::Char('G') => self.scroll_answer(isize::MAX / 2),
-            KeyCode::Char('y') => return vec![Action::Yank(answer.text)],
-            KeyCode::Char('c') => self.draft_from_answer(&answer),
+            KeyCode::Char('y') => return vec![Action::Yank(answer.text.clone())],
+            KeyCode::Char('c') => self.draft_from_answer(&answer.clone()),
             KeyCode::Enter if answer.state != AnswerState::Streaming => return self.question_box(Input::FollowUp),
-            KeyCode::Char('R') => return self.start_answer(answer.label, answer.request, answer.target, true),
+            KeyCode::Char('R') => {
+                let (label, request, target) = (answer.label.clone(), answer.request.clone(), answer.target.clone());
+                return self.start_answer(label, request, target, true);
+            }
             KeyCode::Esc | KeyCode::Char('x') => self.close_answer(),
             _ => {}
         }
@@ -242,16 +256,17 @@ impl App {
     }
 
     fn scroll_answer(&mut self, delta: isize) {
-        let Some(open) = &self.open else { return };
-        let Some(answer) = &open.answer else { return };
-        let scroll = (answer.scroll as isize).saturating_add(delta).max(0) as usize;
-        self.open = Some(Open { answer: Some(Answer { scroll, ..answer.clone() }), ..open.clone() });
+        self.update_open(|open| {
+            let answer = open.answer.map(|answer| {
+                let scroll = (answer.scroll as isize).saturating_add(delta).max(0) as usize;
+                Answer { scroll, ..answer }
+            });
+            Open { answer, ..open }
+        });
     }
 
     pub(super) fn close_answer(&mut self) {
-        if let Some(open) = &self.open {
-            self.open = Some(Open { answer: None, ..open.clone() });
-        }
+        self.update_open(Open::without_answer);
         self.focus = Focus::Review;
     }
 
@@ -282,7 +297,7 @@ impl App {
                 scroll: 0,
                 target: Target::Nowhere,
             };
-            self.open = Some(Open { answer: Some(waiting), pane: None, tree: None, pipeline: None, ..open.clone() });
+            self.update_open(|open| open.showing_answer(waiting));
         }
         self.buffer = crate::tui::field::Field::default();
         self.compose_from = Focus::Side;
@@ -305,9 +320,7 @@ impl App {
     pub(super) fn ai_off(&mut self) {
         self.ask_model = None;
         self.triage = false;
-        if let Some(open) = &self.open {
-            self.open = Some(Open { answer: None, ..open.clone() });
-        }
+        self.update_open(Open::without_answer);
         self.toast("AI off: :ai on brings it back");
     }
 

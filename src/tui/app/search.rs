@@ -98,32 +98,38 @@ impl App {
         let first = hits.iter().find(|hit| Some(**hit) >= start).or(hits.first()).copied();
         match first {
             Some(hit) => self.reveal(hit),
-            None => self.open = Some(open.move_to(search.from)),
+            None => self.update_open(|open| open.move_to(search.from)),
         }
     }
 
     fn cancel_search(&mut self, search: &Search) {
         self.search = None;
-        if let Some(open) = &self.open {
-            self.open = Some(open.move_to(search.from));
-        }
+        self.update_open(|open| open.move_to(search.from));
     }
 
     /// The cursor on the match, its file and hunk opened first when folded.
     fn reveal(&mut self, hit: Hit) {
-        let Some(open) = &self.open else { return };
-        let Some(file) = open.review.files.get(hit.file) else { return };
+        self.update_open(|open| open.revealing(hit));
+    }
+}
+
+impl Open {
+    fn revealing(self, hit: Hit) -> Self {
+        let Some(file) = self.review.files.get(hit.file) else { return self };
         let path = file.new_path.clone();
-        let mut fold = open.review.fold.clone();
+        let mut fold = self.review.fold.clone();
         if !fold.file_is_open(&path) {
             fold = fold.toggle_file(&path);
         }
         if let Some(hunk) = hit.hunk.filter(|&h| !fold.hunk_is_open(&path, h)) {
             fold = fold.toggle_hunk(&path, hunk);
         }
-        let opened = if fold == open.review.fold { open.clone() } else { open.with_fold(fold) };
+        let opened = if fold == self.review.fold { self } else { self.with_fold(fold) };
         let row = opened.rows.iter().position(|row| shows(row, hit)).or_else(|| opened.rows.iter().position(|row| shows_hunk(row, hit)));
-        self.open = Some(row.map_or(opened.clone(), |at| opened.move_to(at)));
+        match row {
+            Some(at) => opened.move_to(at),
+            None => opened,
+        }
     }
 }
 
@@ -217,6 +223,12 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     use ratatui::style::Modifier;
+
+    #[test]
+    fn a_hit_in_a_file_the_review_lacks_leaves_the_open_mr_as_it_was() {
+        let open = Open::new(crate::forge::gitlab::fixture::key(), crate::review::tests::review());
+        assert_eq!(open.clone().revealing(Hit { file: 99, hunk: None, line: None }), open);
+    }
 
     #[test]
     fn smart_case_matches_any_case_until_a_capital_is_typed() {

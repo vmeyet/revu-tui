@@ -102,18 +102,18 @@ impl App {
 
     /// Mine on or off, shown at once, then asked of the forge.
     fn toggle_reaction(&mut self, pick: &Pick, emoji: Emoji) -> Vec<Action> {
-        let Some(open) = self.open.clone() else { return vec![] };
+        let Some(open) = &self.open else { return vec![] };
         let Some(note) = open.review.thread(&pick.thread).and_then(|t| t.notes.get(pick.note)).cloned() else { return vec![] };
         let on = !note.reactions.iter().any(|r| r.emoji == emoji && r.mine);
-        self.open = Some(open.with_review(open.review.with_reaction(&pick.thread, pick.note, emoji, on)));
-        vec![Action::React { key: open.key.clone(), thread: pick.thread.clone(), index: pick.note, note: Box::new(note), emoji, on }]
+        let action =
+            Action::React { key: open.key.clone(), thread: pick.thread.clone(), index: pick.note, note: Box::new(note), emoji, on };
+        self.update_open(|open| open.relaid(|review| review.with_reaction(&pick.thread, pick.note, emoji, on)));
+        vec![action]
     }
 
     /// The forge refused: the count goes back to what it was.
     pub(super) fn react_failed(&mut self, thread: &str, index: usize, emoji: Emoji, on: bool, message: &str) {
-        if let Some(open) = self.open.clone() {
-            self.open = Some(open.with_review(open.review.with_reaction(thread, index, emoji, !on)));
-        }
+        self.update_open(|open| open.relaid(|review| review.with_reaction(thread, index, emoji, !on)));
         self.warn(format!("no reaction: {message}"));
     }
 
