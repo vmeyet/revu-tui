@@ -71,7 +71,8 @@ src/
       state.rs       App struct, Default
       keys.rs        handle_key -> Vec<Action>
       incoming.rs    apply(Incoming)
-      tests.rs       state machine tests
+      test_support.rs   what the app tests share: the fixture app, keys to press, the drawn screen
+      tests.rs       whole-screen snapshots and rendering checks; every other test sits in the module it exercises
       …              one module per feature: queue, order, stack, review, pane, write, search, zen, brief, pipeline, ask, …
     ui.rs            draw(): layout and panes
     *_view.rs        one renderer per pane or modal: queue, diff, thread, tree, pipeline, answer, brief, publish, share, palette

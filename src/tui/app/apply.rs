@@ -93,3 +93,45 @@ fn note_applicable(note: &Note) -> Result<Option<u64>, &'static str> {
         Some(s) => Ok(Some(s.id)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn big_s_asks_first_and_commits_only_on_y() {
+        let body = "Nit:\n```suggestion:-0+0\n    let client = Client::default();\n```";
+        let mut app = with_suggestion(body, json!([{"id": 77, "applied": false, "appliable": true}]));
+        assert_eq!(press(&mut app, "S"), vec![]);
+        let Some(Confirm::Apply { suggestion: asked, .. }) = app.confirm.clone() else { panic!("a question waits") };
+        assert_eq!((asked.id, asked.path.as_str(), asked.line), (Some(77), "src/pay/charge.rs", 13));
+        assert!(render(&mut app, 150, 20).contains("commit this suggestion to src/pay/charge.rs on feat/checkout?"));
+        assert_eq!(press(&mut app, "n"), vec![], "any other key cancels");
+        assert!(app.confirm.is_none());
+        press(&mut app, "S");
+        let actions = press(&mut app, "y");
+        let [Action::Apply { branch, suggestion, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        let branch = branch.clone();
+        assert_eq!((branch.as_str(), suggestion.text.as_str()), ("feat/checkout", "    let client = Client::default();"));
+        app.apply(Incoming::Applied { key: mr_key(), branch });
+        assert_eq!(app.take_actions(), vec![Action::RefreshMr(mr_key())], "the diff reads the new commit");
+        assert!(app.live_toast().unwrap().text.contains("committed on feat/checkout"));
+    }
+
+    #[test]
+    fn big_s_says_why_when_there_is_nothing_to_apply() {
+        let mut plain = with_suggestion("Should this retry?", json!([]));
+        press(&mut plain, "S");
+        assert!(plain.confirm.is_none());
+        assert_eq!(plain.live_toast().unwrap().text, "this note has no suggestion");
+        let body = "```suggestion:-0+0\nx\n```";
+        let mut done = with_suggestion(body, json!([{"id": 77, "applied": true, "appliable": false}]));
+        press(&mut done, "S");
+        assert_eq!(done.live_toast().unwrap().text, "this suggestion is already applied");
+        let mut github = with_suggestion(body, json!([]));
+        press(&mut github, "S");
+        let Some(Confirm::Apply { suggestion, .. }) = &github.confirm else { panic!("a question waits") };
+        assert_eq!(suggestion.id, None, "GitHub lists no id: revu builds the commit");
+    }
+}

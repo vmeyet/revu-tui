@@ -245,3 +245,141 @@ impl App {
         self.sections.iter().flat_map(crate::forge::Sections::all).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    fn run_line(app: &mut App, line: &str) -> Vec<Action> {
+        press(app, ":");
+        press(app, line);
+        app.handle_key(code(KeyCode::Enter))
+    }
+
+    #[test]
+    fn go_opens_an_mr_by_number_or_full_reference() {
+        let mut app = with_queue();
+        let actions = run_line(&mut app, "go !41");
+        assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41), "{actions:?}");
+        let actions = run_line(&mut app, "go other/thing!7");
+        assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.project == "other/thing" && key.number == 7), "{actions:?}");
+        assert_eq!(run_line(&mut app, "go !999"), vec![]);
+        assert!(app.live_toast().unwrap().text.contains("no MR !999"));
+    }
+
+    #[test]
+    fn set_theme_changes_it_now_and_asks_to_save_it() {
+        let mut app = with_queue();
+        assert_eq!(run_line(&mut app, "set theme=nord"), vec![Action::SaveTheme("nord".into())]);
+        assert_eq!(app.theme.name, "nord");
+        assert_eq!(run_line(&mut app, "set theme=nope"), vec![]);
+        assert!(app.live_toast().unwrap().danger);
+    }
+
+    #[test]
+    fn tab_completes_verbs_mrs_and_themes_and_up_recalls() {
+        let mut app = with_queue();
+        press(&mut app, ":pu");
+        app.handle_key(code(KeyCode::Tab));
+        assert_eq!(app.palette.as_ref().unwrap().input, "publish ");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.palette.is_none());
+        assert!(app.completions_for("go ").contains(&"!42".to_owned()));
+        assert!(app.completions_for("set theme=").contains(&"theme=tokyonight".to_owned()));
+        run_line(&mut app, "help");
+        assert_eq!(app.help, Some(Help::default()));
+        press(&mut app, "x:");
+        app.handle_key(ctrl('p'));
+        assert_eq!(app.palette.as_ref().unwrap().input, "help", "^p recalls, as in a shell");
+    }
+
+    #[test]
+    fn arrows_pick_a_command_from_the_list_and_enter_runs_it_or_waits_for_its_argument() {
+        let mut app = with_queue();
+        press(&mut app, ":");
+        for _ in 0..crate::tui::palette::VERBS.iter().position(|(v, _)| *v == "all").unwrap() {
+            app.handle_key(code(KeyCode::Down));
+        }
+        app.handle_key(code(KeyCode::Up));
+        app.handle_key(code(KeyCode::Down));
+        assert!(render(&mut app, 120, 30).contains("▸ all"), "the picked command stands out");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(app.palette.is_none() && app.everywhere, "all runs at once");
+        press(&mut app, ":g");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!(app.palette.as_ref().map(|p| p.input.as_str()), Some("go "), "go needs an MR: the line waits for it");
+        press(&mut app, "4");
+        app.handle_key(code(KeyCode::Down));
+        assert_eq!(app.palette.as_ref().unwrap().input, "go !42 ", "past the verb, ↓ walks the argument's options");
+    }
+
+    fn palette_labels(app: &App) -> Vec<String> {
+        app.palette_candidates(app.palette.as_ref().unwrap()).into_iter().map(|c| c.label).collect()
+    }
+
+    #[test]
+    fn ctrl_k_finds_mrs_and_a_slash_finds_the_open_mrs_files() {
+        let mut app = with_review();
+        app.handle_key(ctrl_k());
+        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
+        press(&mut app, "!41");
+        assert_eq!(palette_labels(&app), ["!41 fix: flaky cache test"]);
+        let actions = app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41));
+        let mut app = with_review();
+        app.handle_key(ctrl_k());
+        press(&mut app, "/");
+        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Files);
+        assert!(matches!(app.palette_candidates(app.palette.as_ref().unwrap())[0].target, crate::tui::palette::Target::File(0)));
+        app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
+    }
+
+    #[test]
+    fn the_mr_search_combines_author_label_number_and_words() {
+        let mut app = with_queue();
+        app.handle_key(ctrl_k());
+        press(&mut app, "@omar");
+        assert_eq!(palette_labels(&app), ["!42 feat: charge cards at checkout", "!35 infra: new runner"]);
+        press(&mut app, " run");
+        assert_eq!(palette_labels(&app), ["!35 infra: new runner"], "words rank what the terms keep");
+        app.handle_key(code(KeyCode::Esc));
+        app.handle_key(ctrl_k());
+        press(&mut app, "@nobody");
+        assert!(palette_labels(&app).is_empty());
+    }
+
+    #[test]
+    fn greater_than_switches_to_commands_and_backspace_comes_back_to_mrs() {
+        let mut app = with_queue();
+        app.handle_key(ctrl_k());
+        press(&mut app, ">he");
+        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Commands);
+        app.handle_key(code(KeyCode::Tab));
+        assert_eq!(app.palette.as_ref().unwrap().input, "help ");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!(app.help, Some(Help::default()));
+        press(&mut app, "x");
+        app.handle_key(ctrl_k());
+        press(&mut app, ">");
+        app.handle_key(code(KeyCode::Backspace));
+        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
+        app.handle_key(code(KeyCode::Backspace));
+        assert!(app.palette.is_none(), "a backspace on nothing closes it");
+    }
+
+    #[test]
+    fn command_k_opens_the_palette_on_mrs_and_command_shift_k_on_commands() {
+        use crate::tui::palette::Mode;
+        let mut app = with_queue();
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER));
+        assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Mrs));
+        app.handle_key(code(KeyCode::Esc));
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER | KeyModifiers::SHIFT));
+        assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Commands));
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, ":");
+        assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Commands), "`:` keeps its muscle memory");
+    }
+}

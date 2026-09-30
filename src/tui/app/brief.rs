@@ -292,3 +292,116 @@ impl App {
         actions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn i_opens_the_description_from_the_queue_and_the_review_and_closes_on_esc() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        press(&mut app, "Gk");
+        press(&mut app, "zo");
+        press(&mut app, "i");
+        let brief = app.brief.clone().unwrap();
+        assert_eq!((brief.number, brief.description.as_str()), (50, "Adds the refund flow."));
+        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(brief.web_url)]);
+        app.handle_key(code(KeyCode::Esc));
+        assert_eq!(app.brief, None);
+        let mut app = with_review();
+        press(&mut app, "i");
+        assert_eq!(app.brief.as_ref().map(|b| b.number), Some(42));
+        press(&mut app, "q");
+        assert!(app.brief.is_none() && !app.should_quit, "q closes the modal, it does not quit");
+    }
+
+    #[test]
+    fn the_cover_scrolls_its_text_and_keeps_the_cursor_row_in_sight() {
+        let mut app = with_review();
+        let long: String = (1..=80).map(|n| format!("line {n}\n")).collect();
+        app.open = app.open.clone().map(|o| {
+            let mut review = o.review.clone();
+            std::sync::Arc::make_mut(&mut review.mr).description = long.clone();
+            o.with_review(review)
+        });
+        press(&mut app, "i");
+        app.handle_key(ctrl('d'));
+        assert_eq!(app.brief.as_ref().unwrap().scroll, 10);
+        app.handle_key(ctrl('u'));
+        assert_eq!(app.brief.as_ref().unwrap().scroll, 0);
+        render(&mut app, 100, 30);
+        press(&mut app, "G");
+        let screen = render(&mut app, 100, 30);
+        assert!(app.brief.as_ref().unwrap().scroll > 0, "the last thread pulls the page down");
+        assert!(screen.lines().any(|l| l.contains("▎ ") && l.contains("(outdated)")), "the cursor row is on screen:\n{screen}");
+    }
+
+    #[test]
+    fn the_cover_walks_threads_and_enter_goes_there() {
+        let mut app = with_review();
+        press(&mut app, "i");
+        let brief = app.brief.clone().unwrap();
+        assert_eq!(brief.targets().len(), 1, "one open thread, and no file rows any more");
+        assert_eq!(brief.selected, Some(0), "the first thread is ready for enter");
+        assert!(!render(&mut app, 120, 40).contains("FILES"));
+        app.handle_key(code(KeyCode::Enter));
+        let open = app.open.as_ref().unwrap();
+        assert_eq!(
+            open.pane.as_ref().map(|p| p.place.clone()),
+            Some(crate::review::Place::Outdated { file: 0 }),
+            "the outdated thread opens in the pane"
+        );
+        assert_eq!(app.focus, Focus::Side);
+    }
+
+    #[test]
+    fn up_from_the_first_thread_scrolls_back_to_the_top_and_g_stays_there() {
+        let mut app = cover_with_threads(20);
+        press(&mut app, "G");
+        render(&mut app, 100, 24);
+        let bottom = app.brief.as_ref().unwrap().scroll;
+        assert!(bottom > 0, "the last thread is below the first page");
+        press(&mut app, "g");
+        render(&mut app, 100, 24);
+        let brief = app.brief.as_ref().unwrap();
+        assert_eq!((brief.scroll, brief.selected), (0, None), "g stays at the top: nothing pulls it back down");
+        press(&mut app, "j");
+        assert_eq!(app.brief.as_ref().unwrap().selected, Some(0));
+        for _ in 0..3 {
+            press(&mut app, "j");
+        }
+        render(&mut app, 100, 24);
+        let before = app.brief.as_ref().unwrap().scroll;
+        for _ in 0..(before + 10) {
+            press(&mut app, "k");
+        }
+        render(&mut app, 100, 24);
+        let brief = app.brief.as_ref().unwrap();
+        assert_eq!((brief.scroll, brief.selected), (0, None), "k past the first thread lets go and reaches the head");
+    }
+
+    #[test]
+    fn the_cover_from_the_queue_opens_the_mr_on_enter_and_has_no_pipeline_yet() {
+        let mut app = with_queue();
+        app.queue_move(0);
+        press(&mut app, "i");
+        assert!(app.brief.as_ref().unwrap().threads.is_none());
+        assert!(render(&mut app, 120, 40).contains("open the MR to see its threads"));
+        assert!(press(&mut app, "p").is_empty());
+        assert!(app.live_toast().unwrap().text.contains("open the MR"));
+        assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![Action::Open(mr_key())]);
+        assert_eq!(app.brief, None);
+    }
+
+    #[test]
+    fn p_on_the_cover_opens_the_pipeline_pane() {
+        let mut app = with_review();
+        press(&mut app, "i");
+        let actions = press(&mut app, "p");
+        assert_eq!(app.brief, None);
+        assert!(app.pipeline_open());
+        assert_eq!(actions.len(), 1, "the pipeline loads");
+    }
+}

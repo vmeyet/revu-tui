@@ -102,6 +102,7 @@ pub fn by_author(mut rows: Vec<&QueueMr>) -> Vec<(&str, Vec<&QueueMr>)> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::app::test_support::*;
     use chrono::{TimeZone, Utc};
 
     fn mr(number: u64, author: &str, created: i64, size: u32) -> QueueMr {
@@ -180,5 +181,52 @@ mod tests {
         let shape: Vec<(&str, Vec<u64>)> = groups.iter().map(|(name, rows)| (*name, numbers(rows))).collect();
         assert_eq!(shape, [("ana", vec![2, 4]), ("zoe", vec![1, 3])]);
         assert!(by_author(vec![]).is_empty());
+    }
+
+    #[test]
+    fn s_cycles_the_order_saves_it_for_the_scope_and_titles_the_pane() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        let actions = press(&mut app, "s");
+        let view = QueueView { order: order::Order::Oldest, ..QueueView::default() };
+        assert_eq!(actions, vec![Action::SaveQueueView { scope: Some("acme/widgets".into()), view }]);
+        press(&mut app, "ss");
+        assert_eq!(app.queue_view.order, order::Order::Size);
+        assert_eq!(app.queue_view_label().as_deref(), Some("smallest first"));
+        press(&mut app, "s");
+        assert_eq!(app.queue_view.order, order::Order::Updated, "no urgency without Jev: back to the start");
+        assert_eq!(app.queue_view_label(), None);
+        let screen = render(&mut app, 120, 20);
+        assert!(screen.contains("Queue · acme/widgets "), "{screen}");
+    }
+
+    #[test]
+    fn capital_s_groups_open_and_drafts_by_author_only() {
+        let mut app = scoped_app();
+        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
+        press(&mut app, "Gkzo");
+        press(&mut app, "S");
+        let authors: Vec<&str> =
+            app.queue_rows().iter().filter_map(|r| if let QueueRow::Author { name, .. } = r { Some(*name) } else { None }).collect();
+        assert_eq!(authors, ["lea", "omar"], "one header per author in Open, then in Drafts");
+        let before_mine = app
+            .queue_rows()
+            .iter()
+            .take_while(|r| !matches!(r, QueueRow::Section { name: "MINE", .. }))
+            .any(|r| matches!(r, QueueRow::Author { .. }));
+        assert!(!before_mine, "To review is never grouped");
+        assert!(app.selected_mr().is_some(), "author headers are never where the cursor rests");
+        press(&mut app, "S");
+        assert!(!app.queue_rows().iter().any(|r| matches!(r, QueueRow::Author { .. })));
+    }
+
+    #[test]
+    fn a_saved_view_for_this_scope_applies_and_one_for_another_is_dropped() {
+        let mut app = scoped_app();
+        let grouped = QueueView { order: order::Order::Author, by_author: true, ..QueueView::default() };
+        app.apply(Incoming::QueueView { scope: None, view: grouped.clone() });
+        assert_eq!(app.queue_view, QueueView::default());
+        app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view: grouped.clone() });
+        assert_eq!(app.queue_view, grouped);
     }
 }

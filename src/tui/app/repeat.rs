@@ -41,7 +41,9 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::app::test_support::*;
 
     /// The steps of `code` pressed at each of `times`, in milliseconds from the first.
     fn steps(code: KeyCode, times: &[u64]) -> Vec<isize> {
@@ -87,5 +89,23 @@ mod tests {
         let run = held(600).iter().fold(None, |run, &ms| Some(Repeat::after(run, KeyCode::Down, start + Duration::from_millis(ms))));
         assert_eq!(run.map(Repeat::step), Some(2));
         assert_eq!(Repeat::after(run, KeyCode::Up, start + Duration::from_millis(630)).step(), 1);
+    }
+
+    #[test]
+    fn a_held_j_moves_further_the_longer_it_is_held_and_a_pause_starts_over() {
+        let mut held = with_long_review();
+        let mut walked = with_long_review();
+        let start = held.now;
+        for ms in (0..=300).step_by(30) {
+            held.now = start + Duration::from_millis(ms);
+            press(&mut held, "j");
+        }
+        press(&mut walked, &"j".repeat(12));
+        let selected = |app: &App| app.open.as_ref().unwrap().selected;
+        assert_eq!(selected(&held), selected(&walked), "the eleventh repeat moves two rows");
+        held.now = start + Duration::from_millis(800);
+        press(&mut held, "j");
+        press(&mut walked, "j");
+        assert_eq!(selected(&held), selected(&walked), "after a pause one row again");
     }
 }

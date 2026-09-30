@@ -244,3 +244,163 @@ fn target_key(input: &Input) -> String {
         Input::FollowUp => "follow-up".to_owned(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn c_on_a_line_opens_the_input_and_enter_makes_a_draft() {
+        let mut app = with_review();
+        assert_eq!(press(&mut app, "c"), vec![], "the cursor is on a file row");
+        assert!(app.input.is_none() && app.live_toast().is_some());
+        on_line(&mut app);
+        press(&mut app, "c");
+        assert_eq!(app.input_label(), "new thread · charge.rs:12");
+        let actions = type_text(&mut app, "nit: rename");
+        let [Action::SaveDraft { key, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!(*key, mr_key());
+        assert_eq!(draft.body, "nit: rename");
+        assert_eq!(draft.position.as_ref().and_then(|p| p.line.new), Some(12));
+        assert_eq!(draft.id, None);
+        assert!(app.input.is_none());
+        let marker = marker_here(&app).expect("the line is marked");
+        assert_eq!((marker.mark, marker.unsaved), (crate::review::Mark::Draft, true), "an unsaved draft of mine, no row inserted");
+        assert_eq!(app.unsaved_drafts(), 1);
+        app.apply(saved(&actions, 9));
+        assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
+        assert_eq!(app.unsaved_drafts(), 0);
+    }
+
+    #[test]
+    fn option_arrows_jump_words_in_the_compose_box_whatever_the_terminal_sends() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        press(&mut app, "fix the bug");
+        let alt = |code| KeyEvent::new(code, KeyModifiers::ALT);
+        app.handle_key(alt(KeyCode::Left));
+        app.handle_key(alt(KeyCode::Char('b')));
+        press(&mut app, "x");
+        assert_eq!(app.buffer.text(), "fix xthe bug", "⌥← and esc-b both jump a word back, and type nothing");
+        app.handle_key(alt(KeyCode::Right));
+        app.handle_key(alt(KeyCode::Char('f')));
+        app.handle_key(alt(KeyCode::Backspace));
+        assert_eq!(app.buffer.text(), "fix xthe ", "⌥→ and esc-f jump a word on, ⌥⌫ deletes the word before");
+    }
+
+    #[test]
+    fn the_compose_box_edits_in_place_keeps_its_text_on_esc_and_takes_newlines() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "cab");
+        assert_eq!(app.focus, Focus::Side, "the box lives in the pane");
+        assert_eq!(
+            app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place),
+            Some(&Place::Line { file: 0, new: Some(12), old: Some(12) })
+        );
+        app.handle_key(code(KeyCode::Left));
+        press(&mut app, "x");
+        assert_eq!(app.buffer.text(), "axb");
+        app.handle_key(ctrl('a'));
+        app.handle_key(code(KeyCode::Delete));
+        assert_eq!(app.buffer.text(), "xb");
+        app.handle_key(ctrl('e'));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+        press(&mut app, "y");
+        assert_eq!(app.buffer.text(), "xb\ny", "alt-enter is a newline, not a send");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.input.is_none());
+        assert_eq!(app.focus, Focus::Review, "back where the box was opened from");
+        press(&mut app, "j");
+        press(&mut app, "c");
+        assert_eq!(app.buffer.text(), "", "another line starts empty");
+        assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![], "an empty comment is dropped");
+        press(&mut app, "k");
+        press(&mut app, "c");
+        assert_eq!(app.buffer.text(), "xb\ny", "the text left on line 12 comes back");
+        let actions = app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(actions.as_slice(), [Action::SaveDraft { draft, .. }] if draft.body == "xb\ny"), "{actions:?}");
+    }
+
+    fn cmd_enter() -> KeyEvent {
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::SUPER)
+    }
+
+    #[test]
+    fn cmd_enter_posts_a_new_thread_at_once_and_ctrl_s_posts_a_reply() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        press(&mut app, " nit ");
+        let actions = app.handle_key(cmd_enter());
+        let [Action::Post { key, to: Post::Thread(position), body }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((key, position.line.new, body.as_str()), (&mr_key(), Some(12), "nit"));
+        assert!(app.input.is_none(), "the box closes while the forge answers");
+        assert!(app.open.as_ref().unwrap().review.drafts.is_empty(), "no draft on the way");
+        press(&mut app, "]N");
+        app.handle_key(code(KeyCode::Enter));
+        press(&mut app, "r");
+        press(&mut app, "agreed");
+        let actions = app.handle_key(ctrl('s'));
+        assert_eq!(actions, vec![Action::Post { key: mr_key(), to: Post::Reply("c0ffee00c0ffee00".into()), body: "agreed".into() }]);
+    }
+
+    #[test]
+    fn a_posted_comment_clears_its_text_and_refreshes_the_threads() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        press(&mut app, "nit");
+        let actions = app.handle_key(cmd_enter());
+        let [Action::Post { to, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        app.poll.discussions_due = None;
+        app.apply(Incoming::Posted { key: mr_key(), to: to.clone() });
+        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("posted"));
+        assert!(app.take_actions().contains(&Action::RefreshMr(mr_key())), "the new note is read back at once");
+        press(&mut app, "c");
+        assert_eq!(app.buffer.text(), "", "nothing left to send on the line");
+    }
+
+    #[test]
+    fn a_refused_post_opens_the_box_again_with_its_text() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        press(&mut app, "nit");
+        let actions = app.handle_key(cmd_enter());
+        let [Action::Post { key, to, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        app.apply(Incoming::Failed { what: Failure::Post { key: key.clone(), to: to.clone() }, message: "HTTP 403".into() });
+        assert!(app.live_toast().unwrap().danger);
+        assert_eq!((app.input_label().as_str(), app.buffer.text()), ("new thread · charge.rs:12", "nit"));
+    }
+
+    #[test]
+    fn cmd_enter_on_an_empty_box_does_nothing_and_saves_other_boxes_as_enter_does() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        press(&mut app, "  ");
+        assert_eq!(app.handle_key(cmd_enter()), vec![]);
+        assert!(app.input.is_some(), "the box stays open");
+        let mut app = with_saved_draft();
+        press(&mut app, "le");
+        let actions = app.handle_key(ctrl('s'));
+        assert!(matches!(actions.as_slice(), [Action::UpdateDraft { .. }]), "an edited draft stays a draft: {actions:?}");
+    }
+
+    #[test]
+    fn up_and_down_in_the_compose_box_move_between_its_lines() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "cab");
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+        press(&mut app, "cd");
+        app.handle_key(code(KeyCode::Up));
+        press(&mut app, "x");
+        app.handle_key(code(KeyCode::Down));
+        press(&mut app, "y");
+        assert_eq!(app.buffer.text(), "abx\ncdy");
+    }
+}

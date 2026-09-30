@@ -106,3 +106,60 @@ impl App {
         actions
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn t_opens_the_tree_on_the_file_under_the_cursor_and_enter_jumps_back() {
+        let mut app = with_review();
+        press(&mut app, "]cj");
+        press(&mut app, "t");
+        assert_eq!(app.focus, Focus::Side);
+        let open = app.open.clone().unwrap();
+        let rows = open.tree_rows();
+        let selected = &rows[open.tree.as_ref().unwrap().selected];
+        assert!(matches!(selected, crate::review::tree::TreeRow::File { index: 0, .. }), "{rows:?}");
+        press(&mut app, "G");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!(app.focus, Focus::Review, "enter on a file hands the keys to the review");
+        let last_file = app.open.as_ref().unwrap().review.files.len() - 1;
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index, .. }) if *index == last_file));
+        assert!(app.open.as_ref().unwrap().tree.is_some(), "the tree stays open beside the diff");
+        press(&mut app, "t");
+        assert!(app.open.as_ref().unwrap().tree.is_none());
+    }
+
+    #[test]
+    fn zv_marks_the_file_viewed_folds_it_and_saves_its_fingerprint() {
+        let mut app = with_review();
+        press(&mut app, "]cj");
+        let actions = press(&mut app, "zv");
+        let open = app.open.clone().unwrap();
+        let path = open.review.files[0].new_path.clone();
+        assert!(open.review.viewed.contains(&path));
+        assert!(!open.review.fold.file_is_open(&path), "a viewed file folds");
+        assert!(
+            matches!(actions.as_slice(), [Action::SaveState { viewed, .. }] if viewed.get(&path) == Some(&open.review.files[0].fingerprint())),
+            "{actions:?}"
+        );
+        press(&mut app, "zv");
+        assert!(!app.open.as_ref().unwrap().review.viewed.contains(&path));
+        assert!(app.open.as_ref().unwrap().review.fold.file_is_open(&path));
+    }
+
+    #[test]
+    fn the_tree_counts_only_unresolved_threads() {
+        let mut app = with_review();
+        press(&mut app, "t");
+        let charge_row = |app: &mut App| {
+            let screen = render(app, 120, 20);
+            screen.lines().filter_map(|l| l.split("││").nth(1)).find(|l| l.contains("charge.rs")).unwrap().to_owned()
+        };
+        assert!(charge_row(&mut app).contains("+4 −2 ◆1"), "the resolved thread is left out");
+        resolve_the_diff_note(&mut app);
+        assert!(!charge_row(&mut app).contains('◆'), "no mark once all are resolved");
+    }
+}

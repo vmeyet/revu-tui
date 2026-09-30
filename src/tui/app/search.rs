@@ -220,8 +220,9 @@ pub fn mark(line: &Line<'static>, query: &str, from: usize, style: Style) -> Lin
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::app::test_support::*;
     use ratatui::style::Modifier;
 
     #[test]
@@ -245,5 +246,68 @@ mod tests {
         let shown: Vec<(&str, bool)> =
             marked.spans.iter().map(|s| (s.content.as_ref(), s.style.add_modifier.contains(Modifier::REVERSED))).collect();
         assert_eq!(shown, [(" 12 let x = ", false), ("12", true), (";", false)]);
+    }
+
+    /// What the row under the cursor reads: a line's text (the new side of a pair), or a file's path.
+    fn text_here(app: &App) -> String {
+        let open = app.open.as_ref().unwrap();
+        let files = &open.review.files;
+        match open.row().unwrap() {
+            Row::Line { file, hunk, index } => files[*file].hunks[*hunk].lines[*index].text.clone(),
+            Row::Pair { file, hunk, removed, added } => {
+                let lines = &files[*file].hunks[*hunk].lines;
+                format!("{} / {}", lines[*removed].text, lines[*added].text)
+            }
+            Row::File { index, .. } => files[*index].new_path.clone(),
+            other => format!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn slash_finds_text_as_it_is_typed_and_n_walks_the_matches_around_the_mr() {
+        let mut app = with_review();
+        press(&mut app, "/client");
+        assert!(text_here(&app).to_lowercase().contains("client"), "{}", text_here(&app));
+        let screen = render(&mut app, 150, 30);
+        assert!(screen.contains("/client▏"), "the search line takes the status row:\n{screen}");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(!app.search.as_ref().unwrap().typing);
+        let first = app.open.as_ref().unwrap().selected;
+        let count = app.search_count().unwrap();
+        assert!(count.starts_with("1/"), "{count}");
+        press(&mut app, "n");
+        assert_ne!(app.open.as_ref().unwrap().selected, first);
+        press(&mut app, "N");
+        assert_eq!(app.open.as_ref().unwrap().selected, first);
+        press(&mut app, "N");
+        assert!(app.live_toast().unwrap().text.contains("from the bottom"), "N before the first match goes round");
+        app.handle_key(code(KeyCode::Esc));
+        assert!(app.search.is_none(), "esc clears the search");
+    }
+
+    #[test]
+    fn a_match_inside_a_folded_file_or_hunk_opens_it() {
+        let mut app = with_review();
+        press(&mut app, "zM");
+        press(&mut app, "/line 43");
+        assert!(text_here(&app).contains("line 43 is new"), "{}", text_here(&app));
+        app.handle_key(code(KeyCode::Enter));
+        press(&mut app, "/Cargo");
+        assert_eq!(text_here(&app), "Cargo.lock", "a path matches too, in a file that opens folded");
+        let screen = render(&mut app, 150, 30);
+        assert!(screen.contains("1/1"), "{screen}");
+    }
+
+    #[test]
+    fn esc_while_typing_puts_the_cursor_back_and_a_capital_asks_for_the_exact_case() {
+        let mut app = with_review();
+        let start = app.open.as_ref().unwrap().selected;
+        press(&mut app, "/Client::with");
+        assert!(text_here(&app).contains("Client::with_key"));
+        app.handle_key(code(KeyCode::Esc));
+        assert_eq!((app.open.as_ref().unwrap().selected, app.search.is_none()), (start, true));
+        press(&mut app, "/CLIENT");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!(app.live_toast().map(|t| t.text.clone()).as_deref(), Some("no match"));
     }
 }

@@ -221,3 +221,124 @@ fn carry_over(old: &Review, fresh: Review) -> Review {
     let drafts = draft::carry(&fresh.drafts, &old.drafts);
     fresh.with_fold(fold).with_viewed(viewed).with_drafts(drafts)
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::test_support::*;
+
+    #[test]
+    fn enter_opens_the_mr_and_the_review_arrives() {
+        let app = with_review();
+        assert_eq!(app.opening, None);
+        assert_eq!(app.focus, Focus::Review);
+        let open = app.open.as_ref().unwrap();
+        assert_eq!(open.key, mr_key());
+        assert_eq!(open.row(), Some(&Row::File { index: 0, open: true }), "the cursor starts on the first file");
+        assert_eq!(app.opened.get(&mr_key()), Some(&today()));
+        assert!(app.poll.mr_due.is_some() && app.poll.discussions_due.is_some());
+    }
+
+    #[test]
+    fn a_cached_review_paints_first_and_the_fresh_one_clears_the_age() {
+        let mut app = with_queue();
+        app.handle_key(code(KeyCode::Enter));
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: Some(Duration::from_secs(120)) });
+        assert!(app.opening.is_some(), "still fetching");
+        assert_eq!(app.open.as_ref().unwrap().staleness(app.now), Some(Duration::from_secs(120)));
+        app.apply(Incoming::Failed { what: Failure::Open, message: "offline".into() });
+        assert!(app.offline.is_some() && app.open.is_some(), "the cached view stays");
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+        assert_eq!(app.open.as_ref().unwrap().staleness(app.now), None);
+        assert_eq!(app.offline, None);
+    }
+
+    #[test]
+    fn a_review_for_another_mr_is_ignored() {
+        let mut app = with_review();
+        app.apply(Incoming::Review { key: MrKey::new("acme/widgets", 99), review: Box::new(review()), cached: None });
+        assert_eq!(app.open.as_ref().unwrap().key, mr_key());
+    }
+
+    #[test]
+    fn answers_for_another_mr_leave_the_open_one_as_it_was() {
+        let mut app = with_review();
+        let before = app.open.clone();
+        let other = MrKey::new("acme/widgets", 99);
+        let head = before.as_ref().unwrap().review.mr.refs.head.clone();
+        app.apply(Incoming::Deployments { key: other.clone(), deployments: vec![] });
+        app.apply(Incoming::File { key: other.clone(), path: "src/pay/charge.rs".into(), sha: head, text: "fn main() {}".into() });
+        app.apply(Incoming::Checks { key: other.clone(), checks: None });
+        app.apply(Incoming::Resolved { key: other.clone(), thread: "c0ffee00c0ffee00".into(), resolved: true });
+        app.apply(Incoming::Approved { key: other.clone(), approve: true });
+        app.apply(Incoming::Published { key: other, approved: false, count: 1 });
+        assert_eq!(app.open, before);
+    }
+
+    #[test]
+    fn fresh_discussions_replace_the_threads_and_reschedule() {
+        let mut app = with_review();
+        app.poll.discussions_due = None;
+        app.apply(Incoming::Discussions {
+            key: mr_key(),
+            discussions: vec![fixture::discussion(include_str!("../../forge/gitlab/fixtures/diff_note.json"))],
+        });
+        assert_eq!(app.open.as_ref().unwrap().review.threads.len(), 1);
+        assert!(app.poll.discussions_due.is_some());
+    }
+
+    #[test]
+    fn a_fresh_review_keeps_the_folds_of_unchanged_files() {
+        let mut app = with_review();
+        press(&mut app, "za");
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
+        assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+    }
+
+    #[test]
+    fn a_poll_at_the_same_head_changes_the_mr_and_keeps_the_diff_and_the_cursor() {
+        let mut app = with_review();
+        press(&mut app, "]cj");
+        let before = app.open.clone().unwrap();
+        let renamed = Mr { title: "feat: charge cards twice".into(), ..mr() };
+        app.apply(Incoming::Mr { key: mr_key(), mr: Box::new(renamed) });
+        let open = app.open.clone().unwrap();
+        assert_eq!(open.review.mr.title, "feat: charge cards twice");
+        assert_eq!((open.selected, open.rows), (before.selected, before.rows));
+        let pushed = Mr { title: "pushed".into(), refs: crate::forge::Refs { head: "cccc".into(), ..mr().refs }, ..mr() };
+        app.apply(Incoming::Mr { key: mr_key(), mr: Box::new(pushed) });
+        assert_eq!(app.open.as_ref().unwrap().review.mr.title, "feat: charge cards twice", "a moved head waits for the whole review");
+        assert!(app.poll.mr_due.is_some(), "polling goes on either way");
+    }
+
+    #[test]
+    fn queue_failures_toast_and_stop_the_spinner() {
+        let mut app = app();
+        app.apply(Incoming::Failed { what: Failure::Queue, message: "HTTP 401".into() });
+        assert!(!app.queue_loading);
+        let toast = app.live_toast().unwrap();
+        assert!(toast.danger && toast.text.contains("r to retry"));
+        app.now += Duration::from_secs(5);
+        assert!(app.live_toast().is_none(), "toasts age out");
+    }
+
+    #[test]
+    fn a_queue_failure_keeps_the_queue_already_shown() {
+        let mut app = with_queue();
+        app.apply(Incoming::Failed { what: Failure::Queue, message: "HTTP 502".into() });
+        assert!(!render(&mut app, 100, 16).contains("did not load"));
+    }
+
+    #[test]
+    fn a_poll_that_brings_notes_says_so_until_the_next_key() {
+        let mut app = with_review();
+        let mut more = discussions();
+        let extra = more[1].notes[0].clone();
+        more[1].notes.push(crate::forge::Note { id: 999, ..extra });
+        app.apply(Incoming::Discussions { key: mr_key(), discussions: more });
+        assert_eq!(app.news.as_deref(), Some("● 1 new note"));
+        assert!(render(&mut app, 120, 20).contains("● 1 new note"));
+        press(&mut app, "j");
+        assert_eq!(app.news, None);
+    }
+}
