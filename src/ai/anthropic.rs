@@ -150,7 +150,7 @@ impl Claude {
         if falls_back(&self.model) {
             request = request.header("anthropic-beta", FALLBACK_BETA);
         }
-        request.send().await.map_err(|e| Failure(format!("could not reach Anthropic: {}", e.without_url())))
+        crate::log::send(request).await.map_err(|e| Failure(format!("could not reach Anthropic: {}", e.without_url())))
     }
 }
 
@@ -269,6 +269,8 @@ impl Reading {
 
     fn finish(self) -> Result<Outcome, Failure> {
         let stop = self.stop.ok_or_else(|| Failure("the answer ended without a stop reason".into()))?;
+        let Usage { input, output, cache_read, cache_write } = self.usage;
+        tracing::info!(model = self.model, input, output, cache_read, cache_write, ?stop, "Claude answered");
         Ok(Outcome { stop, usage: self.usage, model: self.model })
     }
 }
@@ -357,6 +359,7 @@ mod tests {
             )
             .mount(&server)
             .await;
+        crate::log::capture::start();
         let mut text = String::new();
         let outcome = claude(&server)
             .stream(&ask(), |e| {
@@ -369,6 +372,9 @@ mod tests {
         assert_eq!(text, "Hello");
         assert_eq!(outcome.stop, Stop::Done);
         assert_eq!(outcome.usage, Usage { input: 40, output: 9, cache_read: 1200, cache_write: 0 });
+        let log = crate::log::capture::text();
+        assert!(log.contains("/v1/messages 200") && log.contains("cache_read=1200"), "{log}");
+        assert!(!log.contains("sk-ant-test"), "{log}");
     }
 
     #[tokio::test]

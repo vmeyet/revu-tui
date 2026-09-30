@@ -12,6 +12,7 @@ Find your problem in the left column, then apply the fix.
 | `revu update` is slow | The first update builds every library; the next ones build only revu |
 | Pictures in comments do not show | Use a terminal that draws pictures, and check `[tui] images` is not `false` |
 | `no token for gitlab.com` | Run `revu login --from-glab`, or set `GITLAB_TOKEN` |
+| `no token for github.com` | Run `revu login --from-gh github.com`, or set `GITHUB_TOKEN` (`GH_TOKEN` works too) |
 | `token rejected` at login | The token expired or lacks a scope: GitLab needs `api`, GitHub needs `repo` |
 | My config seems ignored | It moved to `~/.config/revu/config.toml`; revu moves an old one there once |
 | revu stops at start with a config error | Fix the key the message names; revu refuses keys it does not know |
@@ -21,7 +22,18 @@ Find your problem in the left column, then apply the fix.
 ## Still stuck
 
 Run the command again with `--json` to see the raw answer.
-Open an issue with the message you see.
+Open an issue with the message you see, and attach the log.
+
+## The log
+
+revu writes what went wrong to `~/Library/Caches/revu/revu.log`, never to the screen.
+By default it keeps warnings: failed requests and failed actions.
+Start revu with `REVU_LOG=info` to also log every request and the tokens each Claude answer used.
+`REVU_LOG=debug` logs more, and `REVU_LOG=off` logs nothing.
+
+A request line holds the method, the host, the path, the status and the time it took.
+It never holds your token, a header or the query of a link.
+Past 2 MB the log moves to `revu.log.1` when revu starts, so the two files stay small.
 
 ## See also
 

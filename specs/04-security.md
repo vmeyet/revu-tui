@@ -42,6 +42,7 @@ TLS via rustls on ring (`src/http.rs` installs it) with webpki roots; no `danger
 
 - Config, cache, snapshots and fixtures hold no token. `Config` has no token field so it cannot be serialised by accident.
 - Error chains are scrubbed in `api::Client` before leaving the module: the header value is replaced by `<redacted>`.
+- The log file, `revu.log` in the cache root (0600), takes revu's own events only, never the HTTP libraries' debug output. A request line is method, host, path, status and time: no header, no query.
 - `Debug` on `Credentials` prints `Credentials { host, token: "<redacted>" }`.
 - No telemetry, no crash reporting, no update check beyond `git ls-remote` on the public repo (as slack-tui).
 - Test fixtures use `glpat-XXXX`.

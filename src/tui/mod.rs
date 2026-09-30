@@ -392,6 +392,7 @@ fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender<Incoming>)
     let backend = backend.clone();
     tokio::spawn(async move {
         let send = |incoming: Incoming| {
+            log_failure(&incoming);
             let _ = tx.send(incoming);
         };
         match action {
@@ -673,6 +674,14 @@ async fn post(forge: &Forge, key: &MrKey, to: &Post, body: &str) -> Result<()> {
     match to {
         Post::Thread(position) => forge.comment(key, body, Some(position)).await.map(|_| ()),
         Post::Reply(thread) => forge.reply(key, thread, body).await,
+    }
+}
+
+fn log_failure(incoming: &Incoming) {
+    match incoming {
+        Incoming::Failed { what, message } => tracing::warn!("{what:?} failed: {message}"),
+        Incoming::Answer { part: Part::Failed(message), .. } => tracing::warn!("Claude failed: {message}"),
+        _ => {}
     }
 }
 

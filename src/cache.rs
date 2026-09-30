@@ -160,6 +160,20 @@ impl Cache {
         self.write(key, &Entry::now(value))
     }
 
+    /// File `name` opened to append, private like the rest. Past `max` bytes it first moves to
+    /// `<name>.1`, dropping the one before, so it never holds more than twice `max`.
+    pub fn append(&self, name: &str, max: u64) -> Result<std::fs::File> {
+        let path = self.dir.join(name);
+        create_private_dirs(&self.dir, &self.dir)?;
+        if std::fs::metadata(&path).is_ok_and(|m| m.len() > max) {
+            std::fs::rename(&path, self.dir.join(format!("{name}.1"))).with_context(|| format!("rolling {}", path.display()))?;
+        }
+        let file =
+            std::fs::OpenOptions::new().create(true).append(true).open(&path).with_context(|| format!("opening {}", path.display()))?;
+        std::fs::set_permissions(&path, private(FILE_MODE))?;
+        Ok(file)
+    }
+
     pub fn clear(&self) -> Result<()> {
         match std::fs::remove_dir_all(&self.dir) {
             Ok(()) => Ok(()),
@@ -314,6 +328,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path().join("gitlab.com"));
         (dir, cache)
+    }
+
+    #[test]
+    fn an_appended_file_is_private_and_rolls_over_once_past_its_cap() {
+        use std::io::Write;
+        let (_dir, cache) = cache();
+        cache.append("revu.log", 4).unwrap().write_all(b"first").unwrap();
+        cache.append("revu.log", 4).unwrap().write_all(b"second").unwrap();
+        cache.append("revu.log", 100).unwrap().write_all(b" third").unwrap();
+        assert_eq!(cache.read_bytes("revu.log.1").as_deref(), Some(&b"first"[..]));
+        assert_eq!(cache.read_bytes("revu.log").as_deref(), Some(&b"second third"[..]));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(cache.dir.join("revu.log")).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
     }
 
     #[test]

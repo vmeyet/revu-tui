@@ -137,12 +137,7 @@ impl TypeSafe {
     }
 
     async fn post(&self, body: &Value) -> Result<Answers, Failure> {
-        let response = self
-            .http
-            .post(&self.url)
-            .bearer_auth(&self.key)
-            .json(body)
-            .send()
+        let response = crate::log::send(self.http.post(&self.url).bearer_auth(&self.key).json(body))
             .await
             .map_err(|e| Failure::Retryable(Unavailable(format!("network error: {}", e.without_url()))))?;
         let status = response.status().as_u16();

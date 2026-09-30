@@ -105,6 +105,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_logged_request_never_holds_the_token() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v4/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(me_json()))
+            .mount(&server)
+            .await;
+        crate::log::capture::start();
+        let client = Client::with_base(&creds(), &format!("{}/api/v4/", server.uri())).unwrap();
+        client.me().await.unwrap();
+        let text = crate::log::capture::text();
+        assert!(text.contains("GET 127.0.0.1/api/v4/user 200"), "{text}");
+        assert!(!text.contains("glpat-xxxx") && !text.contains(TOKEN_HEADER), "{text}");
+    }
+
+    #[tokio::test]
     async fn http_errors_carry_gitlabs_message() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
