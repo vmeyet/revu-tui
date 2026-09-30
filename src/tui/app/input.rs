@@ -135,34 +135,36 @@ impl App {
     /// A finished text, from the compose box or the editor, becomes a draft or changes one.
     pub(super) fn submit(&mut self, input: Input, text: String) -> Vec<Action> {
         self.unsent.remove(&target_key(&input));
-        let Some(open) = self.open.clone() else { return vec![] };
+        if self.open.is_none() {
+            return vec![];
+        }
         match input {
-            Input::Comment { position } => self.add_draft(&open, Draft::on(*position, text)),
-            Input::Reply { thread } => self.add_draft(&open, Draft::reply(&thread, text)),
-            Input::EditDraft { draft } => self.change_draft(&open, draft, text),
+            Input::Comment { position } => self.add_draft(Draft::on(*position, text)),
+            Input::Reply { thread } => self.add_draft(Draft::reply(&thread, text)),
+            Input::EditDraft { draft } => self.change_draft(draft, text),
             question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
         }
     }
 
-    fn add_draft(&mut self, open: &Open, draft: Draft) -> Vec<Action> {
+    fn add_draft(&mut self, draft: Draft) -> Vec<Action> {
+        let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
         let draft = draft.with_local_id(self.new_local_id());
-        let mut drafts = open.review.drafts.clone();
-        drafts.push(draft.clone());
-        self.open = Some(Open { select_from: None, ..open.with_review(open.review.with_drafts(drafts)) });
-        vec![Action::SaveDraft { key: open.key.clone(), draft: Box::new(draft) }]
+        let save = Action::SaveDraft { key, draft: Box::new(draft.clone()) };
+        self.update_open(|open| Open {
+            select_from: None,
+            ..open.with_drafts_changed(|drafts| drafts.into_iter().chain([draft]).collect())
+        });
+        vec![save]
     }
 
-    fn change_draft(&mut self, open: &Open, id: DraftId, text: String) -> Vec<Action> {
+    fn change_draft(&mut self, id: DraftId, text: String) -> Vec<Action> {
+        let Some(open) = &self.open else { return vec![] };
         let Some(index) = open.review.drafts.iter().position(|d| d.is(id)) else { return vec![] };
         let draft = &open.review.drafts[index];
         let changed = draft.clone().with_body(text);
-        let mut drafts = open.review.drafts.clone();
-        drafts[index] = changed.clone();
-        self.open = Some(open.with_review(open.review.with_drafts(drafts)));
-        match draft.id {
-            Some(id) => vec![Action::UpdateDraft { key: open.key.clone(), id, draft: Box::new(changed) }],
-            None => vec![],
-        }
+        let update = draft.id.map(|id| Action::UpdateDraft { key: open.key.clone(), id, draft: Box::new(changed.clone()) });
+        self.update_open(|open| open.with_draft_replaced(index, changed));
+        update.into_iter().collect()
     }
 
     /// The compose box's title: `new thread · charge.rs:57`, `new thread · charge.rs:55–57`,

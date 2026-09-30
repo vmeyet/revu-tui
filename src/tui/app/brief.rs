@@ -150,22 +150,22 @@ impl Brief {
         self.threads.as_ref()?.get(self.selected?)
     }
 
-    fn down(&self) -> Self {
+    fn down(self) -> Self {
         let last = self.targets().len().saturating_sub(1);
         let selected = self.selected.map_or(0, |i| (i + 1).min(last));
-        Self { selected: Some(selected), follow: true, ..self.clone() }
+        Self { selected: Some(selected), follow: true, ..self }
     }
 
     /// Up from the first thread lets go of it and scrolls on, so the head and description come back.
-    fn up(&self) -> Self {
+    fn up(self) -> Self {
         match self.selected {
-            Some(i) if i > 0 => Self { selected: Some(i - 1), follow: true, ..self.clone() },
+            Some(i) if i > 0 => Self { selected: Some(i - 1), follow: true, ..self },
             _ => Self { selected: None, ..self.scrolled(-1) },
         }
     }
 
-    fn scrolled(&self, by: isize) -> Self {
-        Self { scroll: self.scroll.saturating_add_signed(by), follow: false, ..self.clone() }
+    fn scrolled(self, by: isize) -> Self {
+        Self { scroll: self.scroll.saturating_add_signed(by), follow: false, ..self }
     }
 }
 
@@ -283,7 +283,7 @@ impl App {
         let found = open.rows.iter().enumerate().find(|(_, row)| open.review.row_holds(row, &anchor));
         let found = found.and_then(|(i, row)| open.review.place_of(row).map(|p| (i, p)));
         if let Some((index, place)) = found {
-            self.open = Some(open.move_to(index));
+            self.update_open(|open| open.move_to(index));
             self.open_pane(place);
         } else {
             self.review_jump_to(|row| matches!(row, Row::File { index, .. } if *index == file));

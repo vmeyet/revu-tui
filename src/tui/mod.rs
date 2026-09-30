@@ -1092,9 +1092,10 @@ impl Backend {
         let state = self.state(key);
         let review = Review::new(mr, diffs, discussions, &self.fold_globs);
         let fold = merged_fold(review.fold.clone(), state.fold);
+        let viewed = review.still_viewed(&state.viewed_files);
         review
             .with_fold(fold)
-            .with_viewed(review.still_viewed(&state.viewed_files))
+            .with_viewed(viewed)
             .with_inline(self.inline)
             .with_side_by_side(state.side_by_side)
             .with_drafts(drafts.iter().map(Draft::held).collect())

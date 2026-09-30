@@ -1,7 +1,7 @@
 use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef, Sha};
-use crate::review::{Review, Row};
+use crate::review::{Draft, Review, Row};
 use std::time::{Duration, Instant};
 
 /// The MR on screen: the review plus where the reader is in it.
@@ -63,22 +63,15 @@ impl Open {
 
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
     /// The reader's inline or side by side choice outlives the refresh; the lines read around hunks only while the head stays.
-    pub fn with_review(&self, review: Review) -> Self {
+    pub fn with_review(self, review: Review) -> Self {
         let same_head = review.mr.refs.head == self.review.mr.refs.head;
-        let review = Review {
-            side_by_side: self.review.side_by_side,
-            wide: self.review.wide,
-            quiet_whitespace: self.review.quiet_whitespace,
-            context: if same_head { self.review.context.clone() } else { crate::review::Context::default() },
+        self.relaid(|old| Review {
+            side_by_side: old.side_by_side,
+            wide: old.wide,
+            quiet_whitespace: old.quiet_whitespace,
+            context: if same_head { old.context } else { crate::review::Context::default() },
             ..review
-        };
-        let rows = review.rows();
-        let selected = self
-            .row()
-            .and_then(|row| rows.iter().position(|r| same_place(r, row)))
-            .unwrap_or(self.selected)
-            .min(rows.len().saturating_sub(1));
-        Self { review, rows, selected, ..self.clone() }
+        })
     }
 
     /// The right pane holds something: threads, the tree, an answer or the pipeline.
@@ -100,11 +93,11 @@ impl Open {
         self.cached.map(|(at, age)| age + now.saturating_duration_since(at))
     }
 
-    pub(super) fn move_to(&self, index: usize) -> Self {
-        Self { selected: index.min(self.rows.len().saturating_sub(1)), ..self.clone() }
+    pub(super) fn move_to(self, index: usize) -> Self {
+        Self { selected: index.min(self.rows.len().saturating_sub(1)), ..self }
     }
 
-    fn move_by(&self, delta: isize) -> Self {
+    fn move_by(self, delta: isize) -> Self {
         let on_the_mr = !self.review.conversations(&crate::review::Place::Mr).is_empty();
         let selectable = |i: usize| is_selectable(&self.rows[i], on_the_mr);
         let mut at = self.selected as isize;
@@ -140,21 +133,34 @@ impl Open {
         Some((file.new_path.clone(), hunk))
     }
 
-    pub(super) fn with_fold(&self, fold: FoldState) -> Self {
-        self.relaid(self.review.with_fold(fold))
+    pub(super) fn with_fold(self, fold: FoldState) -> Self {
+        self.relaid(|review| review.with_fold(fold))
     }
 
-    fn with_quiet_whitespace(&self, quiet: bool) -> Self {
-        self.relaid(self.review.with_quiet_whitespace(quiet))
+    fn with_quiet_whitespace(self, quiet: bool) -> Self {
+        self.relaid(|review| review.with_quiet_whitespace(quiet))
     }
 
-    /// The same review laid out again, the cursor kept on what it pointed at.
-    pub(super) fn relaid(&self, review: Review) -> Self {
-        let rows = review.rows();
+    /// The review changed by `change` and laid out again, the cursor kept on what it pointed at.
+    pub(super) fn relaid(self, change: impl FnOnce(Review) -> Review) -> Self {
         let anchor = self.row().cloned();
+        let review = change(self.review);
+        let rows = review.rows();
         let selected =
             anchor.and_then(|row| rows.iter().position(|r| same_place(r, &row))).unwrap_or(self.selected).min(rows.len().saturating_sub(1));
-        Self { review, rows, selected, ..self.clone() }
+        Self { review, rows, selected, ..self }
+    }
+
+    /// The drafts `change` makes of the current ones, laid out again.
+    pub(super) fn with_drafts_changed(self, change: impl FnOnce(Vec<Draft>) -> Vec<Draft>) -> Self {
+        self.relaid(|review| Review { drafts: change(review.drafts), ..review })
+    }
+
+    pub(super) fn with_draft_replaced(self, index: usize, draft: Draft) -> Self {
+        self.with_drafts_changed(|mut drafts| {
+            drafts[index] = draft;
+            drafts
+        })
     }
 
     /// The web page of the line under the cursor, the MR's page anywhere else.
@@ -202,10 +208,18 @@ const CONTEXT_STEP: u32 = 10;
 const TOO_NARROW: &str = "side by side needs a wider window";
 
 impl App {
+    /// The open MR replaced by what `change` makes of it; nothing happens when none is open.
+    pub(super) fn update_open(&mut self, change: impl FnOnce(Open) -> Open) {
+        self.open = self.open.take().map(change);
+    }
+
+    /// The open MR replaced by what `change` makes of it, only while it is `key`.
+    pub(super) fn update_open_of(&mut self, key: &MrKey, change: impl FnOnce(Open) -> Open) {
+        self.open = self.open.take().map(|open| if open.key == *key { change(open) } else { open });
+    }
+
     pub(super) fn review_move(&mut self, delta: isize) {
-        if let Some(open) = &self.open {
-            self.open = Some(open.move_by(delta));
-        }
+        self.update_open(|open| open.move_by(delta));
     }
 
     pub(super) fn review_jump(&mut self, forward: bool, wanted: impl Fn(&Row) -> bool) {
@@ -218,7 +232,7 @@ impl App {
     pub(super) fn review_jump_where(&mut self, forward: bool, wanted: impl Fn(usize) -> bool) {
         let Some(open) = &self.open else { return };
         match open.seek(forward, wanted) {
-            Some(index) => self.open = Some(open.move_to(index)),
+            Some(index) => self.update_open(|open| open.move_to(index)),
             None => self.toast("nothing to jump to"),
         }
     }
@@ -227,20 +241,22 @@ impl App {
     pub(super) fn review_jump_to(&mut self, wanted: impl Fn(&Row) -> bool) {
         let Some(open) = &self.open else { return };
         if let Some(index) = open.rows.iter().position(wanted) {
-            self.open = Some(open.move_to(index));
+            self.update_open(|open| open.move_to(index));
         }
     }
 
     pub(super) fn review_first(&mut self) {
-        if let Some(open) = &self.open {
-            self.open = Some(open.move_to(first_selectable(&open.rows)));
-        }
+        self.update_open(|open| {
+            let first = first_selectable(&open.rows);
+            open.move_to(first)
+        });
     }
 
     pub(super) fn review_last(&mut self) {
-        if let Some(open) = &self.open {
-            self.open = Some(open.move_to(open.rows.len().saturating_sub(1)));
-        }
+        self.update_open(|open| {
+            let last = open.rows.len().saturating_sub(1);
+            open.move_to(last)
+        });
     }
 
     /// Indexes of the files carrying an unresolved thread, for `]f` and `[f`.
@@ -289,9 +305,8 @@ impl App {
         }
         let path = open.review.files[file].new_path.clone();
         let actions = self.set_file_fold(&path, crate::diff::fold::Fold::Closed);
-        let open = self.open.as_ref()?;
-        let at = open.rows.iter().position(|r| matches!(r, Row::File { index, .. } if *index == file))?;
-        self.open = Some(Open { pinned_file: None, ..open.move_to(at) });
+        let at = self.open.as_ref()?.rows.iter().position(|r| matches!(r, Row::File { index, .. } if *index == file))?;
+        self.update_open(|open| Open { pinned_file: None, ..open.move_to(at) });
         Some(actions)
     }
 
@@ -313,14 +328,17 @@ impl App {
     }
 
     fn apply_fold(&mut self, fold: FoldState) -> Vec<Action> {
-        let Some(open) = &self.open else { return vec![] };
+        let Some(open) = self.open.take() else { return vec![] };
         self.keep(open.with_fold(fold))
     }
 
     /// `D`: changed words inline, or the old file beside the new one.
     pub(super) fn toggle_side_by_side(&mut self) -> Vec<Action> {
-        let Some(open) = &self.open else { return vec![] };
-        let next = open.relaid(open.review.with_side_by_side(!open.review.side_by_side));
+        let Some(open) = self.open.take() else { return vec![] };
+        let next = open.relaid(|review| {
+            let side_by_side = !review.side_by_side;
+            review.with_side_by_side(side_by_side)
+        });
         self.toast(match (next.review.side_by_side, next.review.wide) {
             (true, true) => "side by side",
             (true, false) => TOO_NARROW,
@@ -332,8 +350,8 @@ impl App {
     /// The diff area is drawn wide enough for two sides, or not: side by side falls back to inline
     /// while it is narrow, saying so once, and comes back when it widens.
     pub(crate) fn fit_diff(&mut self, wide: bool) {
-        let Some(open) = self.open.as_ref().filter(|o| o.review.wide != wide) else { return };
-        let next = open.relaid(open.review.with_wide(wide));
+        let Some(open) = self.open.take_if(|o| o.review.wide != wide) else { return };
+        let next = open.relaid(|review| review.with_wide(wide));
         if next.review.side_by_side && !wide {
             self.toast(TOO_NARROW);
         }
@@ -364,22 +382,26 @@ impl App {
             path,
             sha: open.review.mr.refs.head.clone(),
         });
-        self.open = Some(open.relaid(open.review.with_context(context)));
+        self.update_open(|open| open.relaid(|review| review.with_context(context)));
         load.into_iter().collect()
     }
 
     /// A file read whole arrived: the hunks waiting on it show their extra lines, unless a push moved the head since it was asked.
     pub(super) fn apply_file(&mut self, key: &MrKey, path: String, sha: &Sha, text: &str) {
-        let Some(open) = self.open.as_ref().filter(|o| &o.key == key && &o.review.mr.refs.head == sha) else { return };
-        let mut context = open.review.context.clone();
-        context.texts.insert(path, std::sync::Arc::new(text.lines().map(str::to_owned).collect()));
-        self.open = Some(open.relaid(open.review.with_context(context)));
+        let Some(open) = self.open.take_if(|o| &o.key == key && &o.review.mr.refs.head == sha) else { return };
+        let lines = std::sync::Arc::new(text.lines().map(str::to_owned).collect());
+        self.open = Some(open.relaid(|review| {
+            let mut context = review.context.clone();
+            context.texts.insert(path, lines);
+            review.with_context(context)
+        }));
     }
 
     /// `W`: lines that changed only in whitespace read as one quiet row, or show as they are.
     pub(super) fn toggle_whitespace(&mut self) {
-        let Some(open) = &self.open else { return };
-        let next = open.with_quiet_whitespace(!open.review.quiet_whitespace);
+        let Some(open) = self.open.take() else { return };
+        let quiet = !open.review.quiet_whitespace;
+        let next = open.with_quiet_whitespace(quiet);
         self.toast(if next.review.quiet_whitespace { "whitespace-only changes hidden" } else { "whitespace changes shown" });
         self.open = Some(next);
     }

@@ -103,8 +103,8 @@ impl Open {
         self.pane.as_ref().is_some_and(|pane| pane.place == Place::All)
     }
 
-    fn with_pane(&self, pane: Option<Pane>) -> Self {
-        Self { pane, ..self.clone() }
+    fn with_pane(self, pane: Option<Pane>) -> Self {
+        Self { pane, ..self }
     }
 
     /// Whether the row's line carries a thread or a draft, or the header conversations on the MR.
@@ -123,8 +123,7 @@ impl Open {
 impl App {
     /// The pane on `place`, focused, in place of the file tree.
     pub(super) fn open_pane(&mut self, place: Place) {
-        let Some(open) = &self.open else { return };
-        self.open = Some(Open { tree: None, answer: None, pipeline: None, ..open.with_pane(Some(Pane::at(place))) });
+        self.update_open(|open| Open { tree: None, answer: None, pipeline: None, ..open.with_pane(Some(Pane::at(place))) });
         self.focus = Focus::Side;
     }
 
@@ -170,16 +169,13 @@ impl App {
 
     /// `m` in the list of every conversation: only those I take part in, or every one again.
     fn toggle_mine(&mut self) {
-        let Some(open) = &self.open else { return };
-        let Some(pane) = &open.pane else { return };
+        let Some(pane) = self.open.as_ref().and_then(|o| o.pane.clone()) else { return };
         let only_with = if pane.only_with.is_some() { None } else { Some(self.me.clone()) };
-        self.open = Some(open.with_pane(Some(Pane { note: 0, scroll: 0, only_with, ..pane.clone() })));
+        self.update_open(|open| open.with_pane(Some(Pane { note: 0, scroll: 0, only_with, ..pane })));
     }
 
     pub(super) fn close_pane(&mut self) {
-        if let Some(open) = &self.open {
-            self.open = Some(open.with_pane(None));
-        }
+        self.update_open(|open| open.with_pane(None));
         self.focus = Focus::Review;
     }
 
@@ -193,7 +189,7 @@ impl App {
         let Some(pane) = &open.pane else { return };
         let Some(row) = open.row().filter(|row| open.is_marked(row)) else { return };
         let Some(place) = open.review.place_of(row).filter(|place| *place != pane.place) else { return };
-        self.open = Some(open.with_pane(Some(Pane::at(place))));
+        self.update_open(|open| open.with_pane(Some(Pane::at(place))));
     }
 
     /// `]n` `[n`, `]N` `[N`: the next conversation in file then line order, folded or not; a folded
@@ -229,10 +225,10 @@ impl App {
 
     /// The cursor on `target`; its folded file or hunk opens, and stays open like one opened by hand.
     fn jump_to_row(&mut self, target: &Row) -> Vec<Action> {
-        let Some(open) = &self.open else { return vec![] };
-        let fold = unfolded_for(open, target);
+        let Some(open) = self.open.take() else { return vec![] };
+        let fold = unfolded_for(&open, target);
         let changed = fold != open.review.fold;
-        let laid = if changed { open.relaid(open.review.with_fold(fold)) } else { open.clone() };
+        let laid = if changed { open.with_fold(fold) } else { open };
         let index = laid.rows.iter().position(|row| super::review::same_place(row, target)).unwrap_or(laid.selected);
         let next = laid.move_to(index);
         let actions = if changed {
@@ -297,7 +293,8 @@ impl App {
         let Some(pane) = &open.pane else { return };
         let last = entries.len().saturating_sub(1) as isize;
         let note = (pane.note as isize).saturating_add(delta).clamp(0, last) as usize;
-        self.open = Some(open.with_pane(Some(Pane { note, ..pane.clone() })));
+        let pane = Pane { note, ..pane.clone() };
+        self.update_open(|open| open.with_pane(Some(pane)));
     }
 
     fn pane_jump(&mut self, forward: bool) {
@@ -314,7 +311,8 @@ impl App {
             self.toast(if forward { "last thread on this line" } else { "first thread on this line" });
             return;
         };
-        self.open = Some(open.with_pane(Some(Pane { note, ..pane.clone() })));
+        let pane = Pane { note, ..pane.clone() };
+        self.update_open(|open| open.with_pane(Some(pane)));
     }
 
     /// `enter` on a folded resolved thread shows all its notes, and folds it again.
@@ -328,7 +326,8 @@ impl App {
         if !unfolded.remove(&id) {
             unfolded.insert(id);
         }
-        self.open = Some(open.with_pane(Some(Pane { unfolded, ..pane.clone() })));
+        let pane = Pane { unfolded, ..pane.clone() };
+        self.update_open(|open| open.with_pane(Some(pane)));
     }
 
     /// The first `http` link in the focused thread, for `u`.
@@ -355,7 +354,7 @@ fn first_link(text: &str) -> Option<String> {
 
 /// The next row `threads` stops on after the cursor, wrapping, among the rows the review shows with every fold open.
 fn next_marked(open: &Open, forward: bool, threads: Threads) -> Option<Row> {
-    let every = open.review.with_fold(crate::diff::fold::FoldState::default()).rows();
+    let every = open.review.clone().with_fold(crate::diff::fold::FoldState::default()).rows();
     let markers = open.review.markers();
     let here = open.row().and_then(|row| every.iter().position(|r| super::review::same_place(r, row))).unwrap_or(0);
     let len = every.len();
@@ -372,7 +371,7 @@ fn row_of(review: &Review, spot: Spot) -> Option<Row> {
         Spot::Mr => Some(Row::Header),
         Spot::Outdated(anchor) => review.file_of(anchor).map(|index| Row::File { index, open: true }),
         Spot::Line(anchor) => {
-            review.with_fold(crate::diff::fold::FoldState::default()).rows().into_iter().find(|row| review.row_holds(row, anchor))
+            review.clone().with_fold(crate::diff::fold::FoldState::default()).rows().into_iter().find(|row| review.row_holds(row, anchor))
         }
     }
 }

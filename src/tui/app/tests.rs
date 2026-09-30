@@ -339,6 +339,21 @@ fn a_review_for_another_mr_is_ignored() {
 }
 
 #[test]
+fn answers_for_another_mr_leave_the_open_one_as_it_was() {
+    let mut app = with_review();
+    let before = app.open.clone();
+    let other = MrKey::new("acme/widgets", 99);
+    let head = before.as_ref().unwrap().review.mr.refs.head.clone();
+    app.apply(Incoming::Deployments { key: other.clone(), deployments: vec![] });
+    app.apply(Incoming::File { key: other.clone(), path: "src/pay/charge.rs".into(), sha: head, text: "fn main() {}".into() });
+    app.apply(Incoming::Checks { key: other.clone(), checks: None });
+    app.apply(Incoming::Resolved { key: other.clone(), thread: "c0ffee00c0ffee00".into(), resolved: true });
+    app.apply(Incoming::Approved { key: other.clone(), approve: true });
+    app.apply(Incoming::Published { key: other, approved: false, count: 1 });
+    assert_eq!(app.open, before);
+}
+
+#[test]
 fn tab_and_brackets_jump_between_files_hunks_and_threads() {
     let mut app = with_review();
     press(&mut app, "]c");
@@ -736,7 +751,7 @@ fn a_draft_the_forge_folds_into_one_it_already_holds_leaves_one_draft() {
     let open = app.open.clone().unwrap();
     let sent = crate::review::Draft::new(None, "Also: docs").with_local_id(2);
     let drafts = vec![crate::review::Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone()];
-    app.open = Some(open.with_review(open.review.with_drafts(drafts)));
+    app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
     let follow = app.apply_draft_saved(&mr_key(), &sent, 209, "Two nits.\n\nAlso: docs");
     let held: Vec<(Option<u64>, &str)> = app.open.as_ref().unwrap().review.drafts.iter().map(|d| (d.id, d.body.as_str())).collect();
     assert_eq!(held, [(Some(209), "Two nits.\n\nAlso: docs")], "an edit or a delete of it then keeps both texts");
@@ -750,7 +765,7 @@ fn a_folded_draft_edited_while_its_save_ran_updates_only_its_own_text() {
     let sent = crate::review::Draft::new(None, "Also: docs").with_local_id(2);
     let drafts =
         vec![crate::review::Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone().with_body("Also: docs, please")];
-    app.open = Some(open.with_review(open.review.with_drafts(drafts)));
+    app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
     let follow = app.apply_draft_saved(&mr_key(), &sent, 209, "Two nits.\n\nAlso: docs");
     let [Action::UpdateDraft { id: 209, draft, .. }] = follow.as_slice() else { panic!("{follow:?}") };
     assert_eq!(draft.body, "Two nits.\n\nAlso: docs, please", "the other note on the PR stays");
@@ -1744,7 +1759,7 @@ fn a_draft_whose_line_left_the_diff_is_named_before_publishing_and_m_moves_it_to
         ..open.review.drafts[0].clone()
     };
     let drafts = vec![open.review.drafts[0].clone(), gone];
-    app.open = Some(open.with_review(open.review.with_drafts(drafts)));
+    app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
     press(&mut app, "P");
     assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![], "nothing is sent while a draft hangs on a missing line");
     assert_eq!(app.publish.as_ref().unwrap().selected, 1, "the cursor lands on the stranded draft");
@@ -4216,7 +4231,7 @@ fn is_saved_fold(actions: &[Action]) -> bool {
 fn with_open_thread() -> App {
     let mut app = with_review();
     let open = app.open.clone().unwrap();
-    app.open = Some(open.with_review(open.review.with_resolved("c0ffee00c0ffee00", false)));
+    app.open = Some(open.relaid(|review| review.with_resolved("c0ffee00c0ffee00", false)));
     app
 }
 
@@ -4236,7 +4251,7 @@ fn bracket_n_stops_on_my_draft_reply_to_a_resolved_thread() {
     let mut app = with_review();
     let open = app.open.clone().unwrap();
     let reply = crate::review::Draft::reply("c0ffee00c0ffee00", "agreed");
-    app.open = Some(open.with_review(open.review.with_drafts(vec![reply])));
+    app.open = Some(open.relaid(|review| review.with_drafts(vec![reply])));
     assert_eq!(thread_stops(&mut app, "]n", 2), [LINE_13, Row::Header]);
 }
 
@@ -4244,7 +4259,7 @@ fn bracket_n_stops_on_my_draft_reply_to_a_resolved_thread() {
 fn bracket_n_skips_the_header_once_the_mr_thread_is_resolved() {
     let mut app = with_open_thread();
     let open = app.open.clone().unwrap();
-    app.open = Some(open.with_review(open.review.with_resolved("6a9c1750b2d6e4f0", true)));
+    app.open = Some(open.relaid(|review| review.with_resolved("6a9c1750b2d6e4f0", true)));
     assert_eq!(thread_stops(&mut app, "]n", 1), [LINE_13]);
     assert_eq!(thread_stops(&mut app, "]N", 1), [Row::Header], "]N still stops there");
 }

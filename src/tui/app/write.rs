@@ -73,13 +73,11 @@ impl App {
             self.toast("move onto a line first");
             return;
         }
-        self.open = Some(Open { select_from: Some(open.selected), ..open.clone() });
+        self.update_open(|open| Open { select_from: Some(open.selected), ..open });
     }
 
     pub(super) fn drop_select(&mut self) {
-        if let Some(open) = &self.open {
-            self.open = Some(Open { select_from: None, ..open.clone() });
-        }
+        self.update_open(|open| Open { select_from: None, ..open });
     }
 
     /// The position for a note here: the cursor's line, or the `V` range around it.
@@ -130,17 +128,16 @@ impl App {
     }
 
     fn delete_draft(&mut self, index: usize) -> Vec<Action> {
-        let Some(open) = self.open.clone() else { return vec![] };
-        let Some(draft) = open.review.drafts.get(index).cloned() else { return vec![] };
-        let drafts: Vec<_> = open.review.drafts.iter().enumerate().filter(|(i, _)| *i != index).map(|(_, d)| d.clone()).collect();
-        self.open = Some(open.with_review(open.review.with_drafts(drafts)));
+        let Some(open) = &self.open else { return vec![] };
+        let Some(draft) = open.review.drafts.get(index) else { return vec![] };
+        let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id });
+        self.update_open(|open| {
+            open.with_drafts_changed(|drafts| drafts.into_iter().enumerate().filter(|(i, _)| *i != index).map(|(_, d)| d).collect())
+        });
         if let Some(publish) = &self.publish {
             self.publish = Some(Publish { selected: publish.selected.min(self.draft_count()), ..publish.clone() });
         }
-        match draft.id {
-            Some(id) => vec![Action::DeleteDraft { key: open.key.clone(), id }],
-            None => vec![],
-        }
+        delete.into_iter().collect()
     }
 
     pub(super) fn edit_draft_here(&mut self) -> bool {
@@ -234,17 +231,13 @@ impl App {
 
     /// A draft whose line is gone becomes a note on the MR: the forge draft is replaced by a fresh one.
     fn move_to_the_mr(&mut self, index: usize) -> Vec<Action> {
-        let Some(open) = self.open.clone() else { return vec![] };
-        let Some(draft) = open.review.drafts.get(index).cloned() else { return vec![] };
-        if draft.anchor.is_none() {
-            return vec![];
-        }
-        let moved = draft.clone().on_the_mr().with_local_id(self.new_local_id());
-        let mut drafts = open.review.drafts.clone();
-        drafts[index] = moved.clone();
-        self.open = Some(open.with_review(open.review.with_drafts(drafts)));
-        let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id });
-        let save = Action::SaveDraft { key: open.key.clone(), draft: Box::new(moved) };
+        let Some(open) = &self.open else { return vec![] };
+        let Some(draft) = open.review.drafts.get(index).filter(|d| d.anchor.is_some()).cloned() else { return vec![] };
+        let key = open.key.clone();
+        let delete = draft.id.map(|id| Action::DeleteDraft { key: key.clone(), id });
+        let moved = draft.on_the_mr().with_local_id(self.new_local_id());
+        let save = Action::SaveDraft { key, draft: Box::new(moved.clone()) };
+        self.update_open(|open| open.with_draft_replaced(index, moved));
         delete.into_iter().chain([save]).collect()
     }
 
@@ -298,7 +291,7 @@ impl App {
 
     /// Flipped on screen at once; GitLab's refusal flips it back.
     pub(super) fn toggle_resolved(&mut self) -> Vec<Action> {
-        let Some(open) = self.open.clone() else { return vec![] };
+        let Some(open) = &self.open else { return vec![] };
         let Some(thread) = self.thread_to_resolve().and_then(|id| open.review.thread(&id).cloned()) else {
             self.toast("no thread here");
             return vec![];
@@ -308,8 +301,9 @@ impl App {
             return vec![];
         }
         let resolved = !thread.resolved;
-        self.open = Some(open.with_review(open.review.with_resolved(&thread.id, resolved)));
-        vec![Action::Resolve { key: open.key.clone(), thread: thread.id, resolved }]
+        let action = Action::Resolve { key: open.key.clone(), thread: thread.id.clone(), resolved };
+        self.update_open(|open| open.relaid(|review| review.with_resolved(&thread.id, resolved)));
+        vec![action]
     }
 
     pub(super) fn new_local_id(&mut self) -> u64 {
@@ -321,7 +315,7 @@ impl App {
     /// is deleted from the forge so publishing never shows it; one edited meanwhile is updated there.
     /// Any other draft under the same id is the one the forge folded this note into: it goes.
     pub(super) fn apply_draft_saved(&mut self, key: &MrKey, sent: &Draft, id: u64, body: &str) -> Vec<Action> {
-        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return vec![] };
+        let Some(open) = self.open.as_ref().filter(|o| &o.key == key) else { return vec![] };
         let delete = vec![Action::DeleteDraft { key: key.clone(), id }];
         let Some(draft) = open.review.drafts.iter().find(|d| d.local_id == sent.local_id) else { return delete };
         match draft.id {
@@ -330,25 +324,24 @@ impl App {
             Some(_) => return delete,
         }
         let saved = draft.clone().held_as(id, refolded(body, &sent.body, &draft.body));
-        let drafts = open
-            .review
-            .drafts
-            .iter()
-            .filter(|d| d.id != Some(id))
-            .map(|d| if d.local_id == sent.local_id { &saved } else { d })
-            .cloned()
-            .collect();
-        self.open = Some(open.with_review(open.review.with_drafts(drafts)));
-        if saved.body == body {
-            return vec![];
-        }
-        vec![Action::UpdateDraft { key: key.clone(), id, draft: Box::new(saved) }]
+        let update = (saved.body != body).then(|| Action::UpdateDraft { key: key.clone(), id, draft: Box::new(saved.clone()) });
+        self.update_open(|open| {
+            open.with_drafts_changed(|drafts| {
+                drafts
+                    .into_iter()
+                    .filter(|d| d.id != Some(id))
+                    .map(|d| if d.local_id == sent.local_id { saved.clone() } else { d })
+                    .collect()
+            })
+        });
+        update.into_iter().collect()
     }
 
     pub(super) fn apply_published(&mut self, key: &MrKey, approved: bool, count: usize) {
-        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
-        let review = open.review.with_drafts(vec![]);
-        self.open = Some(open.with_review(review));
+        if self.open.as_ref().is_none_or(|o| &o.key != key) {
+            return;
+        }
+        self.update_open(|open| open.with_drafts_changed(|_| vec![]));
         self.publish = None;
         self.poll.discussions_due = Some(self.now);
         let tail = if approved { " and approved" } else { "" };
@@ -362,15 +355,17 @@ impl App {
     }
 
     pub(super) fn apply_resolved(&mut self, key: &MrKey, thread: &str, resolved: bool) {
-        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
-        self.open = Some(open.with_review(open.review.with_resolved(thread, resolved)));
+        if self.open.as_ref().is_none_or(|o| &o.key != key) {
+            return;
+        }
+        self.update_open(|open| open.relaid(|review| review.with_resolved(thread, resolved)));
         let follow = self.reread(key);
         self.composed.extend(follow);
     }
 
     pub(super) fn set_approved(&mut self, key: &MrKey, approve: bool) {
-        let Some(open) = self.open.clone().filter(|o| &o.key == key) else { return };
-        self.open = Some(open.with_review(open.review.with_approved(approve, &self.me)));
+        let me = self.me.clone();
+        self.update_open_of(key, |open| open.relaid(|review| review.with_approved(approve, &me)));
     }
 
     pub(super) fn apply_write_failure(&mut self, what: Failure, message: String) {
@@ -383,9 +378,7 @@ impl App {
                 self.warn(format!("not published: {message}"));
             }
             Failure::Resolve { thread, resolved } => {
-                if let Some(open) = self.open.clone() {
-                    self.open = Some(open.with_review(open.review.with_resolved(&thread, !resolved)));
-                }
+                self.update_open(|open| open.relaid(|review| review.with_resolved(&thread, !resolved)));
                 self.warn(message);
             }
             Failure::Post { key, to } => self.post_failed(&key, &to, &message),

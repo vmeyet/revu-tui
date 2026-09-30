@@ -239,20 +239,20 @@ impl Review {
         }
     }
 
-    pub fn with_mr(&self, mr: Mr) -> Self {
-        Self { mr: Arc::new(mr), ..self.clone() }
+    pub fn with_mr(self, mr: Mr) -> Self {
+        Self { mr: Arc::new(mr), ..self }
     }
 
-    pub fn with_inline(&self, inline: InlineRule) -> Self {
-        Self { inline, ..self.clone() }
+    pub fn with_inline(self, inline: InlineRule) -> Self {
+        Self { inline, ..self }
     }
 
-    pub fn with_side_by_side(&self, side_by_side: bool) -> Self {
-        Self { side_by_side, ..self.clone() }
+    pub fn with_side_by_side(self, side_by_side: bool) -> Self {
+        Self { side_by_side, ..self }
     }
 
-    pub fn with_wide(&self, wide: bool) -> Self {
-        Self { wide, ..self.clone() }
+    pub fn with_wide(self, wide: bool) -> Self {
+        Self { wide, ..self }
     }
 
     /// Side by side was chosen and the diff is wide enough for it.
@@ -260,20 +260,20 @@ impl Review {
         self.side_by_side && self.wide
     }
 
-    pub fn with_context(&self, context: Context) -> Self {
-        Self { context, ..self.clone() }
+    pub fn with_context(self, context: Context) -> Self {
+        Self { context, ..self }
     }
 
-    pub fn with_quiet_whitespace(&self, quiet_whitespace: bool) -> Self {
-        Self { quiet_whitespace, ..self.clone() }
+    pub fn with_quiet_whitespace(self, quiet_whitespace: bool) -> Self {
+        Self { quiet_whitespace, ..self }
     }
 
-    pub fn with_fold(&self, fold: FoldState) -> Self {
-        Self { fold, ..self.clone() }
+    pub fn with_fold(self, fold: FoldState) -> Self {
+        Self { fold, ..self }
     }
 
-    pub fn with_viewed(&self, viewed: BTreeSet<String>) -> Self {
-        Self { viewed, ..self.clone() }
+    pub fn with_viewed(self, viewed: BTreeSet<String>) -> Self {
+        Self { viewed, ..self }
     }
 
     /// Viewed files with the fingerprint of the change the reader saw, as the cache keeps them.
@@ -290,13 +290,14 @@ impl Review {
         Progress::new(self.files.len(), &self.viewed, &self.auto_folded)
     }
 
-    pub fn with_drafts(&self, drafts: Vec<Draft>) -> Self {
-        Self { drafts, ..self.clone() }
+    pub fn with_drafts(self, drafts: Vec<Draft>) -> Self {
+        Self { drafts, ..self }
     }
 
     /// The same diff with fresh threads, for the cheap discussions poll.
-    pub fn with_discussions(&self, discussions: Vec<Discussion>) -> Self {
-        Self { threads: threads_of(discussions, &self.files).into(), ..self.clone() }
+    pub fn with_discussions(self, discussions: Vec<Discussion>) -> Self {
+        let threads = threads_of(discussions, &self.files).into();
+        Self { threads, ..self }
     }
 
     /// Every note in every thread, to notice new ones between two polls.
@@ -305,13 +306,13 @@ impl Review {
     }
 
     /// The thread flipped locally, ahead of the forge's answer.
-    pub fn with_resolved(&self, id: &str, resolved: bool) -> Self {
+    pub fn with_resolved(self, id: &str, resolved: bool) -> Self {
         let threads = self.threads.iter().map(|t| if t.id == id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
-        Self { threads, ..self.clone() }
+        Self { threads, ..self }
     }
 
     /// My reaction `emoji` on note `index` of thread `id` added or taken off, ahead of the forge's answer.
-    pub fn with_reaction(&self, id: &str, index: usize, emoji: crate::forge::Emoji, on: bool) -> Self {
+    pub fn with_reaction(self, id: &str, index: usize, emoji: crate::forge::Emoji, on: bool) -> Self {
         let react =
             |note: &crate::forge::Note| crate::forge::Note { reactions: crate::forge::toggled(&note.reactions, emoji, on), ..note.clone() };
         let threads = self
@@ -325,14 +326,14 @@ impl Review {
                 Thread { notes, ..t.clone() }
             })
             .collect();
-        Self { threads, ..self.clone() }
+        Self { threads, ..self }
     }
 
     /// The MR marked approved by me or not, ahead of the forge's answer.
     /// My approval, `me`'s, added or taken back ahead of the forge's answer, so the header and `M` agree at once.
-    pub fn with_approved(&self, approved: bool, me: &str) -> Self {
+    pub fn with_approved(self, approved: bool, me: &str) -> Self {
         let approvals = self.mr.approvals.with_mine(approved, me);
-        Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self.clone() }
+        Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self }
     }
 
     pub fn unresolved(&self) -> usize {
@@ -560,12 +561,14 @@ pub(crate) mod tests {
         let started = std::time::Instant::now();
         let mut last = review.clone();
         for _ in 0..rounds {
-            last = last.with_fold(last.fold.clone());
+            let fold = last.fold.clone();
+            last = last.with_fold(fold);
         }
         println!("with_fold on {} lines: {:?} each", 50 * 100, started.elapsed() / rounds);
         let started = std::time::Instant::now();
         for _ in 0..rounds {
-            last = last.with_fold(last.fold.clone());
+            let fold = last.fold.clone();
+            last = last.with_fold(fold);
             assert!(!last.rows().is_empty());
         }
         println!("with_fold then rows, what za does: {:?} each", started.elapsed() / rounds);
@@ -636,7 +639,7 @@ pub(crate) mod tests {
     #[test]
     fn fresh_discussions_keep_the_files_and_folds() {
         let review = review();
-        let refreshed = review.with_discussions(vec![fixture::discussion(include_str!("../forge/gitlab/fixtures/diff_note.json"))]);
+        let refreshed = review.clone().with_discussions(vec![fixture::discussion(include_str!("../forge/gitlab/fixtures/diff_note.json"))]);
         assert_eq!(refreshed.threads.len(), 1);
         assert_eq!(refreshed.files, review.files);
         assert_eq!(refreshed.fold, review.fold);
@@ -645,7 +648,7 @@ pub(crate) mod tests {
     #[test]
     fn a_closed_hunk_keeps_its_row_and_hides_its_lines() {
         let review = review();
-        let folded = review.with_fold(review.fold.toggle_hunk("src/pay/charge.rs", 0));
+        let folded = review.clone().with_fold(review.fold.toggle_hunk("src/pay/charge.rs", 0));
         let rows = folded.rows();
         assert_eq!(rows[3], Row::Hunk { file: 0, index: 0, open: false });
         assert_eq!(rows[4], Row::Hunk { file: 0, index: 1, open: true });
@@ -656,7 +659,7 @@ pub(crate) mod tests {
     fn folding_every_file_leaves_one_row_each() {
         let review = review();
         let paths: Vec<String> = review.files.iter().map(|f| f.new_path.clone()).collect();
-        let rows = review.with_fold(review.fold.fold_all(&paths)).rows();
+        let rows = review.clone().with_fold(review.fold.fold_all(&paths)).rows();
         assert_eq!(rows, [Row::Header, Row::Gap, Row::File { index: 0, open: false }, Row::Gap, Row::File { index: 1, open: false }]);
     }
 
@@ -664,7 +667,7 @@ pub(crate) mod tests {
     fn a_viewed_file_stays_viewed_until_its_change_moves() {
         let review = review();
         let path = review.files[0].new_path.clone();
-        let saved = review.with_viewed(BTreeSet::from([path.clone()])).viewed_fingerprints();
+        let saved = review.clone().with_viewed(BTreeSet::from([path.clone()])).viewed_fingerprints();
         assert_eq!(review.still_viewed(&saved), BTreeSet::from([path.clone()]));
         let moved = std::collections::BTreeMap::from([(path, "an older change".to_owned())]);
         assert!(review.still_viewed(&moved).is_empty(), "a file pushed to since is to read again");
@@ -675,13 +678,17 @@ pub(crate) mod tests {
         let review = review();
         let (charge, lock) = (BTreeSet::from(["src/pay/charge.rs".to_owned()]), BTreeSet::from(["Cargo.lock".to_owned()]));
         assert_eq!(review.progress(), Progress { viewed: 0, files: 1, folded: 1 }, "the lock file waits apart");
-        let read = review.with_viewed(charge).progress();
+        let read = review.clone().with_viewed(charge).progress();
         assert_eq!(read, Progress { viewed: 1, files: 1, folded: 1 });
         assert!(read.done(), "every file to read is viewed");
-        assert_eq!(review.with_viewed(lock).progress(), Progress { viewed: 1, files: 2, folded: 0 }, "a viewed lock file joins the count");
-        let by_hand = review.with_fold(review.fold.toggle_file("src/pay/charge.rs"));
+        assert_eq!(
+            review.clone().with_viewed(lock).progress(),
+            Progress { viewed: 1, files: 2, folded: 0 },
+            "a viewed lock file joins the count"
+        );
+        let by_hand = review.clone().with_fold(review.fold.toggle_file("src/pay/charge.rs"));
         assert_eq!(by_hand.progress().files, 1, "a file folded by hand still counts");
-        let unfolded = review.with_fold(review.fold.toggle_file("Cargo.lock"));
+        let unfolded = review.clone().with_fold(review.fold.toggle_file("Cargo.lock"));
         assert_eq!(unfolded.progress().folded, 1, "unfolding the lock file does not make it count");
     }
 
@@ -711,14 +718,14 @@ pub(crate) mod tests {
     fn side_by_side_sets_each_removed_line_beside_an_added_one_and_the_longer_run_alone() {
         let review = review_of_one("@@ -1,7 +1,6 @@\n a\n-b\n-c\n-d\n+B\n e\n-f\n+F\n+G\n+H\n").with_side_by_side(true);
         assert_eq!(line_rows(&review), [(0, 0), (1, 4), (2, 2), (3, 3), (5, 5), (6, 7), (8, 8), (9, 9)]);
-        let folded = review.with_fold(review.fold.toggle_hunk("a.rs", 0));
+        let folded = review.clone().with_fold(review.fold.toggle_hunk("a.rs", 0));
         assert!(line_rows(&folded).is_empty(), "a folded hunk hides its rows side by side too");
     }
 
     #[test]
     fn side_by_side_falls_back_to_the_inline_rows_while_the_diff_is_narrow() {
         let review = review_of_one("@@ -1,2 +1,1 @@\n-let b = 2;\n-gone\n+let b = 20;\n");
-        let narrow = review.with_side_by_side(true).with_wide(false);
+        let narrow = review.clone().with_side_by_side(true).with_wide(false);
         assert!(narrow.side_by_side && !narrow.shows_side_by_side(), "the choice stays");
         assert_eq!(line_rows(&narrow), line_rows(&review));
         assert_eq!(line_rows(&narrow.with_wide(true)), [(0, 2), (1, 1)]);
@@ -738,7 +745,7 @@ pub(crate) mod tests {
         let path = review.files[0].new_path.clone();
         let text: Vec<String> = (1..=60).map(|n| format!("line {n}")).collect();
         let context = Context { texts: BTreeMap::from([(path, Arc::new(text))]), around: BTreeMap::from([((0, 0), 10), ((0, 1), 20)]) };
-        let rows = contexts(&review.with_context(context.clone()));
+        let rows = contexts(&review.clone().with_context(context.clone()));
         let above_first: Vec<u32> = rows.iter().filter(|(h, _, n)| *h == 0 && *n < 12).map(|(_, _, n)| *n).collect();
         assert_eq!(above_first, (2..12).collect::<Vec<_>>(), "ten lines above the first hunk");
         assert!(rows.iter().any(|&(h, o, n)| h == 0 && n == 17 && o == 16), "below the first hunk, old numbers follow its offset");

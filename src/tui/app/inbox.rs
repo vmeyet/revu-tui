@@ -149,10 +149,8 @@ impl App {
             return;
         }
         if let Some(row) = row_of(open, spot) {
-            let mut next = open.clone();
-            next.selected = row;
             self.spot_saved = Some((key.clone(), spot.clone()));
-            self.open = Some(next);
+            self.update_open(|open| Open { selected: row, ..open });
         }
     }
 

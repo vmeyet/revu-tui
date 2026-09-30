@@ -318,7 +318,7 @@ mod tests {
     fn the_mr_takes_the_most_pressing_mark_of_its_conversations() {
         let review = review();
         assert_eq!(review.mr_mark(), Some(Mark::Unresolved), "a plain comment is never resolved");
-        let resolved = review.with_resolved("6a9c1750b2d6e4f0", true);
+        let resolved = review.clone().with_resolved("6a9c1750b2d6e4f0", true);
         assert_eq!(resolved.mr_mark(), Some(Mark::Resolved));
         assert_eq!(resolved.with_drafts(vec![Draft::new(None, "one more thing")]).mr_mark(), Some(Mark::Draft));
         let anchored = review.threads.iter().filter(|t| t.anchor.is_some()).cloned().collect();
