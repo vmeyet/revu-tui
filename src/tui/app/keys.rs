@@ -101,7 +101,9 @@ impl App {
             KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
-            KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() => self.pending = Some('a'),
+            KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() && !self.outline_keys() => {
+                self.pending = Some('a');
+            }
             _ => {
                 return match self.focus {
                     Focus::Queue => self.handle_queue_key(key),
@@ -249,6 +251,7 @@ impl App {
             KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('p') => return self.toggle_pipeline(),
+            KeyCode::Char('O') => return self.toggle_outline(),
             KeyCode::Char('W') => self.toggle_whitespace(),
             KeyCode::Char('+') => {
                 self.open_react_here();
@@ -335,6 +338,11 @@ impl App {
         vec![]
     }
 
+    /// The outline reads `a` itself while it has the keys.
+    fn outline_keys(&self) -> bool {
+        self.focus == Focus::Side && self.outline_open()
+    }
+
     fn tree_open(&self) -> bool {
         self.open.as_ref().is_some_and(|o| o.tree.is_some())
     }
@@ -345,6 +353,9 @@ impl App {
         }
         if self.pipeline_open() {
             return self.handle_pipeline_key(key);
+        }
+        if self.outline_open() {
+            return self.handle_outline_key(key);
         }
         if self.tree_open() {
             return self.handle_tree_key(key);

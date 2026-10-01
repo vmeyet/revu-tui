@@ -15,6 +15,7 @@ mod keymap;
 pub mod log;
 mod mrref;
 mod open;
+mod outline;
 mod program;
 mod query;
 mod ready;

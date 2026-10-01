@@ -12,6 +12,7 @@ mod field;
 mod ground;
 pub(crate) mod help;
 mod images;
+mod outline_view;
 mod palette;
 mod palette_view;
 mod pipeline_view;

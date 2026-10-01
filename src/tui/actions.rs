@@ -157,6 +157,10 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.forge_of(&key).checks(&key, &head).await;
                 send(outcome.map_or_else(|e| failed(Failure::Checks, &e), |checks| Incoming::Checks { key, checks }));
             }
+            Action::LoadOutline { key, base, head, files } => {
+                let outcome = backend.outline(&key, &base, &head, files).await;
+                send(outcome.map_or_else(|e| failed(Failure::Outline, &e), |changes| Incoming::Outline { key, changes }));
+            }
             Action::LoadDeployments { key, branch, head } => {
                 if let Ok(deployments) = backend.forge_of(&key).deployments(&key, &branch, &head).await {
                     send(Incoming::Deployments { key, deployments });

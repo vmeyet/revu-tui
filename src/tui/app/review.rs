@@ -24,6 +24,8 @@ pub struct Open {
     pub answer: Option<super::ask::Answer>,
     /// The CI run, when it holds the right pane.
     pub pipeline: Option<super::Pipeline>,
+    /// The symbols the MR changes, when they hold the right pane.
+    pub outline: Option<super::Outline>,
     /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
     pub pinned_file: Option<usize>,
     /// Where the branch was deployed; `None` until the forge was asked.
@@ -46,6 +48,7 @@ impl Open {
             tree: None,
             answer: None,
             pipeline: None,
+            outline: None,
             pinned_file: None,
             deployments: None,
         }
@@ -75,14 +78,14 @@ impl Open {
         })
     }
 
-    /// The right pane holds something: threads, the tree, an answer or the pipeline.
+    /// The right pane holds something: threads, the tree, an answer, the pipeline or the outline.
     pub fn side_open(&self) -> bool {
-        self.pane.is_some() || self.tree.is_some() || self.answer.is_some() || self.pipeline.is_some()
+        self.pane.is_some() || self.tree.is_some() || self.answer.is_some() || self.pipeline.is_some() || self.outline.is_some()
     }
 
-    /// The right pane shows threads: no file tree, pipeline or answer took their place.
+    /// The right pane shows threads: no file tree, pipeline, outline or answer took their place.
     pub fn shows_threads(&self) -> bool {
-        self.pane.is_some() && self.tree.is_none() && self.answer.is_none() && self.pipeline.is_none()
+        self.pane.is_some() && self.tree.is_none() && self.answer.is_none() && self.pipeline.is_none() && self.outline.is_none()
     }
 
     pub fn row(&self) -> Option<&Row> {

@@ -45,6 +45,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `t` | file tree |
 | `T` | every thread of the MR |
 | `p` | pipeline |
+| `O` | outline of changed symbols · a all |
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `=` `+` | more lines, react on a thread |
@@ -154,6 +155,7 @@ A bound key adds to the default key, it does not replace it.
 | `tree` | `t` |
 | `every_thread` | `T` |
 | `pipeline` | `p` |
+| `outline` | `O` |
 | `wrap` | `w` |
 | `whitespace` | `W` |
 | `more_context` | `=` |

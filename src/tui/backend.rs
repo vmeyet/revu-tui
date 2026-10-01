@@ -12,9 +12,13 @@ use crate::review::{Draft, Progress, Review};
 use anyhow::{Context as _, Result};
 use app::{Ahead, Incoming, Part};
 use chrono::{DateTime, Utc};
+use futures_util::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
+
+/// Files the outline reads from the forge at once, so a large MR does not burst into its rate limit.
+const OUTLINE_READS: usize = 8;
 
 /// What survives between two openings of one MR, in the cache.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -523,6 +527,34 @@ impl Backend {
         let argv = crate::open::argv(&command, &file.display().to_string(), line, dir.is_some())?;
         let shown = format!("{}:{line}", path.rsplit('/').next().unwrap_or(path));
         Ok(Incoming::ViewReady { key, view: crate::open::View { argv, shown, note, _copy: dir } })
+    }
+
+    /// The symbols each file changes, a few files read at once, in the order given.
+    pub(super) async fn outline(
+        &self,
+        key: &MrKey,
+        base: &Sha,
+        head: &Sha,
+        files: Vec<crate::outline::Sides>,
+    ) -> Result<Vec<crate::outline::Change>> {
+        let files: Vec<(String, String, String)> = futures_util::stream::iter(files)
+            .map(|sides| async move {
+                let path = sides.head.clone().or_else(|| sides.base.clone()).unwrap_or_default();
+                let (old, new) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
+                Ok::<_, anyhow::Error>((path, old, new))
+            })
+            .buffered(OUTLINE_READS)
+            .try_collect()
+            .await?;
+        blocking(move || Ok(files.iter().flat_map(|(path, old, new)| crate::outline::changes(path, old, new)).collect())).await
+    }
+
+    /// The file at `sha`, empty when it does not exist on that side.
+    async fn side_text(&self, key: &MrKey, path: Option<String>, sha: &Sha) -> Result<String> {
+        match path {
+            Some(path) => self.file_text(key, &path, sha).await,
+            None => Ok(String::new()),
+        }
     }
 
     /// A file at a commit never changes, so the cache serves it forever.

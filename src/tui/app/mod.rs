@@ -12,6 +12,7 @@ mod merge;
 mod mouse;
 mod notify;
 mod order;
+mod outline;
 mod pane;
 mod pins;
 mod pipeline;
@@ -44,6 +45,7 @@ pub use feedback::Toast;
 pub use inbox::{Spot, progress_bar};
 pub use mouse::Areas;
 pub use order::QueueView;
+pub use outline::{Outline, Symbols};
 pub use pane::{Entry, EntryKind, Pane};
 pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
 pub use pipeline::{Pipeline, Run};
@@ -216,6 +218,13 @@ pub enum Action {
         key: MrKey,
         head: Sha,
     },
+    /// `O`: the symbols changed in `files`, read at commits `base` and `head`.
+    LoadOutline {
+        key: MrKey,
+        base: Sha,
+        head: Sha,
+        files: Vec<crate::outline::Sides>,
+    },
     /// The review apps of the MR of `branch`, `head` telling which run it as it is now.
     LoadDeployments {
         key: MrKey,
@@ -304,6 +313,8 @@ pub enum Failure {
     Approve,
     /// The CI run could not be read; the pipeline pane says why.
     Checks,
+    /// The files could not be read; the outline pane says why.
+    Outline,
     /// The suggestion was not committed.
     Apply,
     /// The forge did not merge the MR.
@@ -416,6 +427,11 @@ pub enum Incoming {
     Checks {
         key: MrKey,
         checks: Option<crate::forge::checks::Checks>,
+    },
+    /// The symbols the open MR changes, by file, riskiest first.
+    Outline {
+        key: MrKey,
+        changes: Vec<crate::outline::Change>,
     },
     /// The answers kept for the MR, newest first.
     PastAnswers {

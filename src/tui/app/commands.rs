@@ -177,6 +177,7 @@ impl App {
             Command::All => self.toggle_scope(),
             Command::Set { key, value } => self.set(&key, &value),
             Command::View(argument) => self.view_command(&argument),
+            Command::Outline => self.show_outline(),
             Command::AiOff => {
                 self.ai_off();
                 vec![]

@@ -105,6 +105,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "peek_before",
             "tree",
             "pipeline",
+            "outline",
             "wrap",
             "whitespace",
             "more_context",
@@ -136,8 +137,8 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "commands",
         &[
-            ":go", ":open", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":set", ":view", ":ai", ":ask", ":share",
-            ":help", ":quit",
+            ":go", ":open", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":outline", ":set", ":view", ":ai", ":ask",
+            ":share", ":help", ":quit",
         ],
     ),
 ];
@@ -272,6 +273,7 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('t') => "tree",
         KeyCode::Char('T') => "every_thread",
         KeyCode::Char('p') => "pipeline",
+        KeyCode::Char('O') => "outline",
         KeyCode::Char('W') => "whitespace",
         KeyCode::Char('w') => "wrap",
         KeyCode::Char('=') => "more_context",

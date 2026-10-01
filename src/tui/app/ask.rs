@@ -68,9 +68,9 @@ impl Open {
         }
     }
 
-    /// The answer takes the right pane from the threads, the tree and the pipeline.
+    /// The answer takes the right pane from the threads, the tree, the pipeline and the outline.
     fn showing_answer(self, answer: Answer) -> Self {
-        Self { answer: Some(answer), pane: None, tree: None, pipeline: None, ..self }
+        Self { answer: Some(answer), pane: None, tree: None, pipeline: None, outline: None, ..self }
     }
 
     fn without_answer(self) -> Self {

@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 343
 expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -38,12 +37,12 @@ expression: "render(&mut app, 160, 45)"
 │                       │          t  file tree                                            a h  answers kept for this MR               │                       │
 │                       │          T  every thread of the MR                           c ⏎ R y  answer: draft, follow up, again, copy  │                       │
 │                       │          p  pipeline                                                                                         │                       │
-│                       │         zz  zen: the diff alone, quiet                     SEARCH & APP                                      │                       │
-│                       │        w W  wrap long lines, hide whitespace changes              ^k  MRs · / files · > commands             │                       │
-│                       │        = +  more lines, react on a thread                          :  commands: :go !42, :set theme=nord     │                       │
-│                       │         ^v  the file in your own program                         o y  open in the browser, copy the link     │                       │
+│                       │          O  outline of changed symbols · a all             SEARCH & APP                                      │                       │
+│                       │         zz  zen: the diff alone, quiet                            ^k  MRs · / files · > commands             │                       │
+│                       │        w W  wrap long lines, hide whitespace changes               :  commands: :go !42, :set theme=nord     │                       │
+│                       │        = +  more lines, react on a thread                        o y  open in the browser, copy the link     │                       │
 │                       │                                                                                                              │                       │
-│                       ╰───────────────────────────────────────────────────────────────────────── 1–35 of 39 · j k scroll · esc close ╯                       │
+│                       ╰───────────────────────────────────────────────────────────────────────── 1–35 of 40 · j k scroll · esc close ╯                       │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

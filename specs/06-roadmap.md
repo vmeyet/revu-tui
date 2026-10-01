@@ -147,6 +147,10 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 - More syntax languages stay open: one grammar crate and one registry entry each (see `AGENTS.md`).
 - Linux keychain via Secret Service: **not planned**. macOS only is a stated non-goal (`00-vision.md`); the keychain trick through `/usr/bin/security`, `open` and `pbcopy` are macOS tools, and nobody asked for Linux.
 
+## Shipped after M5
+
+- Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk; `enter` jumps there.
+
 ## Definition of done for any slice
 
 - Tests green, `cargo clippy -- -D warnings` clean, `cargo fmt` clean.

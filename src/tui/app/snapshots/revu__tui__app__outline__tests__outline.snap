@@ -1,0 +1,24 @@
+---
+source: src/tui/app/outline.rs
+expression: "render(&mut app, 150, 20)"
+---
+╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at che… ────────╮╭ Outline · public ────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checko… · 2h · +4 −4 · 1 files · ✓ succ ││  1 breaking · 1 added                                    │
+│ ▎ feat charge cards at ch…     ││   1 of 2 approvals                                   ││                                                          │
+│ ▎ omar · !42 · +412 −38     2h ││                                                      ││  shop/cart.py                                            │
+│                                ││                                                      ││ ▎ ~ pay                                                  │
+│   ── MINE · 1 ──────────────── ││ ▎▾ shop/cart.py                                +4 −4 ││      def pay(card)pay(card, amount)                      │
+│   fix flaky cache test       D ││     ▾ @@ -1,11 +1,11 @@                              ││   + refund                                               │
+│   nina · !41 · +3 −1        4h ││       1    1  class Cart:                            ││   · Cart.total                                           │
+│                                ││       2    2      def total(self):                   ││                                                          │
+│   ── WATCHING · 1 ──────────── ││       3    3 ~        return 12                      ││                                                          │
+│   infra: new runner          ⠋ ││       4    4                                         ││                                                          │
+│   omar · !35 · +0 −0        2d ││       5    5                                         ││                                                          │
+│                                ││       6      -def pay(card):                         ││                                                          │
+│   ── ▸ DONE · 1 ────────────── ││            6 +def pay(card, amount):                 ││                                                          │
+│                                ││       7    7      return card.charge()               ││                                                          │
+│                                ││       8    8                                         ││                                                          │
+│                                ││       9    9                                         ││                                                          │
+│                                ││      10      -def _log():                            ││                                                          │
+╰────────────────────────────────╯╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                                                                             ? help

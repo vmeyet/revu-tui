@@ -79,7 +79,7 @@ pub fn segments(old: &Line, new: &Line) -> Vec<Segment> {
     found
 }
 
-fn text_segments(old: &str, new: &str) -> Vec<Segment> {
+pub fn text_segments(old: &str, new: &str) -> Vec<Segment> {
     let mut found: Vec<Segment> = Vec::new();
     for change in TextDiff::from_words(old, new).iter_all_changes() {
         let text = change.value();
