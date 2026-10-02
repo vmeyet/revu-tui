@@ -48,6 +48,10 @@ impl Language {
             })
             .as_ref()
     }
+
+    fn claims(&self, extension: &str) -> bool {
+        self.extensions.iter().any(|known| known.eq_ignore_ascii_case(extension))
+    }
 }
 
 /// Every language revu colours. Order matters only when two claim one extension: the first wins.
@@ -73,7 +77,12 @@ pub fn is_markdown(path: &str) -> bool {
 /// The language of a path, by its extension; nothing is loaded by asking.
 pub fn language_for(path: &str, languages: &'static [Language]) -> Option<&'static Language> {
     let (_, extension) = path.rsplit_once('.')?;
-    languages.iter().find(|language| language.extensions.iter().any(|known| known.eq_ignore_ascii_case(extension)))
+    languages.iter().find(|language| language.claims(extension))
+}
+
+/// The language a code fence's tag names, by its name or one of its extensions: `ts`, `python`, `JSON`.
+pub fn language_named(tag: &str, languages: &'static [Language]) -> Option<&'static Language> {
+    languages.iter().find(|language| language.name.eq_ignore_ascii_case(tag) || language.claims(tag))
 }
 
 /// The spans of each line of `source`, split on `\n`; one entry per line, empty for uncoloured ones.
@@ -252,6 +261,26 @@ mod tests {
         ];
         for (path, name) in cases {
             assert_eq!(language_for(path, &LANGUAGES).map(|l| l.name), name, "{path}");
+        }
+    }
+
+    #[test]
+    fn fence_tags_name_a_language_by_name_or_extension() {
+        let cases = [
+            ("ts", Some("TypeScript")),
+            ("typescript", Some("TypeScript")),
+            ("tsx", Some("TSX")),
+            ("js", Some("JavaScript")),
+            ("py", Some("Python")),
+            ("python", Some("Python")),
+            ("JSON", Some("JSON")),
+            ("sql", Some("SQL")),
+            ("md", Some("Markdown")),
+            ("rust", None),
+            ("", None),
+        ];
+        for (tag, name) in cases {
+            assert_eq!(language_named(tag, &LANGUAGES).map(|l| l.name), name, "{tag}");
         }
     }
 

@@ -814,7 +814,7 @@ fn hunk_spans<'a>(file: &File, index: usize, open: bool, width: usize, theme: Th
 }
 
 /// How one kind of changed line paints: sign, text colour, fills, and the colour of its meaning.
-struct Paint {
+pub(super) struct Paint {
     sign: &'static str,
     text: Color,
     fill: Option<Color>,
@@ -822,7 +822,18 @@ struct Paint {
     accent: Color,
 }
 
-fn paint(kind: LineKind, theme: Theme) -> Option<Paint> {
+impl Paint {
+    /// The line's text colour, on its fill when the theme has one.
+    pub(super) fn base(&self) -> Style {
+        self.fill.map_or(Style::default(), |fill| Style::default().bg(fill)).fg(self.text)
+    }
+
+    pub(super) fn sign_span(&self) -> Span<'static> {
+        Span::styled(self.sign, self.base().fg(self.accent))
+    }
+}
+
+pub(super) fn paint(kind: LineKind, theme: Theme) -> Option<Paint> {
     match kind {
         LineKind::Added => {
             Some(Paint { sign: "+", text: theme.added, fill: theme.added_fill, word: theme.added_word, accent: theme.success })
@@ -855,11 +866,8 @@ fn numbered_spans<'a>(
 ) -> Vec<Span<'a>> {
     let gutter_colour = if selected { theme.muted } else { theme.faded };
     let paint = paint(line.kind, theme);
-    let base = match &paint {
-        Some(p) => p.fill.map_or(Style::default().fg(p.text), |fill| Style::default().fg(p.text).bg(fill)),
-        None => Style::default(),
-    };
-    let sign = paint.as_ref().map_or_else(|| Span::styled(" ", base), |p| Span::styled(p.sign, base.fg(p.accent)));
+    let base = paint.as_ref().map_or(Style::default(), Paint::base);
+    let sign = paint.as_ref().map_or_else(|| Span::styled(" ", base), Paint::sign_span);
     let word = paint.as_ref().map(|p| match p.word {
         Some(fill) => base.fg(p.accent).bg(fill),
         None => base.add_modifier(Modifier::BOLD),
@@ -950,7 +958,7 @@ fn pair_spans<'a>(
 }
 
 /// `text`, found at byte `at` of its line, cut wherever a syntax token starts or stops.
-fn coloured<'t>(text: &'t str, at: usize, code: &[(Range<usize>, Token)], theme: Theme) -> Vec<(&'t str, Style)> {
+pub(super) fn coloured<'t>(text: &'t str, at: usize, code: &[(Range<usize>, Token)], theme: Theme) -> Vec<(&'t str, Style)> {
     let end = at + text.len();
     let mut edges: Vec<usize> = code.iter().flat_map(|(r, _)| [r.start, r.end]).filter(|&e| at < e && e < end).map(|e| e - at).collect();
     edges.extend([0, text.len()]);
