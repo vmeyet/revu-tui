@@ -389,7 +389,7 @@ mod tests {
         press(&mut app, "i");
         assert!(app.brief.as_ref().unwrap().threads.is_none());
         assert!(render(&mut app, 120, 40).contains("open the MR to see its threads"));
-        assert!(press(&mut app, "p").is_empty());
+        assert_eq!(press(&mut app, "p"), [] as [Action; 0]);
         assert!(app.live_toast().unwrap().text.contains("open the MR"));
         assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![Action::Open(mr_key())]);
         assert_eq!(app.brief, None);

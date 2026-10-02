@@ -407,7 +407,7 @@ mod tests {
     fn a_says_claude_is_off_until_the_config_and_a_key_switch_it_on() {
         let mut app = with_review();
         on_line(&mut app);
-        assert!(press(&mut app, "ae").is_empty());
+        assert_eq!(press(&mut app, "ae"), [] as [Action; 0]);
         assert!(app.live_toast().is_some_and(|t| t.text.contains("[ai.anthropic] enabled = true")));
     }
 
@@ -490,7 +490,7 @@ mod tests {
     fn a_c_asks_for_the_concern_then_drafts_a_comment_about_it() {
         let mut app = asking();
         on_line(&mut app);
-        assert!(press(&mut app, "ac").is_empty());
+        assert_eq!(press(&mut app, "ac"), [] as [Action; 0]);
         assert_eq!(app.input_label(), "comment about");
         let (_, request, _) = the_ask(&type_text(&mut app, "naming"));
         assert!(request.turns[0].text.contains("about: naming."));
@@ -545,9 +545,9 @@ mod tests {
         press(&mut app, ":ai off");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!((app.ask_model.as_deref(), app.triage), (None, false));
-        assert!(press(&mut app, "ae").is_empty());
+        assert_eq!(press(&mut app, "ae"), [] as [Action; 0]);
         press(&mut app, ":ask why");
-        assert!(app.handle_key(code(KeyCode::Enter)).is_empty());
+        assert_eq!(app.handle_key(code(KeyCode::Enter)), [] as [Action; 0]);
     }
 
     fn past(label: &str, head: &str, asked_at: chrono::DateTime<chrono::Utc>, text: &str) -> PastAnswer {

@@ -180,7 +180,7 @@ mod tests {
         let groups = by_author(vec![&a, &b, &c, &d]);
         let shape: Vec<(&str, Vec<u64>)> = groups.iter().map(|(name, rows)| (*name, numbers(rows))).collect();
         assert_eq!(shape, [("ana", vec![2, 4]), ("zoe", vec![1, 3])]);
-        assert!(by_author(vec![]).is_empty());
+        assert_eq!(by_author(vec![]), [] as [(&str, Vec<&QueueMr>); 0]);
     }
 
     #[test]

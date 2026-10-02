@@ -146,7 +146,7 @@ pub mod tests {
         let mut thumbs = test_thumbs();
         let urls = || vec!["https://x/a.png".to_owned(), "https://x/b.png".to_owned()];
         assert_eq!(thumbs.wanted(urls()), urls());
-        assert!(thumbs.wanted(urls()).is_empty());
+        assert_eq!(thumbs.wanted(urls()), [] as [String; 0]);
         thumbs.arrived("https://x/a.png", decode(&png(8, 8)));
         thumbs.arrived("https://x/b.png", None);
         assert!(matches!(thumbs.get("https://x/a.png"), Some(Thumb::Ready(_, (8, 8)))));

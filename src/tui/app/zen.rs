@@ -178,7 +178,7 @@ mod tests {
         app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
         assert_eq!(press(&mut app, "[m"), vec![Action::Open(order[0].clone())]);
         app.apply(Incoming::Review { key: order[0].clone(), review: Box::new(review()), cached: None });
-        assert!(press(&mut app, "[m").is_empty());
+        assert_eq!(press(&mut app, "[m"), [] as [Action; 0]);
         assert!(app.live_toast().unwrap().text.contains("first MR"));
     }
 
@@ -204,7 +204,7 @@ mod tests {
         app.handle_key(code(KeyCode::Left));
         assert_eq!(app.focus, Focus::Review);
         assert!(app.zen);
-        assert!(app.handle_key(code(KeyCode::Left)).is_empty());
+        assert_eq!(app.handle_key(code(KeyCode::Left)), [] as [Action; 0]);
         assert!(!app.zen, "← from the diff leaves zen, as h does");
         assert_eq!(app.focus, Focus::Queue);
     }

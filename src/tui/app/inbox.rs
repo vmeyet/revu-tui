@@ -236,7 +236,7 @@ mod tests {
         assert_eq!(numbers(&press(&mut app, "[r")), [50]);
         let mut app = with_inbox();
         opened_at(&mut app, 44);
-        assert!(numbers(&press(&mut app, "]r")).is_empty());
+        assert_eq!(numbers(&press(&mut app, "]r")), [] as [u64; 0]);
         assert!(app.live_toast().unwrap().text.contains("last MR"));
     }
 
@@ -259,7 +259,7 @@ mod tests {
         let mut app = with_inbox();
         opened_at(&mut app, 42);
         app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 1 });
-        assert!(app.handle_key(code(KeyCode::Esc)).is_empty());
+        assert_eq!(app.handle_key(code(KeyCode::Esc)), [] as [Action; 0]);
         assert_eq!(app.offer, None);
         let mut app = with_inbox();
         opened_at(&mut app, 44);

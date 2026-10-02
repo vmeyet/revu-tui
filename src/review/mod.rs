@@ -603,7 +603,7 @@ pub(crate) mod tests {
         for _ in 0..rounds {
             let fold = last.fold.clone();
             last = last.with_fold(fold);
-            assert!(!last.rows().is_empty());
+            assert_ne!(last.rows(), [] as [Row; 0]);
         }
         println!("with_fold then rows, what za does: {:?} each", started.elapsed() / rounds);
         assert_eq!(last.files.len(), 50);
@@ -802,6 +802,6 @@ pub(crate) mod tests {
     #[test]
     fn no_context_is_shown_before_the_file_arrives() {
         let context = Context { texts: BTreeMap::new(), around: BTreeMap::from([((0, 0), 10)]) };
-        assert!(contexts(&review().with_context(context)).is_empty());
+        assert_eq!(contexts(&review().with_context(context)), [] as [(usize, u32, u32); 0]);
     }
 }

@@ -403,7 +403,7 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         assert!(!app.filtering && app.filter == "runner");
         app.handle_key(code(KeyCode::Esc));
-        assert!(app.filter.is_empty());
+        assert_eq!(app.filter, "");
         press(&mut app, "/omar");
         let iids: Vec<u64> = app.queue_rows().iter().filter_map(|r| if let QueueRow::Mr(m) = r { Some(m.number) } else { None }).collect();
         assert_eq!(iids, [42, 35], "author matches too");

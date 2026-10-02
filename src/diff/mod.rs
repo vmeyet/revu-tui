@@ -193,8 +193,8 @@ mod tests {
 
     #[test]
     fn empty_diff_has_no_hunks() {
-        assert!(parse("").is_empty());
-        assert!(parse("\n\n").is_empty());
+        assert_eq!(parse(""), [] as [Hunk; 0]);
+        assert_eq!(parse("\n\n"), [] as [Hunk; 0]);
     }
 
     #[test]

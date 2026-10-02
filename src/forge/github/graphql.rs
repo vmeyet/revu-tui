@@ -922,7 +922,7 @@ mod tests {
         let queue =
             queue_from_json(include_str!("fixtures/queue.json"), Some((include_str!("fixtures/open.json"), "acme/widgets"))).unwrap();
         let sections = queue.sections(&[]);
-        assert!(sections.open.is_empty());
+        assert_eq!(sections.open, [] as [QueueMr; 0]);
         assert_eq!(numbers(&sections.drafts), [44], "a draft PR waits apart from the open ones");
         assert!(sections.watching.is_empty(), "acme/infra is out of scope");
     }

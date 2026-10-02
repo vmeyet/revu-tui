@@ -82,7 +82,7 @@ mod tests {
         };
         assert_eq!(numbers(&plan(&sections, "me", None, 5)), [1, 2, 3, 4, 5]);
         assert_eq!(numbers(&plan(&sections, "me", None, 3)), [1, 2, 3]);
-        assert!(plan(&sections, "me", None, 0).is_empty());
+        assert_eq!(plan(&sections, "me", None, 0), [] as [Ahead; 0]);
     }
 
     #[test]

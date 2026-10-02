@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn y_without_a_share_target_says_how_to_add_one() {
         let mut app = sharing_queue(vec![]);
-        assert!(press(&mut app, "Y").is_empty());
+        assert_eq!(press(&mut app, "Y"), [] as [Action; 0]);
         assert!(app.sharing.is_none());
         assert!(app.live_toast().unwrap().text.contains("[share] command"));
     }

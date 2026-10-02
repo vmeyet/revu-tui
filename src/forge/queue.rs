@@ -332,7 +332,7 @@ mod tests {
         let ruled = scoped().sections_with(&[], &Rules::default(), day(23));
         assert_eq!(numbers(&ruled.open), numbers(&plain.open));
         assert_eq!(numbers(&ruled.to_review), numbers(&plain.to_review));
-        assert!(ruled.other.is_empty());
+        assert_eq!(ruled.other, [] as [QueueMr; 0]);
         assert_eq!(reasons(&ruled.drafts), ["draft"], "a draft says why it waits apart");
     }
 
@@ -353,7 +353,7 @@ mod tests {
         let reviewed = judged(|mr| QueueMr { notes: 5, commenters: vec![mr.author.clone(), "sam".into(), "kim".into()], ..mr });
         assert_eq!(numbers(&reviewed.open), [51]);
         assert_eq!(reasons(&reviewed.open), ["reviewed by 2"]);
-        assert!(reviewed.other.is_empty());
+        assert_eq!(reviewed.other, [] as [QueueMr; 0]);
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod tests {
         };
         let sections = queue.sections_with(&[], &Rules::default(), day(23));
         let ready = sections.with_ready(&[MrKey::new("acme/widgets", 51)], vec![], "nina", &Rules::default(), day(23));
-        assert!(ready.ready.is_empty());
+        assert_eq!(ready.ready, [] as [QueueMr; 0]);
         assert_eq!(reasons(&ready.other), ["pipeline failed"]);
     }
 
