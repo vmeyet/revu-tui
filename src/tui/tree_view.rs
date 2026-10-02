@@ -11,11 +11,10 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame, app: &App, area: Rect) {
+pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(tree) = &open.tree else { return };
-    let rows = open.tree_rows();
     let progress = open.review.progress();
     let title = format!("Files · {}/{} viewed", progress.viewed, progress.files);
     let block = side_pane(theme, &title, app.focus == Focus::Side, app.zen);
@@ -23,13 +22,10 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(block, area);
     let height = inner.height as usize;
     let scroll = settle_scroll(0, tree.selected, height);
-    let lines: Vec<Line> = rows
-        .iter()
-        .enumerate()
-        .skip(scroll)
-        .take(height)
-        .map(|(i, row)| row_line(app, &open.review, row, i == tree.selected, inner.width as usize))
-        .collect();
+    let selected = tree.selected;
+    let shown: Vec<TreeRow> = app.kept.tree_rows(open).iter().skip(scroll).take(height).cloned().collect();
+    let lines: Vec<Line> =
+        shown.iter().zip(scroll..).map(|(row, i)| row_line(app, &open.review, row, i == selected, inner.width as usize)).collect();
     f.render_widget(Paragraph::new(lines), inner);
 }
 

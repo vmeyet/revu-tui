@@ -433,7 +433,8 @@ A network failure while browsing does not clear the screen: the stale view stays
 | Key to frame | one loop turn, no awaited network |
 | Memory with a 5 000-line diff | under 50 MB |
 
-Diff rows are produced lazily from `Review + FoldState` for the visible window, never materialised for the whole MR.
+What the panes list (diff rows, line markers, the file tree, the pane's conversations) is built once per change of what it reads, then kept.
+A frame styles only the visible window; moving a cursor or scrolling rebuilds nothing.
 
 ## Accessibility and terminals
 

@@ -13,10 +13,6 @@ pub struct Tree {
 }
 
 impl Open {
-    pub fn tree_rows(&self) -> Vec<TreeRow> {
-        self.tree.as_ref().map_or_else(Vec::new, |t| tree::rows(&self.review.files, &t.folds))
-    }
-
     fn with_tree(self, tree: Option<Tree>) -> Self {
         Self { tree, ..self }
     }
@@ -49,8 +45,8 @@ impl App {
     pub(super) fn handle_tree_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(tree) = open.tree.clone() else { return vec![] };
-        let rows = open.tree_rows();
-        let last = rows.len().saturating_sub(1);
+        let rows = self.kept.tree_rows(open);
+        let (last, here) = (rows.len().saturating_sub(1), rows.get(tree.selected).cloned());
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let moved = |selected: usize| Some(Tree { selected: selected.min(last), ..tree.clone() });
         let next = match key.code {
@@ -61,13 +57,13 @@ impl App {
             KeyCode::Char('g') => moved(0),
             KeyCode::Char('G') => moved(last),
             KeyCode::Esc | KeyCode::Char('t') => None,
-            KeyCode::Char('v') if ctrl => match rows.get(tree.selected) {
-                Some(TreeRow::File { index, .. }) => return self.view_file(*index),
+            KeyCode::Char('v') if ctrl => match here {
+                Some(TreeRow::File { index, .. }) => return self.view_file(index),
                 _ => Some(tree.clone()),
             },
-            KeyCode::Enter => match rows.get(tree.selected) {
-                Some(TreeRow::Folder { path, .. }) => Some(Tree { folds: tree.folds.toggled(path), ..tree.clone() }),
-                Some(TreeRow::File { index, .. }) => return self.show_file(*index),
+            KeyCode::Enter => match here {
+                Some(TreeRow::Folder { path, .. }) => Some(Tree { folds: tree.folds.toggled(&path), ..tree.clone() }),
+                Some(TreeRow::File { index, .. }) => return self.show_file(index),
                 None => Some(tree.clone()),
             },
             _ => Some(tree.clone()),
@@ -93,7 +89,7 @@ impl App {
     pub(super) fn toggle_viewed(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let index = match (&open.tree, self.focus) {
-            (Some(tree), Focus::Side) => match open.tree_rows().get(tree.selected) {
+            (Some(tree), Focus::Side) => match self.kept.tree_rows(open).get(tree.selected) {
                 Some(TreeRow::File { index, .. }) => Some(*index),
                 _ => None,
             },
@@ -125,7 +121,7 @@ mod tests {
         press(&mut app, "t");
         assert_eq!(app.focus, Focus::Side);
         let open = app.open.clone().unwrap();
-        let rows = open.tree_rows();
+        let rows = app.kept.tree_rows(&open);
         let selected = &rows[open.tree.as_ref().unwrap().selected];
         assert!(matches!(selected, crate::review::tree::TreeRow::File { index: 0, .. }), "{rows:?}");
         press(&mut app, "G");

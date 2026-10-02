@@ -173,6 +173,8 @@ pub struct App {
     pub drag: Option<crate::tui::drag::Drag>,
     /// Pictures of the comments the right pane shows, each fetched once.
     pub thumbs: crate::tui::images::Thumbs,
+    /// What frames read from the open review, kept until it changes.
+    pub kept: super::Kept,
     /// The right pane as the last frame laid it out.
     pub pane_layout: Option<crate::tui::thread_view::PaneLayout>,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
@@ -284,6 +286,7 @@ impl App {
             areas: super::Areas::default(),
             text_rows: vec![],
             drag: None,
+            kept: super::Kept::default(),
             pane_layout: None,
             thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
             viewing: None,
@@ -355,7 +358,7 @@ impl App {
     /// The pictures of the conversations the right pane shows that were never asked for.
     fn picture_requests(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let Some((conversations, _, _)) = open.pane_view() else { return vec![] };
+        let Some((conversations, _, _)) = self.kept.pane_view(open) else { return vec![] };
         let review = &open.review;
         let bodies = conversations.iter().flat_map(|c| {
             let notes =

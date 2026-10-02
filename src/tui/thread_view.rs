@@ -1,5 +1,5 @@
 //! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
-use super::app::{App, Entry, EntryKind, Focus, Open, Pane};
+use super::app::{App, Entry, EntryKind, Focus, Open, Pane, ReviewInputs};
 use super::drag::{self, TextRow};
 use super::field::Field;
 use super::images::Thumbs;
@@ -8,7 +8,7 @@ use super::theme::Theme;
 use super::ui::{rule_pane, short_age, side_pane};
 use crate::forge::Note;
 use crate::review::image::{self, Image};
-use crate::review::{Anchor, Conversation, Draft, File, Place, Review, Side, Spot, Thread};
+use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -16,7 +16,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::ops::Range;
-use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 
 /// The compose box grows with its text up to this many rows, then scrolls.
@@ -68,11 +67,9 @@ pub struct PaneLayout {
 }
 
 /// Everything the pane's layout reads, the cursor and the scroll aside: they only move within it.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct PaneInputs {
-    threads: Arc<[Thread]>,
-    files: Arc<[File]>,
-    drafts: Vec<Draft>,
+    review: ReviewInputs,
     pane: Pane,
     here: bool,
     width: usize,
@@ -89,10 +86,8 @@ impl PaneInputs {
         let open = app.open.as_ref()?;
         let pane = open.pane.as_ref()?;
         Some(Self {
-            threads: Arc::clone(&open.review.threads),
-            files: Arc::clone(&open.review.files),
-            drafts: open.review.drafts.clone(),
-            pane: Pane { note: 0, scroll: 0, ..pane.clone() },
+            review: ReviewInputs::of(open),
+            pane: pane.unmoved(),
             here: at_cursor(open, pane),
             width,
             theme: app.theme,
@@ -101,17 +96,6 @@ impl PaneInputs {
             ascii: app.ascii,
             pictures: app.thumbs.changes(),
         })
-    }
-}
-
-/// Threads and files by identity: a review shares them until a fetch replaces them, and a held copy
-/// keeps their memory from being reused by the next ones.
-impl PartialEq for PaneInputs {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.threads, &other.threads)
-            && Arc::ptr_eq(&self.files, &other.files)
-            && (&self.drafts, &self.pane, self.here, self.width, self.theme, self.second, &self.me, self.ascii, self.pictures)
-                == (&other.drafts, &other.pane, other.here, other.width, other.theme, other.second, &other.me, other.ascii, other.pictures)
     }
 }
 
@@ -147,7 +131,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
         inner
     };
     let height = inner.height as usize;
-    let current = app.open.as_ref().and_then(Open::pane_view).and_then(|(_, _, current)| current);
+    let current = app.open.as_ref().and_then(|open| app.kept.pane_view(open)).and_then(|(_, _, current)| current);
     let on = |entry: &Option<Entry>| entry.is_some() && *entry == current;
     let first = rows.iter().position(|(entry, _)| on(entry)).unwrap_or(0);
     let last = rows.iter().rposition(|(entry, _)| on(entry)).unwrap_or(0);
