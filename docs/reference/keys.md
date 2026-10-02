@@ -45,6 +45,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `t` | file tree |
 | `T` | every thread of the MR |
 | `p` | pipeline |
+| `O` | outline: the symbols the MR changes |
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `=` `+` | more lines, react on a thread |
@@ -84,6 +85,17 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `e` `d` | edit, delete my draft |
 | `S` `+` | apply the suggestion, react |
 | `u` | open the first link |
+
+## Outline pane
+
+| Keys | Does |
+|---|---|
+| `t` | call tree, or the flat list |
+| `u` | calls, or called by |
+| `s` | the whole stack, unchanged calls too |
+| `a` | public symbols only, or all |
+| `zo` `zc` `za` | open, close, toggle the branch |
+| `enter` | the call in the diff, the definition, a section |
 
 ## Ask claude
 
@@ -154,6 +166,7 @@ A bound key adds to the default key, it does not replace it.
 | `tree` | `t` |
 | `every_thread` | `T` |
 | `pipeline` | `p` |
+| `outline` | `O` |
 | `wrap` | `w` |
 | `whitespace` | `W` |
 | `more_context` | `=` |

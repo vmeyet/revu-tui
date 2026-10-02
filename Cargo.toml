@@ -1,6 +1,6 @@
 [package]
 name = "revu"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Review GitLab merge requests and GitHub pull requests from your terminal: a TUI plus scriptable commands."
@@ -44,6 +44,7 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 tree-sitter = "0.27"
 tree-sitter-highlight = "0.27"
+tree-sitter-tags = "0.27"
 tree-sitter-javascript = "0.25"
 tree-sitter-json = "0.24"
 tree-sitter-md = "0.5"

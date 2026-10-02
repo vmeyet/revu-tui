@@ -36,7 +36,13 @@ impl App {
         let folds = TreeFolds::default().revealing(&path);
         let rows = tree::rows(&open.review.files, &folds);
         let selected = rows.iter().position(|r| matches!(r, TreeRow::File { index, .. } if Some(*index) == here)).unwrap_or(0);
-        self.update_open(|open| Open { pane: None, answer: None, pipeline: None, ..open.with_tree(Some(Tree { folds, selected })) });
+        self.update_open(|open| Open {
+            pane: None,
+            answer: None,
+            pipeline: None,
+            outline: None,
+            ..open.with_tree(Some(Tree { folds, selected }))
+        });
         self.focus = Focus::Side;
     }
 

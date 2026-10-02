@@ -48,7 +48,7 @@ The mockup below predates it.
 
 - Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below.
 - Middle: the review, `Min(60)`.
-- Right: 32 columns or 40 % of the width, only when a thread, the pipeline, the file tree or an AI answer is open.
+- Right: 32 columns or 40 % of the width, only when a thread, the pipeline, the outline, the file tree or an AI answer is open.
 - Row above the status line: the input row, only while typing.
 - Status line: host, user, pending drafts, then right aligned the poll state and `? help`. Toasts replace the left part for 4 s.
 
@@ -257,6 +257,7 @@ One of:
 
 - **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, a file's outdated threads, or with `T` the whole MR, each headed by its line), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff, a table as aligned columns split by `│` under a `─┼─` rule, its widest columns cut with `…` when the pane is narrower and left as raw text when even that does not fit. The compose box sits at its bottom. It follows the cursor onto marked lines, except while it lists the whole MR. Width: three columns from 150, the queue steps aside from 120, a page of its own below; in zen, under the diff.
 - **Pipeline** (`p`): the CI run of the head commit (GitLab's newest MR pipeline, GitHub's check runs grouped by workflow): a count per state, then each stage in the order it ran with its jobs, counted failures first, glyph, name and duration; the cursor starts on the first failure; `o` opens the job, `y` copies its link, `r` asks again, and a run still going is asked again every 15 s while the pane shows it. A failure the forge lets pass shows `!` in the warning colour. The header's pipeline word links to the run. Above the jobs, `REVIEW APPS` lists each environment the branch went to with its address, the newest successful deployment of each, and a click on an address opens it; they are asked when the MR opens, after a push, and once a run the pane shows ends. The cover (`i`) from an open MR shows the app to try, its address clickable too: over the cover a click on a link still answers, nothing else does.
+- **Outline** (`O`, `10-outline.md`): the functions, methods and classes the MR changes, by file, riskiest first: `-` removed, `~` signature changed (old → new below), `+` added, `→` renamed, `·` body only; as a call tree (`t` for the list, `u` for called by) with unchanged bridges dimmed; public ones only until `a`; a first row counts `n breaking · n added · n renamed`; `enter` puts the diff's cursor on the call or the symbol.
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` unresolved threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
 - **AI answer** (M4): title `ask · file` and the streaming markdown; a `cached` tag when served from cache.
 
@@ -329,6 +330,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `t` | file tree | M3 |
 | `T` | every thread of the MR in the right pane (`09-thread-pane.md` § Every thread) | M3b |
 | `p` | pipeline: jobs by stage, failures first, `o` opens a job | M5 |
+| `O` | outline: the symbols the MR changes, `a` lists private ones too (`10-outline.md`) | post-M5 |
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
 | `D` | inline diff, or side by side | M3 |
@@ -391,7 +393,7 @@ While `'` waits, the status line lists the views. Views are checked when the con
 
 ### Command line (`>` in the search)
 
-Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:help`, `:quit`.
 While the verb is typed, `↑` `↓` move a cursor through the command list and `enter` runs the command under it, or writes it and waits when it needs an argument (`go `, `set `). Past the verb, `↑` `↓` walk the argument's completions as Tab does. Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `ctrl-p` `ctrl-n` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:cache clear`.
 

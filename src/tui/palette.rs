@@ -70,6 +70,8 @@ pub enum Command {
     },
     /// The file in the reader's program: nothing for the cursor's file, `old` for its base version, or `path[:line]`.
     View(String),
+    /// `:outline`: the symbols the MR changes in the right pane, as `O` does.
+    Outline,
     /// `:ai off`: no more AI calls this session.
     AiOff,
     /// `:ai on`: the providers the config switched on answer again.
@@ -82,7 +84,7 @@ pub enum Command {
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 15] = [
+pub const VERBS: [(&str, &str); 16] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
@@ -91,6 +93,7 @@ pub const VERBS: [(&str, &str); 15] = [
     ("publish", "publish every draft, in the publish modal"),
     ("threads", "every thread of the MR in the right pane"),
     ("all", "the queue: this repo only, or every project"),
+    ("outline", "the functions and classes the MR changes, in the right pane"),
     ("set", "change and save a setting: :set theme=nord"),
     ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     ("ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
@@ -131,6 +134,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
             Ok(Command::Set { key: key.trim().to_owned(), value: value.trim().to_owned() })
         }
         "view" | "v" => Ok(Command::View(rest.to_owned())),
+        "outline" => Ok(Command::Outline),
         "ai" if rest == "off" => Ok(Command::AiOff),
         "ai" if rest == "on" => Ok(Command::AiOn),
         "ai" => Err(":ai off or :ai on; the config says which providers exist".into()),

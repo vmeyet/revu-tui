@@ -57,6 +57,7 @@ impl App {
             Command::All => ":all",
             Command::Set { .. } => ":set",
             Command::View(_) => ":view",
+            Command::Outline => ":outline",
             Command::AiOff | Command::AiOn => ":ai",
             Command::Ask(_) => ":ask",
             Command::Share(_) => ":share",

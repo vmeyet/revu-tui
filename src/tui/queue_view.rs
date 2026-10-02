@@ -118,7 +118,7 @@ fn mr_lines(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize
 
 /// `── OPEN · 28 ─────────`: a faded rule, so a section reads as a break, not as one more row.
 /// A folded section shows `▸`; the cursor on it brightens the name.
-fn rule(theme: Theme, name: &str, count: usize, open: bool, selected: bool, width: usize) -> Line<'static> {
+pub(super) fn rule(theme: Theme, name: &str, count: usize, open: bool, selected: bool, width: usize) -> Line<'static> {
     let faded = Style::default().fg(theme.faded);
     let fold = if open { "" } else { "▸ " };
     let label = format!(" {fold}{name} · {count} ");

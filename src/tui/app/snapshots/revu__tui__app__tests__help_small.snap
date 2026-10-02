@@ -1,29 +1,28 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 80
 expression: "render(&mut app, 80, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────╮
-│   ── TO R╭ keys ──────────────────────────────────────────────────╮          │
-│ ▎ feat ch│                                                        │          │
-│ ▎ omar · │      ^d ^u  half a page; PgDn PgUp space too           │          │
-│          │        h l  pane to the left, to the right             │          │
-│   ── MINE│      enter  open, or toggle the fold                   │          │
-│   fix fla│      esc x  close the pane, back to the queue          │          │
-│   nina · │  tab S-tab  next, previous file                        │          │
-│          │      ]c [c  next, previous hunk                        │          │
-│   ── WATC│      ]n [n  next, previous open conversation           │          │
-│   infra: │      ]N [N  next, previous conversation, resolved too  │          │
-│   omar · │      ]f [f  next, previous file with a thread          │          │
-│          │      ]r [r  next, previous MR that needs you           │          │
-│   ── ▸ DO│      ]m [m  next, previous MR in the queue             │          │
-│          │                                                        │          │
-│          │  QUEUE                                                 │          │
-│          │          /  filter: words @author !42 ~label           │          │
-│          │      ' 1-9  a saved view, by letter or rank            │          │
-│          │          *  this repo, or every project                │          │
-│          │                                                        │          │
-│          ╰─────────────────── 4–19 of 78 · j k scroll · esc close ╯          │
+│   ── T╭ keys ────────────────────────────────────────────────────────╮       │
+│ ▎ feat│                                                              │       │
+│ ▎ omar│      ^d ^u  half a page; PgDn PgUp space too                 │       │
+│       │        h l  pane to the left, to the right                   │       │
+│   ── M│      enter  open, or toggle the fold                         │       │
+│   fix │      esc x  close the pane, back to the queue                │       │
+│   nina│  tab S-tab  next, previous file                              │       │
+│       │      ]c [c  next, previous hunk                              │       │
+│   ── W│      ]n [n  next, previous open conversation                 │       │
+│   infr│      ]N [N  next, previous conversation, resolved too        │       │
+│   omar│      ]f [f  next, previous file with a thread                │       │
+│       │      ]r [r  next, previous MR that needs you                 │       │
+│   ── ▸│      ]m [m  next, previous MR in the queue                   │       │
+│       │                                                              │       │
+│       │  QUEUE                                                       │       │
+│       │          /  filter: words @author !42 ~label                 │       │
+│       │      ' 1-9  a saved view, by letter or rank                  │       │
+│       │          *  this repo, or every project                      │       │
+│       │                                                              │       │
+│       ╰───────────────────────── 4–19 of 87 · j k scroll · esc close ╯       │
 │                                ││                                            │
 ╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina                                                       ? help

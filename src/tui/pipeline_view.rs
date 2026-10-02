@@ -1,7 +1,7 @@
 //! The pipeline pane: the run's state and counts, then each stage and its jobs, failures first.
 use super::app::{App, Focus, Open, Run};
 use super::theme::Theme;
-use super::ui::{DEPLOYED, Link, draw_empty, settle_scroll, side_pane, spinner, truncate};
+use super::ui::{DEPLOYED, Link, counts, draw_empty, settle_scroll, side_pane, spinner, truncate};
 use crate::forge::checks::{Checks, Job, JobState};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -107,18 +107,7 @@ fn summary<'a>(checks: &Checks, theme: Theme) -> Line<'a> {
         (JobState::Canceled, "canceled", theme.faded),
         (JobState::Manual, "manual", theme.muted),
     ];
-    let mut spans = vec![Span::raw(" ")];
-    for (state, label, colour) in parts {
-        let count = checks.count(state);
-        if count == 0 {
-            continue;
-        }
-        if spans.len() > 1 {
-            spans.push(Span::styled(" · ", Style::default().fg(theme.faded)));
-        }
-        spans.push(Span::styled(format!("{count} {label}"), Style::default().fg(colour)));
-    }
-    Line::from(spans)
+    counts(&parts.map(|(state, label, colour)| (checks.count(state), label, colour)), theme)
 }
 
 fn job_line<'a>(job: &Job, selected: bool, width: usize, theme: Theme, tick: &str) -> Line<'a> {

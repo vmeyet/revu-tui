@@ -60,6 +60,7 @@ impl App {
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
+            Incoming::Outline { key, reading } => self.apply_outline(&key, reading),
             Incoming::PastAnswers { key, answers } => self.apply_past_answers(&key, answers),
             Incoming::Deployments { key, deployments } => {
                 self.update_open_of(&key, |open| Open { deployments: Some(deployments), ..open });

@@ -79,6 +79,7 @@ One word per concept, used in code, docs and UI:
 | forge | The host's code platform: GitLab or GitHub |
 | file | One changed file in the MR diff |
 | hunk | One `@@` block inside a file |
+| symbol | A function, method or class definition the outline lists |
 | line | One diff row with an old and/or new number |
 | thread | One discussion (resolvable or not) |
 | note | One comment inside a thread |

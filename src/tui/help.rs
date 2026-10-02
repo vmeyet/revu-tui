@@ -25,7 +25,7 @@ pub struct Help {
     pub every_key: bool,
 }
 
-pub const GROUPS: [Group; 7] = [
+pub const GROUPS: [Group; 8] = [
     Group {
         title: "move",
         keys: &[
@@ -67,6 +67,7 @@ pub const GROUPS: [Group; 7] = [
             ("t", "file tree"),
             ("T", "every thread of the MR"),
             ("p", "pipeline"),
+            ("O", "outline: the symbols the MR changes"),
             ("zz", "zen: the diff alone, quiet"),
             ("w W", "wrap long lines, hide whitespace changes"),
             ("= +", "more lines, react on a thread"),
@@ -108,6 +109,18 @@ pub const GROUPS: [Group; 7] = [
             ("e d", "edit, delete my draft"),
             ("S +", "apply the suggestion, react"),
             ("u", "open the first link"),
+        ],
+        focus: &[Focus::Side],
+    },
+    Group {
+        title: "outline pane",
+        keys: &[
+            ("t", "call tree, or the flat list"),
+            ("u", "calls, or called by"),
+            ("s", "the whole stack, unchanged calls too"),
+            ("a", "public symbols only, or all"),
+            ("zo zc za", "open, close, toggle the branch"),
+            ("enter", "the call in the diff, the definition, a section"),
         ],
         focus: &[Focus::Side],
     },
@@ -307,7 +320,7 @@ mod tests {
         let titles = |every_key, focus| groups(every_key, focus).map(|g| g.title).collect::<Vec<_>>();
         assert_eq!(titles(false, Focus::Queue), ["move", "queue", "search & app"]);
         assert_eq!(titles(false, Focus::Review), ["move", "view", "comment & publish", "ask claude", "search & app"]);
-        assert_eq!(titles(false, Focus::Side), ["comment & publish", "thread pane", "ask claude", "search & app"]);
+        assert_eq!(titles(false, Focus::Side), ["comment & publish", "thread pane", "outline pane", "ask claude", "search & app"]);
         assert_eq!(titles(true, Focus::Side), GROUPS.map(|g| g.title));
     }
 }

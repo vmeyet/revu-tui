@@ -1,35 +1,34 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 73
 expression: "render(&mut app, 100, 30)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   ── TO REVIEW · 1 ╭ keys ──────────────────────────────────────────────────╮ 2 files · ✓ succes │
-│ ▎ feat charge cards│                                                        │d                   │
-│ ▎ omar · !42 · +412│  MOVE                                                  │                    │
-│                    │        j k  move                                       │                    │
-│   ── MINE · 1 ─────│        g G  first, last                                │−2  ✓1 · 1 outdated │
-│   fix flaky cache t│      ^d ^u  half a page; PgDn PgUp space too           │                    │
-│   nina · !41 · +3 −│        h l  pane to the left, to the right             │rd, amount: Money)… │
-│                    │      enter  open, or toggle the fold                   │);                  │
-│   ── WATCHING · 1 ─│      esc x  close the pane, back to the queue          │_key(idempotency_k… │
-│   infra: new runner│  tab S-tab  next, previous file                        │rst();              │
-│   omar · !35 · +0 −│      ]c [c  next, previous hunk                        │rge(amount).await?; │
-│                    │      ]n [n  next, previous open conversation           │                    │
-│   ── ▸ DONE · 1 ───│      ]N [N  next, previous conversation, resolved too  │                    │
-│                    │      ]f [f  next, previous file with a thread          │d) -> Key {         │
-│                    │      ]r [r  next, previous MR that needs you           │                    │
-│                    │      ]m [m  next, previous MR in the queue             │ card.expiry()))    │
-│                    │                                                        │ew                  │
-│                    │  QUEUE                                                 │                    │
-│                    │          /  filter: words @author !42 ~label           │                    │
-│                    │      ' 1-9  a saved view, by letter or rank            │      +1 −1  folded │
-│                    │          *  this repo, or every project                │                    │
-│                    │          s  next sort order                            │                    │
-│                    │          S  group by author                            │                    │
-│                    │      zo zc  open, fold the section or stack            │                    │
-│                    │                                                        │                    │
-│                    ╰─────────────────── 1–22 of 78 · j k scroll · esc close ╯                    │
+│   ── TO REVIEW ·╭ keys ────────────────────────────────────────────────────────╮files · ✓ succes │
+│ ▎ feat charge ca│                                                              │                 │
+│ ▎ omar · !42 · +│  MOVE                                                        │                 │
+│                 │        j k  move                                             │                 │
+│   ── MINE · 1 ──│        g G  first, last                                      │ ✓1 · 1 outdated │
+│   fix flaky cach│      ^d ^u  half a page; PgDn PgUp space too                 │                 │
+│   nina · !41 · +│        h l  pane to the left, to the right                   │ amount: Money)… │
+│                 │      enter  open, or toggle the fold                         │                 │
+│   ── WATCHING · │      esc x  close the pane, back to the queue                │y(idempotency_k… │
+│   infra: new run│  tab S-tab  next, previous file                              │();              │
+│   omar · !35 · +│      ]c [c  next, previous hunk                              │(amount).await?; │
+│                 │      ]n [n  next, previous open conversation                 │                 │
+│   ── ▸ DONE · 1 │      ]N [N  next, previous conversation, resolved too        │                 │
+│                 │      ]f [f  next, previous file with a thread                │-> Key {         │
+│                 │      ]r [r  next, previous MR that needs you                 │                 │
+│                 │      ]m [m  next, previous MR in the queue                   │rd.expiry()))    │
+│                 │                                                              │                 │
+│                 │  QUEUE                                                       │                 │
+│                 │          /  filter: words @author !42 ~label                 │                 │
+│                 │      ' 1-9  a saved view, by letter or rank                  │   +1 −1  folded │
+│                 │          *  this repo, or every project                      │                 │
+│                 │          s  next sort order                                  │                 │
+│                 │          S  group by author                                  │                 │
+│                 │      zo zc  open, fold the section or stack                  │                 │
+│                 │                                                              │                 │
+│                 ╰───────────────────────── 1–22 of 87 · j k scroll · esc close ╯                 │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

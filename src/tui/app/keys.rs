@@ -101,7 +101,10 @@ impl App {
             KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
-            KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() => self.pending = Some('a'),
+            KeyCode::Char('z') if self.outline_keys() => self.pending = Some('z'),
+            KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() && !self.outline_keys() => {
+                self.pending = Some('a');
+            }
             _ => {
                 return match self.focus {
                     Focus::Queue => self.handle_queue_key(key),
@@ -249,6 +252,7 @@ impl App {
             KeyCode::Char('t') => self.toggle_tree(),
             KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('p') => return self.toggle_pipeline(),
+            KeyCode::Char('O') => return self.toggle_outline(),
             KeyCode::Char('W') => self.toggle_whitespace(),
             KeyCode::Char('+') => {
                 self.open_react_here();
@@ -311,6 +315,10 @@ impl App {
         if prefix == 'a' {
             return self.ask_key(c);
         }
+        if prefix == 'z' && self.outline_keys() {
+            self.fold_outline(c);
+            return vec![];
+        }
         let forward = prefix == ']';
         match (prefix, c) {
             ('z', 'a') => return self.fold_at_cursor(None),
@@ -335,6 +343,11 @@ impl App {
         vec![]
     }
 
+    /// The outline reads `a` itself while it has the keys.
+    fn outline_keys(&self) -> bool {
+        self.focus == Focus::Side && self.outline_open()
+    }
+
     fn tree_open(&self) -> bool {
         self.open.as_ref().is_some_and(|o| o.tree.is_some())
     }
@@ -345,6 +358,9 @@ impl App {
         }
         if self.pipeline_open() {
             return self.handle_pipeline_key(key);
+        }
+        if self.outline_open() {
+            return self.handle_outline_key(key);
         }
         if self.tree_open() {
             return self.handle_tree_key(key);
@@ -476,7 +492,7 @@ mod tests {
 
     /// The group titles the open key list shows, as its uppercase headers.
     fn help_titles(app: &mut App) -> Vec<&'static str> {
-        let screen = render(app, 160, 45);
+        let screen = render(app, 160, 60);
         crate::tui::help::GROUPS.iter().map(|g| g.title).filter(|t| screen.contains(&format!("  {} ", t.to_uppercase()))).collect()
     }
 
@@ -494,7 +510,7 @@ mod tests {
         thread.handle_key(code(KeyCode::Enter));
         assert_eq!(thread.focus, Focus::Side);
         press(&mut thread, "?");
-        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "ask claude", "search & app"]);
+        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "outline pane", "ask claude", "search & app"]);
         press(&mut thread, "?");
         assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(|g| g.title));
         thread.handle_key(code(KeyCode::Esc));
