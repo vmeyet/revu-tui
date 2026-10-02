@@ -78,12 +78,26 @@ struct Graph<'a> {
     links: Vec<Vec<Link>>,
 }
 
-/// Roots first among the changes nothing changed reaches, then any change still unseen, both riskiest first.
-pub(super) fn build(changes: &[Change], unchanged: &[(String, Symbol)], shape: Shape) -> Vec<Branch> {
-    let graph = Graph::new(changes, unchanged, shape.direction);
-    let reached = graph.reached_from_changed();
-    let candidates: Vec<usize> = (0..changes.len()).filter(|&change| shape.all || changes[change].public()).collect();
+/// Which part of the MR a tree shows: its code, or its tests and the code each one calls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Section {
+    Code,
+    Tests,
+}
+
+/// Code roots first among the changes nothing changed reaches, then any change still unseen, both riskiest first.
+/// Test roots are every changed test symbol, in order; nothing links into a test file.
+pub(super) fn build(changes: &[Change], unchanged: &[(String, Symbol)], shape: Shape, section: Section) -> Vec<Branch> {
+    let direction = if section == Section::Tests { Direction::Calls } else { shape.direction };
+    let graph = Graph::new(changes, unchanged, direction, section);
+    let in_section = |change: usize| super::is_test(&changes[change].path) == (section == Section::Tests);
     let mut walk = Walk { graph: &graph, seen: vec![false; graph.nodes.len()], stack: shape.stack };
+    if section == Section::Tests {
+        return (0..changes.len()).filter(|&change| in_section(change)).filter_map(|change| walk.unseen(change)).collect();
+    }
+    let reached = graph.reached_from_changed();
+    let candidates: Vec<usize> =
+        (0..changes.len()).filter(|&change| in_section(change) && (shape.all || changes[change].public())).collect();
     let first: Vec<usize> = candidates.iter().copied().filter(|&change| !reached[change]).collect();
     first.into_iter().chain(candidates).filter_map(|change| walk.unseen(change)).collect()
 }
@@ -122,8 +136,9 @@ fn names(change: &Change) -> (Option<&str>, Option<&str>) {
 }
 
 impl<'a> Graph<'a> {
-    /// Changes come first, so a change's node is its index; a call links to every symbol of its name on its own side.
-    fn new(changes: &'a [Change], unchanged: &'a [(String, Symbol)], direction: Direction) -> Self {
+    /// Changes come first, so a change's node is its index; a call links to every code symbol of its name on its own side.
+    /// Test symbols call from the tests section only.
+    fn new(changes: &'a [Change], unchanged: &'a [(String, Symbol)], direction: Direction, section: Section) -> Self {
         let nodes: Vec<Node> = changes
             .iter()
             .enumerate()
@@ -132,7 +147,7 @@ impl<'a> Graph<'a> {
             .collect();
         let mut on_head: HashMap<&str, Vec<usize>> = HashMap::new();
         let mut on_base: HashMap<&str, Vec<usize>> = HashMap::new();
-        for (index, node) in nodes.iter().enumerate() {
+        for (index, node) in nodes.iter().enumerate().filter(|(_, node)| !super::is_test(node.path)) {
             let (head, base) = node.change.map_or((Some(node.symbol.short_name()), Some(node.symbol.short_name())), |c| names(&changes[c]));
             if let Some(name) = head {
                 on_head.entry(name).or_default().push(index);
@@ -142,7 +157,8 @@ impl<'a> Graph<'a> {
             }
         }
         let mut links = vec![vec![]; nodes.len()];
-        for (caller, node) in nodes.iter().enumerate() {
+        let calling = |node: &Node| section == Section::Tests || !super::is_test(node.path);
+        for (caller, node) in nodes.iter().enumerate().filter(|(_, node)| calling(node)) {
             let named = if node.side == Side::Old { &on_base } else { &on_head };
             for call in &node.symbol.calls {
                 let called = named.get(call.name.as_str()).map_or(&[][..], Vec::as_slice);
@@ -295,7 +311,7 @@ mod tests {
             }
         }
         let mut out = vec![];
-        walk(reading, &reading.tree(shape), 0, &mut out);
+        walk(reading, &reading.tree(shape, Section::Code), 0, &mut out);
         out
     }
 
@@ -352,7 +368,7 @@ mod tests {
             ("a.py".to_owned(), moved.to_owned(), String::new()),
             python("b.py", &["to_date", "is_current"], &format!("{moved}\ndef is_current():\n    return to_date(1)\n")),
         ]);
-        let tree = reading.tree(CALLS);
+        let tree = reading.tree(CALLS, Section::Code);
         let current = tree.iter().find(|b| matches!(b.item, Item::Changed(c) if reading.changes[c].symbol.name == "is_current")).unwrap();
         let [call] = current.children.as_slice() else { panic!("one call: {:?}", current.children) };
         let Item::Changed(callee) = call.item else { panic!("a change: {call:?}") };
@@ -381,7 +397,31 @@ mod tests {
         let reading = read(&[("pay.py".to_owned(), base.to_owned(), head.to_owned())]);
         let shape = Shape { direction: Direction::CalledBy, ..CALLS };
         assert_eq!(sketch(&reading, shape), ["charge", "  pay"]);
-        let site = reading.tree(shape)[0].children[0].site.clone().unwrap();
+        let site = reading.tree(shape, Section::Code)[0].children[0].site.clone().unwrap();
         assert_eq!(site, Site { path: "pay.py".into(), side: Side::New, line: 5 });
+    }
+
+    #[test]
+    fn code_ignores_test_files_and_each_test_roots_the_code_it_calls() {
+        let reading = read(&[
+            python("shop/pay.py", &["pay", "_fee"], "def pay():\n    return _fee() + helper()\n\ndef _fee():\n    return 1\n"),
+            python(
+                "tests/test_pay.py",
+                &["test_pay", "test_fee", "helper"],
+                "def helper():\n    return 0\n\ndef test_pay():\n    assert pay() == helper()\n\ndef test_fee():\n    assert _fee()\n",
+            ),
+        ]);
+        let tests = |shape| {
+            let mut out = vec![];
+            for branch in reading.tree(shape, Section::Tests) {
+                let Item::Changed(change) = branch.item else { panic!("a test root: {branch:?}") };
+                out.push((reading.changes[change].symbol.name.clone(), branch.children.len()));
+            }
+            out
+        };
+        assert_eq!(sketch(&reading, CALLS), ["pay", "  _fee"], "helper() is a test file's");
+        assert_eq!(tests(CALLS), [("helper".to_owned(), 0), ("test_pay".to_owned(), 1), ("test_fee".to_owned(), 1)]);
+        let under_test_pay = &reading.tree(CALLS, Section::Tests)[1].children[0];
+        assert_eq!(under_test_pay.children.len(), 1, "pay in full, with _fee under it");
     }
 }

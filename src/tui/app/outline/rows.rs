@@ -1,6 +1,6 @@
 //! What the outline pane draws, built once whenever its state changes, so a frame only slices it.
 use crate::diff::words::{Segment, text_segments};
-use crate::outline::{Branch, Change, Item, Reading, Shape, Site, State};
+use crate::outline::{Branch, Change, Item, Reading, Section, Shape, Site, State, is_test};
 use std::collections::BTreeSet;
 
 /// Every row of the pane, and the entries among them the cursor walks.
@@ -27,9 +27,11 @@ pub enum PaneLine {
     },
 }
 
-/// One row the cursor stops on: a change of the flat list, or a branch of the tree after the lines drawn before it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One row the cursor stops on: a section header, a change of the flat list, or a branch of the tree after the lines drawn before it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Entry {
+    /// The section it heads, with how many changes it holds.
+    pub header: Option<(Section, usize)>,
     pub lines: String,
     /// The branch's item; none in the flat list.
     pub item: Option<Item>,
@@ -57,15 +59,25 @@ pub(super) struct View {
 }
 
 impl Rows {
+    /// The code section, then the tests section, each under its header and gone when empty.
     pub(super) fn build(reading: &Reading, view: View, folded: &BTreeSet<Vec<usize>>) -> Self {
-        let counted: Vec<usize> = (0..reading.changes.len()).filter(|&c| view.shape.all || reading.changes[c].public()).collect();
-        let entries = if view.flat { flat(&counted) } else { tree(&reading.tree(view.shape), folded) };
-        let mut lines = vec![PaneLine::Counts(counts(reading, &counted)), PaneLine::Blank];
+        let in_tests = |c: &usize| is_test(&reading.changes[*c].path);
+        let counted: Vec<usize> =
+            (0..reading.changes.len()).filter(|c| !in_tests(c) && (view.shape.all || reading.changes[*c].public())).collect();
+        let tests: Vec<usize> = (0..reading.changes.len()).filter(in_tests).collect();
+        let code = if view.flat { flat(&counted) } else { tree(&reading.tree(view.shape, Section::Code), folded, 0) };
+        let code = section(Section::Code, counted.len(), code, folded);
+        let tests = section(Section::Tests, tests.len(), tree(&reading.tree(view.shape, Section::Tests), folded, 1), folded);
+        let entries: Vec<Entry> = code.into_iter().chain(tests).collect();
+        let mut lines = vec![];
         let mut line_of = vec![];
         let mut path = None;
         for (index, entry) in entries.iter().enumerate() {
             let change = entry.change.map(|c| &reading.changes[c]);
-            if let Some(change) = change.filter(|c| view.flat && path != Some(&c.path)) {
+            if matches!(entry.header, Some((Section::Tests, _))) && !lines.is_empty() {
+                lines.push(PaneLine::Blank);
+            }
+            if let Some(change) = change.filter(|c| entry.item.is_none() && path != Some(&c.path)) {
                 if path.is_some() {
                     lines.push(PaneLine::Blank);
                 }
@@ -74,12 +86,26 @@ impl Rows {
             }
             line_of.push(lines.len());
             lines.push(PaneLine::Entry(index));
+            if matches!(entry.header, Some((Section::Code, _))) {
+                lines.extend([PaneLine::Counts(counts(reading, &counted)), PaneLine::Blank]);
+            }
             if let Some(signature) = change.filter(|_| entry.full()).and_then(|c| signature(c, 4 + entry.lines.chars().count())) {
                 lines.push(signature);
             }
         }
         Self { lines, entries, line_of }
     }
+}
+
+/// A section's header and, unless it is folded, its entries; nothing when it has none.
+fn section(name: Section, count: usize, entries: Vec<Entry>, folded: &BTreeSet<Vec<usize>>) -> Vec<Entry> {
+    if entries.is_empty() {
+        return vec![];
+    }
+    let at = vec![name as usize];
+    let closed = folded.contains(&at);
+    let header = Entry { header: Some((name, count)), folded: closed, children: true, at, ..Entry::default() };
+    std::iter::once(header).chain(entries.into_iter().filter(|_| !closed)).collect()
 }
 
 fn counts(reading: &Reading, counted: &[usize]) -> [usize; 3] {
@@ -93,21 +119,12 @@ fn signature(change: &Change, indent: usize) -> Option<PaneLine> {
 }
 
 fn flat(counted: &[usize]) -> Vec<Entry> {
-    let entry = |&change| Entry {
-        lines: String::new(),
-        item: None,
-        change: Some(change),
-        unsure: false,
-        site: None,
-        folded: false,
-        children: false,
-        at: vec![],
-    };
-    counted.iter().map(entry).collect()
+    counted.iter().map(|&change| Entry { change: Some(change), ..Entry::default() }).collect()
 }
 
-fn tree(roots: &[Branch], folded: &BTreeSet<Vec<usize>>) -> Vec<Entry> {
-    roots.iter().enumerate().flat_map(|(index, root)| entries_of(root, String::new(), "", &[index], folded)).collect()
+/// The tree of section number `section`, its branches keyed under it.
+fn tree(roots: &[Branch], folded: &BTreeSet<Vec<usize>>, section: usize) -> Vec<Entry> {
+    roots.iter().enumerate().flat_map(|(index, root)| entries_of(root, String::new(), "", &[section, index], folded)).collect()
 }
 
 /// `branch` after `lines`, then its children unless folded, `lead` drawn before theirs.
@@ -126,6 +143,7 @@ fn entries_of(branch: &Branch, lines: String, lead: &str, at: &[usize], folded: 
         folded: closed,
         children: !branch.children.is_empty(),
         at: at.to_vec(),
+        header: None,
     }];
     if closed {
         return entries;

@@ -5,7 +5,7 @@ mod rows;
 
 pub use rows::{Entry, PaneLine, Rows};
 
-use crate::outline::{Direction, Reading, Shape};
+use crate::outline::{Direction, Reading, Section, Shape};
 use crate::review::{Place, Review, Row, Side};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rows::View;
@@ -47,9 +47,15 @@ impl Outline {
             flat: false,
             stack: false,
             direction: Direction::Calls,
-            folded: BTreeSet::new(),
+            folded: BTreeSet::from([vec![Section::Tests as usize]]),
             rows: Arc::default(),
         }
+    }
+
+    /// The cursor on the first symbol, past the code header.
+    fn on_top(self) -> Self {
+        let first = self.rows.entries.iter().position(|e| e.header.is_none()).unwrap_or(0);
+        Self { selected: first, ..self }
     }
 
     /// The rows built again for what changed, the cursor kept on them.
@@ -61,9 +67,10 @@ impl Outline {
         Self { rows: Arc::new(rows), selected, ..self }
     }
 
-    /// The same pane shown another way: the cursor back on top, every branch open.
+    /// The same pane shown another way: the cursor back on top, every branch open, the sections as they were.
     fn shown_as(&self, change: impl FnOnce(Self) -> Self) -> Self {
-        change(Self { selected: 0, folded: BTreeSet::new(), ..self.clone() }).rebuilt()
+        let folded = self.folded.iter().filter(|at| at.len() == 1).cloned().collect();
+        change(Self { folded, ..self.clone() }).rebuilt().on_top()
     }
 
     /// `zo` `zc` `za` on the branch under the cursor; `None` opens or closes it, whichever it is not.
@@ -165,11 +172,16 @@ impl App {
         self.update_open(|open| open.with_outline(Some(folded)));
     }
 
-    /// `enter`: the diff's cursor on the call under the cursor, or on the symbol's definition at the top; the keys go to the diff.
+    /// `enter`: the diff's cursor on the call under the cursor, or on the symbol's definition at the top, and the keys to the diff;
+    /// on a section header, its fold.
     fn jump_from_outline(&mut self) -> Vec<Action> {
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return vec![] };
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
         let Some(entry) = outline.rows.entries.get(outline.selected) else { return vec![] };
+        if entry.header.is_some() {
+            self.fold_outline('a');
+            return vec![];
+        }
         let place = match (&entry.site, entry.change.map(|c| &reading.changes[c])) {
             (Some(site), _) => Some((site.path.clone(), site.side, (site.line, site.line))),
             (None, Some(change)) => Some((change.path.clone(), change.side(), change.symbol.lines)),
@@ -195,7 +207,7 @@ impl App {
     /// The symbols read, or why they could not be; dropped once the pane closed.
     pub(super) fn settle_outline(&mut self, symbols: Symbols) {
         if self.outline_open() {
-            self.update_open(|open| open.with_outline(Some(Outline { symbols, ..Outline::waiting() }.rebuilt())));
+            self.update_open(|open| open.with_outline(Some(Outline { symbols, ..Outline::waiting() }.rebuilt().on_top())));
         }
     }
 }
@@ -239,15 +251,31 @@ mod tests {
     const HEAD: &str = "class Cart:\n    def total(self):\n        return pay(self, 2)\n\n\ndef pay(card, amount):\n    return _fee(card)\n\n\ndef refund(card):\n    return pay(card, 0)\n\n\ndef _fee(card):\n    return card.cost\n";
     const DIFF: &str = "@@ -1,11 +1,15 @@\n class Cart:\n     def total(self):\n-        return 1\n+        return pay(self, 2)\n \n \n-def pay(card):\n-    return card.charge()\n+def pay(card, amount):\n+    return _fee(card)\n \n \n-def _log():\n-    pass\n+def refund(card):\n+    return pay(card, 0)\n+\n+\n+def _fee(card):\n+    return card.cost\n";
 
+    const TEST: &str = "def test_refund():\n    assert refund(1) == 0\n";
+    const TEST_DIFF: &str = "@@ -0,0 +1,2 @@\n+def test_refund():\n+    assert refund(1) == 0\n";
+
     fn with_outline() -> App {
         let mut app = with_review();
         let file = DiffFile { diff: DIFF.into(), old_path: "shop/cart.py".into(), new_path: "shop/cart.py".into(), ..DiffFile::default() };
-        let review = Review::new(mr(), &[file], vec![], &[]);
+        let test = DiffFile {
+            diff: TEST_DIFF.into(),
+            old_path: "tests/test_cart.py".into(),
+            new_path: "tests/test_cart.py".into(),
+            change: crate::review::FileKind::Added,
+            ..DiffFile::default()
+        };
+        let review = Review::new(mr(), &[file, test], vec![], &[]);
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
         let actions = press(&mut app, "O");
-        let files = vec![crate::outline::Sides { base: Some("shop/cart.py".into()), head: Some("shop/cart.py".into()) }];
+        let files = vec![
+            crate::outline::Sides { base: Some("shop/cart.py".into()), head: Some("shop/cart.py".into()) },
+            crate::outline::Sides { base: None, head: Some("tests/test_cart.py".into()) },
+        ];
         assert_eq!(actions, vec![Action::LoadOutline { key: mr_key(), base: "aaaa".into(), head: "bbbb".into(), files }]);
-        let reading = crate::outline::read(&[("shop/cart.py".into(), BASE.into(), HEAD.into())]);
+        let reading = crate::outline::read(&[
+            ("shop/cart.py".into(), BASE.into(), HEAD.into()),
+            ("tests/test_cart.py".into(), String::new(), TEST.into()),
+        ]);
         app.apply(Incoming::Outline { key: mr_key(), reading });
         app
     }
@@ -256,7 +284,11 @@ mod tests {
     fn rows(app: &App) -> Vec<String> {
         let outline = app.open.as_ref().unwrap().outline.as_ref().unwrap();
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
-        let name = |entry: &super::Entry| entry.change.map_or("?".into(), |c| reading.changes[c].symbol.name.clone());
+        let name = |entry: &super::Entry| match (entry.header, entry.change) {
+            (Some((section, count)), _) => format!("{section:?} {count}"),
+            (None, Some(change)) => reading.changes[change].symbol.name.clone(),
+            (None, None) => "?".into(),
+        };
         outline.rows.entries.iter().map(|entry| format!("{}{}", entry.lines, name(entry))).collect()
     }
 
@@ -269,13 +301,13 @@ mod tests {
     fn o_shows_the_call_tree_t_the_flat_list_and_a_private_symbols_too() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);
-        assert_eq!(rows(&app), ["refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay"]);
+        assert_eq!(rows(&app), ["Code 3", "refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay", "Tests 1"]);
         press(&mut app, "a");
-        assert_eq!(rows(&app)[5..], ["_log"]);
+        assert_eq!(rows(&app)[6..], ["_log", "Tests 1"]);
         press(&mut app, "t");
-        assert_eq!(rows(&app), ["pay", "refund", "Cart.total", "_log", "_fee"]);
+        assert_eq!(rows(&app), ["Code 5", "pay", "refund", "Cart.total", "_log", "_fee", "Tests 1"]);
         press(&mut app, "a");
-        assert_eq!(rows(&app), ["pay", "refund", "Cart.total"]);
+        assert_eq!(rows(&app), ["Code 3", "pay", "refund", "Cart.total", "Tests 1"]);
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);
@@ -285,7 +317,18 @@ mod tests {
     fn u_lists_who_calls_each_symbol() {
         let mut app = with_outline();
         press(&mut app, "u");
-        assert_eq!(rows(&app), ["pay", "├─ refund", "└─ Cart.total"]);
+        assert_eq!(rows(&app), ["Code 3", "pay", "├─ refund", "└─ Cart.total", "Tests 1"]);
+    }
+
+    #[test]
+    fn tests_open_with_enter_on_their_header_and_show_the_code_each_test_calls() {
+        let mut app = with_outline();
+        assert_eq!(app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, 1, "the cursor starts on the first symbol");
+        press(&mut app, "G");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!(rows(&app)[6..], ["Tests 1", "test_refund", "└─ refund", "   └─ pay", "      └─ _fee"]);
+        press(&mut app, "zc");
+        assert_eq!(rows(&app)[6..], ["Tests 1"]);
     }
 
     #[test]
@@ -302,9 +345,9 @@ mod tests {
     fn zc_folds_the_branch_under_the_cursor_and_zo_opens_it() {
         let mut app = with_outline();
         press(&mut app, "zc");
-        assert_eq!(rows(&app)[..2], ["refund", "Cart.total"]);
+        assert_eq!(rows(&app)[..3], ["Code 3", "refund", "Cart.total"]);
         press(&mut app, "zo");
-        assert_eq!(rows(&app)[..2], ["refund", "└─ pay"]);
+        assert_eq!(rows(&app)[..3], ["Code 3", "refund", "└─ pay"]);
     }
 
     #[test]
@@ -315,11 +358,11 @@ mod tests {
         assert_eq!(app.focus, Focus::Review);
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(11), old: None }), "the call to pay in refund");
         press(&mut app, "l");
-        press(&mut app, "g");
+        press(&mut app, "gj");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(10), old: None }), "refund's definition");
         press(&mut app, "l");
-        press(&mut app, "taGk");
+        press(&mut app, "taGkk");
         app.handle_key(code(KeyCode::Enter));
         let Some(Place::Line { old, .. }) = place(&app) else { panic!("on a line") };
         assert_eq!(old, Some(10), "_log was on base line 10");

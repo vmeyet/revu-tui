@@ -3,7 +3,7 @@
 //! the calls the query finds link them into a tree.
 mod tree;
 
-pub use tree::{Branch, Direction, Item, Shape, Site};
+pub use tree::{Branch, Direction, Item, Section, Shape, Site};
 
 use crate::forge::Side;
 use crate::syntax;
@@ -103,9 +103,9 @@ pub struct Reading {
 }
 
 impl Reading {
-    /// The call tree over the changes, cut as `shape` says.
-    pub fn tree(&self, shape: Shape) -> Vec<Branch> {
-        tree::build(&self.changes, &self.unchanged, shape)
+    /// The call tree over the changes of `section`, cut as `shape` says.
+    pub fn tree(&self, shape: Shape, section: Section) -> Vec<Branch> {
+        tree::build(&self.changes, &self.unchanged, shape, section)
     }
 }
 
@@ -183,6 +183,14 @@ fn unprefixed(_node: Node, name: &str) -> bool {
 fn tags_for(path: &str) -> Option<&'static Tags> {
     let language = syntax::language_for(path, &syntax::LANGUAGES)?;
     TAGS.iter().find(|tags| tags.language == language.name)
+}
+
+/// A test file, by the usual names: a `test`, `tests` or `__tests__` folder, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`.
+pub fn is_test(path: &str) -> bool {
+    let (folders, name) = path.rsplit_once('/').unwrap_or(("", path));
+    let in_tests = folders.split('/').any(|folder| matches!(folder, "test" | "tests" | "__tests__"));
+    let python = name.strip_suffix(".py").is_some_and(|stem| stem.starts_with("test_") || stem.ends_with("_test"));
+    in_tests || python || name.contains(".test.") || name.contains(".spec.")
 }
 
 /// Whether the outline can read this file.
@@ -552,5 +560,23 @@ mod tests {
         assert_eq!(calls_of("src/a.js", js, "outer"), ["step", "charge"]);
         let python = "def pay(card, fee=charge, *more):\n    total = compute(card)\n    return fee(total) + more() + self.total()\n";
         assert_eq!(calls_of("shop/pay.py", python, "pay"), ["compute", "total"]);
+    }
+
+    #[test]
+    fn test_files_go_by_their_usual_names() {
+        for path in [
+            "tests/cart.py",
+            "src/__tests__/cart.ts",
+            "pkg/test/x.js",
+            "src/cart.test.ts",
+            "src/cart.spec.tsx",
+            "shop/test_cart.py",
+            "shop/cart_test.py",
+        ] {
+            assert!(is_test(path), "{path}");
+        }
+        for path in ["src/cart.ts", "shop/testing.py", "src/attest/x.py", "contest.py", "src/latest.ts"] {
+            assert!(!is_test(path), "{path}");
+        }
     }
 }

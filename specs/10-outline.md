@@ -41,6 +41,14 @@ The pane shows public symbols; `a` switches to every symbol and back, the title 
 
 A symbol public at base counts as public: one that loses its `export` is a breaking signature change.
 
+## Code and tests
+
+The pane has two sections under the queue's section rules: `CODE` and `TESTS`; a section with nothing to show is left out.
+A test file is a path with a `test`, `tests` or `__tests__` folder, or named `*.test.*`, `*.spec.*`, `test_*.py` or `*_test.py`.
+
+- `CODE` holds the tree below (or the list under `t`) built from the other files only; a call from code into a test file links nowhere. Its header counts its changes, and the badge under it counts code only.
+- `TESTS` is folded at first; `zo`, `za` or `enter` on its header opens it, `zc` closes it. Every changed test symbol is a root, whatever `a` says, and under it the code symbols it calls, as in `CODE` (changes in full, bridges, `s`): what each test covers. It always reads as calls; nothing links into a test file.
+
 ## Call tree
 
 The tree is the default; `t` switches to the flat list by file and back.
@@ -69,5 +77,5 @@ The first row counts what is listed: `2 breaking · 3 added · 1 renamed`, zeros
 ## Keys
 
 `j` `k` move, `g` `G` first and last, `^d` `^u` half a page, `a` public or all, `t` tree or list, `u` calls or called by, `s` whole stack, `zo` `zc` `za` open, close, toggle the branch under the cursor, `r` reads again.
-`enter` hands the keys to the diff with its cursor, file and hunk opened, on the call linking a row to its parent; on a root, a row of the list, or a row after a fold, on the symbol's first line the diff shows (head, base for a removed one).
+`enter` on a section header folds or opens it; elsewhere it hands the keys to the diff with its cursor, file and hunk opened, on the call linking a row to its parent; on a root, a row of the list, or a row after a fold, on the symbol's first line the diff shows (head, base for a removed one).
 A call on a line the diff does not show says so in the status line.
