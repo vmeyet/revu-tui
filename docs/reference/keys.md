@@ -45,7 +45,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `t` | file tree |
 | `T` | every thread of the MR |
 | `p` | pipeline |
-| `O` | outline of changed symbols · a all |
+| `O` | outline: the symbols the MR changes |
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `=` `+` | more lines, react on a thread |
@@ -85,6 +85,16 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `e` `d` | edit, delete my draft |
 | `S` `+` | apply the suggestion, react |
 | `u` | open the first link |
+
+## Outline pane
+
+| Keys | Does |
+|---|---|
+| `t` | call tree, or the flat list |
+| `u` | calls, or called by |
+| `a` | public symbols only, or all |
+| `zo` `zc` `za` | open, close, toggle the branch |
+| `enter` | the call in the diff, or the definition |
 
 ## Ask claude
 

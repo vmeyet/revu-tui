@@ -1,5 +1,11 @@
 //! The outline: which functions, methods and classes an MR changes. Each side of a file is read with
-//! its grammar's own tags query, then the symbols of both sides are compared by kind and name.
+//! its grammar's own tags query, then the symbols of both sides are compared by kind and name, and
+//! the calls the query finds link them into a tree.
+mod tree;
+
+pub use tree::{Branch, Direction, Item};
+
+use crate::forge::Side;
 use crate::syntax;
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -28,6 +34,21 @@ pub struct Symbol {
     /// Its first and last line, from 1.
     pub lines: (u32, u32),
     body: String,
+    calls: Vec<Call>,
+}
+
+/// A call inside a symbol's body: the name called, and the line it is on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Call {
+    name: String,
+    line: u32,
+}
+
+impl Symbol {
+    /// The name without the classes around it, as a call names it.
+    fn short_name(&self) -> &str {
+        self.name.rsplit('.').next().unwrap_or(&self.name)
+    }
 }
 
 /// How a symbol changed, riskiest first.
@@ -52,16 +73,57 @@ pub struct Change {
 }
 
 impl Change {
+    /// Public at head, or at base: a symbol that stopped being exported still counts.
+    pub fn public(&self) -> bool {
+        self.symbol.public || self.before.as_ref().is_some_and(|before| before.public)
+    }
+
+    /// The side its lines are on: base for a removed symbol, head for every other.
+    pub fn side(&self) -> Side {
+        if self.state == State::Removed { Side::Old } else { Side::New }
+    }
+
     /// A public symbol gone, or called differently now.
     pub fn breaking(&self) -> bool {
-        self.symbol.public && matches!(self.state, State::Removed | State::Signature)
+        self.public() && matches!(self.state, State::Removed | State::Signature)
     }
 
     /// Public removals, signatures and additions first; private ones after renames and body changes.
     fn risk(&self) -> (bool, State, u32) {
-        let private = !self.symbol.public && self.state <= State::Added;
+        let private = !self.public() && self.state <= State::Added;
         (private, self.state, self.symbol.lines.0)
     }
+}
+
+/// What the outline read in the MR: the changed symbols, by file then risk, and the call tree over them both ways.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Reading {
+    pub changes: Vec<Change>,
+    calls: Vec<Branch>,
+    called_by: Vec<Branch>,
+}
+
+impl Reading {
+    pub fn tree(&self, direction: Direction) -> &[Branch] {
+        match direction {
+            Direction::Calls => &self.calls,
+            Direction::CalledBy => &self.called_by,
+        }
+    }
+}
+
+/// Reads each file, given as its path with its text at base and at head, empty on a side it does not exist.
+pub fn read(files: &[(String, String, String)]) -> Reading {
+    let mut changes = vec![];
+    let mut unchanged = vec![];
+    for (path, base, head) in files {
+        let (changed, kept) = file(path, base, head);
+        changes.extend(changed);
+        unchanged.extend(kept.into_iter().map(|symbol| (path.clone(), symbol)));
+    }
+    let calls = tree::build(&changes, &unchanged, Direction::Calls);
+    let called_by = tree::build(&changes, &unchanged, Direction::CalledBy);
+    Reading { changes, calls, called_by }
 }
 
 /// One file to outline: its path at base, absent when added, and at head, absent when deleted.
@@ -110,6 +172,14 @@ fn exported(node: Node, _name: &str) -> bool {
     std::iter::successors(node.parent(), Node::parent).any(|n| n.kind() == "export_statement")
 }
 
+/// Where the signature starts: at the `export` that holds the definition itself, so dropping it changes the signature.
+fn signature_start(node: Node) -> usize {
+    std::iter::successors(node.parent(), Node::parent)
+        .take_while(|n| !matches!(n.kind(), "class_body" | "statement_block" | "program"))
+        .find(|n| n.kind() == "export_statement")
+        .map_or(node.start_byte(), |export| export.start_byte())
+}
+
 /// Python: a name without a leading `_`.
 fn unprefixed(_node: Node, name: &str) -> bool {
     !name.starts_with('_')
@@ -125,37 +195,53 @@ pub fn readable(path: &str) -> bool {
     tags_for(path).is_some()
 }
 
-/// The symbols that changed between the two sides of `path`, riskiest first; an absent side is empty.
-pub fn changes(path: &str, base: &str, head: &str) -> Vec<Change> {
-    let Some(tags) = tags_for(path) else { return vec![] };
-    let mut changes = compare(path, symbols(tags, base), symbols(tags, head));
+/// The symbols that changed between the two sides of `path`, riskiest first, and those of head that did not.
+fn file(path: &str, base: &str, head: &str) -> (Vec<Change>, Vec<Symbol>) {
+    let Some(tags) = tags_for(path) else { return (vec![], vec![]) };
+    let (mut changes, unchanged) = compare(path, symbols(tags, base), symbols(tags, head));
     changes.sort_by_key(Change::risk);
-    changes
+    (changes, unchanged)
 }
 
-/// Every function, method and class of `source`.
+/// Every function, method and class of `source`, each with the calls in its body.
 fn symbols(tags: &Tags, source: &str) -> Vec<Symbol> {
     let Some(config) = tags.configuration() else { return vec![] };
     let mut parser = Parser::new();
     let Some(tree) = parser.set_language(&config.language).ok().and_then(|()| parser.parse(source, None)) else { return vec![] };
     let mut context = TagsContext::new();
     let Ok((found, _)) = context.generate_tags(config, source.as_bytes(), None) else { return vec![] };
-    let definitions: Vec<(Kind, Range<usize>, Range<usize>)> = found
-        .filter_map(Result::ok)
-        .filter(|tag| tag.is_definition)
-        .filter_map(|tag| Some((kind_named(config.syntax_type_name(tag.syntax_type_id))?, tag.range, tag.name_range)))
-        .collect();
+    let mut definitions: Vec<(Kind, Range<usize>, Range<usize>)> = vec![];
+    let mut calls: Vec<(Range<usize>, Call)> = vec![];
+    for tag in found.filter_map(Result::ok) {
+        let kind = config.syntax_type_name(tag.syntax_type_id);
+        match (tag.is_definition, kind_named(kind)) {
+            (true, Some(kind)) => definitions.push((kind, tag.range, tag.name_range)),
+            (false, _) if kind == "call" => {
+                calls.push((tag.range, Call { name: source[tag.name_range].to_owned(), line: line(tag.span.start.row) }));
+            }
+            _ => {}
+        }
+    }
+    let inside = |inner: &Range<usize>, outer: &Range<usize>| outer.start <= inner.start && inner.end <= outer.end;
+    let mut owned: Vec<Vec<Call>> = vec![vec![]; definitions.len()];
+    for (at, call) in calls {
+        let innermost = definitions.iter().enumerate().filter(|(_, (_, r, _))| inside(&at, r)).min_by_key(|(_, (_, r, _))| r.len());
+        if let Some((index, _)) = innermost {
+            owned[index].push(call);
+        }
+    }
     definitions
         .iter()
-        .filter_map(|(kind, range, name)| {
+        .zip(owned)
+        .filter_map(|((kind, range, name), calls)| {
             let node = tree.root_node().descendant_for_byte_range(range.start, range.end)?;
             let classes: Vec<&str> = definitions
                 .iter()
-                .filter(|(k, r, _)| *k == Kind::Class && r != range && r.start <= range.start && range.end <= r.end)
+                .filter(|(k, r, _)| *k == Kind::Class && r != range && inside(range, r))
                 .map(|(_, _, n)| &source[n.clone()])
                 .collect();
             let kind = if *kind == Kind::Function && !classes.is_empty() { Kind::Method } else { *kind };
-            Some(symbol(node, source, kind, &classes, &source[name.clone()], tags))
+            Some(Symbol { calls, ..symbol(node, source, kind, &classes, &source[name.clone()], tags) })
         })
         .collect()
 }
@@ -172,36 +258,42 @@ fn kind_named(name: &str) -> Option<Kind> {
 fn symbol(node: Node, source: &str, kind: Kind, classes: &[&str], name: &str, tags: &Tags) -> Symbol {
     let body = node.child_by_field_name("body").or_else(|| node.child_by_field_name("value")?.child_by_field_name("body"));
     let body_start = body.map_or(node.end_byte(), |b| b.start_byte());
-    let line = |row: usize| u32::try_from(row + 1).unwrap_or(u32::MAX);
     Symbol {
         kind,
         name: classes.iter().copied().chain([name]).collect::<Vec<_>>().join("."),
-        signature: collapsed(&source[node.start_byte()..body_start]).trim_end_matches(':').trim_end().to_owned(),
+        signature: collapsed(&source[signature_start(node)..body_start]).trim_end_matches(':').trim_end().to_owned(),
         public: (tags.public)(node, name),
         lines: (line(node.start_position().row), line(node.end_position().row)),
         body: collapsed(&source[body_start..node.end_byte()]),
+        calls: vec![],
     }
+}
+
+/// A tree-sitter row as a line number, from 1.
+fn line(row: usize) -> u32 {
+    u32::try_from(row + 1).unwrap_or(u32::MAX)
 }
 
 fn collapsed(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Symbols matched by kind and name; a removed one and an added one alike enough read as a rename.
+/// Symbols matched by kind and name, and those that did not change; a removed one and an added one alike enough read as a rename.
 /// A class lists only when it comes, goes or changes its signature: its methods carry its body.
-fn compare(path: &str, base: Vec<Symbol>, head: Vec<Symbol>) -> Vec<Change> {
+fn compare(path: &str, base: Vec<Symbol>, head: Vec<Symbol>) -> (Vec<Change>, Vec<Symbol>) {
     let keyed =
         |symbols: Vec<Symbol>| -> BTreeMap<(Kind, String), Symbol> { symbols.into_iter().map(|s| ((s.kind, s.name.clone()), s)).collect() };
     let (mut old, new) = (keyed(base), keyed(head));
     let change = |state, symbol: Symbol, before: Option<Symbol>| Change { path: path.to_owned(), state, symbol, before };
     let mut changes = vec![];
     let mut added = vec![];
+    let mut unchanged = vec![];
     for (key, after) in new {
         match old.remove(&key) {
             None => added.push(after),
             Some(before) if before.signature != after.signature => changes.push(change(State::Signature, after, Some(before))),
             Some(before) if before.body != after.body && after.kind != Kind::Class => changes.push(change(State::Body, after, None)),
-            Some(_) => {}
+            Some(_) => unchanged.push(after),
         }
     }
     let mut removed: Vec<Symbol> = old.into_values().collect();
@@ -213,7 +305,7 @@ fn compare(path: &str, base: Vec<Symbol>, head: Vec<Symbol>) -> Vec<Change> {
         }
     }
     changes.extend(added.into_iter().map(|after| change(State::Added, after, None)));
-    changes
+    (changes, unchanged)
 }
 
 /// The added symbol most alike `before`, of its kind and scope, when alike enough.
@@ -254,6 +346,10 @@ mod tests {
         symbols(tags_for(path).unwrap(), source).into_iter().map(|s| (s.kind, s.name, s.signature, s.public)).collect()
     }
 
+    fn changes(path: &str, base: &str, head: &str) -> Vec<Change> {
+        file(path, base, head).0
+    }
+
     fn states(path: &str, base: &str, head: &str) -> Vec<(State, String)> {
         changes(path, base, head).into_iter().map(|c| (c.state, c.symbol.name)).collect()
     }
@@ -279,11 +375,11 @@ mod tests {
         assert_eq!(
             found("src/pay.ts", source),
             vec![
-                (Kind::Function, "charge".into(), "function charge(amount: number): Receipt".into(), true),
+                (Kind::Function, "charge".into(), "export function charge(amount: number): Receipt".into(), true),
                 (Kind::Function, "helper".into(), "function helper()".into(), false),
-                (Kind::Class, "Wallet".into(), "class Wallet".into(), true),
+                (Kind::Class, "Wallet".into(), "export class Wallet".into(), true),
                 (Kind::Method, "Wallet.refund".into(), "refund(id: string)".into(), true),
-                (Kind::Function, "total".into(), "total = (a: number) =>".into(), true),
+                (Kind::Function, "total".into(), "export const total = (a: number) =>".into(), true),
             ]
         );
     }
@@ -356,5 +452,26 @@ mod tests {
     fn breaking_means_a_public_symbol_removed_or_called_differently() {
         let changes = changes("m.py", "def a(x):\n    pass\n\ndef _b():\n    pass\n", "def a(x, y):\n    pass\n");
         assert_eq!(changes.iter().map(Change::breaking).collect::<Vec<_>>(), vec![true, false]);
+    }
+
+    #[test]
+    fn dropping_an_export_is_a_breaking_signature_change() {
+        let changes = changes(
+            "src/pay.ts",
+            "export function charge(a: number) {\n  return a;\n}\n",
+            "function charge(a: number) {\n  return a;\n}\n",
+        );
+        assert_eq!((changes[0].state, changes[0].breaking()), (State::Signature, true));
+    }
+
+    #[test]
+    fn calls_belong_to_the_innermost_definition_around_them() {
+        let symbols = symbols(tags_for("m.py").unwrap(), CART);
+        let calls = |name: &str| {
+            symbols.iter().find(|s| s.name == name).unwrap().calls.iter().map(|c| (c.name.clone(), c.line)).collect::<Vec<_>>()
+        };
+        assert_eq!(calls("Cart.total"), vec![("sum".to_owned(), 3)]);
+        assert_eq!(calls("checkout"), vec![("pay".to_owned(), 9)]);
+        assert_eq!(calls("Cart"), vec![]);
     }
 }

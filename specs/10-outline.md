@@ -1,6 +1,6 @@
 # 10 · Symbol outline
 
-Goal: see which functions, methods and classes an MR changes without reading every hunk.
+Goal: see which functions, methods and classes an MR changes, and how they call each other, without reading every hunk.
 
 ## Opening it
 
@@ -17,7 +17,7 @@ It replaces whatever held the pane, and the pane takes the keys.
 
 ## Comparing the two sides
 
-A symbol's signature is its definition from its start up to its body, whitespace collapsed, a trailing `:` dropped.
+A symbol's signature is its definition from its start up to its body, whitespace collapsed, a trailing `:` dropped; in TypeScript and JavaScript it starts at the `export` holding the definition, so dropping the `export` changes it.
 Symbols are matched by kind and name inside one file; a renamed file is read at its old path on base and its new one on head.
 
 | Glyph | State | When |
@@ -33,10 +33,26 @@ A class lists only when it comes, goes or changes its signature: its methods car
 
 ## Public or all
 
-The pane lists public symbols; `a` switches to every symbol and back, the title says which.
+The pane shows public symbols; `a` switches to every symbol and back, the title says which.
 
 - TypeScript, JavaScript: inside an `export` statement.
 - Python: a name without a leading `_`.
+
+A symbol public at base counts as public: one that loses its `export` is a breaking signature change.
+
+## Call tree
+
+The tree is the default; `t` switches to the flat list by file and back.
+
+- Edges come from the `@reference.call` captures of the same tags queries; nothing is written by hand.
+  A call belongs to the innermost definition around it, and links by name to the symbols of the MR's changed files: head side, base side for a removed symbol.
+- Roots are the changed public symbols, in the flat list's order. Each root shows in full at the top; under another symbol it is a dimmed reference row.
+- A changed private symbol hangs under the first symbol calling it, in full; under any later caller it is a dimmed reference row. Changed private symbols no changed symbol calls go last under a dimmed `unreached` row, shown with `a`.
+- An unchanged function of a changed file shows dimmed as `· name()` only when it links two changed symbols. At most two of them stand in a row; a longer chain folds into a dimmed `… N calls` row, N the unchanged calls folded, with the changed symbol under it.
+- A name several symbols carry (methods, the same name in two files) links to each of them, marked `?`.
+- A call back to a symbol above shows `↺ name` and stops there.
+- `u` turns every branch around: under each symbol, the changed or bridge symbols that call it, which matters most for removed or re-signed ones.
+- Rows are drawn with `├─ └─ │`, the state signs above, and the signature word diff under `~` rows shown in full.
 
 ## Order and badge
 
@@ -45,4 +61,6 @@ The first row counts what is listed: `2 breaking · 3 added · 1 renamed`, zeros
 
 ## Keys
 
-`j` `k` move, `g` `G` first and last, `^d` `^u` half a page, `enter` puts the diff's cursor on the symbol (its first line the diff shows, on head, on base for a removed one, its file and hunk opened) and hands the keys to the diff, `a` public or all, `r` reads again.
+`j` `k` move, `g` `G` first and last, `^d` `^u` half a page, `a` public or all, `t` tree or list, `u` calls or called by, `zo` `zc` `za` open, close, toggle the branch under the cursor, `r` reads again.
+`enter` hands the keys to the diff with its cursor, file and hunk opened, on the call linking a row to its parent; on a root, a row of the list, or a row after a fold, on the symbol's first line the diff shows (head, base for a removed one).
+A call on a line the diff does not show says so in the status line.

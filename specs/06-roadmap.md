@@ -149,7 +149,7 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 
 ## Shipped after M5
 
-- Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk; `enter` jumps there.
+- Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk, as a call tree; `enter` jumps there.
 
 ## Definition of done for any slice
 

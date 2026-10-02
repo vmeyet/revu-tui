@@ -529,14 +529,14 @@ impl Backend {
         Ok(Incoming::ViewReady { key, view: crate::open::View { argv, shown, note, _copy: dir } })
     }
 
-    /// The symbols each file changes, a few files read at once, in the order given.
+    /// The symbols the files change and the calls between them, a few files read at once.
     pub(super) async fn outline(
         &self,
         key: &MrKey,
         base: &Sha,
         head: &Sha,
         files: Vec<crate::outline::Sides>,
-    ) -> Result<Vec<crate::outline::Change>> {
+    ) -> Result<crate::outline::Reading> {
         let files: Vec<(String, String, String)> = futures_util::stream::iter(files)
             .map(|sides| async move {
                 let path = sides.head.clone().or_else(|| sides.base.clone()).unwrap_or_default();
@@ -546,7 +546,7 @@ impl Backend {
             .buffered(OUTLINE_READS)
             .try_collect()
             .await?;
-        blocking(move || Ok(files.iter().flat_map(|(path, old, new)| crate::outline::changes(path, old, new)).collect())).await
+        blocking(move || Ok(crate::outline::read(&files))).await
     }
 
     /// The file at `sha`, empty when it does not exist on that side.

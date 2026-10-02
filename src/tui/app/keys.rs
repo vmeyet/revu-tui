@@ -101,6 +101,7 @@ impl App {
             KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
+            KeyCode::Char('z') if self.outline_keys() => self.pending = Some('z'),
             KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() && !self.outline_keys() => {
                 self.pending = Some('a');
             }
@@ -314,6 +315,10 @@ impl App {
         if prefix == 'a' {
             return self.ask_key(c);
         }
+        if prefix == 'z' && self.outline_keys() {
+            self.fold_outline(c);
+            return vec![];
+        }
         let forward = prefix == ']';
         match (prefix, c) {
             ('z', 'a') => return self.fold_at_cursor(None),
@@ -487,7 +492,7 @@ mod tests {
 
     /// The group titles the open key list shows, as its uppercase headers.
     fn help_titles(app: &mut App) -> Vec<&'static str> {
-        let screen = render(app, 160, 45);
+        let screen = render(app, 160, 60);
         crate::tui::help::GROUPS.iter().map(|g| g.title).filter(|t| screen.contains(&format!("  {} ", t.to_uppercase()))).collect()
     }
 
@@ -505,7 +510,7 @@ mod tests {
         thread.handle_key(code(KeyCode::Enter));
         assert_eq!(thread.focus, Focus::Side);
         press(&mut thread, "?");
-        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "ask claude", "search & app"]);
+        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "outline pane", "ask claude", "search & app"]);
         press(&mut thread, "?");
         assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(|g| g.title));
         thread.handle_key(code(KeyCode::Esc));
