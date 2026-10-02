@@ -1,0 +1,31 @@
+---
+source: src/tui/thread_view.rs
+expression: "runs.join(\"\\n\")"
+---
+Reset/Reset "Shorter:                                "
+---
+Reset/Reset "  "
+Rgb(187, 154, 247)/Reset "const"
+Reset/Reset " total "
+Rgb(137, 221, 255)/Reset "="
+Reset/Reset " items"
+Rgb(137, 221, 255)/Reset "."
+Rgb(122, 162, 247)/Reset "length"
+Rgb(137, 221, 255)/Reset ";"
+Reset/Reset " "
+Rgb(86, 95, 137)/Reset "// all"
+Reset/Reset "    "
+---
+Rgb(247, 118, 142)/Rgb(48, 36, 48) "- "
+Rgb(187, 154, 247)/Rgb(48, 36, 48) "return"
+Reset/Rgb(48, 36, 48) " total"
+Reset/Reset "                          "
+---
+Rgb(158, 206, 106)/Rgb(39, 44, 44) "+ "
+Rgb(187, 154, 247)/Rgb(39, 44, 44) "return"
+Reset/Rgb(39, 44, 44) " total "
+Rgb(137, 221, 255)/Rgb(39, 44, 44) "*"
+Reset/Rgb(39, 44, 44) " "
+Rgb(255, 158, 100)/Rgb(39, 44, 44) "2"
+Reset/Reset "                      "
+---
