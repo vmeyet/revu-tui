@@ -3,7 +3,7 @@ use crate::forge::Sections;
 use crate::tui::field::Field;
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::time::{Duration, Instant};
 
 const QUEUE_EVERY: Duration = Duration::from_secs(60);
@@ -116,6 +116,8 @@ pub struct App {
     pub seen: Option<super::notify::Seen>,
     /// How rows sit inside the sections: `s` sorts, `S` groups by author.
     pub queue_view: super::QueueView,
+    /// The MRs pinned in this scope: PINNED shows them above every section.
+    pub pins: BTreeSet<MrKey>,
     pub queue_layout: crate::config::QueueLayout,
     pub queue_loading: bool,
     /// The last load failed: with nothing to show, the pane says so until one succeeds or `r` asks again.
@@ -255,6 +257,7 @@ impl App {
             hosts: settings.hosts,
             seen: None,
             queue_view: super::QueueView::default(),
+            pins: BTreeSet::new(),
             queue_layout: settings.queue_layout,
             prefetch_limit: settings.prefetch,
             prefetch_due: false,

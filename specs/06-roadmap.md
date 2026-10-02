@@ -150,6 +150,7 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 ## Shipped after M5
 
 - Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk, as a call tree; `enter` jumps there.
+- Pins `b` (`03-ui-ux.md` § The queue, 2026-10-02): MRs kept on top of the queue in `PINNED`, per scope, until merged or closed.
 
 ## Definition of done for any slice
 

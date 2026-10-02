@@ -55,6 +55,8 @@ impl App {
             Command::Publish => ":publish",
             Command::Threads => ":threads",
             Command::All => ":all",
+            Command::Pin => ":pin",
+            Command::Unpin => ":unpin",
             Command::Set { .. } => ":set",
             Command::View(_) => ":view",
             Command::Outline => ":outline",

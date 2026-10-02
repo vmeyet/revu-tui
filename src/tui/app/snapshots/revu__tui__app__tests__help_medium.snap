@@ -26,9 +26,9 @@ expression: "render(&mut app, 100, 30)"
 │                 │          *  this repo, or every project                      │                 │
 │                 │          s  next sort order                                  │                 │
 │                 │          S  group by author                                  │                 │
-│                 │      zo zc  open, fold the section or stack                  │                 │
+│                 │          b  pin on top of the queue, or unpin                │                 │
 │                 │                                                              │                 │
-│                 ╰───────────────────────── 1–22 of 87 · j k scroll · esc close ╯                 │
+│                 ╰───────────────────────── 1–22 of 88 · j k scroll · esc close ╯                 │
 │                                ││                                                                │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

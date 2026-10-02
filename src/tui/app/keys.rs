@@ -179,6 +179,7 @@ impl App {
             KeyCode::Char('\'') => self.pending = Some('\''),
             KeyCode::Char(c @ '1'..='9') => self.apply_view(c),
             KeyCode::Char('S') => return self.group_queue(),
+            KeyCode::Char('b') => return self.toggle_pin(),
             KeyCode::Char('i') => self.open_brief_from_queue(),
             KeyCode::Enter => return self.open_selected(),
             KeyCode::Char('r') => return self.refresh_queue(),

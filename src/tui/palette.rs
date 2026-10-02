@@ -62,6 +62,9 @@ pub enum Command {
     Publish,
     /// `:threads`: every conversation of the MR in the right pane, as `T` does.
     Threads,
+    /// `:pin`, `:unpin`: the MR kept on top of the queue, or let go.
+    Pin,
+    Unpin,
     /// This repo only, or every project.
     All,
     Set {
@@ -84,7 +87,7 @@ pub enum Command {
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 16] = [
+pub const VERBS: [(&str, &str); 18] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
@@ -93,6 +96,8 @@ pub const VERBS: [(&str, &str); 16] = [
     ("publish", "publish every draft, in the publish modal"),
     ("threads", "every thread of the MR in the right pane"),
     ("all", "the queue: this repo only, or every project"),
+    ("pin", "pin the MR on top of the queue"),
+    ("unpin", "take the MR's pin off"),
     ("outline", "the functions and classes the MR changes, in the right pane"),
     ("set", "change and save a setting: :set theme=nord"),
     ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
@@ -129,6 +134,8 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "publish" | "p" => Ok(Command::Publish),
         "threads" => Ok(Command::Threads),
         "all" | "*" => Ok(Command::All),
+        "pin" => Ok(Command::Pin),
+        "unpin" => Ok(Command::Unpin),
         "set" => {
             let Some((key, value)) = rest.split_once('=') else { return Err(":set needs key=value, e.g. theme=nord".into()) };
             Ok(Command::Set { key: key.trim().to_owned(), value: value.trim().to_owned() })

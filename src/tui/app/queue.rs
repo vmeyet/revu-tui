@@ -40,7 +40,8 @@ const GROUPED: [&str; 2] = ["OPEN", "DRAFTS"];
 
 impl App {
     /// Sections and their rows after the filter, in the chosen order; a section with no match
-    /// still shows its header, except the ones that only exist when they hold something.
+    /// still shows its header, except the ones that only exist when they hold something. A pinned
+    /// MR leaves its section for PINNED, on top.
     pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
         let groups: [(&'static str, &Vec<QueueMr>); 8] = [
@@ -53,11 +54,13 @@ impl App {
             ("DONE", &sections.done),
             ("OTHER", &sections.other),
         ];
+        let unpinned = groups.map(|(name, mrs)| (name, mrs.iter().filter(|mr| !self.is_pinned(mr)).collect()));
+        let groups = std::iter::once(("PINNED", self.pinned(sections))).chain(unpinned);
         let mut rows = Vec::new();
         for (name, mrs) in groups {
             let open = !self.queue_view.closed_sections.contains(name);
-            let matching = self.in_order(name, mrs.iter().filter(|mr| self.matches_filter(mr)).collect());
-            let only_when_filled = matches!(name, "READY" | "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
+            let only_when_filled = matches!(name, "PINNED" | "READY" | "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
+            let matching = self.in_order(name, mrs.into_iter().filter(|mr| self.matches_filter(mr)).collect());
             if only_when_filled || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;
             }
@@ -75,6 +78,13 @@ impl App {
             }
         }
         rows
+    }
+
+    /// The pinned MRs of every section, newest activity first as the forge lists any section.
+    fn pinned<'m>(&self, sections: &'m Sections) -> Vec<&'m QueueMr> {
+        let mut pinned: Vec<&QueueMr> = sections.all().filter(|mr| self.is_pinned(mr)).collect();
+        pinned.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
+        pinned
     }
 
     /// `mrs` as rows, each chain as one stack row, followed by its MRs when it is unfolded.

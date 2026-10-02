@@ -86,7 +86,7 @@ The "needs me" rules (`[queue.rules]`, on by default) then judge every MR of `TO
 | approved enough | at least one approval and none left to give | `OTHER` | `2 approvals, needs none` |
 | reviewed by others | `reviewed_comments` (3) or more comments, others commented, I did not | stays, sorted last | `reviewed by 3` |
 
-A review request to me by name pins an MR against stale and approved enough, not against not ready: nobody asks for a review by accident.
+A review request to me by name guards an MR against stale and approved enough, not against not ready: nobody asks for a review by accident.
 A ready source (`[queue.ready] command`) adds `READY` right after `MINE`: every MR link its output names (GitLab `/-/merge_requests/N`, GitHub `/pull/N`), when the MR is someone else's, open, not reviewed by me, and not moved out by a rule, leaves `TO REVIEW`, `WATCHING` or `OPEN` for it. Inside a checkout only that project's links count; outside one, named MRs no list holds are fetched one by one (30 at most). The command runs as words (no shell), 10 s at most, 1 MB of output; its last answer is cached per scope (`ready.<scope>.json`) so the queue paints at once, and a failure keeps it and only warns.
 `OTHER` sits last, folded. The selected MR's reason shows in the status line; `revu list` prints it in a last, dim column and `--json` carries it as `reason`.
 The rules read only what the queue queries already return, plus `approvalsLeft` and `commenters` on GitLab (the MRs asking me and the project's open ones; each query stays under GitLab's complexity limit of 250) and `participants` on GitHub.
@@ -118,6 +118,10 @@ Its title is the words the MRs' titles share when they share two or more, else t
 Stacks start folded; the unfolded ones are remembered per scope with the order and grouping. Only real chains stack: several MRs by one author that do not target each other stay apart.
 On a terminal at least 160 columns wide the queue is 44 columns instead of 34, which shows about twice the title.
 Every section folds: `zo`, `zc`, `za` (or `enter` on a folded header) act on the section under the cursor. `Done`, `Drafts` and `Other` start folded; what the reader folds or opens is remembered per scope with the order and grouping, so a section folded once stays folded. The cursor skips the headers of open sections and author headers, stops on folded ones, their only row, and opening a section puts it on its first MR.
+`b` pins the MR under the cursor and `b` again unpins it; `:pin` and `:unpin` do the same, on the open MR outside the queue. A toast says `pinned !42` or `unpinned !42`.
+A pinned MR leaves its section for `PINNED`, above every other section, so it never shows twice; `PINNED` folds like the others, starts open, and hides when empty. `[m` `]m` meet the pins first.
+Pins are remembered per scope in the cache (`pins.<scope>.json`), by MR key with its host; pinning twice, or unpinning what is not pinned, changes nothing.
+At each fresh queue answer, a pin no list holds is fetched on its own, as the ready source fetches the MRs it names: open, it shows in `PINNED`; merged or closed, the pin goes. A fetch that fails keeps the pin, unseen until the forge answers.
 Each `!iid` is a terminal hyperlink (OSC 8) to the MR: the loop prints it again over the drawn cells after every frame, only where the cells still spell it, and never over a modal.
 `i` opens the MR's cover, on demand only: opening an MR still lands on its diff.
 It shows the author, branches, age and labels, the description as light markdown, then CHECKS (pipeline status, failed job names once the pipeline pane fetched them), REVIEW (approvals n of m, reviewers and their state, mine) and THREADS: each open thread on two lines, `author · first words` on the full width, then a faded `file.rs:57 · 2 replies`; the selected thread's full `path:line` shows in the bottom border, its start cut when it does not fit. The file tree (`t`) lists the files, so the cover does not.
@@ -306,6 +310,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `r` | refresh | M1 |
 | `/` | filter (queue) or search text (review) | M1 |
 | `*` | queue: this checkout's project, or every project | M3 |
+| `b` | queue: pin the MR on top, or unpin it | post-M5 |
 | `i` | the MR cover: description, checks, reviews, threads, files | M3 |
 | `:` | command line | M3 |
 | `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
@@ -393,7 +398,7 @@ While `'` waits, the status line lists the views. Views are checked when the con
 
 ### Command line (`>` in the search)
 
-Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:pin`, `:unpin` (post-M5), `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:help`, `:quit`.
 While the verb is typed, `↑` `↓` move a cursor through the command list and `enter` runs the command under it, or writes it and waits when it needs an argument (`go `, `set `). Past the verb, `↑` `↓` walk the argument's completions as Tab does. Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `ctrl-p` `ctrl-n` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:cache clear`.
 

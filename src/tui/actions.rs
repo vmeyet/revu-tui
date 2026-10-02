@@ -28,13 +28,16 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     {
                         send(Incoming::QueueView { scope: scope.clone(), view });
                     }
+                    let wanted = scope.clone();
+                    let pins = backend.off(move |b| b.pins(wanted.as_deref())).await.unwrap_or_default();
+                    send(Incoming::Pins { scope: scope.clone(), pins });
                 }
                 let wanted = scope.clone();
                 if let Some(cached) = backend.off(move |b| b.cached_queue(wanted)).await.ok().flatten().filter(|_| from_cache) {
                     send(cached);
                 }
                 match backend.load_queue(scope).await {
-                    Ok((answer, ready_failure)) => {
+                    Ok((answer, follow)) => {
                         let counted = match &answer {
                             Incoming::Queue { sections, .. } => Some(sections.clone()),
                             _ => None,
@@ -45,15 +48,19 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                         {
                             send(Incoming::Progress(progress));
                         }
-                        if let Some(message) = ready_failure {
-                            send(Incoming::Failed { what: Failure::Ready, message });
-                        }
+                        follow.into_iter().for_each(send);
                     }
                     Err(e) => send(failed(Failure::Queue, &e)),
                 }
             }
             Action::SaveQueueView { scope, view } => {
                 let saved = backend.off(move |b| b.cache.write(&keys::queue_view(scope.as_deref()), &view)).await;
+                if let Err(e) = saved.and_then(|written| written) {
+                    send(failed(Failure::Local, &e));
+                }
+            }
+            Action::SavePins { scope, pins } => {
+                let saved = backend.off(move |b| b.cache.write(&keys::pins(scope.as_deref()), &pins)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }

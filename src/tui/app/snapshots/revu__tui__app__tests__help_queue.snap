@@ -22,18 +22,18 @@ expression: "render(&mut app, 160, 45)"
 │                          │      ^d ^u  half a page; PgDn PgUp space too                   *  this repo, or every project         │                           │
 │                          │        h l  pane to the left, to the right                     s  next sort order                     │                           │
 │                          │      enter  open, or toggle the fold                           S  group by author                     │                           │
-│                          │      esc x  close the pane, back to the queue              zo zc  open, fold the section or stack     │                           │
-│                          │  tab S-tab  next, previous file                                                                       │                           │
-│                          │      ]c [c  next, previous hunk                            SEARCH & APP                               │                           │
-│                          │      ]n [n  next, previous open conversation                  ^k  MRs · / files · > commands          │                           │
-│                          │      ]N [N  next, previous conversation, resolved too          :  commands: :go !42, :set theme=nord  │                           │
-│                          │      ]f [f  next, previous file with a thread                o y  open in the browser, copy the link  │                           │
-│                          │      ]r [r  next, previous MR that needs you                   r  refresh                             │                           │
-│                          │      ]m [m  next, previous MR in the queue                     ?  this help                           │                           │
+│                          │      esc x  close the pane, back to the queue                  b  pin on top of the queue, or unpin   │                           │
+│                          │  tab S-tab  next, previous file                            zo zc  open, fold the section or stack     │                           │
+│                          │      ]c [c  next, previous hunk                                                                       │                           │
+│                          │      ]n [n  next, previous open conversation               SEARCH & APP                               │                           │
+│                          │      ]N [N  next, previous conversation, resolved too         ^k  MRs · / files · > commands          │                           │
+│                          │      ]f [f  next, previous file with a thread                  :  commands: :go !42, :set theme=nord  │                           │
+│                          │      ]r [r  next, previous MR that needs you                 o y  open in the browser, copy the link  │                           │
+│                          │      ]m [m  next, previous MR in the queue                     r  refresh                             │                           │
+│                          │                                                                ?  this help                           │                           │
 │                          │                                                             q ^c  quit: twice; q closes a pane first  │                           │
 │                          │                                                                                                       │                           │
 │                          ╰────────────────────────────────────────────────────────────────────────────── ? every key · esc close ╯                           │
-│                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
