@@ -1,5 +1,5 @@
 //! The review pane: rows from `Review::rows()` turned into styled lines, only for the visible window.
-use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
+use super::app::{App, Entry, EntryKind, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
 use super::drag::{self, TextRow};
 use super::table::{self, TableLine};
 use super::theme::Theme;
@@ -7,7 +7,7 @@ use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, t
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::{Deployment, Kind, PipelineStatus};
-use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
+use crate::review::{Conversation, File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
 use crate::syntax::{self, Token};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -63,7 +63,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let Some(open) = app.open.as_mut() else { return };
-    let anchors = Anchors { markers: open.review.markers(), stretch: focused_range(open) };
+    let stretch = focused_range(&open.review, app.kept.pane_view(open));
+    let anchors = Anchors { markers: app.kept.markers(open), stretch };
     let header = match (zen, folded) {
         (true, _) => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
         (false, true) => vec![folded_header(open, theme)],
@@ -488,7 +489,7 @@ fn row_line<'a>(
     let mut spans = vec![bar];
     let body = width.saturating_sub(1);
     if matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
-        let marker = review.marker_of(&anchors.markers, row);
+        let marker = review.marker_of(anchors.markers, row);
         let spans_range = marker.is_none() && anchors.stretch.is_some_and(|stretch| stretch.covers(review, row));
         spans.extend(if spans_range { range_spans(theme) } else { anchor_spans(marker, theme) });
     }
@@ -646,8 +647,8 @@ fn with_table_lines<'a>(mut spans: Vec<Span<'a>>, file: &File, text: &str, overf
 }
 
 /// What the anchor column draws from: the marks of every line, and the range comment the pane is on.
-struct Anchors {
-    markers: Markers,
+struct Anchors<'m> {
+    markers: &'m Markers,
     stretch: Option<Stretch>,
 }
 
@@ -673,15 +674,18 @@ impl Stretch {
 }
 
 /// The range of the thread or draft under the pane's cursor, when it spans several lines.
-fn focused_range(open: &Open) -> Option<Stretch> {
-    let position = match open.focused_thread() {
-        Some(id) => open.review.thread(&id)?.first().position.clone()?,
-        None => open.review.drafts.get(open.focused_draft()?)?.position.clone()?,
+fn focused_range(review: &Review, pane: Option<(&[Conversation], &[Entry], Option<Entry>)>) -> Option<Stretch> {
+    let (conversations, _, focused) = pane?;
+    let focused = focused?;
+    let position = match (&conversations.get(focused.conversation)?.thread, focused.kind) {
+        (Some(id), _) => review.thread(id)?.first().position.clone()?,
+        (None, EntryKind::Draft(index)) => review.drafts.get(index)?.position.clone()?,
+        (None, EntryKind::Note(_)) => return None,
     };
     let side = position.line.side();
     let number = |line: crate::forge::LineRef| if side == Side::New { line.new } else { line.old };
     let (first, last) = (number(position.start?)?, number(position.line)?);
-    let file = open.review.files.iter().position(|f| f.new_path == position.new_path || f.old_path == position.old_path)?;
+    let file = review.files.iter().position(|f| f.new_path == position.new_path || f.old_path == position.old_path)?;
     Some(Stretch { file, side, first, last })
 }
 
@@ -1158,7 +1162,7 @@ mod tests {
             ..Default::default()
         };
         let review = Review::new((*crate::review::tests::review().mr).clone(), &[diff], vec![], &[]);
-        let anchors = Anchors { markers: review.markers(), stretch: None };
+        let anchors = Anchors { markers: &review.markers(), stretch: None };
         let rows = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. } | Row::Context { .. }));
         let drawn = rows.flat_map(|row| {
             wrap_row(row_line(&review, &anchors, &row, false, false, Overflow::Wrap(44), Theme::default()), 44, WRAP_INDENT)
@@ -1173,7 +1177,7 @@ mod tests {
 
     /// Every screen row of the diff lines as its old half and its new half, trimmed, halves 20 columns wide.
     fn halves_of(review: &Review, overflow: Overflow) -> Vec<(String, String)> {
-        let anchors = Anchors { markers: review.markers(), stretch: None };
+        let anchors = Anchors { markers: &review.markers(), stretch: None };
         let rows = review.rows();
         let lines = rows.iter().filter_map(|row| side_by_side_lines(review, &anchors, row, false, overflow, Theme::default()));
         let split = |line: Line| {
@@ -1188,7 +1192,7 @@ mod tests {
     fn a_peek_draws_its_side_without_signs_or_fills_numbered_on_that_side_alone() {
         let peek = |side| side_by_side_of("@@ -1,2 +1,2 @@\n a\n-b\n+B\n", "a.txt").with_peek(Some(side));
         let drawn = |review: Review| -> Vec<String> {
-            let anchors = Anchors { markers: review.markers(), stretch: None };
+            let anchors = Anchors { markers: &review.markers(), stretch: None };
             let lines = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. }));
             lines
                 .map(|row| spans_text(&row_line(&review, &anchors, &row, false, false, Overflow::Cut(40), Theme::default()).spans))
@@ -1228,7 +1232,7 @@ mod tests {
         let diff = include_str!("../review/fixtures/cart.ts.diff");
         let review = side_by_side_of(diff, "src/cart.ts");
         let theme = Theme::named("tokyonight").unwrap();
-        let anchors = Anchors { markers: review.markers(), stretch: None };
+        let anchors = Anchors { markers: &review.markers(), stretch: None };
         let pair = Row::Pair { file: 0, hunk: 0, removed: 1, added: 2 };
         let line = &side_by_side_lines(&review, &anchors, &pair, false, Overflow::Cut(200), theme).unwrap()[0];
         let keywords = line.spans.iter().filter(|s| s.content == "const" && s.style.fg == Some(theme.syntax.keyword)).count();

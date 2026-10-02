@@ -38,6 +38,11 @@ impl Pane {
     pub fn at(place: Place) -> Self {
         Self { place, note: 0, scroll: 0, unfolded: BTreeSet::new(), only_with: None }
     }
+
+    /// The pane with its cursor and scroll at the top: what it lists, which they only move within.
+    pub fn unmoved(&self) -> Self {
+        Self { note: 0, scroll: 0, ..self.clone() }
+    }
 }
 
 /// One stop of the cursor bar: a note of a thread, or one of my drafts.
@@ -69,10 +74,22 @@ pub fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTree
     entries
 }
 
+/// The stop under the pane's cursor, the last one when the cursor ran past them.
+pub(super) fn focused(entries: &[Entry], pane: &Pane) -> Option<Entry> {
+    entries.get(pane.note.min(entries.len().saturating_sub(1))).copied()
+}
+
 impl Open {
     /// The conversations the pane lists, its cursor stops, and the one under the cursor.
     pub fn pane_view(&self) -> Option<(Vec<Conversation>, Vec<Entry>, Option<Entry>)> {
         let pane = self.pane.as_ref()?;
+        let (conversations, entries) = self.listed(pane);
+        let focused = focused(&entries, pane);
+        Some((conversations, entries, focused))
+    }
+
+    /// The conversations `pane` lists and its cursor stops.
+    pub(super) fn listed(&self, pane: &Pane) -> (Vec<Conversation>, Vec<Entry>) {
         let conversations: Vec<Conversation> = self
             .review
             .conversations(&pane.place)
@@ -80,8 +97,7 @@ impl Open {
             .filter(|conversation| pane.only_with.as_deref().is_none_or(|user| self.review.takes_part(conversation, user)))
             .collect();
         let entries = entries(&self.review, &conversations, &pane.unfolded);
-        let focused = entries.get(pane.note.min(entries.len().saturating_sub(1))).copied();
-        Some((conversations, entries, focused))
+        (conversations, entries)
     }
 
     /// The thread under the pane's cursor.
@@ -187,7 +203,8 @@ impl App {
         }
         let Some(open) = self.open.as_ref().filter(|open| !open.lists_every_thread()) else { return };
         let Some(pane) = &open.pane else { return };
-        let Some(row) = open.row().filter(|row| open.is_marked(row)) else { return };
+        let markers = self.kept.markers(open);
+        let Some(row) = open.row().filter(|row| open.mark_in(markers, row).is_some()) else { return };
         let Some(place) = open.review.place_of(row).filter(|place| *place != pane.place) else { return };
         self.update_open(|open| open.with_pane(Some(Pane::at(place))));
     }
@@ -289,7 +306,7 @@ impl App {
 
     fn pane_move(&mut self, delta: isize) {
         let Some(open) = &self.open else { return };
-        let Some((_, entries, _)) = open.pane_view() else { return };
+        let Some((_, entries, _)) = self.kept.pane_view(open) else { return };
         let Some(pane) = &open.pane else { return };
         let last = entries.len().saturating_sub(1) as isize;
         let note = (pane.note as isize).saturating_add(delta).clamp(0, last) as usize;
@@ -299,7 +316,7 @@ impl App {
 
     fn pane_jump(&mut self, forward: bool) {
         let Some(open) = &self.open else { return };
-        let Some((_, entries, Some(focused))) = open.pane_view() else { return };
+        let Some((_, entries, Some(focused))) = self.kept.pane_view(open) else { return };
         let Some(pane) = &open.pane else { return };
         let target = if forward {
             entries.iter().position(|e| e.conversation > focused.conversation)

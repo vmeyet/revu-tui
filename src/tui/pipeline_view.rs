@@ -28,17 +28,15 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         Run::Failed(message) => return draw_empty(f, theme, inner, &["pipeline unreadable", message, "", "r to retry"]),
         Run::Ready(checks) => checks,
     };
-    let deployed = deployment_lines(open, inner.width as usize, theme);
-    let lines: Vec<(Option<usize>, Line)> = deployed
-        .iter()
-        .map(|(line, _)| (None, line.clone()))
-        .chain(lines(checks, pipeline.selected, inner.width as usize, theme, tick))
-        .collect();
+    let width = inner.width as usize;
+    let deployed = deployment_lines(open, width, theme);
+    let rows = rows(&deployed, checks);
     let height = inner.height as usize;
-    let cursor = lines.iter().position(|(job, _)| *job == Some(pipeline.selected)).unwrap_or(0);
+    let cursor = rows.iter().position(|row| matches!(row, PaneRow::Job(index, _) if *index == pipeline.selected)).unwrap_or(0);
     let scroll = settle_scroll(0, cursor, height);
     let links = app_links(&deployed, scroll, inner);
-    let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|(_, line)| line).collect();
+    let shown: Vec<Line> =
+        rows.iter().skip(scroll).take(height).map(|row| row_line(row, checks, pipeline.selected, width, theme, tick)).collect();
     f.render_widget(Paragraph::new(shown), inner);
     app.links.extend(links);
 }
@@ -81,19 +79,40 @@ fn deployment_lines<'a>(open: &Open, width: usize, theme: Theme) -> Vec<(Line<'a
     lines
 }
 
-/// Every row of the pane, each with the index of the job it shows, if any.
-fn lines<'a>(checks: &Checks, selected: usize, width: usize, theme: Theme, tick: &str) -> Vec<(Option<usize>, Line<'a>)> {
-    let mut lines = vec![(None, summary(checks, theme)), (None, Line::default())];
+/// One row of the pane, drawn only once it is in view.
+enum PaneRow<'p> {
+    Deployed(&'p Line<'static>),
+    Summary,
+    Blank,
+    Stage(&'p str),
+    /// A job, and its index among all the run's jobs.
+    Job(usize, &'p Job),
+}
+
+/// Every row of the pane: the review apps, the counts, then each stage and its jobs.
+fn rows<'p>(deployed: &'p [(Line<'static>, Option<String>)], checks: &'p Checks) -> Vec<PaneRow<'p>> {
+    let mut rows: Vec<PaneRow> = deployed.iter().map(|(line, _)| PaneRow::Deployed(line)).collect();
+    rows.extend([PaneRow::Summary, PaneRow::Blank]);
     let mut index = 0;
     for stage in &checks.stages {
-        lines.push((None, Line::from(Span::styled(format!(" {}", stage.name.to_uppercase()), Style::default().fg(theme.faded)))));
+        rows.push(PaneRow::Stage(&stage.name));
         for job in &stage.jobs {
-            lines.push((Some(index), job_line(job, index == selected, width, theme, tick)));
+            rows.push(PaneRow::Job(index, job));
             index += 1;
         }
-        lines.push((None, Line::default()));
+        rows.push(PaneRow::Blank);
     }
-    lines
+    rows
+}
+
+fn row_line(row: &PaneRow, checks: &Checks, selected: usize, width: usize, theme: Theme, tick: &str) -> Line<'static> {
+    match row {
+        PaneRow::Deployed(line) => (*line).clone(),
+        PaneRow::Summary => summary(checks, theme),
+        PaneRow::Blank => Line::default(),
+        PaneRow::Stage(name) => Line::from(Span::styled(format!(" {}", name.to_uppercase()), Style::default().fg(theme.faded))),
+        PaneRow::Job(index, job) => job_line(job, *index == selected, width, theme, tick),
+    }
 }
 
 /// `2 passed · 1 failed · 1 running`, zeros left out.
