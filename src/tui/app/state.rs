@@ -424,7 +424,7 @@ mod tests {
         app.now += Duration::from_secs(120);
         assert_eq!(app.tick(), vec![], "backed off for five minutes");
         app.now += Duration::from_secs(200);
-        assert!(!app.tick().is_empty());
+        assert_ne!(app.tick(), [] as [Action; 0]);
     }
 
     #[test]

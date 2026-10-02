@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(targets[1].template, "{url}");
         assert_eq!(targets[0].done("!42"), "shared !42");
         assert_eq!(targets[2].done("!42"), "shared !42 to team");
-        assert!(super::targets(&config::Share::default()).is_empty());
+        assert_eq!(super::targets(&config::Share::default()), [] as [Target; 0]);
     }
 
     #[tokio::test]

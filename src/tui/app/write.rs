@@ -772,6 +772,6 @@ mod tests {
         assert_eq!((draft.anchor.clone(), draft.position.clone()), (None, None), "the note now sits on the MR");
         let first = app.open.as_ref().unwrap().review.drafts[0].local_id;
         assert!(draft.local_id.is_some() && draft.local_id != first, "the save's answer finds the moved draft, not its neighbour");
-        assert!(app.open.as_ref().unwrap().review.stranded().is_empty());
+        assert_eq!(app.open.as_ref().unwrap().review.stranded(), [] as [usize; 0]);
     }
 }

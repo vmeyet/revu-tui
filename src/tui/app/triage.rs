@@ -160,7 +160,7 @@ mod tests {
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
         let asked: Vec<Action> = app.take_actions().into_iter().filter(|a| !matches!(a, Action::LoadDeployments { .. })).collect();
         let [Action::Read { head, files, .. }] = asked.as_slice() else { panic!("{asked:?}") };
-        assert!(!files.is_empty());
+        assert_ne!(files.as_slice(), []);
         let path = files[0].0.clone();
         let reading = crate::ai::triage::Reading {
             waits_on_me: true,
@@ -187,6 +187,6 @@ mod tests {
         app.apply(Incoming::Failed { what: Failure::Triage, message: "again".into() });
         assert!(app.live_toast().is_some_and(|t| t.text.contains("quota")), "the second failure stays quiet");
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
-        assert!(app.take_actions().is_empty());
+        assert_eq!(app.take_actions(), [] as [Action; 0]);
     }
 }

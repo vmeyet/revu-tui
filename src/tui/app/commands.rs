@@ -347,7 +347,7 @@ mod tests {
         app.handle_key(code(KeyCode::Esc));
         app.handle_key(ctrl_k());
         press(&mut app, "@nobody");
-        assert!(palette_labels(&app).is_empty());
+        assert_eq!(palette_labels(&app), [] as [String; 0]);
     }
 
     #[test]

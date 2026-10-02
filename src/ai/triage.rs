@@ -292,7 +292,7 @@ mod tests {
     fn the_open_mr_state_keeps_the_last_three_notes_and_every_text_file() {
         let review = crate::review::tests::review();
         let files = file_states(&review);
-        assert!(!files.is_empty());
+        assert_ne!(files, [] as [(String, serde_json::Value); 0]);
         assert!(files.iter().all(|(path, state)| state["path"] == path.as_str() && state["change"].as_str().is_some()));
         if let Some(state) = waits_state(&review, "nina") {
             assert!(state["last_notes"].as_array().unwrap().len() <= LAST_NOTES);

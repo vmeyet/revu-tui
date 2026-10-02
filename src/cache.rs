@@ -432,7 +432,7 @@ mod tests {
         let mut found = cache.keys_in("mr/a/1/ai", "answer.");
         found.sort();
         assert_eq!(found, ["mr/a/1/ai/answer.1.json", "mr/a/1/ai/answer.2.json"]);
-        assert!(cache.keys_in("mr/a/2/ai", "answer.").is_empty());
+        assert_eq!(cache.keys_in("mr/a/2/ai", "answer."), [] as [String; 0]);
     }
 
     #[test]

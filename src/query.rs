@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn terms_split_on_spaces_and_quotes_keep_them() {
         assert_eq!(tokens(r#"@loic ~"needs review"  slack "two words""#), ["@loic", "~needs review", "slack", "two words"]);
-        assert!(tokens("   ").is_empty());
+        assert_eq!(tokens("   "), [] as [String; 0]);
     }
 
     #[test]
