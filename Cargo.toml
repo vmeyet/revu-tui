@@ -1,6 +1,6 @@
 [package]
 name = "revu"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Review GitLab merge requests and GitHub pull requests from your terminal: a TUI plus scriptable commands."
