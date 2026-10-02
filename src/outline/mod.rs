@@ -3,7 +3,7 @@
 //! the calls the query finds link them into a tree.
 mod tree;
 
-pub use tree::{Branch, Direction, Item};
+pub use tree::{Branch, Direction, Item, Shape, Site};
 
 use crate::forge::Side;
 use crate::syntax;
@@ -95,20 +95,17 @@ impl Change {
     }
 }
 
-/// What the outline read in the MR: the changed symbols, by file then risk, and the call tree over them both ways.
+/// What the outline read in the MR: the changed symbols, by file then risk, and the unchanged ones of their files at head.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reading {
     pub changes: Vec<Change>,
-    calls: Vec<Branch>,
-    called_by: Vec<Branch>,
+    unchanged: Vec<(String, Symbol)>,
 }
 
 impl Reading {
-    pub fn tree(&self, direction: Direction) -> &[Branch] {
-        match direction {
-            Direction::Calls => &self.calls,
-            Direction::CalledBy => &self.called_by,
-        }
+    /// The call tree over the changes, cut as `shape` says.
+    pub fn tree(&self, shape: Shape) -> Vec<Branch> {
+        tree::build(&self.changes, &self.unchanged, shape)
     }
 }
 
@@ -121,9 +118,7 @@ pub fn read(files: &[(String, String, String)]) -> Reading {
         changes.extend(changed);
         unchanged.extend(kept.into_iter().map(|symbol| (path.clone(), symbol)));
     }
-    let calls = tree::build(&changes, &unchanged, Direction::Calls);
-    let called_by = tree::build(&changes, &unchanged, Direction::CalledBy);
-    Reading { changes, calls, called_by }
+    Reading { changes, unchanged }
 }
 
 /// One file to outline: its path at base, absent when added, and at head, absent when deleted.

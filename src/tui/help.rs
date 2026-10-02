@@ -117,6 +117,7 @@ pub const GROUPS: [Group; 8] = [
         keys: &[
             ("t", "call tree, or the flat list"),
             ("u", "calls, or called by"),
+            ("s", "the whole stack, unchanged calls too"),
             ("a", "public symbols only, or all"),
             ("zo zc za", "open, close, toggle the branch"),
             ("enter", "the call in the diff, or the definition"),

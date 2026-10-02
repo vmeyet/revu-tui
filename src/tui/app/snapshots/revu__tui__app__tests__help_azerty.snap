@@ -34,15 +34,15 @@ expression: "render(&mut app, 160, 45)"
 │                      │          i  the MR cover page                              OUTLINE PANE                                        │                      │
 │                      │          D  inline diff, or side by side                           t  call tree, or the flat list              │                      │
 │                      │        > <  the code after, before, alone                          u  calls, or called by                      │                      │
-│                      │          t  file tree                                              a  public symbols only, or all              │                      │
-│                      │          T  every thread of the MR                          zo zc za  open, close, toggle the branch           │                      │
-│                      │          p  pipeline                                           enter  the call in the diff, or the definition  │                      │
-│                      │          O  outline: the symbols the MR changes                                                                │                      │
-│                      │         zz  zen: the diff alone, quiet                     ASK CLAUDE                                          │                      │
-│                      │        w W  wrap long lines, hide whitespace changes         a e r s  explain, risks, summary                  │                      │
-│                      │        = +  more lines, react on a thread                    a t c a  thread, comment, anything                │                      │
+│                      │          t  file tree                                              s  the whole stack, unchanged calls too     │                      │
+│                      │          T  every thread of the MR                                 a  public symbols only, or all              │                      │
+│                      │          p  pipeline                                        zo zc za  open, close, toggle the branch           │                      │
+│                      │          O  outline: the symbols the MR changes                enter  the call in the diff, or the definition  │                      │
+│                      │         zz  zen: the diff alone, quiet                                                                         │                      │
+│                      │        w W  wrap long lines, hide whitespace changes       ASK CLAUDE                                          │                      │
+│                      │        = +  more lines, react on a thread                    a e r s  explain, risks, summary                  │                      │
 │                      │                                                                                                                │                      │
-│                      ╰─────────────────────────────────────────────────────────────────────────── 1–35 of 45 · j k scroll · esc close ╯                      │
+│                      ╰─────────────────────────────────────────────────────────────────────────── 1–35 of 46 · j k scroll · esc close ╯                      │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
