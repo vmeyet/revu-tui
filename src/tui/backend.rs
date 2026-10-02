@@ -6,7 +6,7 @@ use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::{Cache, Entry, keys};
 use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
-use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, Sections, Sha};
+use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, QueueMr, Sections, Sha};
 use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Progress, Review};
 use anyhow::{Context as _, Result};
@@ -14,7 +14,7 @@ use app::{Ahead, Incoming, Part};
 use chrono::{DateTime, Utc};
 use futures_util::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 
 /// Files the outline reads from the forge at once, so a large MR does not burst into its rate limit.
@@ -260,7 +260,8 @@ impl Backend {
     /// Every project's queue also asks the other hosts I am logged in to; one that fails to
     /// answer is left out rather than failing the whole queue. The ready command runs alongside;
     /// when it fails the queue still paints, with its last answer, and the reason comes back apart.
-    pub(super) async fn load_queue(&self, scope: Option<String>) -> Result<(Incoming, Option<String>)> {
+    /// What follows the answer: the pins found merged or closed, and that reason.
+    pub(super) async fn load_queue(&self, scope: Option<String>) -> Result<(Incoming, Vec<Incoming>)> {
         let others = async {
             if scope.is_some() {
                 return vec![];
@@ -280,15 +281,45 @@ impl Backend {
             Ok(None) => (None, None),
             Err(e) => (self.cached_ready(scope.as_deref()), Some(format!("{e:#}"))),
         };
-        let answer = self.off(move |b| b.queue_answer(scope, &queue, &others, ready.as_ref(), false)).await?;
-        Ok((answer, failure))
+        let held = ready.iter().flat_map(|source| &source.outside);
+        let listed = std::iter::once(&queue).chain(&others).flat_map(Queue::listed).chain(held.map(QueueMr::key)).collect();
+        let (pinned, gone) = self.pins_outside(scope.as_deref(), &listed).await;
+        let follow = [
+            (!gone.is_empty()).then(|| Incoming::PinsGone { scope: scope.clone(), gone }),
+            failure.map(|message| Incoming::Failed { what: app::Failure::Ready, message }),
+        ];
+        let answer = self.off(move |b| b.queue_answer(scope, &queue, &others, ready.as_ref(), pinned, false)).await?;
+        Ok((answer, follow.into_iter().flatten().collect()))
     }
 
     pub(super) fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
         let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_deref()))?.value;
         let others: Vec<Queue> = if scope.is_none() { self.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
         let ready = self.cached_ready(scope.as_deref());
-        Some(self.queue_answer(scope, &queue, &others, ready.as_ref(), true))
+        Some(self.queue_answer(scope, &queue, &others, ready.as_ref(), vec![], true))
+    }
+
+    pub(super) fn pins(&self, scope: Option<&str>) -> BTreeSet<MrKey> {
+        self.cache.read(&keys::pins(scope)).unwrap_or_default()
+    }
+
+    /// The pins of `scope` the queue does not hold yet, each asked of its forge: the open ones come
+    /// back as rows, the merged or closed ones as gone. A pin the forge did not answer for stays.
+    async fn pins_outside(&self, scope: Option<&str>, listed: &HashSet<MrKey>) -> (Vec<QueueMr>, Vec<MrKey>) {
+        let wanted = scope.map(str::to_owned);
+        let pins = self.off(move |b| b.pins(wanted.as_deref())).await.unwrap_or_default();
+        let missing: Vec<MrKey> = pins.into_iter().filter(|key| !listed.contains(key)).collect();
+        let fetched = crate::ctx::fetch_each(&self.forge, &self.others, &missing).await;
+        let mut rows = vec![];
+        let mut gone = vec![];
+        for (key, mr) in missing.into_iter().zip(fetched) {
+            let Ok(mr) = mr else { continue };
+            match QueueMr::from_mr(&mr, key.host.clone()) {
+                Some(row) => rows.push(row),
+                None => gone.push(key),
+            }
+        }
+        (rows, gone)
     }
 
     async fn ask_ready(&self) -> Result<Option<String>> {
@@ -309,7 +340,16 @@ impl Backend {
         source
     }
 
-    fn queue_answer(&self, scope: Option<String>, queue: &Queue, others: &[Queue], ready: Option<&ReadySource>, cached: bool) -> Incoming {
+    /// `pinned` are the pinned MRs no list holds.
+    fn queue_answer(
+        &self,
+        scope: Option<String>,
+        queue: &Queue,
+        others: &[Queue],
+        ready: Option<&ReadySource>,
+        pinned: Vec<QueueMr>,
+        cached: bool,
+    ) -> Incoming {
         let now = Utc::now();
         let parts = std::iter::once(queue).chain(others).map(|q| q.sections_with(&self.watch_labels, &self.rules, now)).collect();
         let sections = Sections::merge(parts);
@@ -317,6 +357,7 @@ impl Backend {
             Some(source) => source.apply(sections, self.forge.host(), &self.others, scope.as_deref(), &queue.me, &self.rules),
             None => sections,
         };
+        let sections = Sections { pinned, ..sections };
         let opened = self.opened_at(&sections);
         Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
     }
@@ -785,7 +826,7 @@ mod tests {
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
         };
-        let mr = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
+        let mr = queue().review_requested[0].clone();
         let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
         backend.cache.write(&keys::verdict(&mr.key()), &verdict).unwrap();
         let Ok(Incoming::Triaged { verdict: cached, .. }) = backend.triage(&mr).await else { panic!("the cache answers") };
@@ -993,7 +1034,7 @@ mod tests {
             crate::forge::github::Client::new(&crate::auth::Credentials { host: "github.com".into(), token: "ghp_xxxx".into() }).unwrap();
         let other =
             crate::ctx::Home { host: "github.com".into(), forge: Forge::GitHub(github), cache: Cache::in_dir(dir.path().join("gh")) };
-        let queue = crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json"));
+        let queue = queue();
         other.cache.write_entry(&keys::queue(None), &queue.clone().on_host("github.com")).unwrap();
         let backend = Backend { others: vec![other], cache: Cache::in_dir(dir.path().join("gl")), ..backend_on_nothing() };
         backend.cache.write_entry(&keys::queue(None), &queue).unwrap();
@@ -1029,6 +1070,43 @@ mod tests {
         let without = Backend { ready_command: None, ..backend };
         let Some(Incoming::Queue { sections, .. }) = without.cached_queue(Some("acme/widgets".into())) else { panic!("the cache answers") };
         assert!(sections.ready.is_empty(), "no command, no Ready, whatever the cache kept");
+    }
+
+    #[tokio::test]
+    async fn pins_no_list_holds_are_read_from_the_forge_which_alone_can_drop_them() {
+        use wiremock::matchers::{method, path};
+        let server = wiremock::MockServer::start().await;
+        mount_mr(&server, "2026-09-20T10:00:00Z", [1, 1, 0, 0, 0]).await;
+        let merged = serde_json::json!({
+            "id": 1043, "iid": 43, "project_id": 7, "title": "fix: old", "description": "", "state": "merged", "draft": false,
+            "author": {"id": 5, "username": "omar", "name": "Omar"}, "source_branch": "fix/old", "target_branch": "main",
+            "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/43", "updated_at": "2026-09-20T10:00:00Z", "sha": "cccc",
+            "diff_refs": {"base_sha": "aaaa", "head_sha": "cccc", "start_sha": "aaaa"}
+        });
+        let base = "/api/v4/projects/acme%2Fwidgets/merge_requests/43";
+        for (route, body) in [
+            (base.to_owned(), merged),
+            (format!("{base}/approvals"), serde_json::json!({"approved": false, "approvals_left": 0, "approved_by": []})),
+        ] {
+            wiremock::Mock::given(method("GET"))
+                .and(path(route))
+                .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(body))
+                .mount(&server)
+                .await;
+        }
+        let backend = backend_on(&server);
+        let pins: BTreeSet<MrKey> = [42, 43, 44].map(|n| MrKey::new("acme/widgets", n)).into();
+        backend.cache.write(&keys::pins(None), &pins).unwrap();
+        assert_eq!(backend.pins(None), pins, "the pins round trip through the cache");
+        let (rows, gone) = backend.pins_outside(None, &HashSet::new()).await;
+        assert_eq!(rows.iter().map(|mr| mr.number).collect::<Vec<_>>(), [42], "an open one shows");
+        assert_eq!(gone, [MrKey::new("acme/widgets", 43)], "the merged one goes; 44 failed to fetch and stays");
+        let (rows, gone) = backend.pins_outside(None, &queue().listed().collect()).await;
+        assert!(rows.is_empty() && gone == [MrKey::new("acme/widgets", 43)], "a listed pin is not fetched");
+    }
+
+    fn queue() -> Queue {
+        crate::forge::gitlab::fixture::queue(include_str!("../forge/gitlab/fixtures/queue.json"))
     }
 
     fn backend_on_nothing() -> Backend {

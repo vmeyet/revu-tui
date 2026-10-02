@@ -245,6 +245,7 @@ fn queue_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('*') => "scope",
         KeyCode::Char('s') => "sort_queue",
         KeyCode::Char('S') => "group_by_author",
+        KeyCode::Char('b') => "pin",
         KeyCode::Char('1'..='9') => "views",
         KeyCode::Char('i') => "description",
         KeyCode::Char('r') => "refresh",

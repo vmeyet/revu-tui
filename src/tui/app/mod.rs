@@ -15,6 +15,7 @@ mod notify;
 mod order;
 mod outline;
 mod pane;
+mod pin;
 mod pins;
 mod pipeline;
 pub mod prefetch;
@@ -91,6 +92,11 @@ pub enum Action {
     SaveQueueView {
         scope: Option<String>,
         view: QueueView,
+    },
+    /// Remember the MRs pinned in the queue of `scope`.
+    SavePins {
+        scope: Option<String>,
+        pins: BTreeSet<MrKey>,
     },
     /// Paint from the cache at once, then fetch the MR, its diffs and its discussions.
     Open(MrKey),
@@ -349,6 +355,16 @@ pub enum Incoming {
     QueueView {
         scope: Option<String>,
         view: QueueView,
+    },
+    /// The MRs pinned in the queue of `scope`, as the cache kept them.
+    Pins {
+        scope: Option<String>,
+        pins: BTreeSet<MrKey>,
+    },
+    /// The forge says these pins of `scope` are merged or closed.
+    PinsGone {
+        scope: Option<String>,
+        gone: Vec<MrKey>,
     },
     /// `cached` is how old the cache entry was; `None` means it just came from GitLab.
     Review {

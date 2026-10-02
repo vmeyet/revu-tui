@@ -86,3 +86,4 @@ One word per concept, used in code, docs and UI:
 | draft | A note written locally, or held by the forge (GitLab draft note, GitHub pending review comment), not yet published |
 | review | The set of drafts, published together with `P` |
 | viewed | A file the reviewer marked as read; it folds |
+| pin | An MR the reader keeps on top of the queue, in `PINNED`, until it is merged or closed |

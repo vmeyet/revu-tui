@@ -221,25 +221,28 @@ pub mod keys {
 
     /// One file per scope, so switching between a repo and every project never shows the other list.
     pub fn queue(project: Option<&str>) -> String {
-        match project {
-            Some(path) => format!("queue.{}.json", slug(path)),
-            None => "queue.json".into(),
-        }
+        scoped("queue", project)
     }
 
     /// The ready command's last output for a scope, and the MRs it named outside my lists.
     pub fn ready(project: Option<&str>) -> String {
-        match project {
-            Some(path) => format!("ready.{}.json", slug(path)),
-            None => "ready.json".into(),
-        }
+        scoped("ready", project)
     }
 
     /// How the queue of one scope is sorted and grouped, next to its list.
     pub fn queue_view(project: Option<&str>) -> String {
+        scoped("queue_view", project)
+    }
+
+    /// The MRs pinned in the queue of one scope.
+    pub fn pins(project: Option<&str>) -> String {
+        scoped("pins", project)
+    }
+
+    fn scoped(name: &str, project: Option<&str>) -> String {
         match project {
-            Some(path) => format!("queue_view.{}.json", slug(path)),
-            None => "queue_view.json".into(),
+            Some(path) => format!("{name}.{}.json", slug(path)),
+            None => format!("{name}.json"),
         }
     }
 
@@ -497,5 +500,7 @@ mod tests {
     fn queue_keys_differ_per_scope() {
         assert_eq!(keys::queue(None), "queue.json");
         assert_eq!(keys::queue(Some("acme/sub/widgets")), "queue.acme+sub+widgets.json");
+        assert_eq!(keys::pins(None), "pins.json");
+        assert_eq!(keys::pins(Some("acme/widgets")), "pins.acme+widgets.json");
     }
 }

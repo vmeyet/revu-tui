@@ -175,6 +175,8 @@ impl App {
                 vec![]
             }
             Command::All => self.toggle_scope(),
+            Command::Pin => self.pin_command(true),
+            Command::Unpin => self.pin_command(false),
             Command::Set { key, value } => self.set(&key, &value),
             Command::View(argument) => self.view_command(&argument),
             Command::Outline => self.show_outline(),

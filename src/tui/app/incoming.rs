@@ -4,10 +4,22 @@ use crate::review::{Review, draft};
 impl App {
     pub fn apply(&mut self, incoming: Incoming) {
         match incoming {
-            Incoming::Queue { scope, .. } | Incoming::QueueView { scope, .. } if scope != self.scope() => {}
+            Incoming::Queue { scope, .. }
+            | Incoming::QueueView { scope, .. }
+            | Incoming::Pins { scope, .. }
+            | Incoming::PinsGone { scope, .. }
+                if scope != self.scope() => {}
             Incoming::QueueView { view, .. } => {
                 self.queue_view = view;
                 self.queue_settle();
+            }
+            Incoming::Pins { pins, .. } => {
+                self.pins = pins;
+                self.queue_settle();
+            }
+            Incoming::PinsGone { gone, .. } => {
+                let follow = self.drop_pins(&gone);
+                self.composed.extend(follow);
             }
             Incoming::Queue { ref me, .. } if self.me.is_empty() && !me.is_empty() => {
                 self.me.clone_from(me);

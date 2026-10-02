@@ -87,6 +87,9 @@ pub enum ReviewState {
 /// The queue sorted into the sidebar sections, each MR in exactly one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Sections {
+    /// Pinned MRs no list holds, each fetched on its own; PINNED also takes the pinned MRs of every other section.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pinned: Vec<QueueMr>,
     pub to_review: Vec<QueueMr>,
     pub mine: Vec<QueueMr>,
     /// Others' MRs the ready command named, still needing me: taken out of the sections below.
@@ -134,7 +137,9 @@ impl Sections {
 impl Sections {
     /// Every row, section after section.
     pub fn all(&self) -> impl Iterator<Item = &QueueMr> {
-        [&self.to_review, &self.mine, &self.ready, &self.watching, &self.open, &self.drafts, &self.done, &self.other].into_iter().flatten()
+        [&self.pinned, &self.to_review, &self.mine, &self.ready, &self.watching, &self.open, &self.drafts, &self.done, &self.other]
+            .into_iter()
+            .flatten()
     }
 
     /// The MRs the ready command named move to Ready, when they still need me: someone else's,
@@ -230,6 +235,11 @@ impl QueueMr {
 }
 
 impl Queue {
+    /// The key of every MR the forge listed, all of them open.
+    pub fn listed(&self) -> impl Iterator<Item = MrKey> + '_ {
+        self.review_requested.iter().chain(&self.authored).chain(&self.assigned).chain(&self.open).map(QueueMr::key)
+    }
+
     /// Every row marked as coming from `host`, so opening it reaches the right forge.
     pub fn on_host(self, host: &str) -> Self {
         let tag = |rows: Vec<QueueMr>| rows.into_iter().map(|mr| QueueMr { host: Some(host.to_owned()), ..mr }).collect();
@@ -288,7 +298,7 @@ impl Queue {
         let (watching_drafts, watching): (Vec<_>, Vec<_>) = watching.into_iter().partition(|mr| mr.draft);
         let (open_drafts, open): (Vec<_>, Vec<_>) = open.into_iter().partition(|mr| mr.draft);
         let drafts = watching_drafts.into_iter().chain(open_drafts).collect();
-        Sections { to_review, mine, ready: vec![], watching, open, drafts, done, other: vec![] }
+        Sections { to_review, mine, watching, open, drafts, done, ..Sections::default() }
     }
 }
 

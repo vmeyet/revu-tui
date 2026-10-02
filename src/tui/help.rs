@@ -53,6 +53,7 @@ pub const GROUPS: [Group; 8] = [
             ("*", "this repo, or every project"),
             ("s", "next sort order"),
             ("S", "group by author"),
+            ("b", "pin on top of the queue, or unpin"),
             ("zo zc", "open, fold the section or stack"),
         ],
         focus: &[Focus::Queue],

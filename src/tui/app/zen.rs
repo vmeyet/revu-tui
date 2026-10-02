@@ -89,7 +89,7 @@ impl App {
     }
 
     /// The queue cursor on `key`'s row, or on the folded stack holding it, so leaving zen shows it.
-    fn select_in_queue(&mut self, key: &MrKey) {
+    pub(super) fn select_in_queue(&mut self, key: &MrKey) {
         let at = self.queue_rows().iter().position(|row| match row {
             QueueRow::Mr(mr) | QueueRow::Stacked(mr) => mr.key() == *key,
             QueueRow::Stack { mrs, open: false, .. } => mrs.iter().any(|mr| mr.key() == *key),

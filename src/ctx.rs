@@ -2,7 +2,7 @@
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::forge::{Forge, Kind};
+use crate::forge::{Forge, Kind, Mr, MrKey};
 use anyhow::Result;
 use serde::Serialize;
 
@@ -61,6 +61,13 @@ impl Home {
     pub fn cached(&self) -> Option<crate::forge::Queue> {
         self.cache.read_entry(&crate::cache::keys::queue(None)).map(|e: crate::cache::Entry<crate::forge::Queue>| e.value)
     }
+}
+
+/// Each MR read on its own from the host it lives on, all at once, answers in the order of `keys`.
+pub(crate) async fn fetch_each(main: &Forge, others: &[Home], keys: &[MrKey]) -> Vec<Result<Mr>> {
+    let forge_of =
+        |key: &MrKey| key.host.as_deref().and_then(|h| others.iter().find(|home| home.host == h)).map_or(main, |home| &home.forge);
+    futures_util::future::join_all(keys.iter().map(|key| forge_of(key).mr(key))).await
 }
 
 impl Ctx {

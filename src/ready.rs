@@ -100,19 +100,13 @@ fn named(output: &str, main_host: &str, others: &[Home], scope: Option<&str>) ->
 /// A source from a fresh output: the named MRs no list holds are fetched one by one (outside a
 /// checkout only: inside one, every open MR of the project is already listed).
 pub async fn resolve(output: String, main: &Forge, others: &[Home], scope: Option<&str>, queues: &[&Queue]) -> Source {
-    let listed: HashSet<MrKey> = queues
-        .iter()
-        .flat_map(|q| q.review_requested.iter().chain(&q.authored).chain(&q.assigned).chain(&q.open))
-        .map(QueueMr::key)
-        .collect();
+    let listed: HashSet<MrKey> = queues.iter().flat_map(|q| q.listed()).collect();
     let missing: Vec<MrKey> = if scope.is_some() {
         vec![]
     } else {
         named(&output, main.host(), others, scope).into_iter().filter(|k| !listed.contains(k)).take(MAX_OUTSIDE).collect()
     };
-    let forge_of =
-        |key: &MrKey| key.host.as_deref().and_then(|h| others.iter().find(|home| home.host == h)).map_or(main, |home| &home.forge);
-    let fetched = futures_util::future::join_all(missing.iter().map(|key| forge_of(key).mr(key))).await;
+    let fetched = crate::ctx::fetch_each(main, others, &missing).await;
     let outside = missing.iter().zip(fetched).filter_map(|(key, mr)| QueueMr::from_mr(&mr.ok()?, key.host.clone())).collect();
     Source { output, outside }
 }

@@ -28,6 +28,7 @@ A group of MRs in the queue.
 
 | Section | Holds |
 |---|---|
+| PINNED | MRs you pinned with `b`, on top until they are merged or closed |
 | TO REVIEW | MRs where you are a reviewer and have not approved yet |
 | MINE | MRs you wrote |
 | READY | MRs a [ready source](guides/ready-source.md) names, when they need you; [sharing](guides/share.md) to that source puts an MR here |
