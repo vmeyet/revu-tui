@@ -13,6 +13,7 @@ It replaces whatever held the pane, and the pane takes the keys.
 - Both sides of each file come through the forge's file read at the base and head commits, cached forever per commit as `^v` does; an added file has no base side, a deleted one no head side.
 - Definitions come from `tree-sitter-tags` with each grammar crate's own `TAGS_QUERY`; TypeScript and TSX join the JavaScript query with TypeScript's, which only adds signatures and abstract classes. No query is written by hand.
 - Only functions, methods and classes list. A Python function inside a class is a method, named `Class.name`.
+- A function held by an object literal's property (`{ reload: () => … }`) is not a symbol, though the query tags it.
 - Reading and parsing run in the background; the pane shows a spinner until they end, and a failure with `r to retry`.
 
 ## Comparing the two sides
@@ -45,6 +46,7 @@ A symbol public at base counts as public: one that loses its `export` is a break
 The tree is the default; `t` switches to the flat list by file and back.
 
 - Edges come from the `@reference.call` captures of the same tags queries; nothing is written by hand.
+  A plain call to a name the caller binds itself (a parameter, a variable or destructured name, an inner function; in Python a parameter or an assignment) calls that local and links nowhere; `obj.name()` still links.
   A call belongs to the innermost definition around it, and links by name to the symbols of the MR's changed files on its own side: a call read on head (from an added, changed or unchanged symbol) links only to symbols that exist on head, a call from a removed symbol only to symbols that exist on base.
 - Roots are entry points, so the tree reads as the MR's call stack: a root is a changed symbol (public, or any with `a`) that no other changed or bridge symbol calls, in the flat list's order. A shown change that every caller of hides (only private ones call it, and `a` is off) is a root too.
 - Every other change hangs in full under its first caller: state, signature diff and children. Only its later appearances are dimmed reference rows.

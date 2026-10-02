@@ -205,23 +205,31 @@ fn symbols(tags: &Tags, source: &str) -> Vec<Symbol> {
     let Some(tree) = parser.set_language(&config.language).ok().and_then(|()| parser.parse(source, None)) else { return vec![] };
     let mut context = TagsContext::new();
     let Ok((found, _)) = context.generate_tags(config, source.as_bytes(), None) else { return vec![] };
+    let node_at = |range: &Range<usize>| tree.root_node().descendant_for_byte_range(range.start, range.end);
     let mut definitions: Vec<(Kind, Range<usize>, Range<usize>)> = vec![];
-    let mut calls: Vec<(Range<usize>, Call)> = vec![];
+    let mut calls: Vec<(Range<usize>, Call, bool)> = vec![];
     for tag in found.filter_map(Result::ok) {
         let kind = config.syntax_type_name(tag.syntax_type_id);
         match (tag.is_definition, kind_named(kind)) {
-            (true, Some(kind)) => definitions.push((kind, tag.range, tag.name_range)),
+            (true, Some(kind)) if node_at(&tag.range).is_some_and(|node| node.kind() != "pair") => {
+                definitions.push((kind, tag.range, tag.name_range));
+            }
             (false, _) if kind == "call" => {
-                calls.push((tag.range, Call { name: source[tag.name_range].to_owned(), line: line(tag.span.start.row) }));
+                let plain = node_at(&tag.name_range)
+                    .and_then(|name| name.parent())
+                    .is_none_or(|p| !matches!(p.kind(), "member_expression" | "attribute"));
+                calls.push((tag.range, Call { name: source[tag.name_range].to_owned(), line: line(tag.span.start.row) }, plain));
             }
             _ => {}
         }
     }
     let inside = |inner: &Range<usize>, outer: &Range<usize>| outer.start <= inner.start && inner.end <= outer.end;
+    let locals: Vec<Vec<&str>> =
+        definitions.iter().map(|(_, range, _)| node_at(range).map(|node| locals(node, source)).unwrap_or_default()).collect();
     let mut owned: Vec<Vec<Call>> = vec![vec![]; definitions.len()];
-    for (at, call) in calls {
+    for (at, call, plain) in calls {
         let innermost = definitions.iter().enumerate().filter(|(_, (_, r, _))| inside(&at, r)).min_by_key(|(_, (_, r, _))| r.len());
-        if let Some((index, _)) = innermost {
+        if let Some((index, _)) = innermost.filter(|(index, _)| !plain || !locals[*index].contains(&call.name.as_str())) {
             owned[index].push(call);
         }
     }
@@ -239,6 +247,61 @@ fn symbols(tags: &Tags, source: &str) -> Vec<Symbol> {
             Some(Symbol { calls, ..symbol(node, source, kind, &classes, &source[name.clone()], tags) })
         })
         .collect()
+}
+
+/// The names bound inside a definition, below its own name: parameters, variables and inner functions.
+/// A plain call to one of them calls the local, not a symbol of the MR.
+fn locals<'s>(definition: Node, source: &'s str) -> Vec<&'s str> {
+    let mut names = vec![];
+    let mut below: Vec<Node> = children(definition);
+    while let Some(node) = below.pop() {
+        let bound = match node.kind() {
+            "formal_parameters" | "parameters" | "lambda_parameters" => Some(node),
+            "arrow_function" => node.child_by_field_name("parameter"),
+            "variable_declarator" => node.child_by_field_name("name"),
+            "assignment" => node.child_by_field_name("left"),
+            "function_declaration"
+            | "generator_function_declaration"
+            | "function_definition"
+            | "class_declaration"
+            | "class_definition" => node.child_by_field_name("name"),
+            _ => None,
+        };
+        if let Some(pattern) = bound {
+            names.extend(bound_names(pattern, source));
+        }
+        below.extend(children(node));
+    }
+    names
+}
+
+/// The identifiers a parameter list or a pattern binds, defaults and type annotations left out.
+fn bound_names<'s>(pattern: Node, source: &'s str) -> Vec<&'s str> {
+    let field = |name| pattern.child_by_field_name(name).map(|n| bound_names(n, source)).unwrap_or_default();
+    match pattern.kind() {
+        "identifier" | "shorthand_property_identifier_pattern" => source.get(pattern.byte_range()).into_iter().collect(),
+        "assignment_pattern" => field("left"),
+        "default_parameter" | "typed_default_parameter" => field("name"),
+        "pair_pattern" => field("value"),
+        "required_parameter" | "optional_parameter" => field("pattern"),
+        "typed_parameter" => pattern.named_child(0).map(|n| bound_names(n, source)).unwrap_or_default(),
+        "formal_parameters"
+        | "parameters"
+        | "lambda_parameters"
+        | "object_pattern"
+        | "array_pattern"
+        | "rest_pattern"
+        | "pattern_list"
+        | "tuple_pattern"
+        | "list_pattern"
+        | "list_splat_pattern"
+        | "dictionary_splat_pattern" => children(pattern).into_iter().flat_map(|n| bound_names(n, source)).collect(),
+        _ => vec![],
+    }
+}
+
+fn children(node: Node) -> Vec<Node> {
+    (0..node.named_child_count()).filter_map(|i| node.named_child(u32::try_from(i).ok()?)).collect()
 }
 
 fn kind_named(name: &str) -> Option<Kind> {
@@ -468,5 +531,26 @@ mod tests {
         assert_eq!(calls("Cart.total"), vec![("sum".to_owned(), 3)]);
         assert_eq!(calls("checkout"), vec![("pay".to_owned(), 9)]);
         assert_eq!(calls("Cart"), vec![]);
+    }
+
+    fn calls_of(path: &str, source: &str, name: &str) -> Vec<String> {
+        let symbols = symbols(tags_for(path).unwrap(), source);
+        symbols.iter().find(|s| s.name == name).unwrap().calls.iter().map(|c| c.name.clone()).collect()
+    }
+
+    #[test]
+    fn an_object_literal_property_holding_a_function_is_not_a_symbol() {
+        let hook = "export function useWidgets(id: string) {\n  const { data, reload } = useQuery(id);\n  return { reload: () => void reload(), data };\n}\nclass Shelf {\n  load() { return 1; }\n}\nconst count = () => 2;\n";
+        let names: Vec<String> = found("src/hooks.ts", hook).into_iter().map(|(_, name, _, _)| name).collect();
+        assert_eq!(names, ["useWidgets", "Shelf", "Shelf.load", "count"]);
+        assert_eq!(calls_of("src/hooks.ts", hook, "useWidgets"), ["useQuery"], "reload() calls the destructured local");
+    }
+
+    #[test]
+    fn a_call_to_a_name_bound_in_the_caller_is_not_linked_but_a_method_call_is() {
+        let js = "function outer({ fetch }, [first], ...rest) {\n  let step = () => 1;\n  function inner() {}\n  return fetch() + step() + inner() + first() + rest() + this.step() + charge();\n}\n";
+        assert_eq!(calls_of("src/a.js", js, "outer"), ["step", "charge"]);
+        let python = "def pay(card, fee=charge, *more):\n    total = compute(card)\n    return fee(total) + more() + self.total()\n";
+        assert_eq!(calls_of("shop/pay.py", python, "pay"), ["compute", "total"]);
     }
 }
