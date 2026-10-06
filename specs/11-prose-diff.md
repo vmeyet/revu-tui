@@ -20,7 +20,7 @@ It outlives a refresh while the file is still in the MR, and closes with the MR.
 ## Blocks
 
 Each side is rendered by [mrk](https://github.com/vmeyet/mrk-cli) (`mrk::markdown::render_blocks`) into blocks: a heading, a paragraph, one top-level list item, a quote, a code block, a table, a diagram.
-Pairing the two sides and marking words is mrk's job (`mrk::diff::blocks`, mrk issue #15), not revu's: revu draws a list of block changes.
+Pairing the two sides and marking words is mrk's job (`mrk::diff::blocks`), not revu's: revu draws the list of block changes it returns.
 
 | Change | Drawn as |
 |---|---|
@@ -38,7 +38,7 @@ Pairing the two sides and marking words is mrk's job (`mrk::diff::blocks`, mrk i
 ## Rendering
 
 - Blocks are rendered at the diff area's width less the two gutter columns, never the terminal's width.
-- Rendered blocks are kept per file texts, width and theme, and rendered again only when one of them changes (a resize, `:set theme=`); scrolling renders nothing.
+- Rendered blocks are kept per file texts, width and theme, and rendered again only when one of them changes (a resize, `:set theme=`); scrolling, `zR` and `zM` render nothing.
 - mrk's colours come from revu's theme, so the view matches the rest of the screen:
   - the mrk preset of the same name when there is one (`dracula`, `catppuccin`, `catppuccin-latte`, `nord`, `tokyonight`), else `mrk-dark`, or `mrk-light` on a light ground;
   - then every RGB colour of revu's theme replaces its mrk twin: `accent`, `link`, `code`, `muted`, `faded` (mrk `subtle`), `surface`, `success`, `warn` (mrk `warning`), `danger` (mrk `caution`);
@@ -61,6 +61,5 @@ The view is a cargo feature, `prose`, on by default.
 
 These come in their own MRs, in this order (`06-roadmap.md`):
 
-1. **Pairing live.** `mrk::diff::blocks` replaces revu's stand-in, which until then reads every block of the head side as same (all added or all removed for a new or deleted file).
-2. **Pictures.** mrk gets the terminal's cell size, so diagrams come back as pictures drawn with `ratatui-image` at the cells mrk gives, never scaled up. A changed diagram shows its old side (red bar, `before`) above its new one (green bar, `after`), side by side when the area is wider than both.
-3. **Comments.** `j` `k` move a cursor block by block. A comment on a block anchors to its `last_line`: head side, base side for a removed block. Threads show under the block holding their line. `enter` goes to the raw diff at that line, for anything that needs exact lines.
+1. **Pictures.** mrk gets the terminal's cell size, so diagrams come back as pictures drawn with `ratatui-image` at the cells mrk gives, never scaled up. A changed diagram shows its old side (red bar, `before`) above its new one (green bar, `after`), side by side when the area is wider than both.
+2. **Comments.** `j` `k` move a cursor block by block. A comment on a block anchors to its `last_line`: head side, base side for a removed block. Threads show under the block holding their line. `enter` goes to the raw diff at that line, for anything that needs exact lines.
