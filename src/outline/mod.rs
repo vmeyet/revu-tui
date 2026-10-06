@@ -28,7 +28,7 @@ pub struct Symbol {
     pub kind: Kind,
     /// Led by the classes around it: `Cart.total`.
     pub name: String,
-    /// The definition up to its body, whitespace collapsed.
+    /// The definition up to its body, whitespace collapsed and brackets tightened.
     pub signature: String,
     pub public: bool,
     /// Its first and last line, from 1.
@@ -340,8 +340,21 @@ fn line(row: usize) -> u32 {
     u32::try_from(row + 1).unwrap_or(u32::MAX)
 }
 
+/// Whitespace collapsed, then no space inside brackets and no trailing comma, so a list split over lines reads as on one.
+/// `<` and `>` stay as they are: they also write `=>` and comparisons.
 fn collapsed(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+    let spaced = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    spaced.chars().fold(String::with_capacity(spaced.len()), |mut kept, c| {
+        match c {
+            ' ' if kept.ends_with(['(', '[', '{']) => {}
+            ')' | ']' | '}' => {
+                kept.truncate(kept.trim_end_matches([' ', ',']).len());
+                kept.push(c);
+            }
+            _ => kept.push(c),
+        }
+        kept
+    })
 }
 
 /// Symbols matched by kind and name, and those that did not change; a removed one and an added one alike enough read as a rename.
@@ -407,6 +420,7 @@ fn words(text: &str) -> Vec<&str> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::diff::words::{Segment, text_segments};
 
     fn found(path: &str, source: &str) -> Vec<(Kind, String, String, bool)> {
         symbols(tags_for(path).unwrap(), source).into_iter().map(|s| (s.kind, s.name, s.signature, s.public)).collect()
@@ -528,6 +542,33 @@ mod tests {
             "function charge(a: number) {\n  return a;\n}\n",
         );
         assert_eq!((changes[0].state, changes[0].breaking()), (State::Signature, true));
+    }
+
+    const SECTION_BODY: &str = "export const findSectionBody = (\n  lines: string[],\n  sectionTitle: string,\n  sectionPath: string[],\n): string[] => {\n  return [ ...lines, ...sectionPath ];\n};\n";
+
+    #[test]
+    fn a_signature_or_body_only_reformatted_over_lines_is_no_change() {
+        let one_line = "export const findSectionBody = (lines: string[], sectionTitle: string, sectionPath: string[]): string[] => {\n  return [...lines, ...sectionPath];\n};\n";
+        assert_eq!(states("src/md.ts", SECTION_BODY, one_line), vec![]);
+        assert_eq!(states("src/md.ts", one_line, SECTION_BODY), vec![]);
+        let python = "def pay(\n    card,\n    fee,\n):\n    return f(\n        card,\n    )\n";
+        assert_eq!(states("m.py", python, "def pay(card, fee):\n    return f(card)\n"), vec![]);
+    }
+
+    #[test]
+    fn a_parameter_dropped_from_a_reformatted_signature_is_the_only_word_changed() {
+        let head = "export const findSectionBody = (lines: string[], sectionPath: string[]): string[] => {\n  return [...lines, ...sectionPath];\n};\n";
+        let changes = changes("src/md.ts", SECTION_BODY, head);
+        let before = &changes[0].before.as_ref().unwrap().signature;
+        let changed: Vec<Segment> =
+            text_segments(before, &changes[0].symbol.signature).into_iter().filter(|s| !matches!(s, Segment::Same(_))).collect();
+        assert_eq!(changes[0].state, State::Signature);
+        assert_eq!(changed, vec![Segment::Old("sectionTitle: string, ".into())]);
+    }
+
+    #[test]
+    fn an_arrow_and_a_comparison_keep_their_spaces() {
+        assert_eq!(collapsed("( a,\n b, ) =>  a > b"), "(a, b) => a > b");
     }
 
     #[test]
