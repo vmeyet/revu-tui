@@ -54,7 +54,7 @@ Pairing the two sides and marking words is mrk's job (`mrk::diff::blocks`, mrk i
 The view is a cargo feature, `prose`, on by default.
 
 - It pulls mrk with `default-features = false` (no clap, no crossterm of its own), pinned by tag, bumped on purpose.
-- On by default, because a toggle hidden behind a flag nobody sets is a feature nobody sees; the cost is about 6 MB of binary (syntect, resvg, the Mermaid engine) and mrk's minimum Rust (1.92).
+- On by default, because a toggle hidden behind a flag nobody sets is a feature nobody sees; the cost is about 7 MB of binary (16.5 to 23.2 MB on macOS) (syntect, resvg, the Mermaid engine) and mrk's minimum Rust (1.92).
 - `cargo install --no-default-features` builds without it: `v` still opens the view, which says the build has no prose view, so the help and `docs/reference/keys.md` stay the same in every build.
 
 ## Later

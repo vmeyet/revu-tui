@@ -157,10 +157,11 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 Spec: `11-prose-diff.md`. One MR per slice:
 
 1. The spec.
-2. Cargo feature `prose` (mrk pinned by tag), both files read at base and head, `v` toggles the view, block changes drawn with bars, folds and word marks; every head block reads as same until slice 3.
-3. Swap revu's stand-in for `mrk::diff::blocks` (mrk issue #15) once mrk tags it: blocks pair and words light up.
-4. Pictures: Mermaid and images drawn as pictures, a changed diagram before and after.
-5. Comments: a block cursor, comments on a block's last line, threads under their block, `enter` to the raw diff.
+2. Cargo feature `prose` (mrk pinned by tag), both files read at base and head, `v` toggles the view, the file drawn in revu's colours, block after block.
+3. Block changes drawn with bars, folds (`zR` `zM`) and word marks, from a revu stand-in shaped like `mrk::diff::BlockChange` that reads every head block as same.
+4. Swap the stand-in for `mrk::diff::blocks` (mrk issue #15) once mrk tags it: blocks pair and words light up.
+5. Pictures: Mermaid and images drawn as pictures, a changed diagram before and after.
+6. Comments: a block cursor, comments on a block's last line, threads under their block, `enter` to the raw diff.
 
 Acceptance: a README with one edited paragraph, one added bullet and one removed heading shows exactly those three marked and the rest faded; one changed word in a long paragraph lights that word only.
 
