@@ -19,6 +19,7 @@ mod pin;
 mod pins;
 mod pipeline;
 pub mod prefetch;
+mod prose;
 mod queue;
 pub(crate) mod quit;
 mod react;
@@ -53,6 +54,7 @@ pub use pane::{Entry, EntryKind, Pane};
 pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
 pub use pipeline::{Pipeline, Run};
 pub use prefetch::Ahead;
+pub use prose::{Prose, Texts, Versions};
 pub use queue::{Badge, QueueRow};
 pub use react::{Pick, failure as react_failure};
 pub use review::Open;
@@ -233,6 +235,13 @@ pub enum Action {
         head: Sha,
         files: Vec<crate::outline::Sides>,
     },
+    /// `v`: the Markdown file of `sides`, read at commits `base` and `head`.
+    LoadProse {
+        key: MrKey,
+        base: Sha,
+        head: Sha,
+        sides: crate::outline::Sides,
+    },
     /// The review apps of the MR of `branch`, `head` telling which run it as it is now.
     LoadDeployments {
         key: MrKey,
@@ -323,6 +332,8 @@ pub enum Failure {
     Checks,
     /// The files could not be read; the outline pane says why.
     Outline,
+    /// The Markdown file could not be read; the prose view says why.
+    Prose,
     /// The suggestion was not committed.
     Apply,
     /// The forge did not merge the MR.
@@ -450,6 +461,12 @@ pub enum Incoming {
     Outline {
         key: MrKey,
         reading: crate::outline::Reading,
+    },
+    /// Both sides of the Markdown file the prose view shows.
+    Prose {
+        key: MrKey,
+        sides: crate::outline::Sides,
+        versions: Versions,
     },
     /// The answers kept for the MR, newest first.
     PastAnswers {

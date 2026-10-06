@@ -26,6 +26,8 @@ pub struct Open {
     pub pipeline: Option<super::Pipeline>,
     /// The symbols the MR changes, when they hold the right pane.
     pub outline: Option<super::Outline>,
+    /// The Markdown file drawn rendered, when it holds the diff area.
+    pub prose: Option<super::Prose>,
     /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
     pub pinned_file: Option<usize>,
     /// Where the branch was deployed; `None` until the forge was asked.
@@ -49,6 +51,7 @@ impl Open {
             answer: None,
             pipeline: None,
             outline: None,
+            prose: None,
             pinned_file: None,
             deployments: None,
         }

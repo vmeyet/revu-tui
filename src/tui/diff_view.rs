@@ -63,14 +63,21 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let Some(open) = app.open.as_mut() else { return };
-    let stretch = focused_range(&open.review, app.kept.pane_view(open));
-    let anchors = Anchors { markers: app.kept.markers(open), stretch };
     let header = match (zen, folded) {
         (true, _) => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
         (false, true) => vec![folded_header(open, theme)],
         (false, false) => header_lines(open, theme, today, inner.width as usize),
     };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
+    let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
+    let deployment = if folded || zen { None } else { deployment_link(open, &header, inner) };
+    f.render_widget(Paragraph::new(header), inner);
+    app.links.extend(pipeline.into_iter().chain(deployment));
+    if open.prose.is_some() {
+        return super::prose_view::draw(f, app, body);
+    }
+    let stretch = focused_range(&open.review, app.kept.pane_view(open));
+    let anchors = Anchors { markers: app.kept.markers(open), stretch };
     let height = body.height as usize;
     let width = body.width as usize;
     let render = |open: &Open, i: usize| -> Vec<Line<'static>> {
@@ -128,11 +135,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     }
     lines.truncate(height);
     selectable.retain(|row| row.at.y < body.bottom());
-    let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
-    let deployment = if folded || zen { None } else { deployment_link(open, &header, inner) };
-    f.render_widget(Paragraph::new(header), inner);
     f.render_widget(Paragraph::new(lines), body);
-    app.links.extend(pipeline.into_iter().chain(deployment));
     app.text_rows.extend(selectable);
 }
 

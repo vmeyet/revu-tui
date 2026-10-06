@@ -100,9 +100,9 @@ impl SavedAnswer {
 }
 
 /// How often the cache drops what it keeps for finished MRs.
-const PRUNE_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+const PRUNE_EVERY: Duration = Duration::from_hours(24);
 /// An MR nobody opened for this long is dropped even when its forge could not say it is finished.
-const KEEP_UNTOUCHED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const KEEP_UNTOUCHED: Duration = Duration::from_hours(30 * 24);
 
 /// One host's cache pruned: the forge asked once per project which kept MRs are finished; a
 /// project it cannot answer for keeps its MRs until they are old.
@@ -588,6 +588,12 @@ impl Backend {
             .try_collect()
             .await?;
         blocking(move || Ok(crate::outline::read(&files))).await
+    }
+
+    /// The Markdown file the prose view shows, at base and at head.
+    pub(super) async fn prose(&self, key: &MrKey, base: &Sha, head: &Sha, sides: crate::outline::Sides) -> Result<super::app::Versions> {
+        let (base, head) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
+        Ok(super::app::Versions { base, head })
     }
 
     /// The file at `sha`, empty when it does not exist on that side.

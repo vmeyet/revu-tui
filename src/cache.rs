@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn merged_closed_and_long_untouched_mrs_are_forgotten() {
         let now = SystemTime::now();
-        let day = Duration::from_secs(86_400);
+        let day = Duration::from_hours(24);
         let kept = |number: u64, days: u64| Kept { project: "acme/widgets".into(), number, touched: now - day * days as u32 };
         let all = [kept(40, 2), kept(41, 2), kept(42, 45)];
         let finished: HashSet<(String, u64)> = [("acme/widgets".to_owned(), 40)].into();

@@ -168,6 +168,10 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.outline(&key, &base, &head, files).await;
                 send(outcome.map_or_else(|e| failed(Failure::Outline, &e), |reading| Incoming::Outline { key, reading }));
             }
+            Action::LoadProse { key, base, head, sides } => {
+                let outcome = backend.prose(&key, &base, &head, sides.clone()).await;
+                send(outcome.map_or_else(|e| failed(Failure::Prose, &e), |versions| Incoming::Prose { key, sides, versions }));
+            }
             Action::LoadDeployments { key, branch, head } => {
                 if let Ok(deployments) = backend.forge_of(&key).deployments(&key, &branch, &head).await {
                     send(Incoming::Deployments { key, deployments });
