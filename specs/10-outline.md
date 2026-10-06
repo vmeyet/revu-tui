@@ -19,6 +19,7 @@ It replaces whatever held the pane, and the pane takes the keys.
 ## Comparing the two sides
 
 A symbol's signature is its definition from its start up to its body, whitespace collapsed, a trailing `:` dropped; in TypeScript and JavaScript it starts at the `export` holding the definition, so dropping the `export` changes it.
+Signature and body are compared with whitespace collapsed, no space after `(` `[` `{` or before `)` `]` `}`, and no comma right before a closer, so a list moved between one line and many reads the same; `<` and `>` keep their spaces since they also write `=>` and comparisons.
 Symbols are matched by kind and name inside one file; a renamed file is read at its old path on base and its new one on head.
 
 | Glyph | State | When |
