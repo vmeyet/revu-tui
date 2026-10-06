@@ -226,6 +226,9 @@ impl App {
             }
             return vec![];
         }
+        if self.prose_open() {
+            return self.handle_prose_key(key);
+        }
         if !key.modifiers.contains(KeyModifiers::CONTROL)
             && let Some(actions) = self.handle_write_key(key)
         {
@@ -273,6 +276,7 @@ impl App {
             KeyCode::Char('r') => return self.refresh_open(),
             KeyCode::Char('i') => self.open_brief_from_review(),
             KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => return self.view_here(crate::review::Side::New),
+            KeyCode::Char('v') => return self.open_prose(),
             KeyCode::Char('o') => {
                 return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }
@@ -319,6 +323,9 @@ impl App {
         if prefix == 'z' && self.outline_keys() {
             self.fold_outline(c);
             return vec![];
+        }
+        if self.prose_open() {
+            return self.prose_prefixed(prefix, c);
         }
         let forward = prefix == ']';
         match (prefix, c) {
@@ -382,7 +389,7 @@ impl App {
             return (!open.every_key).then_some(Help { scroll: 0, every_key: true });
         }
         let last = help::last_row(open.every_key, self.focus);
-        help_scroll(open.scroll, last, key).map(|scroll| Help { scroll, ..open })
+        scroll_key(open.scroll, last, key).map(|scroll| Help { scroll, ..open })
     }
 
     fn is_help_key(&self, key: KeyEvent) -> bool {
@@ -391,13 +398,13 @@ impl App {
     }
 }
 
-/// Moving keys scroll the key list; any other key closes it.
-fn help_scroll(scroll: usize, last: usize, key: KeyEvent) -> Option<usize> {
+/// The scroll a moving key gives, kept at or under `last`; `None` for any other key.
+pub(super) fn scroll_key(scroll: usize, last: usize, key: KeyEvent) -> Option<usize> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Some((scroll + 1).min(last)),
+        KeyCode::Char('j') | KeyCode::Down => Some(scroll.saturating_add(1).min(last)),
         KeyCode::Char('k') | KeyCode::Up => Some(scroll.saturating_sub(1)),
-        KeyCode::Char('d') if ctrl => Some((scroll + HALF_PAGE.unsigned_abs()).min(last)),
+        KeyCode::Char('d') if ctrl => Some(scroll.saturating_add(HALF_PAGE.unsigned_abs()).min(last)),
         KeyCode::Char('u') if ctrl => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
         KeyCode::Char('g') => Some(0),
         KeyCode::Char('G') => Some(last),

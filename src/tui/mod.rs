@@ -16,6 +16,9 @@ mod outline_view;
 mod palette;
 mod palette_view;
 mod pipeline_view;
+#[cfg(feature = "prose")]
+mod prose;
+mod prose_view;
 mod publish_view;
 mod queue_view;
 mod screen;
