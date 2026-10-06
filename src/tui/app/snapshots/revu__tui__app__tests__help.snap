@@ -34,7 +34,7 @@ expression: "render(&mut app, 160, 45)"
 │            │  VIEW                                                                 OUTLINE PANE                                                │             │
 │            │      / n N  find text in the MR, next, previous                               t  call tree, or the flat list                      │             │
 │            │          i  the MR cover page                                                 u  calls, or called by                              │             │
-│            │          D  inline diff, or side by side                                      s  the whole stack, unchanged calls too             │             │
+│            │          D  inline or side by side, diff and prose                            s  the whole stack, unchanged calls too             │             │
 │            │        > <  the code after, before, alone                                     a  public symbols only, or all                      │             │
 │            │          t  file tree                                                  zo zc za  open, close, toggle the branch                   │             │
 │            │          T  every thread of the MR                                        enter  the call in the diff, the definition, a section  │             │

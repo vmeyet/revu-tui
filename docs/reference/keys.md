@@ -42,7 +42,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 |---|---|
 | `/` `n` `N` | find text in the MR, next, previous |
 | `i` | the MR cover page |
-| `D` | inline diff, or side by side |
+| `D` | inline or side by side, diff and prose |
 | `>` `<` | the code after, before, alone |
 | `t` | file tree |
 | `T` | every thread of the MR |

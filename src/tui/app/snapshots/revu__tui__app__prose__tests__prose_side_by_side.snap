@@ -1,0 +1,30 @@
+---
+source: src/tui/app/prose.rs
+expression: "render(&mut app, 180, 26)"
+---
+╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────────────────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ───────────────────── ││  omar · feat/checkout → main · 2h · +4 −1 · 1 files · ✓ success                                                                      │
+│ ▎ feat charge cards at checkout          ││   1 of 2 approvals                                                                                                                   │
+│ ▎ omar · !42 · +412 −38               2h ││ docs/README.md · prose                                                                                                               │
+│                                          ││                                                                                                                                      │
+│   ── MINE · 1 ────────────────────────── ││   Widgets                                                           Widgets                                                          │
+│   fix flaky cache test                 D ││   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   nina · !41 · +3 −1                  4h ││                                                                                                                                      │
+│                                          ││ ▎ ▍ Install                                                                                                                          │
+│   ── WATCHING · 1 ────────────────────── ││                                                                                                                                      │
+│   infra: new runner                    ⠋ ││ ▎ Run the installer once.                                         ▎ Run the installer twice.                                         │
+│   omar · !35 · +0 −0                  2d ││                                                                                                                                      │
+│                                          ││   • one                                                             • one                                                            │
+│   ── ▸ DONE · 1 ──────────────────────── ││                                                                                                                                      │
+│                                          ││   • two                                                             • two                                                            │
+│                                          ││                                                                                                                                      │
+│                                          ││                                                                   ▎ • three                                                          │
+│                                          ││                                                                                                                                      │
+│                                          ││   The end.                                                          The end.                                                         │
+│                                          ││                                                                                                                                      │
+│                                          ││                                                                                                                                      │
+│                                          ││                                                                                                                                      │
+│                                          ││                                                                                                                                      │
+│                                          ││                                                                                                                                      │
+╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ✓ side by side                                                                                                                                                              ? help

@@ -35,10 +35,21 @@ Pairing the two sides and marking words is mrk's job (`mrk::diff::blocks`), not 
 - When no block changed (a rename, an edit mrk's rendering hides), the file reads as plain rendered Markdown: nothing dims and nothing folds.
 - Colour is never the only cue: the bar's presence and the strike or underline carry the change on a terminal without colour.
 
+## Side by side
+
+`D` lays the view out like the raw diff's side by side (`03-ui-ux.md` § Side by side): the old file on the left, the new one on the right.
+It is the same choice as the diff's, saved per MR as `side_by_side`, so `D` in either view sets both.
+
+- Each side is half the diff area less a one-column gap, and mrk renders it at that half less the gutter.
+- Every block change takes one band of rows: a same block on both sides, faded and folded as inline; a changed block's old side on the left with its words struck, its new side on the right with its words underlined (the old side shows even when only words were added); a removed block on the left beside blank rows; an added one on the right beside blank rows.
+- The shorter side of a band ends in blank rows, so the next band starts on the same row on both sides.
+- A fold row sits once, on the left.
+- Below the diff's threshold (117 columns of diff area) the view stays inline and toasts `side by side needs a wider window` once; the choice comes back with a wider area.
+
 ## Rendering
 
-- Blocks are rendered at the diff area's width less the two gutter columns, never the terminal's width.
-- Rendered blocks are kept per file texts, width and theme, and rendered again only when one of them changes (a resize, `:set theme=`); scrolling, `zR` and `zM` render nothing.
+- Blocks are rendered at the diff area's width less the two gutter columns, or each half's side by side, never the terminal's width.
+- Rendered blocks are kept per file texts, width and theme, one set per layout, and rendered again only when one of them changes (a resize, `:set theme=`); scrolling, `zR`, `zM` and `D` back to a layout already drawn render nothing.
 - mrk's colours come from revu's theme, so the view matches the rest of the screen:
   - the mrk preset of the same name when there is one (`dracula`, `catppuccin`, `catppuccin-latte`, `nord`, `tokyonight`), else `mrk-dark`, or `mrk-light` on a light ground;
   - then every RGB colour of revu's theme replaces its mrk twin: `accent`, `link`, `code`, `muted`, `faded` (mrk `subtle`), `surface`, `success`, `warn` (mrk `warning`), `danger` (mrk `caution`);
@@ -47,7 +58,7 @@ Pairing the two sides and marking words is mrk's job (`mrk::diff::blocks`), not 
 
 ## Keys
 
-`j` `k` scroll a row, `ctrl-d` `ctrl-u` `space` half a page, `g` `G` top and bottom, `zR` `zM` open and fold the unchanged runs, `r` reads again, `v` `esc` `x` back to the diff.
+`j` `k` scroll a row, `ctrl-d` `ctrl-u` `space` half a page, `g` `G` top and bottom, `zR` `zM` open and fold the unchanged runs, `D` inline or side by side, `r` reads again, `v` `esc` `x` back to the diff.
 
 ## Build
 
