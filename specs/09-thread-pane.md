@@ -125,7 +125,7 @@ Zen's column is at least 120 columns, so a pane beside the diff would squeeze th
 ### Moving inside it
 
 - `h` / `l` move focus between the diff and the pane, as between slack-tui's channel and thread.
-- `j` / `k` move the cursor bar note by note; `J` / `K` jump to the next or previous thread; `ctrl-d` / `ctrl-u` (`PgDn` `space` / `PgUp`) scroll half a page; `g` / `G` first and last note.
+- `j` / `k` move the cursor bar note by note; `J` / `K` jump to the next or previous thread; `ctrl-d` / `ctrl-u` (`space` down) scroll half a page, `ctrl-f` / `ctrl-b` (`PgDn` / `PgUp`) a full one; `g` / `G` first and last note.
 - The focused thread is the one under the cursor bar; `r`, `R`, `e`, `d`, `o`, `y` act on it.
 
 ## Composing

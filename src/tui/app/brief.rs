@@ -224,6 +224,8 @@ impl App {
             KeyCode::Char('p') => return self.brief_pipeline(),
             KeyCode::Char('d') if ctrl => Some(brief.scrolled(HALF_PAGE as isize)),
             KeyCode::Char('u') if ctrl => Some(brief.scrolled(-(HALF_PAGE as isize))),
+            KeyCode::Char('f') if ctrl => Some(brief.scrolled(2 * HALF_PAGE as isize)),
+            KeyCode::Char('b') if ctrl => Some(brief.scrolled(-2 * HALF_PAGE as isize)),
             KeyCode::Char('j') | KeyCode::Down if walks => Some(brief.down()),
             KeyCode::Char('k') | KeyCode::Up if walks => Some(brief.up()),
             KeyCode::Char('j') | KeyCode::Down => Some(brief.scrolled(1)),

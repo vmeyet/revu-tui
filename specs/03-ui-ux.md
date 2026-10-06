@@ -301,7 +301,8 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 |---|---|---|
 | `j` `k` `↓` `↑` | move; held down, each move grows to 2 then 4 rows | M1 |
 | `g` `G` | first, last | M1 |
-| `ctrl-d` `ctrl-u` `PgDn` `PgUp` `space` | half page (`space` down) | M1 |
+| `ctrl-d` `ctrl-u` `space` | half page (`space` down) | M1 |
+| `ctrl-f` `ctrl-b` `PgDn` `PgUp` | full page: the pane's rows but two, kept for context | post-M5 |
 | `h` `l` | focus left, right pane | M1 |
 | `enter` | open the thing under the cursor | M1 |
 | `esc` | close overlay, drop selection, go back | M1 |

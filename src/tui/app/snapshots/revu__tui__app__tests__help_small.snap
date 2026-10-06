@@ -5,24 +5,24 @@ expression: "render(&mut app, 80, 24)"
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────╮
 │   ─╭ keys ─────────────────────────────────────────────────────────────╮     │
 │ ▎ f│                                                                   │     │
-│ ▎ o│      ^d ^u  half a page; PgDn PgUp space too                      │     │
-│    │        h l  pane to the left, to the right                        │     │
-│   ─│      enter  open, or toggle the fold                              │     │
-│   f│      esc x  close the pane, back to the queue                     │     │
-│   n│  tab S-tab  next, previous file                                   │     │
-│    │      ]c [c  next, previous hunk                                   │     │
-│   ─│      ]n [n  next, previous open conversation                      │     │
-│   i│      ]N [N  next, previous conversation, resolved too             │     │
-│   o│      ]f [f  next, previous file with a thread                     │     │
-│    │      ]r [r  next, previous MR that needs you                      │     │
-│   ─│      ]m [m  next, previous MR in the queue                        │     │
+│ ▎ o│      ^d ^u  half a page; space too                                │     │
+│    │      ^f ^b  a full page; PgDn PgUp too                            │     │
+│   ─│        h l  pane to the left, to the right                        │     │
+│   f│      enter  open, or toggle the fold                              │     │
+│   n│      esc x  close the pane, back to the queue                     │     │
+│    │  tab S-tab  next, previous file                                   │     │
+│   ─│      ]c [c  next, previous hunk                                   │     │
+│   i│      ]n [n  next, previous open conversation                      │     │
+│   o│      ]N [N  next, previous conversation, resolved too             │     │
+│    │      ]f [f  next, previous file with a thread                     │     │
+│   ─│      ]r [r  next, previous MR that needs you                      │     │
+│    │      ]m [m  next, previous MR in the queue                        │     │
 │    │                                                                   │     │
 │    │  QUEUE                                                            │     │
 │    │          /  filter: words @author !42 ~label                      │     │
 │    │      ' 1-9  a saved view, by letter or rank                       │     │
-│    │          *  this repo, or every project                           │     │
 │    │                                                                   │     │
-│    ╰────────────────────────────── 4–19 of 89 · j k scroll · esc close ╯     │
+│    ╰────────────────────────────── 4–19 of 90 · j k scroll · esc close ╯     │
 │                                ││                                            │
 ╰────────────────────────────────╯╰────────────────────────────────────────────╯
  gitlab.com · nina                                                       ? help

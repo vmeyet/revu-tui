@@ -26,6 +26,8 @@ const INTERNAL: &[&str] = &[
     "move_up",
     "page_down",
     "page_up",
+    "full_page_down",
+    "full_page_up",
     "top",
     "bottom",
     "open",
@@ -68,7 +70,23 @@ const INTERNAL: &[&str] = &[
 /// How the report groups actions, in the order a review goes; anything not listed lands in OTHER,
 /// so a new action shows up without anyone updating this table.
 const GROUPS: &[(&str, &[&str])] = &[
-    ("move", &["move_down", "move_up", "page_down", "page_up", "top", "bottom", "focus_left", "focus_right", "open", "back"]),
+    (
+        "move",
+        &[
+            "move_down",
+            "move_up",
+            "page_down",
+            "page_up",
+            "full_page_down",
+            "full_page_up",
+            "top",
+            "bottom",
+            "focus_left",
+            "focus_right",
+            "open",
+            "back",
+        ],
+    ),
     (
         "jump",
         &[
@@ -230,6 +248,8 @@ fn movement(code: KeyCode, ctrl: bool) -> Option<&'static str> {
     Some(match code {
         KeyCode::Char('d') if ctrl => "page_down",
         KeyCode::Char('u') if ctrl => "page_up",
+        KeyCode::Char('f') if ctrl => "full_page_down",
+        KeyCode::Char('b') if ctrl => "full_page_up",
         _ if ctrl => return None,
         KeyCode::Char('j') | KeyCode::Down => "move_down",
         KeyCode::Char('k') | KeyCode::Up => "move_up",
