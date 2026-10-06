@@ -80,6 +80,7 @@ One word per concept, used in code, docs and UI:
 | file | One changed file in the MR diff |
 | hunk | One `@@` block inside a file |
 | symbol | A function, method or class definition the outline lists |
+| prose | A Markdown file drawn rendered, block by block, each block same, added, removed or changed |
 | line | One diff row with an old and/or new number |
 | thread | One discussion (resolvable or not) |
 | note | One comment inside a thread |

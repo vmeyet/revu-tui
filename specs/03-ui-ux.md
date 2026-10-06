@@ -336,6 +336,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `T` | every thread of the MR in the right pane (`09-thread-pane.md` § Every thread) | M3b |
 | `p` | pipeline: jobs by stage, failures first, `o` opens a job | M5 |
 | `O` | outline: the symbols the MR changes, `a` lists private ones too (`10-outline.md`) | post-M5 |
+| `v` | prose: the Markdown file under the cursor rendered, its blocks marked (`11-prose-diff.md`) | post-M5 |
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
 | `D` | inline diff, or side by side | M3 |
