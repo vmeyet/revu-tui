@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/prose.rs
-assertion_line: 221
 expression: "render(&mut app, 120, 20)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
@@ -11,11 +10,11 @@ expression: "render(&mut app, 120, 20)"
 │   ── MINE · 1 ──────────────── ││   Widgets                                                                          │
 │   fix flaky cache test       D ││   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │
 │   nina · !41 · +3 −1        4h ││                                                                                    │
-│                                ││   Acme widgets for nina.                                                           │
+│                                ││ ▎ Acme widgets for nina.                                                           │
 │   ── WATCHING · 1 ──────────── ││                                                                                    │
-│   infra: new runner          ⠋ ││   • one                                                                            │
+│   infra: new runner          ⠋ ││ ▎ • one                                                                            │
 │   omar · !35 · +0 −0        2d ││                                                                                    │
-│                                ││   • two                                                                            │
+│                                ││ ▎ • two                                                                            │
 │   ── ▸ DONE · 1 ────────────── ││                                                                                    │
 │                                ││                                                                                    │
 │                                ││                                                                                    │

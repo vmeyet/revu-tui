@@ -3,8 +3,8 @@
 use super::{Entry, Open, Pane, Versions};
 use crate::review::tree::{self, TreeFolds, TreeRow};
 use crate::review::{Conversation, Draft, File, Markers, Thread};
+use crate::tui::prose_view::{self, Rows};
 use crate::tui::theme::Theme;
-use ratatui::text::Line;
 use std::sync::Arc;
 
 /// A shared slice compared by identity: a review keeps it until a fetch replaces it, and the held
@@ -62,7 +62,7 @@ pub struct Kept {
     markers: Memo<ReviewInputs, Markers>,
     listed: Memo<(ReviewInputs, Pane), (Vec<Conversation>, Vec<Entry>)>,
     tree: Memo<(Same<[File]>, TreeFolds), Vec<TreeRow>>,
-    prose: Memo<(Same<Versions>, usize, Theme, bool), Vec<Line<'static>>>,
+    prose: Memo<(Same<Versions>, usize, Theme), Rows>,
 }
 
 impl Kept {
@@ -84,9 +84,9 @@ impl Kept {
         self.tree.get((Same::of(&open.review.files), folds.clone()), || tree::rows(&open.review.files, folds))
     }
 
-    /// The prose view's rows in `width` columns, rendered again only for other texts, width, theme or folds.
-    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, theme: Theme, unfolded: bool) -> &[Line<'static>] {
-        self.prose.get((Same::of(versions), width, theme, unfolded), || crate::tui::prose_view::rows(versions, width, theme, unfolded))
+    /// The prose view's rows in `width` columns, rendered again only for other texts, width or theme.
+    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, theme: Theme) -> &Rows {
+        self.prose.get((Same::of(versions), width, theme), || prose_view::rows(versions, width, theme))
     }
 }
 

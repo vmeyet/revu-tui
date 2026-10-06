@@ -1,5 +1,7 @@
 //! A Markdown file drawn as mrk renders it, block by block, each block marked same, added, removed or changed.
+use super::prose_view::Rows;
 use super::theme::Theme;
+use mrk::diff::BlockChange;
 use mrk::document::{self, Block, Rgb, Settings};
 use mrk::markdown::SourceBlock;
 use mrk::theme::{Appearance, Palette};
@@ -23,42 +25,12 @@ const PRESETS: [(&str, &str); 5] = [
     ("tokyonight", "tokyo-night"),
 ];
 
-/// What one block became between base and head, in the shape of `mrk::diff::BlockChange` (mrk issue #15).
-/// Once mrk tags `diff::blocks`, this enum becomes `pub use mrk::diff::BlockChange;` and [`blocks`] calls it.
-#[derive(Clone, Debug, PartialEq)]
-#[allow(dead_code, reason = "mrk's shape: the stand-in never pairs, and the old side of a same block is never drawn")]
-pub enum BlockChange {
-    Same {
-        old: SourceBlock,
-        new: SourceBlock,
-    },
-    Added(SourceBlock),
-    Removed(SourceBlock),
-    /// `old_words` and `new_words` are char ranges into each side's plain text, ready for `document::highlight`.
-    Changed {
-        old: SourceBlock,
-        new: SourceBlock,
-        old_words: Vec<Range<usize>>,
-        new_words: Vec<Range<usize>>,
-    },
-}
-
-/// Stands in for `mrk::diff::blocks` until mrk tags it: no pairing, every head block reads as same,
-/// and a side alone (an added or deleted file) reads as all added or all removed.
-pub fn blocks(old: &str, new: &str, settings: &Settings) -> Vec<BlockChange> {
-    let render = |source: &str| mrk::markdown::render_blocks(source, settings);
-    match (old.is_empty(), new.is_empty()) {
-        (_, true) => render(old).into_iter().map(BlockChange::Removed).collect(),
-        (true, false) => render(new).into_iter().map(BlockChange::Added).collect(),
-        (false, false) => render(new).into_iter().map(|block| BlockChange::Same { old: block.clone(), new: block }).collect(),
-    }
-}
-
-/// The rows of `old` and `new` drawn as prose in `width` columns; unchanged runs fold unless `unfolded`.
-pub fn render(old: &str, new: &str, width: usize, theme: Theme, unfolded: bool) -> Vec<Line<'static>> {
+/// The rows of `old` and `new` drawn as prose in `width` columns, unchanged runs folded and open.
+pub fn render(old: &str, new: &str, width: usize, theme: Theme) -> Rows {
     let settings = settings(theme, width.saturating_sub(GUTTER));
     let look = Look { theme, palette: settings.theme.palette };
-    rows(&blocks(old, new, &settings), unfolded, &look)
+    let changes = mrk::diff::blocks(old, new, &settings);
+    Rows { folded: rows(&changes, false, &look), unfolded: rows(&changes, true, &look) }
 }
 
 /// mrk's settings in revu's colours: the preset of the same theme, or mrk's own for the ground, then every RGB colour revu has.
@@ -265,17 +237,42 @@ mod tests {
     }
 
     #[test]
-    fn the_stand_in_reads_every_head_block_as_same_and_a_side_alone_as_added_or_removed() {
-        let settings = settings(theme(), 40);
-        assert!(blocks(README, README, &settings).iter().all(is_same));
-        assert!(blocks("", README, &settings).iter().all(|c| matches!(c, BlockChange::Added(_))));
-        assert!(blocks(README, "", &settings).iter().all(|c| matches!(c, BlockChange::Removed(_))));
-        assert_eq!(blocks(README, README, &settings), blocks(README, README, &settings), "running it twice gives the same blocks");
+    fn an_edited_readme_marks_its_removed_heading_edited_paragraph_and_added_bullet_and_fades_the_rest() {
+        let old = "# Widgets\n\n## Install\n\nRun the installer once.\n\n- one\n- two\n\nThe end.\n";
+        let new = old.replace("## Install\n\n", "").replace("once", "twice").replace("- two\n", "- two\n- three\n");
+        let rows = render(old, &new, 40, theme()).unfolded;
+        assert_eq!(
+            plain(&rows),
+            [
+                "  Widgets",
+                &format!("  {}", "━".repeat(38)),
+                "",
+                "▎ ▍ Install",
+                "",
+                "▎ Run the installer once.",
+                "",
+                "▎ Run the installer twice.",
+                "",
+                "  • one",
+                "",
+                "  • two",
+                "",
+                "▎ • three",
+                "",
+                "  The end."
+            ]
+        );
+        let bars: Vec<Option<Color>> = rows.iter().map(|row| row.spans.first().and_then(|bar| bar.style.fg)).collect();
+        let (added, removed) = (Some(theme().success), Some(theme().danger));
+        assert_eq!([bars[3], bars[5], bars[7], bars[13]], [removed, removed, added, added]);
+        assert!(span(&rows, "once").style.add_modifier.contains(Modifier::CROSSED_OUT));
+        assert!(span(&rows, "twice").style.add_modifier.contains(Modifier::UNDERLINED));
+        assert_eq!(span(&rows, "The end.").style.fg, Some(theme().faded), "unchanged blocks fade");
     }
 
     #[test]
     fn a_file_with_no_change_reads_as_plain_prose_nothing_faded_or_folded() {
-        let rows = render(README, README, 40, theme(), false);
+        let rows = render(README, README, 40, theme()).folded;
         assert_eq!(
             plain(&rows),
             ["  Widgets", &format!("  {}", "━".repeat(38)), "", "  Acme widgets for nina.", "", "  • one", "", "  • two", "", "  The end."]

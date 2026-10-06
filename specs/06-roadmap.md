@@ -158,8 +158,8 @@ Spec: `11-prose-diff.md`. One MR per slice:
 
 1. The spec.
 2. Cargo feature `prose` (mrk pinned by tag), both files read at base and head, `v` toggles the view, the file drawn in revu's colours, block after block.
-3. Block changes drawn with bars, folds (`zR` `zM`) and word marks, from a revu stand-in shaped like `mrk::diff::BlockChange` that reads every head block as same.
-4. Swap the stand-in for `mrk::diff::blocks` (mrk issue #15) once mrk tags it: blocks pair and words light up.
+3. Block changes drawn with bars, folds (`zR` `zM`) and word marks.
+4. Pairing from `mrk::diff::blocks` (mrk 0.7): blocks pair and words light up.
 5. Pictures: Mermaid and images drawn as pictures, a changed diagram before and after.
 6. Comments: a block cursor, comments on a block's last line, threads under their block, `enter` to the raw diff.
 

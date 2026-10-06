@@ -22,18 +22,33 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         Texts::Failed(message) => return draw_empty(f, theme, body, &[message, "", "r to retry"]),
         Texts::Ready(versions) => versions,
     };
-    let rows = app.kept.prose_rows(versions, body.width as usize, theme, prose.unfolded);
+    let rows = app.kept.prose_rows(versions, body.width as usize, theme).shown(prose.unfolded);
     prose.scroll = prose.scroll.min(rows.len().saturating_sub(body.height as usize));
     let shown: Vec<Line> = rows.iter().skip(prose.scroll).take(body.height as usize).cloned().collect();
     f.render_widget(Paragraph::new(shown), body);
 }
 
+/// The view's rows both ways, so `zR` and `zM` render nothing again.
+#[derive(Debug)]
+pub struct Rows {
+    pub folded: Vec<Line<'static>>,
+    pub unfolded: Vec<Line<'static>>,
+}
+
+impl Rows {
+    pub fn shown(&self, unfolded: bool) -> &[Line<'static>] {
+        if unfolded { &self.unfolded } else { &self.folded }
+    }
+}
+
 #[cfg(feature = "prose")]
-pub fn rows(versions: &Versions, width: usize, theme: Theme, unfolded: bool) -> Vec<Line<'static>> {
-    super::prose::render(&versions.base, &versions.head, width, theme, unfolded)
+pub fn rows(versions: &Versions, width: usize, theme: Theme) -> Rows {
+    super::prose::render(&versions.base, &versions.head, width, theme)
 }
 
 #[cfg(not(feature = "prose"))]
-pub fn rows(_: &Versions, _: usize, theme: Theme, _: bool) -> Vec<Line<'static>> {
-    vec![Line::styled("this revu was built without the prose view (cargo feature `prose`)", Style::default().fg(theme.muted))]
+pub fn rows(_: &Versions, _: usize, theme: Theme) -> Rows {
+    let message =
+        vec![Line::styled("this revu was built without the prose view (cargo feature `prose`)", Style::default().fg(theme.muted))];
+    Rows { folded: message.clone(), unfolded: message }
 }
