@@ -340,7 +340,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `v` | prose: the Markdown file under the cursor rendered, its blocks marked (`11-prose-diff.md`) | post-M5 |
 | `w` | wrap long lines | M3 |
 | `W` | hide whitespace-only changes | M3 |
-| `D` | inline diff, or side by side | M3 |
+| `D` | inline or side by side, diff and prose | M3 |
 | `>` `<` | the code after, before, alone | post-M5 |
 | `=` | more context around the hunk | M3 |
 | `+` | react to the thread on the line | M5 |

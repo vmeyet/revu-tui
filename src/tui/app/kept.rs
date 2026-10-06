@@ -62,7 +62,9 @@ pub struct Kept {
     markers: Memo<ReviewInputs, Markers>,
     listed: Memo<(ReviewInputs, Pane), (Vec<Conversation>, Vec<Entry>)>,
     tree: Memo<(Same<[File]>, TreeFolds), Vec<TreeRow>>,
+    /// One per layout, so `D` in the prose view goes back and forth without rendering again.
     prose: Memo<(Same<Versions>, usize, Theme), Rows>,
+    prose_beside: Memo<(Same<Versions>, usize, Theme), Rows>,
 }
 
 impl Kept {
@@ -84,9 +86,10 @@ impl Kept {
         self.tree.get((Same::of(&open.review.files), folds.clone()), || tree::rows(&open.review.files, folds))
     }
 
-    /// The prose view's rows in `width` columns, rendered again only for other texts, width or theme.
-    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, theme: Theme) -> &Rows {
-        self.prose.get((Same::of(versions), width, theme), || prose_view::rows(versions, width, theme))
+    /// The prose view's rows in `width` columns, inline or `beside`, rendered again only for other texts, width or theme.
+    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, beside: bool, theme: Theme) -> &Rows {
+        let memo = if beside { &mut self.prose_beside } else { &mut self.prose };
+        memo.get((Same::of(versions), width, theme), || prose_view::rows(versions, width, beside, theme))
     }
 }
 

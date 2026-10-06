@@ -82,6 +82,7 @@ impl App {
         }
         match key.code {
             KeyCode::Char('r') => self.read_prose(prose),
+            KeyCode::Char('D') => self.toggle_side_by_side(),
             KeyCode::Char('v' | 'x') | KeyCode::Esc => {
                 self.update_open(|open| open.with_prose(None));
                 vec![]
@@ -150,8 +151,20 @@ mod tests {
     }
 
     fn read(app: &mut App) {
-        let versions = Versions { base: BASE.into(), head: HEAD.into() };
+        read_texts(app, BASE, HEAD);
+    }
+
+    fn read_texts(app: &mut App, base: &str, head: &str) {
+        let versions = Versions { base: base.into(), head: head.into() };
         app.apply(Incoming::Prose { key: mr_key(), sides: prose(app).unwrap().sides.clone(), versions });
+    }
+
+    /// A README with a removed heading, an edited paragraph and an added bullet.
+    #[cfg(feature = "prose")]
+    fn read_edited(app: &mut App) {
+        let base = "# Widgets\n\n## Install\n\nRun the installer once.\n\n- one\n- two\n\nThe end.\n";
+        let head = base.replace("## Install\n\n", "").replace("once", "twice").replace("- two\n", "- two\n- three\n");
+        read_texts(app, base, &head);
     }
 
     #[test]
@@ -229,5 +242,28 @@ mod tests {
         press(&mut app, "v");
         read(&mut app);
         insta::assert_snapshot!("prose", render(&mut app, 120, 20));
+    }
+
+    #[cfg(feature = "prose")]
+    #[test]
+    fn snapshot_prose_side_by_side() {
+        let mut app = with_markdown(FileKind::Modified);
+        press(&mut app, "vD");
+        read_edited(&mut app);
+        insta::assert_snapshot!("prose_side_by_side", render(&mut app, 180, 26));
+    }
+
+    #[cfg(feature = "prose")]
+    #[test]
+    fn d_in_a_narrow_pane_keeps_prose_inline_and_says_so() {
+        let mut app = with_markdown(FileKind::Modified);
+        press(&mut app, "v");
+        read_edited(&mut app);
+        render(&mut app, 100, 30);
+        press(&mut app, "D");
+        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("side by side needs a wider window"));
+        let screen = render(&mut app, 100, 30);
+        assert!(screen.lines().any(|row| row.contains("once") && !row.contains("twice")), "{screen}");
+        assert!(prose(&app).is_some() && app.open.as_ref().unwrap().review.side_by_side, "the choice stays for a wider window");
     }
 }

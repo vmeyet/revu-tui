@@ -13,7 +13,9 @@ const TITLE_ROWS: u16 = 2;
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let (theme, elapsed) = (app.theme, app.now.duration_since(app.started));
-    let Some(prose) = app.open.as_mut().and_then(|open| open.prose.as_mut()) else { return };
+    let Some(open) = app.open.as_mut() else { return };
+    let beside = open.review.side_by_side && open.review.wide;
+    let Some(prose) = open.prose.as_mut() else { return };
     let title = Line::styled(format!("{} · prose", prose.path()), Style::default().fg(theme.muted));
     f.render_widget(Paragraph::new(title), area);
     let body = Rect { y: area.y + TITLE_ROWS, height: area.height.saturating_sub(TITLE_ROWS), ..area };
@@ -22,7 +24,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         Texts::Failed(message) => return draw_empty(f, theme, body, &[message, "", "r to retry"]),
         Texts::Ready(versions) => versions,
     };
-    let rows = app.kept.prose_rows(versions, body.width as usize, theme).shown(prose.unfolded);
+    let rows = app.kept.prose_rows(versions, body.width as usize, beside, theme).shown(prose.unfolded);
     prose.scroll = prose.scroll.min(rows.len().saturating_sub(body.height as usize));
     let shown: Vec<Line> = rows.iter().skip(prose.scroll).take(body.height as usize).cloned().collect();
     f.render_widget(Paragraph::new(shown), body);
@@ -42,12 +44,12 @@ impl Rows {
 }
 
 #[cfg(feature = "prose")]
-pub fn rows(versions: &Versions, width: usize, theme: Theme) -> Rows {
-    super::prose::render(&versions.base, &versions.head, width, theme)
+pub fn rows(versions: &Versions, width: usize, beside: bool, theme: Theme) -> Rows {
+    super::prose::render(&versions.base, &versions.head, width, beside, theme)
 }
 
 #[cfg(not(feature = "prose"))]
-pub fn rows(_: &Versions, _: usize, theme: Theme) -> Rows {
+pub fn rows(_: &Versions, _: usize, _: bool, theme: Theme) -> Rows {
     let message =
         vec![Line::styled("this revu was built without the prose view (cargo feature `prose`)", Style::default().fg(theme.muted))];
     Rows { folded: message.clone(), unfolded: message }

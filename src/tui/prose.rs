@@ -12,6 +12,8 @@ use std::ops::Range;
 
 /// The bar and the space after it.
 pub const GUTTER: usize = 2;
+/// The blank column between the two sides.
+const GAP: usize = 1;
 /// A run of unchanged blocks longer than this folds, its first and last block kept.
 const FOLD_FROM: usize = 3;
 /// Every char of a block, to fade it whole.
@@ -25,12 +27,30 @@ const PRESETS: [(&str, &str); 5] = [
     ("tokyonight", "tokyo-night"),
 ];
 
-/// The rows of `old` and `new` drawn as prose in `width` columns, unchanged runs folded and open.
-pub fn render(old: &str, new: &str, width: usize, theme: Theme) -> Rows {
-    let settings = settings(theme, width.saturating_sub(GUTTER));
+/// The rows of `old` and `new` drawn as prose in `width` columns, inline or `beside` each other, unchanged runs folded and open.
+pub fn render(old: &str, new: &str, width: usize, beside: bool, theme: Theme) -> Rows {
+    let layout = if beside { Layout::Beside { half: width.saturating_sub(GAP) / 2 } } else { Layout::Inline };
+    let settings = settings(theme, layout.side_width(width).saturating_sub(GUTTER));
     let look = Look { theme, palette: settings.theme.palette };
     let changes = mrk::diff::blocks(old, new, &settings);
-    Rows { folded: rows(&changes, false, &look), unfolded: rows(&changes, true, &look) }
+    Rows { folded: rows(&changes, false, layout, &look), unfolded: rows(&changes, true, layout, &look) }
+}
+
+/// Every block in one column, or the old side on the left and the new one on the right, each `half` columns wide.
+#[derive(Clone, Copy)]
+enum Layout {
+    Inline,
+    Beside { half: usize },
+}
+
+impl Layout {
+    /// The columns one side is drawn in, its bar included.
+    fn side_width(self, width: usize) -> usize {
+        match self {
+            Self::Inline => width,
+            Self::Beside { half } => half,
+        }
+    }
 }
 
 /// mrk's settings in revu's colours: the preset of the same theme, or mrk's own for the ground, then every RGB colour revu has.
@@ -73,24 +93,29 @@ impl Look {
     }
 }
 
-/// One block of the view, or a fold standing for several.
+/// One block after its bar; a same block has none.
+struct Marked {
+    bar: Option<Color>,
+    lines: Vec<document::Line>,
+}
+
+/// One block of the view, the two sides of a change `half` columns wide each, or a fold standing for several.
 enum Shown {
-    Block { bar: Option<Color>, lines: Vec<document::Line> },
+    Block(Marked),
+    Beside { old: Option<Marked>, new: Option<Marked>, half: usize },
     Folded(usize),
 }
 
-fn rows(changes: &[BlockChange], unfolded: bool, look: &Look) -> Vec<Line<'static>> {
+fn rows(changes: &[BlockChange], unfolded: bool, layout: Layout, look: &Look) -> Vec<Line<'static>> {
     let changed = changes.iter().any(|change| !is_same(change));
-    let shown = changes.chunk_by(|a, b| is_same(a) && is_same(b)).flat_map(|run| match run {
-        [BlockChange::Same { new: first, .. }, .., BlockChange::Same { new: last, .. }]
-            if changed && !unfolded && run.len() > FOLD_FROM =>
-        {
-            let faded = Some(look.palette.subtle);
-            vec![same(first, faded), Shown::Folded(run.len() - 2), same(last, faded)]
+    let shown = |change: &BlockChange| shown(change, changed, layout, look);
+    let all = changes.chunk_by(|a, b| is_same(a) && is_same(b)).flat_map(|run| match run {
+        [first, .., last] if is_same(first) && changed && !unfolded && run.len() > FOLD_FROM => {
+            [shown(first), vec![Shown::Folded(run.len() - 2)], shown(last)].into_iter().flatten().collect::<Vec<_>>()
         }
-        _ => run.iter().flat_map(|change| shown(change, changed, look)).collect(),
+        _ => run.iter().flat_map(shown).collect::<Vec<_>>(),
     });
-    let drawn: Vec<Vec<Line<'static>>> = shown.map(|shown| drawn(shown, look)).collect();
+    let drawn: Vec<Vec<Line<'static>>> = all.map(|shown| drawn(shown, look)).collect();
     drawn.join(&Line::default())
 }
 
@@ -98,25 +123,43 @@ fn is_same(change: &BlockChange) -> bool {
     matches!(change, BlockChange::Same { .. })
 }
 
-/// A change as the blocks it shows; same blocks fade only when something else changed.
-fn shown(change: &BlockChange, changed: bool, look: &Look) -> Vec<Shown> {
-    let (added, removed, faded) = (Some(look.theme.success), Some(look.theme.danger), Some(look.palette.subtle));
-    match change {
-        BlockChange::Same { new, .. } => vec![same(new, faded.filter(|_| changed))],
-        BlockChange::Added(block) => vec![Shown::Block { bar: added, lines: marked(block, None, &[], identity) }],
-        BlockChange::Removed(block) => vec![Shown::Block { bar: removed, lines: marked(block, faded, &[], identity) }],
-        BlockChange::Changed { old, new, old_words, new_words } => {
-            let new = Shown::Block { bar: added, lines: marked(new, None, new_words, look.added_word()) };
-            if old_words.is_empty() && !new_words.is_empty() {
-                return vec![new];
-            }
-            vec![Shown::Block { bar: removed, lines: marked(old, faded, old_words, look.removed_word()) }, new]
-        }
+/// A change as the blocks it shows, in one column or side by side.
+fn shown(change: &BlockChange, changed: bool, layout: Layout, look: &Look) -> Vec<Shown> {
+    let (old, new) = sides(change, changed, look);
+    match layout {
+        Layout::Beside { half } => vec![Shown::Beside { old, new, half }],
+        Layout::Inline => [old.filter(|_| shows_old_inline(change)), new].into_iter().flatten().map(Shown::Block).collect(),
     }
 }
 
-fn same(block: &SourceBlock, faded: Option<Rgb>) -> Shown {
-    Shown::Block { bar: None, lines: marked(block, faded, &[], identity) }
+/// The block of each side, none on the side it is missing from; same blocks fade only when something else changed.
+fn sides(change: &BlockChange, changed: bool, look: &Look) -> (Option<Marked>, Option<Marked>) {
+    let (added, removed, faded) = (Some(look.theme.success), Some(look.theme.danger), Some(look.palette.subtle));
+    match change {
+        BlockChange::Same { old, new } => {
+            let faded = faded.filter(|_| changed);
+            (Some(same(old, faded)), Some(same(new, faded)))
+        }
+        BlockChange::Added(block) => (None, Some(Marked { bar: added, lines: marked(block, None, &[], identity) })),
+        BlockChange::Removed(block) => (Some(Marked { bar: removed, lines: marked(block, faded, &[], identity) }), None),
+        BlockChange::Changed { old, new, old_words, new_words } => (
+            Some(Marked { bar: removed, lines: marked(old, faded, old_words, look.removed_word()) }),
+            Some(Marked { bar: added, lines: marked(new, None, new_words, look.added_word()) }),
+        ),
+    }
+}
+
+/// In one column a same block shows once, and a change that only adds words shows its new side alone.
+fn shows_old_inline(change: &BlockChange) -> bool {
+    match change {
+        BlockChange::Same { .. } => false,
+        BlockChange::Changed { old_words, new_words, .. } => !old_words.is_empty() || new_words.is_empty(),
+        BlockChange::Added(_) | BlockChange::Removed(_) => true,
+    }
+}
+
+fn same(block: &SourceBlock, faded: Option<Rgb>) -> Marked {
+    Marked { bar: None, lines: marked(block, faded, &[], identity) }
 }
 
 /// The block's lines, all in the `faded` colour when given, then its `words` restyled.
@@ -152,16 +195,12 @@ fn text_lines(part: &Block) -> &[document::Line] {
 }
 
 fn drawn(shown: Shown, look: &Look) -> Vec<Line<'static>> {
-    let text = look.palette.text;
     match shown {
-        Shown::Block { bar, lines } => lines
-            .into_iter()
-            .map(|line| {
-                let bar = Span::styled(if bar.is_some() { "▎ " } else { "  " }, Style::default().fg(bar.unwrap_or_default()));
-                let spans = line.spans.into_iter().map(|span| Span::styled(span.text, style(span.style, text)));
-                Line::from(std::iter::once(bar).chain(spans).collect::<Vec<_>>())
-            })
-            .collect(),
+        Shown::Block(block) => barred(block, look),
+        Shown::Beside { old, new, half } => {
+            let side = |block: Option<Marked>| block.map(|block| barred(block, look)).unwrap_or_default();
+            beside(&side(old), &side(new), half)
+        }
         Shown::Folded(count) => {
             vec![Line::styled(
                 format!("  ··· {count} unchanged block{}", if count == 1 { "" } else { "s" }),
@@ -169,6 +208,31 @@ fn drawn(shown: Shown, look: &Look) -> Vec<Line<'static>> {
             )]
         }
     }
+}
+
+fn barred(block: Marked, look: &Look) -> Vec<Line<'static>> {
+    let text = look.palette.text;
+    let bar = Span::styled(if block.bar.is_some() { "▎ " } else { "  " }, Style::default().fg(block.bar.unwrap_or_default()));
+    block
+        .lines
+        .into_iter()
+        .map(|line| {
+            let spans = line.spans.into_iter().map(|span| Span::styled(span.text, style(span.style, text)));
+            Line::from(std::iter::once(bar.clone()).chain(spans).collect::<Vec<_>>())
+        })
+        .collect()
+}
+
+/// The old rows padded to `half` columns and the gap, the new rows after them; the shorter side ends in blank rows.
+fn beside(old: &[Line<'static>], new: &[Line<'static>], half: usize) -> Vec<Line<'static>> {
+    let row = |lines: &[Line<'static>], i: usize| lines.get(i).cloned().unwrap_or_default();
+    (0..old.len().max(new.len()))
+        .map(|i| {
+            let left = row(old, i);
+            let pad = Span::raw(" ".repeat((half + GAP).saturating_sub(left.width())));
+            Line::from([left.spans, vec![pad], row(new, i).spans].concat())
+        })
+        .collect()
 }
 
 /// mrk's style as ratatui's; mrk's text colour becomes the terminal's own, as everywhere in revu.
@@ -240,7 +304,7 @@ mod tests {
     fn an_edited_readme_marks_its_removed_heading_edited_paragraph_and_added_bullet_and_fades_the_rest() {
         let old = "# Widgets\n\n## Install\n\nRun the installer once.\n\n- one\n- two\n\nThe end.\n";
         let new = old.replace("## Install\n\n", "").replace("once", "twice").replace("- two\n", "- two\n- three\n");
-        let rows = render(old, &new, 40, theme()).unfolded;
+        let rows = render(old, &new, 40, false, theme()).unfolded;
         assert_eq!(
             plain(&rows),
             [
@@ -272,7 +336,7 @@ mod tests {
 
     #[test]
     fn a_file_with_no_change_reads_as_plain_prose_nothing_faded_or_folded() {
-        let rows = render(README, README, 40, theme()).folded;
+        let rows = render(README, README, 40, false, theme()).folded;
         assert_eq!(
             plain(&rows),
             ["  Widgets", &format!("  {}", "━".repeat(38)), "", "  Acme widgets for nina.", "", "  • one", "", "  • two", "", "  The end."]
@@ -282,7 +346,8 @@ mod tests {
 
     #[test]
     fn added_and_removed_blocks_carry_their_bar_and_a_removed_one_fades() {
-        let rows = rows(&[BlockChange::Added(block("New line.")), BlockChange::Removed(block("Old line."))], false, &look());
+        let rows =
+            rows(&[BlockChange::Added(block("New line.")), BlockChange::Removed(block("Old line."))], false, Layout::Inline, &look());
         assert_eq!(plain(&rows), ["▎ New line.", "", "▎ Old line."]);
         assert_eq!(rows[0].spans[0].style.fg, Some(theme().success));
         assert_eq!(rows[2].spans[0].style.fg, Some(theme().danger));
@@ -293,7 +358,7 @@ mod tests {
     fn a_changed_block_strikes_its_old_words_and_underlines_its_new_ones() {
         let change =
             BlockChange::Changed { old: block("Pay by card."), new: block("Pay by cash."), old_words: vec![7..11], new_words: vec![7..11] };
-        let rows = rows(&[change], false, &look());
+        let rows = rows(&[change], false, Layout::Inline, &look());
         assert_eq!(plain(&rows), ["▎ Pay by card.", "", "▎ Pay by cash."]);
         let (old, new) = (span(&rows, "card"), span(&rows, "cash"));
         assert!(old.style.add_modifier.contains(Modifier::CROSSED_OUT) && old.style.fg == Some(theme().danger));
@@ -304,16 +369,48 @@ mod tests {
     #[test]
     fn a_change_that_only_adds_words_shows_its_new_side_alone() {
         let change = BlockChange::Changed { old: block("Pay."), new: block("Pay now."), old_words: vec![], new_words: vec![3..7] };
-        assert_eq!(plain(&rows(&[change], false, &look())), ["▎ Pay now."]);
+        assert_eq!(plain(&rows(&[change], false, Layout::Inline, &look())), ["▎ Pay now."]);
     }
 
     #[test]
     fn a_long_unchanged_run_folds_to_its_ends_unless_unfolded() {
         let mut changes: Vec<BlockChange> = ["One.", "Two.", "Three.", "Four.", "Five."].into_iter().map(same).collect();
         changes.push(BlockChange::Added(block("Six.")));
-        assert_eq!(plain(&rows(&changes, false, &look())), ["  One.", "", "  ··· 3 unchanged blocks", "", "  Five.", "", "▎ Six."]);
-        assert_eq!(plain(&rows(&changes, true, &look())).len(), 11);
-        assert_eq!(span(&rows(&changes, true, &look()), "Two.").style.fg, Some(theme().faded), "same blocks fade next to a change");
+        assert_eq!(
+            plain(&rows(&changes, false, Layout::Inline, &look())),
+            ["  One.", "", "  ··· 3 unchanged blocks", "", "  Five.", "", "▎ Six."]
+        );
+        assert_eq!(plain(&rows(&changes, true, Layout::Inline, &look())).len(), 11);
+        assert_eq!(
+            span(&rows(&changes, true, Layout::Inline, &look()), "Two.").style.fg,
+            Some(theme().faded),
+            "same blocks fade next to a change"
+        );
+    }
+
+    #[test]
+    fn side_by_side_puts_old_left_and_new_right_and_pads_the_shorter_side() {
+        let long = "Pay by card or by bank transfer, whichever comes first.";
+        let changes = [
+            BlockChange::Removed(block("Old.")),
+            BlockChange::Changed { old: block(long), new: block("Pay by cash."), old_words: vec![7..11], new_words: vec![7..11] },
+            BlockChange::Added(block("New.")),
+        ];
+        let rows = rows(&changes, false, Layout::Beside { half: 42 }, &look());
+        let right = |text: &str| format!("{}{text}", " ".repeat(43));
+        assert_eq!(
+            plain(&rows),
+            [
+                "▎ Old.".to_owned(),
+                String::new(),
+                format!("{:43}▎ Pay by cash.", "▎ Pay by card or by bank transfer,"),
+                "▎ whichever comes first.".to_owned(),
+                String::new(),
+                right("▎ New."),
+            ]
+        );
+        assert!(span(&rows, "card").style.add_modifier.contains(Modifier::CROSSED_OUT));
+        assert!(span(&rows, "cash").style.add_modifier.contains(Modifier::UNDERLINED));
     }
 
     #[test]
