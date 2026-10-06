@@ -282,7 +282,7 @@ impl Keymap {
                     Some(c) => TAKEN.contains(c),
                     None => {
                         matches!(first.code, Code::Enter | Code::Esc | Code::Tab | Code::BackTab)
-                            || (first.ctrl && matches!(first.code, Code::Char('c' | 'd' | 'u' | 'k' | 'v')))
+                            || (first.ctrl && matches!(first.code, Code::Char('c' | 'd' | 'u' | 'f' | 'b' | 'k' | 'v')))
                     }
                 };
                 taken.then(|| {

@@ -240,6 +240,8 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.scroll_answer(-1),
             KeyCode::Char('d') if ctrl => self.scroll_answer(HALF_PAGE as isize),
             KeyCode::Char('u') if ctrl => self.scroll_answer(-(HALF_PAGE as isize)),
+            KeyCode::Char('f') if ctrl => self.scroll_answer(super::keys::full_page(self.areas.side)),
+            KeyCode::Char('b') if ctrl => self.scroll_answer(-super::keys::full_page(self.areas.side)),
             KeyCode::Char('g') => self.scroll_answer(isize::MIN / 2),
             KeyCode::Char('G') => self.scroll_answer(isize::MAX / 2),
             KeyCode::Char('y') => return vec![Action::Yank(answer.text.clone())],

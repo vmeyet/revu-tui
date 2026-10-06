@@ -3,8 +3,11 @@ use super::{Action, App, Focus};
 use crate::review::Row;
 use crate::tui::help::{self, Help};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::Rect;
 
 const HALF_PAGE: isize = 10;
+/// Rows of one page still on screen after a full page down, as vim keeps them for context.
+const KEPT_ROWS: u16 = 2;
 
 impl App {
     /// Any key but the one finishing a quit calls the pending quit off, then does its own job.
@@ -173,6 +176,8 @@ impl App {
             KeyCode::Char('G') => self.queue_last(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(-HALF_PAGE),
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(full_page(self.areas.queue)),
+            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(-full_page(self.areas.queue)),
             KeyCode::Char('/') => self.filtering = true,
             KeyCode::Char('*') => return self.toggle_scope(),
             KeyCode::Char('s') => return self.sort_queue(),
@@ -250,6 +255,8 @@ impl App {
             KeyCode::Char('N') if self.search.is_some() => self.search_step(false),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(full_page(self.areas.review)),
+            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-full_page(self.areas.review)),
             KeyCode::Char('D') => return self.toggle_side_by_side(),
             KeyCode::Char('>') => return self.cycle_peek(true),
             KeyCode::Char('<') => return self.cycle_peek(false),
@@ -406,19 +413,32 @@ pub(super) fn scroll_key(scroll: usize, last: usize, key: KeyEvent) -> Option<us
         KeyCode::Char('k') | KeyCode::Up => Some(scroll.saturating_sub(1)),
         KeyCode::Char('d') if ctrl => Some(scroll.saturating_add(HALF_PAGE.unsigned_abs()).min(last)),
         KeyCode::Char('u') if ctrl => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
+        KeyCode::Char('f') if ctrl => Some((scroll + 2 * HALF_PAGE.unsigned_abs()).min(last)),
+        KeyCode::Char('b') if ctrl => Some(scroll.saturating_sub(2 * HALF_PAGE.unsigned_abs())),
         KeyCode::Char('g') => Some(0),
         KeyCode::Char('G') => Some(last),
         _ => None,
     }
 }
 
-/// `PageDown` and space page down as `ctrl-d` does, `PageUp` up as `ctrl-u`, wherever no text is typed.
+/// `PageDown` pages down as `ctrl-f` does and `PageUp` up as `ctrl-b`, as in a pager; space keeps
+/// the half page of `ctrl-d`. Wherever no text is typed.
 fn paged(key: KeyEvent) -> KeyEvent {
     match (key.code, key.modifiers) {
-        (KeyCode::PageDown, _) | (KeyCode::Char(' '), KeyModifiers::NONE) => KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
-        (KeyCode::PageUp, _) => KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+        (KeyCode::PageDown, _) => KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL),
+        (KeyCode::PageUp, _) => KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL),
+        (KeyCode::Char(' '), KeyModifiers::NONE) => KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
         _ => key,
     }
+}
+
+/// The rows a full page moves in a pane drawn on `area`: those inside its border but the kept ones,
+/// or twice a half page before the pane was ever drawn.
+pub(super) fn full_page(area: Rect) -> isize {
+    if area.is_empty() {
+        return 2 * HALF_PAGE;
+    }
+    area.height.saturating_sub(2 + KEPT_ROWS).max(1) as isize
 }
 
 /// `ctrl-k` and `⌘k` open the palette on MRs; `⌘⇧k`, where the terminal tells it apart, on commands.
@@ -438,6 +458,7 @@ fn palette_key(key: KeyEvent) -> Option<crate::tui::palette::Mode> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
+    use ratatui::layout::Rect;
 
     #[test]
     fn zh_folds_the_review_header_to_one_row() {
@@ -592,18 +613,38 @@ mod tests {
     }
 
     #[test]
-    fn page_down_and_space_page_like_ctrl_d_and_count_as_page_down() {
-        let mut paged = counting();
-        let mut spaced = with_long_review();
-        let mut ctrl_d = with_long_review();
-        paged.handle_key(code(KeyCode::PageDown));
-        press(&mut spaced, " ");
-        ctrl_d.handle_key(ctrl('d'));
+    fn page_keys_page_like_their_ctrl_key_and_count_as_it() {
         let selected = |app: &App| app.open.as_ref().unwrap().selected;
-        assert_eq!((selected(&paged), selected(&spaced)), (selected(&ctrl_d), selected(&ctrl_d)));
+        let after = |key: KeyEvent| {
+            let mut app = with_long_review();
+            app.handle_key(key);
+            selected(&app)
+        };
+        assert_eq!((after(code(KeyCode::PageDown)), after(key(' '))), (after(ctrl('f')), after(ctrl('d'))));
+        let mut paged = counting();
+        paged.handle_key(code(KeyCode::PageDown));
         paged.handle_key(code(KeyCode::PageUp));
         assert_eq!(selected(&paged), selected(&with_long_review()));
         let counts = paged.take_usage().unwrap();
-        assert_eq!((counts.actions.get("page_down"), counts.actions.get("page_up")), (Some(&1), Some(&1)));
+        assert_eq!((counts.actions.get("full_page_down"), counts.actions.get("full_page_up")), (Some(&1), Some(&1)));
+    }
+
+    #[test]
+    fn ctrl_f_and_ctrl_b_move_the_diff_cursor_by_the_rows_the_pane_shows() {
+        let mut app = with_long_review();
+        render(&mut app, 120, 30);
+        let top = app.open.as_ref().unwrap().selected;
+        let page = usize::from(app.areas.review.height) - 4;
+        app.handle_key(ctrl('f'));
+        assert_eq!(app.open.as_ref().unwrap().selected, top + page);
+        app.handle_key(ctrl('b'));
+        assert_eq!(app.open.as_ref().unwrap().selected, top);
+    }
+
+    #[test]
+    fn a_full_page_keeps_two_rows_inside_the_border_and_is_twice_a_half_page_before_any_frame() {
+        assert_eq!(super::full_page(Rect::new(0, 0, 80, 24)), 24 - 2 - 2);
+        assert_eq!(super::full_page(Rect::new(0, 0, 80, 3)), 1);
+        assert_eq!(super::full_page(Rect::default()), 2 * super::HALF_PAGE);
     }
 }

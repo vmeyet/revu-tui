@@ -265,6 +265,8 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.pane_move(-1),
             KeyCode::Char('d') if ctrl => self.pane_move(HALF_PAGE as isize),
             KeyCode::Char('u') if ctrl => self.pane_move(-(HALF_PAGE as isize)),
+            KeyCode::Char('f') if ctrl => self.pane_move(2 * HALF_PAGE as isize),
+            KeyCode::Char('b') if ctrl => self.pane_move(-2 * HALF_PAGE as isize),
             KeyCode::Char('g') => self.pane_move(isize::MIN / 2),
             KeyCode::Char('G') => self.pane_move(isize::MAX / 2),
             KeyCode::Char('J') => self.pane_jump(true),
