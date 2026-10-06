@@ -152,6 +152,18 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 - Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk, as a call tree; `enter` jumps there.
 - Pins `b` (`03-ui-ux.md` § The queue, 2026-10-02): MRs kept on top of the queue in `PINNED`, per scope, until merged or closed.
 
+## Next · Prose diff
+
+Spec: `11-prose-diff.md`. One MR per slice:
+
+1. The spec.
+2. Cargo feature `prose` (mrk pinned by tag), both files read at base and head, `v` toggles the view, block changes drawn with bars, folds and word marks; every head block reads as same until slice 3.
+3. Swap revu's stand-in for `mrk::diff::blocks` (mrk issue #15) once mrk tags it: blocks pair and words light up.
+4. Pictures: Mermaid and images drawn as pictures, a changed diagram before and after.
+5. Comments: a block cursor, comments on a block's last line, threads under their block, `enter` to the raw diff.
+
+Acceptance: a README with one edited paragraph, one added bullet and one removed heading shows exactly those three marked and the rest faded; one changed word in a long paragraph lights that word only.
+
 ## Definition of done for any slice
 
 - Tests green, `cargo clippy -- -D warnings` clean, `cargo fmt` clean.
