@@ -11,6 +11,8 @@ pub struct Prose {
     pub texts: Texts,
     /// The first row in view; the draw keeps it inside the rows.
     pub scroll: usize,
+    /// Every unchanged run shown, `zR`.
+    pub unfolded: bool,
 }
 
 impl Prose {
@@ -54,7 +56,7 @@ impl App {
             base: (file.kind != FileKind::Added).then(|| file.old_path.clone()),
             head: (file.kind != FileKind::Deleted).then(|| file.new_path.clone()),
         };
-        let prose = Prose { sides, texts: Texts::Waiting, scroll: 0 };
+        let prose = Prose { sides, texts: Texts::Waiting, scroll: 0, unfolded: false };
         if !crate::syntax::is_markdown(prose.path()) {
             self.toast("prose shows Markdown files only");
             return vec![];
@@ -88,9 +90,11 @@ impl App {
         }
     }
 
-    /// `zz` and `zh` act as anywhere; the diff's other prefixed keys would move a cursor out of sight, so they do nothing.
+    /// `zR` shows every unchanged run and `zM` folds them again; `zz` and `zh` act as anywhere; the diff's other
+    /// prefixed keys would move a cursor out of sight, so they do nothing.
     pub(super) fn prose_prefixed(&mut self, prefix: char, c: char) -> Vec<Action> {
         match (prefix, c) {
+            ('z', 'R' | 'M') => self.update_prose(|prose| Prose { unfolded: c == 'R', ..prose }),
             ('z', 'z') => return self.toggle_zen(),
             ('z', 'h') => self.header_folded = !self.header_folded,
             _ => {}
@@ -194,11 +198,14 @@ mod tests {
     }
 
     #[test]
-    fn the_diff_prefixed_keys_leave_the_hidden_diff_alone() {
+    fn zr_shows_every_unchanged_run_zm_folds_them_and_the_hidden_diff_stays_put() {
         let mut app = with_markdown(FileKind::Modified);
         let selected = app.open.as_ref().unwrap().selected;
         press(&mut app, "v");
-        press(&mut app, "]czazR");
+        press(&mut app, "zR");
+        assert!(prose(&app).unwrap().unfolded);
+        press(&mut app, "zM]cza");
+        assert!(!prose(&app).unwrap().unfolded);
         assert_eq!(app.open.as_ref().unwrap().selected, selected, "the hidden diff does not move");
     }
 
