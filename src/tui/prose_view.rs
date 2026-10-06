@@ -22,18 +22,18 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         Texts::Failed(message) => return draw_empty(f, theme, body, &[message, "", "r to retry"]),
         Texts::Ready(versions) => versions,
     };
-    let rows = app.kept.prose_rows(versions, body.width as usize, theme);
+    let rows = app.kept.prose_rows(versions, body.width as usize, theme, prose.unfolded);
     prose.scroll = prose.scroll.min(rows.len().saturating_sub(body.height as usize));
     let shown: Vec<Line> = rows.iter().skip(prose.scroll).take(body.height as usize).cloned().collect();
     f.render_widget(Paragraph::new(shown), body);
 }
 
 #[cfg(feature = "prose")]
-pub fn rows(versions: &Versions, width: usize, theme: Theme) -> Vec<Line<'static>> {
-    super::prose::render(&versions.base, &versions.head, width, theme)
+pub fn rows(versions: &Versions, width: usize, theme: Theme, unfolded: bool) -> Vec<Line<'static>> {
+    super::prose::render(&versions.base, &versions.head, width, theme, unfolded)
 }
 
 #[cfg(not(feature = "prose"))]
-pub fn rows(_: &Versions, _: usize, theme: Theme) -> Vec<Line<'static>> {
+pub fn rows(_: &Versions, _: usize, theme: Theme, _: bool) -> Vec<Line<'static>> {
     vec![Line::styled("this revu was built without the prose view (cargo feature `prose`)", Style::default().fg(theme.muted))]
 }

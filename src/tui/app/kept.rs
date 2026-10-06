@@ -62,7 +62,7 @@ pub struct Kept {
     markers: Memo<ReviewInputs, Markers>,
     listed: Memo<(ReviewInputs, Pane), (Vec<Conversation>, Vec<Entry>)>,
     tree: Memo<(Same<[File]>, TreeFolds), Vec<TreeRow>>,
-    prose: Memo<(Same<Versions>, usize, Theme), Vec<Line<'static>>>,
+    prose: Memo<(Same<Versions>, usize, Theme, bool), Vec<Line<'static>>>,
 }
 
 impl Kept {
@@ -84,9 +84,9 @@ impl Kept {
         self.tree.get((Same::of(&open.review.files), folds.clone()), || tree::rows(&open.review.files, folds))
     }
 
-    /// The prose view's rows in `width` columns, rendered again only for other texts, width or theme.
-    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, theme: Theme) -> &[Line<'static>] {
-        self.prose.get((Same::of(versions), width, theme), || crate::tui::prose_view::rows(versions, width, theme))
+    /// The prose view's rows in `width` columns, rendered again only for other texts, width, theme or folds.
+    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, theme: Theme, unfolded: bool) -> &[Line<'static>] {
+        self.prose.get((Same::of(versions), width, theme, unfolded), || crate::tui::prose_view::rows(versions, width, theme, unfolded))
     }
 }
 
