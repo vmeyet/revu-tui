@@ -119,7 +119,7 @@ impl Open {
         self.pane.as_ref().is_some_and(|pane| pane.place == Place::All)
     }
 
-    fn with_pane(self, pane: Option<Pane>) -> Self {
+    pub(super) fn with_pane(self, pane: Option<Pane>) -> Self {
         Self { pane, ..self }
     }
 

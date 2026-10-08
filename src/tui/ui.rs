@@ -47,6 +47,7 @@ pub struct Link {
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
     app.text_rows.clear();
+    app.list_rows.clear();
     let input_rows = u16::from(app.filtering);
     let status_rows = u16::from(
         !app.zen

@@ -35,6 +35,13 @@ pub enum QueueRow<'a> {
     Stacked(&'a QueueMr),
 }
 
+impl QueueRow<'_> {
+    /// The cursor may land on it: an MR, a stack, or a folded section's header.
+    pub fn selectable(&self) -> bool {
+        matches!(self, Self::Mr(_) | Self::Stack { .. } | Self::Stacked(_) | Self::Section { open: false, .. })
+    }
+}
+
 /// The sections `S` splits by author: the ones that pile up other people's MRs.
 const GROUPED: [&str; 2] = ["OPEN", "DRAFTS"];
 
@@ -229,14 +236,7 @@ impl App {
     }
 
     fn queue_selectable(&self) -> Vec<usize> {
-        self.queue_rows()
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| {
-                matches!(r, QueueRow::Mr(_) | QueueRow::Stack { .. } | QueueRow::Stacked(_) | QueueRow::Section { open: false, .. })
-            })
-            .map(|(i, _)| i)
-            .collect()
+        self.queue_rows().iter().enumerate().filter(|(_, row)| row.selectable()).map(|(i, _)| i).collect()
     }
 
     pub(super) fn queue_first(&mut self) {

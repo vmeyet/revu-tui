@@ -52,6 +52,11 @@ impl Outline {
         }
     }
 
+    /// The cursor on entry `selected`.
+    pub(super) fn at(self, selected: usize) -> Self {
+        Self { selected, ..self }
+    }
+
     /// The cursor on the first symbol, past the code header.
     fn on_top(self) -> Self {
         let first = self.rows.entries.iter().position(|e| e.header.is_none()).unwrap_or(0);
@@ -244,6 +249,7 @@ fn row_at(review: &Review, path: &str, side: Side, (first, last): (u32, u32)) ->
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use crate::tui::app::List;
     use crate::tui::app::test_support::*;
 
     const BASE: &str =
@@ -366,6 +372,17 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         let Some(Place::Line { old, .. }) = place(&app) else { panic!("on a line") };
         assert_eq!(old, Some(10), "_log was on base line 10");
+    }
+
+    #[test]
+    fn a_click_on_a_call_picks_it_and_a_second_click_goes_to_its_line() {
+        let mut app = with_outline();
+        app.focus = Focus::Review;
+        assert_eq!(click_row(&mut app, List::Outline, 2), vec![]);
+        assert_eq!((app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, app.focus), (2, Focus::Side));
+        click_row(&mut app, List::Outline, 2);
+        assert_eq!(app.focus, Focus::Review);
+        assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(11), old: None }), "the call to pay in refund");
     }
 
     #[test]

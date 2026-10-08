@@ -1,5 +1,5 @@
 //! The file tree pane: folders and files with the same counts and marks as the diff's file rows.
-use super::app::{App, Focus};
+use super::app::{App, Focus, List, ListRow};
 use super::ui::{settle_scroll, side_pane, truncate};
 use crate::ai::triage::Risk;
 use crate::review::tree::TreeRow;
@@ -27,6 +27,12 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let lines: Vec<Line> =
         shown.iter().zip(scroll..).map(|(row, i)| row_line(app, &open.review, row, i == selected, inner.width as usize)).collect();
     f.render_widget(Paragraph::new(lines), inner);
+    let list_rows: Vec<ListRow> = (scroll..)
+        .zip(inner.y..)
+        .take(shown.len())
+        .map(|(index, y)| ListRow { area: Rect { y, height: 1, ..inner }, list: List::Tree, index })
+        .collect();
+    app.list_rows.extend(list_rows);
 }
 
 fn row_line<'a>(app: &App, review: &Review, row: &TreeRow, selected: bool, width: usize) -> Line<'a> {

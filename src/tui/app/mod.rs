@@ -47,7 +47,7 @@ pub use brief::{Brief, ThreadRow};
 pub use feedback::Toast;
 pub use inbox::{Spot, progress_bar};
 pub use kept::{Kept, ReviewInputs};
-pub use mouse::Areas;
+pub use mouse::{Areas, List, ListRow};
 pub use order::QueueView;
 pub use outline::{Entry as OutlineEntry, Outline, PaneLine, Symbols};
 pub use pane::{Entry, EntryKind, Pane};

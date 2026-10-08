@@ -1,5 +1,5 @@
 //! The outline pane: what breaks, what came and what was renamed, then the call tree of the changed symbols, or their list by file.
-use super::app::{App, Focus, Outline, OutlineEntry, PaneLine, Symbols};
+use super::app::{App, Focus, List, ListRow, Outline, OutlineEntry, PaneLine, Symbols};
 use super::queue_view::rule;
 use super::theme::Theme;
 use super::ui::{counts, draw_empty, settle_scroll, side_pane, spinner, truncate};
@@ -12,7 +12,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame, app: &App, area: Rect) {
+pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(outline) = &open.outline else { return };
@@ -34,7 +34,17 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
     let height = inner.height as usize;
     let scroll = settle_scroll(0, rows.line_of.get(outline.selected).copied().unwrap_or(0), height);
     let width = inner.width as usize;
-    let shown: Vec<Line> = rows.lines[scroll.min(rows.lines.len())..]
+    let window = &rows.lines[scroll.min(rows.lines.len())..];
+    let list_rows: Vec<ListRow> = window
+        .iter()
+        .take(height)
+        .zip(inner.y..)
+        .filter_map(|(line, y)| match line {
+            PaneLine::Entry(index) => Some(ListRow { area: Rect { y, height: 1, ..inner }, list: List::Outline, index: *index }),
+            _ => None,
+        })
+        .collect();
+    let shown: Vec<Line> = window
         .iter()
         .take(height)
         .map(|line| match line {
@@ -54,6 +64,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
     f.render_widget(Paragraph::new(shown), inner);
+    app.list_rows.extend(list_rows);
 }
 
 /// `Outline · calls · public`: how the pane shows.

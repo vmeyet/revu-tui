@@ -171,6 +171,10 @@ pub struct App {
     pub areas: super::Areas,
     /// The rows of text a drag can select, as this frame drew them.
     pub text_rows: Vec<crate::tui::drag::TextRow>,
+    /// The list rows a click can pick, as this frame drew them.
+    pub list_rows: Vec<super::ListRow>,
+    /// Where the left button went down, so a release elsewhere is a drag and not a click.
+    pub pressed: Option<ratatui::layout::Position>,
     /// The text a drag covers; it stays lit after the copy until the next key or click.
     pub drag: Option<crate::tui::drag::Drag>,
     /// Pictures of the comments the right pane shows, each fetched once.
@@ -288,6 +292,8 @@ impl App {
             links: vec![],
             areas: super::Areas::default(),
             text_rows: vec![],
+            list_rows: vec![],
+            pressed: None,
             drag: None,
             kept: super::Kept::default(),
             pane_layout: None,

@@ -13,7 +13,7 @@ pub struct Tree {
 }
 
 impl Open {
-    fn with_tree(self, tree: Option<Tree>) -> Self {
+    pub(super) fn with_tree(self, tree: Option<Tree>) -> Self {
         Self { tree, ..self }
     }
 }
