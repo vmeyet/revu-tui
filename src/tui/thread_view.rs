@@ -1,5 +1,5 @@
 //! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
-use super::app::{App, Entry, EntryKind, Focus, Open, Pane, ReviewInputs};
+use super::app::{App, Entry, EntryKind, Focus, List, ListRow, Open, Pane, ReviewInputs};
 use super::diff_view::{coloured, paint};
 use super::drag::{self, TextRow};
 use super::field::Field;
@@ -134,7 +134,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
         inner
     };
     let height = inner.height as usize;
-    let current = app.open.as_ref().and_then(|open| app.kept.pane_view(open)).and_then(|(_, _, current)| current);
+    let (entries, current) =
+        app.open.as_ref().and_then(|open| app.kept.pane_view(open)).map(|(_, entries, current)| (entries, current)).unwrap_or_default();
     let on = |entry: &Option<Entry>| entry.is_some() && *entry == current;
     let first = rows.iter().position(|(entry, _)| on(entry)).unwrap_or(0);
     let last = rows.iter().rposition(|(entry, _)| on(entry)).unwrap_or(0);
@@ -151,6 +152,17 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
         })
         .collect();
     f.render_widget(Paragraph::new(drawn), inner);
+    let list_rows: Vec<ListRow> = rows
+        .iter()
+        .skip(scroll)
+        .take(height)
+        .zip(inner.y..)
+        .filter_map(|((entry, _), y)| {
+            let index = entries.iter().position(|e| Some(*e) == *entry)?;
+            Some(ListRow { area: Rect { y, height: 1, ..inner }, list: List::Threads, index })
+        })
+        .collect();
+    app.list_rows.extend(list_rows);
     let width = inner.width.saturating_sub(1);
     let mut placements = vec![];
     for (row, piece, mark) in marks {

@@ -513,6 +513,17 @@ pub(super) fn mouse(app: &mut App, kind: crossterm::event::MouseEventKind, (colu
     app.handle_mouse(crossterm::event::MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE })
 }
 
+/// Draws, then presses the left button on the last cell of the row of `list` with cursor stop `index`, and lets go.
+pub(super) fn click_row(app: &mut App, list: super::List, index: usize) -> Vec<Action> {
+    use crossterm::event::{MouseButton, MouseEventKind};
+    render(app, 160, 30);
+    let row =
+        app.list_rows.iter().find(|row| row.list == list && row.index == index).unwrap_or_else(|| panic!("{list:?} row {index} on screen"));
+    let at = (row.area.right() - 1, row.area.y);
+    mouse(app, MouseEventKind::Down(MouseButton::Left), at);
+    mouse(app, MouseEventKind::Up(MouseButton::Left), at)
+}
+
 /// Presses the left button at `from`, drags to `to` and lets go, drawing between each step as the loop does.
 pub(super) fn drag(app: &mut App, from: (u16, u16), to: (u16, u16), width: u16, height: u16) -> Vec<Action> {
     use crossterm::event::{MouseButton, MouseEventKind};

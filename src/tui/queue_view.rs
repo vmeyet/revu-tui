@@ -1,6 +1,6 @@
 //! The queue pane: sections under faded rules, two lines per MR by default (one with
 //! `[tui] queue = "compact"`), and one author's chained MRs folded into a stack.
-use super::app::{App, Badge, Focus, Mark, QueueRow};
+use super::app::{App, Badge, Focus, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
 use super::ui::{Link, draw_empty, pane, short_age, spinner, truncate};
 use crate::config::QueueLayout;
@@ -44,6 +44,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let scroll = settle(app.queue_scroll, app.queue_selected, &heights, height);
     let mut lines: Vec<Line<'static>> = vec![];
     let mut links = vec![];
+    let mut list_rows = vec![];
     for (i, row) in rows.iter().enumerate().skip(scroll) {
         if lines.len() >= height {
             break;
@@ -53,6 +54,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         if let Some(link) = link.filter(|link| top + link.line < height) {
             links.push(Link { x: inner.x + link.x, y: inner.y + (top + link.line) as u16, text: link.text, url: link.url });
         }
+        if row.selectable() {
+            let shown = drawn.len().min(height - top) as u16;
+            list_rows.push(ListRow { area: Rect { y: inner.y + top as u16, height: shown, ..inner }, list: List::Queue, index: i });
+        }
         lines.extend(drawn);
     }
     lines.truncate(height);
@@ -60,6 +65,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     app.queue_scroll = scroll;
     f.render_widget(Paragraph::new(lines), inner);
     app.links.extend(links);
+    app.list_rows.extend(list_rows);
 }
 
 /// Where an MR row's `!iid` sits: which of its lines, and how many cells in.
