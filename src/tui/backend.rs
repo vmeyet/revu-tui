@@ -1063,7 +1063,7 @@ mod tests {
         let backend = Backend {
             cache: Cache::in_dir(dir.path()),
             ready_command: Some("never-run".into()),
-            rules: crate::forge::rules::Rules::default(),
+            rules: crate::forge::rules::Rules { stale_days: u32::MAX, ..crate::forge::rules::Rules::default() },
             ..backend_on_nothing()
         };
         let queue = crate::forge::gitlab::fixture::queue_in(include_str!("../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets");
