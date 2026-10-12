@@ -20,7 +20,8 @@ const WIDE_QUEUE_FROM: u16 = 160;
 const SIDE_W: u16 = 36;
 /// From this width the queue, the diff and the right pane sit side by side.
 const WIDE: u16 = 150;
-/// From this width the diff and the right pane share the screen; below, the pane is a page of its own.
+/// From this width the diff and the right pane share the screen; below, the pane is a page of its own,
+/// an open MR hides the queue unless it has the keys, and the diff shows one line number.
 const MEDIUM: u16 = 120;
 const SIDE_PCT: u16 = 40;
 /// Zen's column, unless `[tui] zen_width` fixes it: this share of the screen, never under `ZEN_MIN_W`.
@@ -60,7 +61,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(f.area());
     let side_open = app.open.as_ref().is_some_and(super::app::Open::side_open);
-    let shown = columns(main.width, side_open, app.focus == Focus::Side, app.zen);
+    let shown = columns(main.width, app.open.is_some(), side_open, app.focus, app.zen);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
@@ -77,7 +78,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         super::queue_view::draw(f, app, queue);
     }
     if shown.diff {
-        diff_view::draw(f, app, review);
+        let gutter = if main.width < MEDIUM { diff_view::Gutter::One } else { diff_view::Gutter::Both };
+        diff_view::draw(f, app, review, gutter);
     }
     let mut pictures = vec![];
     if app.open.as_ref().is_some_and(|o| o.answer.is_some()) && side_open {
@@ -177,10 +179,13 @@ struct Columns {
 
 /// The right pane's width rules: all three columns from 150, the queue steps aside from 120,
 /// and below that, or in a zen column too short to split, the pane is a page of its own while it has the keys.
-fn columns(width: u16, side_open: bool, side_focused: bool, zen: bool) -> Columns {
+/// Below 120 an open MR leaves the queue the same way: it shows only while it has the keys.
+fn columns(width: u16, mr_open: bool, side_open: bool, focus: Focus, zen: bool) -> Columns {
     let side = SIDE_W.max(width * SIDE_PCT / 100);
+    let queue_kept = !mr_open || focus == Focus::Queue;
     let queue = match (zen, width) {
         (true, _) => 0,
+        (false, ..MEDIUM) if !queue_kept => 0,
         (false, WIDE_QUEUE_FROM..) => WIDE_QUEUE_W,
         (false, _) => QUEUE_W,
     };
@@ -188,8 +193,8 @@ fn columns(width: u16, side_open: bool, side_focused: bool, zen: bool) -> Column
         (false, _) => Columns { queue, side: 0, diff: true },
         (true, WIDE..) if !zen => Columns { queue, side, diff: true },
         (true, MEDIUM..) if !zen => Columns { queue: 0, side, diff: true },
-        (true, _) if side_focused => Columns { queue: 0, side: width, diff: false },
-        (true, _) => Columns { queue: 0, side: 0, diff: true },
+        (true, _) if focus == Focus::Side => Columns { queue: 0, side: width, diff: false },
+        (true, _) => Columns { queue, side: 0, diff: true },
     }
 }
 
@@ -497,27 +502,56 @@ mod columns_tests {
 
     #[test]
     fn the_pane_takes_what_the_width_allows() {
-        assert_eq!(columns(160, true, false, false), Columns { queue: WIDE_QUEUE_W, side: 64, diff: true }, "three columns from 150");
-        assert_eq!(columns(155, true, false, false), Columns { queue: QUEUE_W, side: 62, diff: true });
-        assert_eq!(columns(130, true, true, false), Columns { queue: 0, side: 52, diff: true }, "the queue steps aside from 120");
-        assert_eq!(columns(100, true, true, false), Columns { queue: 0, side: 100, diff: false }, "a page of its own below 120");
-        assert_eq!(columns(100, true, false, false), Columns { queue: 0, side: 0, diff: true }, "h goes back to the diff at the same line");
-        assert_eq!(columns(90, true, true, false).side, 90);
-        assert_eq!(columns(80, false, false, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+        assert_eq!(
+            columns(160, true, true, Focus::Review, false),
+            Columns { queue: WIDE_QUEUE_W, side: 64, diff: true },
+            "three columns from 150"
+        );
+        assert_eq!(columns(155, true, true, Focus::Review, false), Columns { queue: QUEUE_W, side: 62, diff: true });
+        assert_eq!(
+            columns(130, true, true, Focus::Side, false),
+            Columns { queue: 0, side: 52, diff: true },
+            "the queue steps aside from 120"
+        );
+        assert_eq!(
+            columns(100, true, true, Focus::Side, false),
+            Columns { queue: 0, side: 100, diff: false },
+            "a page of its own below 120"
+        );
+        assert_eq!(
+            columns(100, true, true, Focus::Review, false),
+            Columns { queue: 0, side: 0, diff: true },
+            "h goes back to the diff at the same line"
+        );
+        assert_eq!(columns(90, true, true, Focus::Side, false).side, 90);
+        assert_eq!(columns(80, true, false, Focus::Queue, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+    }
+
+    #[test]
+    fn below_120_an_open_mr_shows_the_queue_only_while_it_has_the_keys() {
+        assert_eq!(columns(MEDIUM - 1, true, false, Focus::Review, false), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(columns(MEDIUM - 1, true, false, Focus::Queue, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+        assert_eq!(columns(MEDIUM - 1, true, true, Focus::Queue, false).queue, QUEUE_W, "the pane behind it stays away");
+        assert_eq!(columns(MEDIUM - 1, false, false, Focus::Review, false).queue, QUEUE_W, "with no MR open the queue stays");
+        assert_eq!(columns(MEDIUM, true, false, Focus::Review, false).queue, QUEUE_W, "from 120 the queue stays");
     }
 
     #[test]
     fn the_queue_widens_from_160_columns() {
-        assert_eq!(columns(WIDE_QUEUE_FROM - 1, false, false, false).queue, QUEUE_W);
-        assert_eq!(columns(WIDE_QUEUE_FROM, false, false, false).queue, WIDE_QUEUE_W);
-        assert_eq!(columns(240, false, false, false).queue, WIDE_QUEUE_W);
+        assert_eq!(columns(WIDE_QUEUE_FROM - 1, true, false, Focus::Review, false).queue, QUEUE_W);
+        assert_eq!(columns(WIDE_QUEUE_FROM, true, false, Focus::Review, false).queue, WIDE_QUEUE_W);
+        assert_eq!(columns(240, true, false, Focus::Review, false).queue, WIDE_QUEUE_W);
     }
 
     #[test]
     fn zen_never_puts_the_pane_beside_the_diff() {
-        assert_eq!(columns(200, false, false, true), Columns { queue: 0, side: 0, diff: true });
-        assert_eq!(columns(200, true, true, true), Columns { queue: 0, side: 200, diff: false }, "the pane opens the narrow way");
-        assert_eq!(columns(200, true, false, true), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(columns(200, true, false, Focus::Review, true), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(
+            columns(200, true, true, Focus::Side, true),
+            Columns { queue: 0, side: 200, diff: false },
+            "the pane opens the narrow way"
+        );
+        assert_eq!(columns(200, true, true, Focus::Review, true), Columns { queue: 0, side: 0, diff: true });
     }
 
     #[test]
@@ -577,7 +611,7 @@ mod columns_tests {
 
     #[test]
     fn the_pane_is_never_narrower_than_36_columns() {
-        assert_eq!(columns(80, true, false, false).side, 0);
+        assert_eq!(columns(80, true, true, Focus::Review, false).side, 0);
         assert_eq!(SIDE_W.max(80 * SIDE_PCT / 100), 36);
     }
 }

@@ -30,7 +30,36 @@ const TAB: &str = "→   ";
 const INDENT: &str = "   ";
 const MIN_BRANCH_W: usize = 12;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+/// The line numbers before the sign: both sides, or the one side a line is read on when the window is narrow.
+#[derive(Clone, Copy)]
+pub enum Gutter {
+    Both,
+    One,
+}
+
+impl Gutter {
+    /// The new number alone when there is one column, the old one on a line the new side does not have.
+    fn numbers(self, old: Option<u32>, new: Option<u32>) -> String {
+        match self {
+            Self::Both => format!("{} {} ", number(old), number(new)),
+            Self::One => format!("{} ", number(new.or(old))),
+        }
+    }
+
+    fn width(self) -> usize {
+        match self {
+            Self::Both => 2 * (GUTTER_W + 1),
+            Self::One => GUTTER_W + 1,
+        }
+    }
+
+    /// Continuation rows start under the text: past the cursor bar, the anchor column, the numbers and the sign.
+    fn wrap_indent(self) -> usize {
+        1 + ANCHOR_W + self.width() + 1
+    }
+}
+
+pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     let theme = app.theme;
     let title = match &app.open {
         Some(open) => {
@@ -82,24 +111,24 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let width = body.width as usize;
     let render = |open: &Open, i: usize| -> Vec<Line<'static>> {
         let row = &open.rows[i];
-        let (selected, in_range) = (i == open.selected, open.is_selected(i));
+        let marked = i == open.selected || open.is_selected(i);
         let overflow = if wrap { Overflow::Wrap(width) } else { Overflow::Cut(width) };
         if open.review.shows_side_by_side()
-            && let Some(lines) = side_by_side_lines(&open.review, &anchors, row, selected || in_range, overflow, theme)
+            && let Some(lines) = side_by_side_lines(&open.review, &anchors, row, marked, overflow, theme)
         {
             return lines;
         }
         let text_row = matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. });
         let found = |line: Line<'static>| match &sought {
             Some(query) if text_row => {
-                super::app::mark_search(&line, query, WRAP_INDENT, Style::default().add_modifier(Modifier::REVERSED))
+                super::app::mark_search(&line, query, gutter.wrap_indent(), Style::default().add_modifier(Modifier::REVERSED))
             }
             _ => line,
         };
         if wrap && text_row {
-            wrap_row(found(row_line(&open.review, &anchors, row, selected, in_range, overflow, theme)), width, WRAP_INDENT)
+            wrap_row(found(row_line(&open.review, &anchors, row, marked, gutter, overflow, theme)), width, gutter.wrap_indent())
         } else {
-            vec![found(row_line(&open.review, &anchors, row, selected, in_range, Overflow::Cut(width), theme))]
+            vec![found(row_line(&open.review, &anchors, row, marked, gutter, Overflow::Cut(width), theme))]
         }
     };
     let pinning = height >= PIN_MIN_HEIGHT;
@@ -121,7 +150,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let pinned_lines: Vec<Line> = [pinned.file, pinned.hunk]
         .into_iter()
         .flatten()
-        .map(|i| pinned_line(&open.review, &anchors, &open.rows[i], width, theme))
+        .map(|i| pinned_line(&open.review, &anchors, &open.rows[i], gutter, width, theme))
         .collect();
     let mut lines: Vec<Line> = pinned_lines;
     let mut selectable = vec![];
@@ -130,7 +159,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
             break;
         }
         let top = body.y + lines.len() as u16;
-        selectable.extend(text_rows(&open.review, &open.rows[i], i, Rect { y: top, ..body }, wrap));
+        selectable.extend(text_rows(&open.review, &open.rows[i], i, Rect { y: top, ..body }, gutter, wrap));
         lines.extend(drawn.pop_front().unwrap_or_else(|| render(open, i)));
     }
     lines.truncate(height);
@@ -140,8 +169,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 /// The rows of text a drag can select in diff row `index`, drawn from the top of `area`.
-fn text_rows(review: &Review, row: &Row, index: usize, area: Rect, wrap: bool) -> Vec<TextRow> {
-    text_columns(review, row, usize::from(area.width)).into_iter().flat_map(|column| column.rows(area, index, wrap)).collect()
+fn text_rows(review: &Review, row: &Row, index: usize, area: Rect, gutter: Gutter, wrap: bool) -> Vec<TextRow> {
+    text_columns(review, row, gutter, usize::from(area.width)).into_iter().flat_map(|column| column.rows(area, index, wrap)).collect()
 }
 
 /// One column of text in a diff row: how far past the row's start its text is drawn, the cells it has, what it shows.
@@ -162,9 +191,10 @@ impl Column {
 }
 
 /// The inline text of a diff row, or each half side by side.
-fn text_columns(review: &Review, row: &Row, width: usize) -> Vec<Column> {
+fn text_columns(review: &Review, row: &Row, gutter: Gutter, width: usize) -> Vec<Column> {
     let Some(halves) = halves(review, row).filter(|_| review.shows_side_by_side()) else {
-        let column = |(text, cells)| Column { x: WRAP_INDENT, room: width.saturating_sub(WRAP_INDENT), text, cells };
+        let indent = gutter.wrap_indent();
+        let column = |(text, cells)| Column { x: indent, room: width.saturating_sub(indent), text, cells };
         return inline_text(review, row).map(column).into_iter().collect();
     };
     let (old_w, new_w) = half_widths(width);
@@ -221,8 +251,8 @@ fn screen_rows(cells: &[Range<usize>], room: usize, wrap: bool) -> Vec<&[Range<u
 
 /// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
 /// reads as a bar the diff scrolls under.
-fn pinned_line<'a>(review: &Review, anchors: &Anchors, row: &Row, width: usize, theme: Theme) -> Line<'a> {
-    let line = row_line(review, anchors, row, false, false, Overflow::Cut(width), theme);
+fn pinned_line<'a>(review: &Review, anchors: &Anchors, row: &Row, gutter: Gutter, width: usize, theme: Theme) -> Line<'a> {
+    let line = row_line(review, anchors, row, false, gutter, Overflow::Cut(width), theme);
     let used: usize = line.spans.iter().map(Span::width).sum();
     let mut spans = line.spans;
     spans.push(Span::raw(" ".repeat(width.saturating_sub(used))));
@@ -241,8 +271,6 @@ fn pipeline_link(review: &Review, header: &[Line], area: Rect) -> Option<super::
 
 /// The width a line is drawn at before `w` cuts it into screen rows; wide enough for any real line.
 const UNCUT: usize = 4_096;
-/// Continuation rows start under the text: past the cursor bar, both gutters and the sign.
-const WRAP_INDENT: usize = 1 + ANCHOR_W + GUTTER_W * 2 + 3;
 /// A side by side half before its text: the anchor column, its one number and the sign.
 const HALF_INDENT: usize = ANCHOR_W + GUTTER_W + 2;
 /// Columns of code each half shows at least; narrower, side by side falls back to inline.
@@ -475,20 +503,12 @@ enum Overflow {
     Wrap(usize),
 }
 
-fn row_line<'a>(
-    review: &Review,
-    anchors: &Anchors,
-    row: &Row,
-    selected: bool,
-    in_range: bool,
-    overflow: Overflow,
-    theme: Theme,
-) -> Line<'a> {
+fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, marked: bool, gutter: Gutter, overflow: Overflow, theme: Theme) -> Line<'a> {
     let width = match overflow {
         Overflow::Cut(width) => width,
         Overflow::Wrap(_) => UNCUT,
     };
-    let bar = Span::styled(if selected || in_range { "▎" } else { " " }, Style::default().fg(theme.accent));
+    let bar = Span::styled(if marked { "▎" } else { " " }, Style::default().fg(theme.accent));
     let mut spans = vec![bar];
     let body = width.saturating_sub(1);
     if matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) {
@@ -506,19 +526,19 @@ fn row_line<'a>(
             let file = &review.files[*file];
             let line = &file.hunks[*hunk].lines[*index];
             let shown = review.peek.map(|side| peeked(line, side));
-            let drawn = line_spans(shown.as_ref().unwrap_or(line), file.spans(*hunk, *index), selected || in_range, body, theme);
-            spans.extend(with_table_lines(drawn, file, &line.text, overflow, theme));
+            let drawn = line_spans(shown.as_ref().unwrap_or(line), file.spans(*hunk, *index), marked, gutter, body, theme);
+            spans.extend(with_table_lines(drawn, file, &line.text, gutter.wrap_indent(), overflow, theme));
         }
         Row::Pair { file, hunk, removed, added } => {
             let file = &review.files[*file];
             let code = file.spans(*hunk, *added);
             let (old, new) = (&file.hunks[*hunk].lines[*removed], &file.hunks[*hunk].lines[*added]);
             let drawn = if review.quiet_whitespace && same_but_whitespace(&old.text, &new.text) {
-                quiet_spans(old, new, code, selected || in_range, body, theme)
+                quiet_spans(old, new, code, marked, gutter, body, theme)
             } else {
-                pair_spans(old, new, code, selected || in_range, body, theme)
+                pair_spans(old, new, code, marked, gutter, body, theme)
             };
-            spans.extend(with_table_lines(drawn, file, &new.text, overflow, theme));
+            spans.extend(with_table_lines(drawn, file, &new.text, gutter.wrap_indent(), overflow, theme));
         }
         Row::Context { file, old, new, .. } => {
             let line = context_line(review, *file, *old, *new);
@@ -527,7 +547,8 @@ fn row_line<'a>(
                 None => line,
             };
             let file = &review.files[*file];
-            spans.extend(with_table_lines(line_spans(&line, &[], selected || in_range, body, theme), file, &line.text, overflow, theme));
+            let drawn = line_spans(&line, &[], marked, gutter, body, theme);
+            spans.extend(with_table_lines(drawn, file, &line.text, gutter.wrap_indent(), overflow, theme));
         }
     }
     Line::from(spans)
@@ -626,18 +647,26 @@ fn half_line(review: &Review, anchors: &Anchors, half: &Half, marked: bool, widt
     let anchor = if stretched { range_spans(theme) } else { anchor_spans(marker, theme) };
     let drawn = numbered_spans(format!("{} ", number(number_here)), &half.line, half.code, marked, width.saturating_sub(ANCHOR_W), theme);
     let drawn = if half.quiet { with_quiet_sign(drawn, theme) } else { drawn };
-    Line::from([anchor, with_table_lines(drawn, file, &half.line.text, Overflow::Cut(width), theme)].concat())
+    Line::from([anchor, with_table_lines(drawn, file, &half.line.text, HALF_INDENT, Overflow::Cut(width), theme)].concat())
 }
 
 /// A drawn diff line, its table pipes as box lines when `text` is a table line of a markdown file,
-/// its cells wrapped in their columns when it wraps; the gutter and the sign before the text stay as they are.
-fn with_table_lines<'a>(mut spans: Vec<Span<'a>>, file: &File, text: &str, overflow: Overflow, theme: Theme) -> Vec<Span<'a>> {
+/// its cells wrapped in their columns when it wraps, the text starting `indent` columns into the row;
+/// the gutter and the sign before the text stay as they are.
+fn with_table_lines<'a>(
+    mut spans: Vec<Span<'a>>,
+    file: &File,
+    text: &str,
+    indent: usize,
+    overflow: Overflow,
+    theme: Theme,
+) -> Vec<Span<'a>> {
     let Some(line) = TableLine::of(text).filter(|_| syntax::is_markdown(&file.new_path)) else { return spans };
     let text_spans = spans.split_off(2.min(spans.len()));
     let pad = text_spans.last().filter(|span| is_blank(span)).cloned();
     let rows = match overflow {
         Overflow::Wrap(width) => {
-            table::wrapped(&text_spans, line, width.saturating_sub(WRAP_INDENT), pad.as_ref().map(|s| s.style).unwrap_or_default(), theme)
+            table::wrapped(&text_spans, line, width.saturating_sub(indent), pad.as_ref().map(|s| s.style).unwrap_or_default(), theme)
         }
         Overflow::Cut(_) => None,
     };
@@ -854,11 +883,18 @@ fn number(n: Option<u32>) -> String {
 
 /// A changed line is filled edge to edge; without a fill, the text itself carries the colour
 /// and changed words go bold, so every theme reads on every terminal.
-fn line_spans<'a>(line: &DiffLine, code: &[(Range<usize>, Token)], selected: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
-    numbered_spans(format!("{} {} ", number(line.old), number(line.new)), line, code, selected, width, theme)
+fn line_spans<'a>(
+    line: &DiffLine,
+    code: &[(Range<usize>, Token)],
+    selected: bool,
+    gutter: Gutter,
+    width: usize,
+    theme: Theme,
+) -> Vec<Span<'a>> {
+    numbered_spans(gutter.numbers(line.old, line.new), line, code, selected, width, theme)
 }
 
-/// A line drawn after `gutter`, its numbers: both of them inline, the one of its side side by side.
+/// A line drawn after `gutter`, its numbers: both of them or one inline, the one of its side side by side.
 fn numbered_spans<'a>(
     gutter: String,
     line: &DiffLine,
@@ -931,10 +967,11 @@ fn pair_spans<'a>(
     new: &DiffLine,
     code: &[(Range<usize>, Token)],
     selected: bool,
+    gutter: Gutter,
     width: usize,
     theme: Theme,
 ) -> Vec<Span<'a>> {
-    let gutter = Style::default().fg(if selected { theme.muted } else { theme.faded });
+    let faint = Style::default().fg(if selected { theme.muted } else { theme.faded });
     let with_fill = |style: Style, fill: Option<Color>| fill.map_or(style, |f| style.bg(f));
     let dropped = with_fill(Style::default().fg(theme.danger).add_modifier(Modifier::CROSSED_OUT), theme.removed_word);
     let added = with_fill(Style::default().fg(theme.success), theme.added_word);
@@ -954,9 +991,8 @@ fn pair_spans<'a>(
             }
         }
     }
-    let mut spans =
-        vec![Span::styled(format!("{} {} ", number(old.old), number(new.new)), gutter), Span::styled("~", Style::default().fg(theme.warn))];
-    spans.extend(fit(styled, width.saturating_sub(GUTTER_W * 2 + 3)));
+    let mut spans = vec![Span::styled(gutter.numbers(old.old, new.new), faint), Span::styled("~", Style::default().fg(theme.warn))];
+    spans.extend(fit(styled, width.saturating_sub(gutter.width() + 1)));
     spans
 }
 
@@ -977,11 +1013,12 @@ fn quiet_spans<'a>(
     new: &DiffLine,
     code: &[(Range<usize>, Token)],
     selected: bool,
+    gutter: Gutter,
     width: usize,
     theme: Theme,
 ) -> Vec<Span<'a>> {
     let context = DiffLine { old: old.old, ..quiet(new) };
-    with_quiet_sign(line_spans(&context, code, selected, width, theme), theme)
+    with_quiet_sign(line_spans(&context, code, selected, gutter, width, theme), theme)
 }
 
 /// A line that changed only in whitespace, drawn as context.
@@ -1077,7 +1114,7 @@ mod tests {
         let (old, new) = (&hunk.lines[0], &hunk.lines[1]);
         let code = [(0..5, Token::Keyword), (14..15, Token::Number)];
         let theme = Theme::named("tokyonight").unwrap();
-        let spans = pair_spans(old, new, &code, false, 80, theme);
+        let spans = pair_spans(old, new, &code, false, Gutter::Both, 80, theme);
         let style_of = |text: &str| spans.iter().find(|s| s.content == text).map(|s| s.style).unwrap();
         assert_eq!(spans_text(&spans).trim_end(), "   1    1 ~const total = 1;2;");
         assert_eq!(style_of("const").fg, Some(theme.syntax.colour(Token::Keyword)), "kept text takes its syntax colour");
@@ -1100,12 +1137,12 @@ mod tests {
     fn syntax_sets_the_text_and_the_diff_keeps_the_fills() {
         let file = cart();
         let theme = Theme::named("tokyonight").unwrap();
-        let spans = line_spans(&file.hunks[0].lines[1], file.spans(0, 1), false, 100, theme);
+        let spans = line_spans(&file.hunks[0].lines[1], file.spans(0, 1), false, Gutter::Both, 100, theme);
         let keyword = spans.iter().find(|s| s.content == "const").unwrap();
         assert_eq!((keyword.style.fg, keyword.style.bg), (Some(theme.syntax.keyword), theme.removed_fill));
         let comment = spans.iter().find(|s| s.content.contains("// cents")).unwrap();
         assert_eq!((comment.style.fg, comment.style.bg), (Some(theme.syntax.comment), theme.removed_fill));
-        let changed = line_spans(&file.hunks[0].lines[2], file.spans(0, 2), false, 100, theme);
+        let changed = line_spans(&file.hunks[0].lines[2], file.spans(0, 2), false, Gutter::Both, 100, theme);
         let word = changed.iter().find(|s| s.content.contains("quantity")).unwrap();
         assert_eq!(word.style.bg, theme.added_word, "a changed word keeps its stronger fill under the syntax colour");
     }
@@ -1114,7 +1151,7 @@ mod tests {
     fn on_an_unknown_ground_syntax_colours_the_text_and_only_the_sign_says_removed() {
         let file = cart();
         let theme = Theme::default();
-        let spans = line_spans(&file.hunks[0].lines[1], file.spans(0, 1), false, 100, theme);
+        let spans = line_spans(&file.hunks[0].lines[1], file.spans(0, 1), false, Gutter::Both, 100, theme);
         assert_eq!(spans[1].content, "-");
         assert_eq!(spans[1].style.fg, Some(theme.danger));
         let keyword = spans.iter().find(|s| s.content == "const").unwrap();
@@ -1129,7 +1166,7 @@ mod tests {
             .lines
             .iter()
             .enumerate()
-            .map(|(i, line)| painted(&line_spans(line, file.spans(0, i), false, 100, theme)))
+            .map(|(i, line)| painted(&line_spans(line, file.spans(0, i), false, Gutter::Both, 100, theme)))
             .collect();
         insta::assert_snapshot!("highlighted_typescript_hunk", lines.join("\n---\n"));
     }
@@ -1146,9 +1183,12 @@ mod tests {
 
     fn drawn_lines(file: &File, theme: Theme) -> Vec<Vec<Span<'static>>> {
         let lines = &file.hunks[0].lines;
-        let each = lines.iter().enumerate().map(|(i, line)| (line_spans(line, file.spans(0, i), false, 60, theme), &line.text));
-        let pair = (pair_spans(&lines[2], &lines[3], file.spans(0, 3), false, 60, theme), &lines[3].text);
-        each.chain([pair]).map(|(spans, text)| with_table_lines(spans, file, text, Overflow::Cut(60), theme)).collect()
+        let each =
+            lines.iter().enumerate().map(|(i, line)| (line_spans(line, file.spans(0, i), false, Gutter::Both, 60, theme), &line.text));
+        let pair = (pair_spans(&lines[2], &lines[3], file.spans(0, 3), false, Gutter::Both, 60, theme), &lines[3].text);
+        each.chain([pair])
+            .map(|(spans, text)| with_table_lines(spans, file, text, Gutter::Both.wrap_indent(), Overflow::Cut(60), theme))
+            .collect()
     }
 
     #[test]
@@ -1176,7 +1216,8 @@ mod tests {
         let anchors = Anchors { markers: &review.markers(), stretch: None };
         let rows = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. } | Row::Context { .. }));
         let drawn = rows.flat_map(|row| {
-            wrap_row(row_line(&review, &anchors, &row, false, false, Overflow::Wrap(44), Theme::default()), 44, WRAP_INDENT)
+            let line = row_line(&review, &anchors, &row, false, Gutter::Both, Overflow::Wrap(44), Theme::default());
+            wrap_row(line, 44, Gutter::Both.wrap_indent())
         });
         insta::assert_snapshot!("wrapped_markdown_table", drawn.map(|line| spans_text(&line.spans)).collect::<Vec<_>>().join("\n"));
     }
@@ -1206,7 +1247,7 @@ mod tests {
             let anchors = Anchors { markers: &review.markers(), stretch: None };
             let lines = review.rows().into_iter().filter(|row| matches!(row, Row::Line { .. }));
             lines
-                .map(|row| spans_text(&row_line(&review, &anchors, &row, false, false, Overflow::Cut(40), Theme::default()).spans))
+                .map(|row| spans_text(&row_line(&review, &anchors, &row, false, Gutter::Both, Overflow::Cut(40), Theme::default()).spans))
                 .collect()
         };
         assert_eq!(drawn(peek(Side::Old)), ["      1       a", "      2       b"]);
@@ -1263,17 +1304,71 @@ mod tests {
     #[test]
     fn line_shows_both_gutters_the_sign_and_visible_tabs() {
         let hunk = &diff::parse("@@ -1,2 +1,2 @@\n \tkeep  \n-\told\n+\tnew  \n")[0];
-        let context = spans_text(&line_spans(&hunk.lines[0], &[], false, 60, Theme::default()));
+        let context = spans_text(&line_spans(&hunk.lines[0], &[], false, Gutter::Both, 60, Theme::default()));
         assert_eq!(context, "   1    1  →   keep");
-        let added = spans_text(&line_spans(&hunk.lines[2], &[], false, 60, Theme::default()));
+        let added = spans_text(&line_spans(&hunk.lines[2], &[], false, Gutter::Both, 60, Theme::default()));
         assert_eq!(added.trim_end(), "        2 +→   new··", "trailing spaces are marked on changed lines");
         assert_eq!(added.width(), 60, "a changed line is filled edge to edge");
     }
 
     #[test]
+    fn one_gutter_numbers_a_line_on_its_new_side_and_a_removed_line_on_its_old_side() {
+        let hunk = &diff::parse("@@ -7,2 +9,2 @@\n keep\n-old\n+new\n")[0];
+        let drawn = |index: usize| spans_text(&line_spans(&hunk.lines[index], &[], false, Gutter::One, 60, Theme::default()));
+        assert_eq!(drawn(0), "   9  keep");
+        assert_eq!(drawn(1).trim_end(), "   8 -old");
+        assert_eq!(drawn(2).trim_end(), "  10 +new");
+        assert_eq!(drawn(2).width(), 60, "a changed line is still filled edge to edge");
+    }
+
+    #[test]
+    fn one_gutter_numbers_a_modified_line_on_its_new_side_and_gives_the_text_the_freed_columns() {
+        let hunk =
+            diff::words::mark(&diff::parse(&format!("@@ -3 +5 @@\n-const total = 1;{0}\n+const total = 2;{0}\n", "x".repeat(40)))[0]);
+        let drawn = |gutter| spans_text(&pair_spans(&hunk.lines[0], &hunk.lines[1], &[], false, gutter, 30, Theme::default()));
+        assert!(drawn(Gutter::One).starts_with("   5 ~const total = "), "{}", drawn(Gutter::One));
+        assert_eq!(drawn(Gutter::One).width(), 30);
+        assert_eq!(drawn(Gutter::Both).width(), 30, "both cut at the pane's edge");
+    }
+
+    fn long_added_line() -> Review {
+        let diff = crate::forge::DiffFile {
+            diff: format!("@@ -1 +1,2 @@\n a\n+{}\n", "x".repeat(40)),
+            old_path: "a.txt".into(),
+            new_path: "a.txt".into(),
+            ..Default::default()
+        };
+        Review::new((*crate::review::tests::review().mr).clone(), &[diff], vec![], &[])
+    }
+
+    #[test]
+    fn a_wrapped_line_continues_under_its_text_whatever_the_gutter() {
+        let review = long_added_line();
+        let anchors = Anchors { markers: &review.markers(), stretch: None };
+        let row = Row::Line { file: 0, hunk: 0, index: 1 };
+        let wrapped = |gutter: Gutter| -> Vec<String> {
+            let line = row_line(&review, &anchors, &row, false, gutter, Overflow::Wrap(30), Theme::default());
+            wrap_row(line, 30, gutter.wrap_indent()).iter().map(|line| spans_text(&line.spans)).collect()
+        };
+        let x = |n: usize| "x".repeat(n);
+        let under = |indent: usize, n: usize, pad: usize| format!("{}{}{}", " ".repeat(indent), x(n), " ".repeat(pad));
+        assert_eq!(wrapped(Gutter::Both), [format!("           2 +{}", x(16)), under(14, 16, 0), under(14, 8, 8)]);
+        assert_eq!(wrapped(Gutter::One), [format!("      2 +{}", x(21)), under(9, 19, 2)]);
+    }
+
+    #[test]
+    fn a_drag_starts_where_the_text_does_whatever_the_gutter() {
+        let review = long_added_line();
+        let row = Row::Line { file: 0, hunk: 0, index: 1 };
+        let column = |gutter| text_columns(&review, &row, gutter, 30).into_iter().map(|column| (column.x, column.room)).collect::<Vec<_>>();
+        assert_eq!(column(Gutter::Both), [(14, 16)]);
+        assert_eq!(column(Gutter::One), [(9, 21)]);
+    }
+
+    #[test]
     fn long_lines_are_cut_to_the_pane() {
         let hunk = &diff::parse(&format!("@@ -1 +1 @@\n+{}\n", "x".repeat(100)))[0];
-        let text = spans_text(&line_spans(&hunk.lines[0], &[], false, 30, Theme::default()));
+        let text = spans_text(&line_spans(&hunk.lines[0], &[], false, Gutter::Both, 30, Theme::default()));
         assert_eq!(text.width(), 30);
         assert!(text.ends_with('…'));
     }

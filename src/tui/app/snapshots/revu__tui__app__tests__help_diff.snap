@@ -2,33 +2,33 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 30)"
 ---
-╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   ── TO REVIE╭ keys ─────────────────────────────────────────────────────────────╮les · ✓ succes │
-│ ▎ feat charge│                                                                   │               │
-│ ▎ omar · !42 │  MOVE                                                             │               │
+╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────────────────────────────────╮
+│  omar · feat/╭ keys ─────────────────────────────────────────────────────────────╮               │
+│   1 of 2 appr│                                                                   │               │
+│  ◆ 1 on the M│  MOVE                                                             │               │
 │              │        j k  move                                                  │               │
-│   ── MINE · 1│        g G  first, last                                           │1 · 1 outdated │
-│   fix flaky c│      ^d ^u  half a page; space too                                │               │
-│   nina · !41 │      ^f ^b  a full page; PgDn PgUp too                            │mount: Money)… │
-│              │        h l  pane to the left, to the right                        │               │
-│   ── WATCHING│      enter  open, or toggle the fold                              │idempotency_k… │
-│   infra: new │      esc x  close the pane, back to the queue                     │;              │
-│   omar · !35 │  tab S-tab  next, previous file                                   │mount).await?; │
-│              │      ]c [c  next, previous hunk                                   │               │
-│   ── ▸ DONE ·│      ]n [n  next, previous open conversation                      │               │
-│              │      ]N [N  next, previous conversation, resolved too             │ Key {         │
-│              │      ]f [f  next, previous file with a thread                     │               │
-│              │      ]r [r  next, previous MR that needs you                      │.expiry()))    │
-│              │      ]m [m  next, previous MR in the queue                        │               │
-│              │                                                                   │               │
+│ ▎▾ src/pay/ch│        g G  first, last                                           │1 · 1 outdated │
+│     ▾ @@ -12,│      ^d ^u  half a page; space too                                │               │
+│      12  pub │      ^f ^b  a full page; PgDn PgUp too                            │               │
+│  ✓   13 -    │        h l  pane to the left, to the right                        │               │
+│      13 +    │      enter  open, or toggle the fold                              │               │
+│      14 +    │      esc x  close the pane, back to the queue                     │               │
+│      15      │  tab S-tab  next, previous file                                   │               │
+│      16      │      ]c [c  next, previous hunk                                   │               │
+│     ▾ @@ -40,│      ]n [n  next, previous open conversation                      │               │
+│      41  fn i│      ]N [N  next, previous conversation, resolved too             │               │
+│      41 -    │      ]f [f  next, previous file with a thread                     │               │
+│      42 +    │      ]r [r  next, previous MR that needs you                      │               │
+│      43 +    │      ]m [m  next, previous MR in the queue                        │               │
+│      44  }   │                                                                   │               │
 │              │  VIEW                                                             │               │
-│              │      / n N  find text in the MR, next, previous                   │ +1 −1  folded │
+│  ▸ Cargo.lock│      / n N  find text in the MR, next, previous                   │ +1 −1  folded │
 │              │          i  the MR cover page                                     │               │
 │              │          D  inline or side by side, diff and prose                │               │
 │              │        > <  the code after, before, alone                         │               │
 │              │          t  file tree                                             │               │
 │              │                                                                   │               │
 │              ╰──────────────── 1–22 of 63 · j k scroll · ? every key · esc close ╯               │
-│                                ││                                                                │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

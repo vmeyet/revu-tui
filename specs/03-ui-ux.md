@@ -46,7 +46,7 @@ The mockup below predates it.
  gitlab.com · vivien · 2 drafts · P to publish                                                     ⠋ refreshing · ? help
 ```
 
-- Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below.
+- Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below. Under 120 columns, once an MR is open, it shows only while it has the keys: the diff takes the window, and `h` or `esc` brings the queue back beside it.
 - Middle: the review, `Min(60)`.
 - Right: 32 columns or 40 % of the width, only when a thread, the pipeline, the outline, the file tree or an AI answer is open.
 - Row above the status line: the input row, only while typing.
@@ -182,6 +182,7 @@ Pins are off below 20 diff rows; in zen (`zz`) they sit inside the centred colum
 ```
 
 - Two 4-column right aligned gutters in `faded`; the selected line's gutters turn `fg`.
+- Under 120 columns of terminal, zen or not, one gutter: the new side's number, the old side's on a removed line. The text, wrapped rows, search marks and drag selection start five columns earlier.
 - Sign column, 1 char, coloured; the text keeps the sign colour at 100 % for changed words and at 60 % (mixed toward the ground) for the rest of the line.
 - Removed and added lines get a fill edge to edge: `mix(ground, danger, 10)` and `mix(ground, success, 10)`, with the terminal's own text colour on top; changed words get `mix(ground, colour, 25)` in the sign colour.
 - The ground is the theme's `base` when it is RGB. Otherwise revu asks the terminal at startup (OSC 11, then DA1 so a silent terminal still ends the read, 50 ms cap, `select(2)` on `/dev/tty`) and `Theme::with_ground` computes the same fills from its answer.
@@ -206,7 +207,7 @@ A removed line and its added twin read as one row when the change is small:
 ```
 
 - The rule: the pair comes from an equal run of `-` and `+` lines (the word-diff pairing), each side changes at most `[review] inline_max_words` runs of words (default 2), and both lines keep at least `[review] inline_min_same` percent of their bytes (default 60). Anything bigger stays on two rows, so a rewrite never turns into a puzzle.
-- Both gutters show, the sign is `~` in `warn`, the kept text is plain, each old word is struck through in the removed colours and followed by its replacement in the added colours (the theme's word fills behind them on RGB themes).
+- Both gutters show (the new side's number alone under 120 columns), the sign is `~` in `warn`, the kept text is plain, each old word is struck through in the removed colours and followed by its replacement in the added colours (the theme's word fills behind them on RGB themes).
 - `c` comments on the new side, `C` on the old side; `V` counts the pair as its added line. Threads and drafts on either line hang under the pair.
 - `D` switches between inline and side by side, remembered per MR like folds; inline is the default.
 

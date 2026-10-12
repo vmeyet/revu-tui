@@ -2,27 +2,27 @@
 source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 24)"
 ---
-╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────╮
-│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ succes │
-│ ▎ feat charge card╭ search · commands ───────────────────────────────────────╮                   │
-│ ▎ omar · !42 · +41│ > pu▌blish                                               │                   │
+╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────────────────────────────────╮
+│  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success                                  │
+│   1 of 2 approvals╭ search · commands ───────────────────────────────────────╮                   │
+│  ◆ 1 on the MR  en│ > pu▌blish                                               │                   │
 │                   │                                                          │                   │
-│   ── MINE · 1 ────│ ▸ publish  publish every draft, in the publish modal     │2  ✓1 · 1 outdated │
-│   fix flaky cache │   ↑↓ pick · tab completes · ^p history · esc             │                   │
-│   nina · !41 · +3 │                                                          │d, amount: Money)… │
-│                   │                                                          │;                  │
-│   ── WATCHING · 1 │                                                          │key(idempotency_k… │
-│   infra: new runne│                                                          │st();              │
-│   omar · !35 · +0 │                                                          │ge(amount).await?; │
-│                   │                                                          │                   │
-│   ── ▸ DONE · 1 ──│                                                          │                   │
-│                   │                                                          │) -> Key {         │
-│                   │                                                          │                   │
-│                   │                                                          │card.expiry()))    │
-│                   ╰──────────────────────────────────────────────────────────╯w                  │
-│                                ││      42   44  }                                                │
-│                                ││                                                                │
-│                                ││  ▸ Cargo.lock                                    +1 −1  folded │
-│                                ││                                                                │
-╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+│ ▎▾ src/pay/charge.│ ▸ publish  publish every draft, in the publish modal     │2  ✓1 · 1 outdated │
+│     ▾ @@ -12,4 +12│   ↑↓ pick · tab completes · ^p history · esc             │                   │
+│      12  pub async│                                                          │                   │
+│  ✓   13 -    let c│                                                          │                   │
+│      13 +    let c│                                                          │                   │
+│      14 +    let a│                                                          │                   │
+│      15      let r│                                                          │                   │
+│      16      audit│                                                          │                   │
+│     ▾ @@ -40,3 +41│                                                          │                   │
+│      41  fn idempo│                                                          │                   │
+│      41 -    Key::│                                                          │                   │
+│      42 +    Key::│                                                          │                   │
+│      43 +    // hu╰──────────────────────────────────────────────────────────╯                   │
+│      44  }                                                                                       │
+│                                                                                                  │
+│  ▸ Cargo.lock                                                                      +1 −1  folded │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

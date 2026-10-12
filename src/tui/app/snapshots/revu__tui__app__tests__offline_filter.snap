@@ -9,8 +9,8 @@ expression: "render(&mut app, 100, 12)"
 │                                ││                                                                │
 │   ── WATCHING · 0 ──────────── ││ ▎▾ src/pay/charge.rs                    +4 −2  ✓1 · 1 outdated │
 │                                ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                    │
-│ ▎ ── ▸ DONE · 0 ────────────── ││      12   12  pub async fn charge(card: &Card, amount: Money)… │
-│                                ││  ✓   13      -    let client = Client::new();                  │
+│ ▎ ── ▸ DONE · 0 ────────────── ││      12  pub async fn charge(card: &Card, amount: Money) -> R… │
+│                                ││  ✓   13 -    let client = Client::new();                       │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
  / pay▏  enter keep · esc clear
  offline · last refresh 3m ago                                                               ? help

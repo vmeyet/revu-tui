@@ -663,3 +663,52 @@ fn a_peek_badges_the_first_header_row_in_every_layout_and_leaves_the_pipeline_li
     press(&mut app, "zhzz");
     assert!(first_row(&mut app).contains(" AFTER "), "zen: {}", first_row(&mut app));
 }
+
+#[test]
+fn below_120_columns_an_open_mr_shows_the_queue_only_while_it_has_the_keys() {
+    let mut app = with_long_review();
+    let reading = render(&mut app, 119, 24);
+    assert!(!reading.contains("Queue"), "{reading}");
+    assert_eq!((app.areas.queue.width, app.areas.review.width), (0, 119), "the diff takes the window");
+    let before = app.open.as_ref().unwrap().selected;
+    wheel(&mut app, true, 5, 10);
+    assert_ne!(app.open.as_ref().unwrap().selected, before, "the wheel finds the diff where the queue was");
+    press(&mut app, "h");
+    insta::assert_snapshot!("queue_back_narrow", render(&mut app, 119, 24));
+    assert_eq!((app.areas.queue.width, app.areas.review.x), (34, 34), "h brings the queue back");
+    press(&mut app, "l");
+    render(&mut app, 120, 24);
+    assert_eq!(app.areas.queue.width, 34, "from 120 columns the queue stays beside the diff");
+}
+
+#[test]
+fn below_120_columns_the_queue_shows_while_no_mr_is_open() {
+    let mut app = with_queue();
+    app.focus = Focus::Review;
+    render(&mut app, 100, 24);
+    assert_eq!(app.areas.queue.width, 34);
+}
+
+#[test]
+fn a_narrow_window_numbers_each_line_once_and_a_wide_one_on_both_sides() {
+    let mut app = with_review();
+    let narrow = render(&mut app, 119, 24);
+    assert!(narrow.contains("  ✓   13 -    let client = Client::new();"), "{narrow}");
+    assert!(narrow.contains("      15      let response = client.charge(amount).await?;"), "{narrow}");
+    let wide = render(&mut app, 120, 24);
+    assert!(wide.contains("  ✓   13      -    let client = Client::new();"), "{wide}");
+    assert!(wide.contains("      14   15      let response = client.charge(amount).await?;"), "{wide}");
+}
+
+#[test]
+fn in_a_narrow_window_a_drag_and_a_search_start_where_the_text_does() {
+    let mut app = with_review();
+    let (x, y) = spot(&mut app, "let client = Client::new()", 100, 24);
+    assert_eq!(drag(&mut app, (x - 5, y), (x + 9, y), 100, 24), vec![], "the sign is no text");
+    let actions = drag(&mut app, (x - 4, y), (x + 9, y + 1), 100, 24);
+    let text = "    let client = Client::new();\n    let client".to_owned();
+    assert_eq!(actions, vec![Action::Copy { text, done: "copied 2 lines".into() }]);
+    type_text(&mut app, "/pub");
+    let found = render_selected(&mut app, 100, 24);
+    assert!(found.contains("12  ⟦pub⟧ async fn charge"), "{found}");
+}
