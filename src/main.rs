@@ -24,6 +24,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Logout { host }) => return commands::login::logout(host.or(cli.host).as_deref()),
         Some(Command::Update(args)) => return commands::update::run(&args),
         Some(Command::Usage(args)) => return commands::usage::run(&args, cli.json),
+        Some(Command::News(args)) => return commands::news::run(&args, cli.json),
         Some(Command::Docs(args)) => return commands::docs::run(&args),
         Some(Command::Ai(args)) if !args.needs_forge() => return commands::ai::run(args, cli.json).await,
         Some(Command::Completions { shell }) => {
@@ -53,7 +54,8 @@ async fn run(cli: Cli) -> Result<()> {
             | Command::Completions { .. }
             | Command::Update(_)
             | Command::Docs(_)
-            | Command::Usage(_),
+            | Command::Usage(_)
+            | Command::News(_),
         ) => {
             unreachable!("handled above")
         }

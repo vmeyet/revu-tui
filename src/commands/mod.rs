@@ -15,6 +15,8 @@ pub mod list;
 pub mod login;
 /// `revu merge`.
 pub mod merge;
+/// `revu news`.
+pub mod news;
 /// `revu publish`.
 pub mod publish;
 /// `revu ready`.

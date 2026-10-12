@@ -65,6 +65,8 @@ pub enum Command {
     },
     /// Install the latest `revu`: with brew when brew installed it, else rebuilt with cargo.
     Update(UpdateArgs),
+    /// What changed in revu, newest version first: what is new, where, and how to use it.
+    News(NewsArgs),
     /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.
     Usage(UsageArgs),
     /// Write the reference pages under `docs/reference/` from the code.
@@ -89,6 +91,17 @@ pub struct UsageArgs {
     /// How far back to look: `30d`, `4w`, or `all`.
     #[arg(long, default_value = "30d")]
     pub since: String,
+}
+
+/// Flags of `revu news`.
+#[derive(Args, Debug)]
+pub struct NewsArgs {
+    /// Only what came after this version: `0.5.0`.
+    #[arg(long, value_name = "VERSION")]
+    pub since: Option<crate::changelog::Position>,
+    /// As `revu update` ends: nothing when nothing is new, and a last line on how to read it again.
+    #[arg(long, hide = true, requires = "since")]
+    pub after_update: bool,
 }
 
 /// Flags of `revu update`.

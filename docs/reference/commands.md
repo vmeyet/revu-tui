@@ -200,6 +200,14 @@ Install the latest `revu`: with brew when brew installed it, else rebuilt with c
 |---|---|
 | `-f, --force` | Install even when the running binary is already the latest commit (`brew reinstall` under brew) |
 
+## `revu news`
+
+What changed in revu, newest version first: what is new, where, and how to use it.
+
+| Flag | Means |
+|---|---|
+| `--since` | Only what came after this version: `0.5.0`. |
+
 ## `revu usage`
 
 What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.

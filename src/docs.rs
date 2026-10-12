@@ -456,7 +456,7 @@ fn command_section(command: &Command, parent: &str) -> Vec<String> {
     }
     let flags: Vec<&Arg> = command
         .get_arguments()
-        .filter(|a| !a.is_positional() && !a.is_global_set() && a.get_id() != "help" && a.get_id() != "version")
+        .filter(|a| !a.is_positional() && !a.is_global_set() && !a.is_hide_set() && a.get_id() != "help" && a.get_id() != "version")
         .collect();
     if !flags.is_empty() {
         lines.push(String::new());

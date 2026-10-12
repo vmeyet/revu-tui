@@ -1,5 +1,6 @@
 //! Where a newer `revu` comes from, and whether the running one is already it.
 use crate::cache::Cache;
+use crate::changelog::Position;
 use crate::version;
 use anyhow::{Context, Result, bail};
 use std::path::Path;
@@ -53,6 +54,17 @@ pub fn brew(force: bool) -> Result<()> {
         bail!("brew {action} {FORMULA} failed");
     }
     Ok(())
+}
+
+/// Lets the binary now installed print what is new past `had`: the running one only holds its own changelog.
+pub fn show_news(had: Position) -> Result<()> {
+    let installed = std::env::current_exe().context("finding the installed revu")?;
+    Command::new(installed).args(news_args(had)).status().context("running the installed revu")?;
+    Ok(())
+}
+
+fn news_args(had: Position) -> [String; 4] {
+    ["news".to_owned(), "--after-update".to_owned(), "--since".to_owned(), had.to_string()]
 }
 
 /// cargo ties a `--git` build to the repo URL, never to the commit, so a kept build folder would
@@ -129,6 +141,14 @@ mod tests {
     #[test]
     fn a_binary_built_by_cargo_is_not_installed_by_brew() {
         assert!(!is_in_brew_cellar(Path::new("/Users/nina/.cargo/bin/revu")));
+    }
+
+    #[test]
+    fn the_installed_binary_is_asked_what_is_new_past_the_one_that_ran() {
+        let had = "0.6.0+2".parse().unwrap();
+        assert_eq!(news_args(had), ["news", "--after-update", "--since", "0.6.0+2"]);
+        let cli = <crate::cli::Cli as clap::Parser>::try_parse_from(std::iter::once("revu".to_owned()).chain(news_args(had))).unwrap();
+        assert!(matches!(cli.command, Some(crate::cli::Command::News(args)) if args.after_update && args.since == Some(had)));
     }
 
     #[test]

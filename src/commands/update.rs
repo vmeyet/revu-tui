@@ -1,3 +1,4 @@
+use crate::changelog::Changelog;
 use crate::cli::UpdateArgs;
 use crate::render::{Style, Theme};
 use crate::update::{self, Decision, FORMULA, REPO, decide};
@@ -17,6 +18,7 @@ pub fn run(args: &UpdateArgs) -> Result<()> {
             println!("{} installing the latest revu from {REPO}…", theme.paint("→", Style::Accent));
             update::install()?;
             println!("{} updated, run `revu --version` to see it", theme.paint("✓", Style::Ok));
+            show_news(theme);
         }
     }
     Ok(())
@@ -27,7 +29,16 @@ fn upgrade_with_brew(theme: Theme, force: bool) -> Result<()> {
     println!("{} upgrading revu with brew ({FORMULA})…", theme.paint("→", Style::Accent));
     update::brew(force)?;
     println!("{} done, run `revu --version` to see it", theme.paint("✓", Style::Ok));
+    show_news(theme);
     Ok(())
+}
+
+/// The update worked either way, so a changelog that cannot be shown only warns.
+fn show_news(theme: Theme) {
+    let shown = Changelog::embedded().and_then(|log| update::show_news(log.position()));
+    if let Err(err) = shown {
+        eprintln!("{} could not show what is new: {err}", theme.paint("!", Style::Warn));
+    }
 }
 
 fn latest(theme: Theme) -> Option<String> {

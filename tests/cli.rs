@@ -134,3 +134,53 @@ fn tui_rejects_a_reference_before_the_screen_changes() {
         .failure()
         .stderr(predicate::str::contains("group/project!42"));
 }
+
+#[test]
+fn news_prints_every_version_newest_first() {
+    let page = revu().arg("news").assert().success().get_output().stdout.clone();
+    let page = String::from_utf8(page).unwrap();
+    let (newer, older) = (page.find("0.6.0 · 2026-10-06").unwrap(), page.find("0.2.0 · 2026-09-30").unwrap());
+    assert!(newer < older, "{page}");
+    assert!(page.contains("  New\n  • "), "{page}");
+}
+
+#[test]
+fn news_since_keeps_the_newer_versions_only() {
+    revu()
+        .args(["news", "--since", "0.5.0"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("0.6.0 · 2026-10-06").and(predicate::str::contains("0.5.0 · ").not()));
+    revu().args(["news", "--since", "99.0.0"]).assert().success().stdout("Nothing new since 99.0.0.\n");
+    revu().args(["news", "--since", "banana"]).assert().failure().code(2).stderr(predicate::str::contains("write it like 0.6.0"));
+}
+
+#[test]
+fn news_as_json_lists_what_where_and_how() {
+    let output = revu().args(["news", "--since", "0.5.0", "--json"]).assert().success().get_output().stdout.clone();
+    let sections: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let release = sections.as_array().unwrap().iter().find(|s| s["version"] == "0.6.0").unwrap();
+    assert_eq!(release["date"], "2026-10-06");
+    let entry = &release["new"][0];
+    assert!(entry["what"].is_string() && entry["where"].is_string() && entry["how"].is_string(), "{entry}");
+    assert!(release["fixed"].is_array());
+}
+
+#[test]
+fn the_update_tail_prints_nothing_when_nothing_is_new() {
+    revu().args(["news", "--after-update", "--since", "99.0.0"]).assert().success().stdout("");
+    revu()
+        .args(["news", "--after-update", "--since", "0.5.0"])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("\nNew since 0.5.0\n").and(predicate::str::contains("revu news")));
+}
+
+#[test]
+fn completions_know_the_news_command() {
+    revu()
+        .args(["completions", "zsh"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("news").and(predicate::str::contains("--since")));
+}

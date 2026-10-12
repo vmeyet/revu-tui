@@ -15,7 +15,7 @@ revu login github.com --from-gh   # GitHub: reuse the token gh holds
 ```
 
 You need Rust 1.90 or newer.
-`revu update` installs the latest version later.
+`revu update` installs the latest version later, and ends with what is new for you.
 When brew installed revu, `revu update` runs `brew upgrade` for you.
 
 ## A 30-second tour
@@ -42,6 +42,7 @@ revu 42             # straight into MR 42 of this project, in zen
 | [Guides](docs/guides/) | One task per page: review mode, search, ready source, share, zen, AI, your editor, keys, hosts, usage, update |
 | [Keys](docs/reference/keys.md), [config](docs/reference/config.md), [commands](docs/reference/commands.md) | Every key, setting and command |
 | [Troubleshooting](docs/troubleshooting.md) | When something does not work |
+| [What's new](CHANGELOG.md) | What changed in each version, and how to use it |
 
 Contributors: read [`AGENTS.md`](AGENTS.md) and the design in [`specs/`](specs/).
 
