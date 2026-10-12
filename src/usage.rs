@@ -318,18 +318,26 @@ fn pane_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('J') => "next_in_line",
         KeyCode::Char('K') => "prev_in_line",
         KeyCode::Char('T') => "every_thread",
+        KeyCode::Char('P') => "publish",
+        KeyCode::Esc | KeyCode::Char('x') => "close_pane",
+        _ => return thread_key(code),
+    })
+}
+
+/// The action of a key that acts on the thread, note or draft under the cursor, in the pane or on a thread row
+/// of the diff.
+pub fn thread_key(code: KeyCode) -> Option<&'static str> {
+    Some(match code {
         KeyCode::Char('u') => "open_link",
         KeyCode::Char('o') => "open_browser",
         KeyCode::Char('y') => "copy_link",
-        KeyCode::Char('r') => "reply",
+        KeyCode::Char('r' | 'c') => "reply",
         KeyCode::Char('R') => "resolve",
         KeyCode::Char('S') => "apply_suggestion",
         KeyCode::Char('+') => "react",
         KeyCode::Char('e') => "edit_draft",
         KeyCode::Char('d') => "delete_draft",
         KeyCode::Char('E') => "editor",
-        KeyCode::Char('P') => "publish",
-        KeyCode::Esc | KeyCode::Char('x') => "close_pane",
         _ => return None,
     })
 }

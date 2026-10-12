@@ -16,7 +16,9 @@ impl App {
     pub(super) fn usage_name(&self, key: KeyEvent) -> Option<(&'static str, Place)> {
         self.usage.as_ref()?;
         let place = self.usage_place();
-        crate::usage::action(self.pending, key, place).map(|name| (name, place))
+        let on_thread = self.pending.is_none() && key.modifiers.is_empty() && self.on_thread_row();
+        let thread_action = if on_thread { crate::usage::thread_key(key.code) } else { None };
+        thread_action.or_else(|| crate::usage::action(self.pending, key, place)).map(|name| (name, place))
     }
 
     /// Counts a key's action, and the habits a faster key would replace.

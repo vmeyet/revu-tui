@@ -302,7 +302,7 @@ impl App {
             KeyCode::Char('R') => self.toggle_resolved(),
             KeyCode::Char('d') if !ctrl => self.delete_draft_here(),
             KeyCode::Char('E') => self.compose_draft_here(),
-            KeyCode::Char('r') => {
+            KeyCode::Char('r' | 'c') => {
                 self.reply_here();
                 vec![]
             }

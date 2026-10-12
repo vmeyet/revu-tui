@@ -20,7 +20,7 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 
 | Key | Does |
 |---|---|
-| `c` | Comment on the line under the cursor |
+| `c` | Comment on the line under the cursor; on a thread, reply to it |
 | `V`, then `j` `k`, then `c` | Comment on a range of lines |
 | `C` | Comment on the old side of a line shown inline or side by side |
 | `s` | Suggest a change: the box starts with the lines to edit |
@@ -52,7 +52,7 @@ A line with a conversation has a mark left of its numbers.
 | `]N` `[N` | The same, resolved threads too |
 | `T` or `:threads` | Every thread of the MR in the right pane, open ones first; `J` `K` walk them, `enter` takes the diff to one |
 | `m` in that list | Only the threads you take part in: you wrote in it, or have a draft there; `m` again shows them all |
-| `r` | Reply, as a draft |
+| `r` or `c` | Reply, as a draft |
 | `R` | Resolve or unresolve |
 | `q`, `x` or `esc` | Close the pane |
 | `e` `d` | Edit, delete your draft |

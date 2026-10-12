@@ -347,7 +347,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `>` `<` | the code after, before, alone | post-M5 |
 | `=` | more context around the hunk | M3 |
 | `+` | react to the thread on the line | M5 |
-| `c` | comment on the line (draft) | M2 |
+| `c` | comment on the line (draft); on a thread row, reply to it | M2 |
 | `V` | select lines | M2 |
 | `^v` | the file after the change in the reader's program, at the cursor's line (`08-open-file.md`) | M3b |
 | `E` | comment in `$EDITOR` | M2 |
@@ -364,7 +364,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `j` `k`, `J` `K` | note by note, thread by thread |
 | `enter` | unfold, fold a resolved thread; in every thread, also go to its line in the diff |
 | `T` | every thread of the MR, or close it |
-| `r` | reply, in the compose box |
+| `r` `c` | reply, in the compose box |
 | `R` | resolve, unresolve (also on a marked line in the diff) |
 | `S` | commit the note's suggestion on the MR branch, after a `y` (M5): GitLab applies it by its id; on GitHub, which has no API for it, revu commits the change itself through the contents API, only on the PR's own branch and with push access, else `o` opens it on the web |
 | `e` `d` `E` | edit, delete my draft; edit it in `$EDITOR` |

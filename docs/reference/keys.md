@@ -62,7 +62,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 
 | Keys | Does |
 |---|---|
-| `c` | comment on the line |
+| `c` | comment on the line, reply on a thread |
 | `C` | comment on the old side |
 | `V` | select lines |
 | `s` | suggest a change |
@@ -81,7 +81,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 
 | Keys | Does |
 |---|---|
-| `r` | reply, as a draft |
+| `r` `c` | reply, as a draft |
 | `R` | resolve, unresolve |
 | `J` `K` | next, previous thread |
 | `T` | every thread; enter goes to it |

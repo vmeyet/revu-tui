@@ -137,7 +137,7 @@ Side by side (`D`) has no single column to hang them in, so it keeps the pane.
 - `enter` on the line unfolds every thread on it, or folds them once none is folded; `enter` on a thread row unfolds or folds that thread and leaves the cursor on its first row. `Review::unfolded` holds the unfolded ids, kept through a refresh.
 - An unfolded thread is a row per note, then per draft reply of mine, drawn as the pane draws them and wrapped to the text column: its rows start where the code does, behind a `│` in `border` one column before the sign, whichever gutter the diff shows (one number under the narrow width, both above).
 - `j` `k` stop on each of those rows, so a thread longer than the screen scrolls note by note; `]n` `]N` stop on marked lines only; a folded hunk or file hides its thread rows.
-- On a thread row `r`, `R`, `S`, `+`, `e`, `d`, `E`, `u`, `o`, `y` and `ctrl-v` act as in the pane on the thread, note or draft under the cursor; elsewhere in the diff they keep their own meaning.
+- On a thread row `r`, `c`, `R`, `S`, `+`, `e`, `d`, `E`, `u`, `o`, `y` and `ctrl-v` act as in the pane on the thread, note or draft under the cursor; elsewhere in the diff they keep their own meaning.
 - Written from the diff, the compose box opens in it, under the row the text will land after: the last row of the thread a reply answers, which unfolds for it; the last row under the line of a new thread, after the threads already there; the row of an edited draft. It is the pane's box, as wide as the thread rows, its text starting where theirs does.
 - The cursor goes to that row, so the diff scrolls to keep the row and the whole box on screen as the box grows; `esc` takes it back to the row it left, and a saved draft takes it.
 - Written from the pane (the list of every thread, the MR's own threads), or side by side, the box stays in the pane. A draft whose line the diff does not show (a folded hunk, the other side of a peek) is edited in a box at the foot of the diff.
@@ -172,7 +172,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `C` | diff, inline pair | same, on the old side | input row |
 | `s` | diff | new thread prefilled with a suggestion | editor only |
 | `E` | diff or box | write in `$EDITOR` | same |
-| `r` | pane | reply to the focused thread | input row |
+| `r`, `c` | pane, or a thread row in the diff | reply to the focused thread; `c` is "write here", a new thread on a code line | input row |
 | `R` | pane, or diff on a marked line | resolve, unresolve the focused thread | pane only |
 | `e` | pane | edit my draft (or my note, M3) | `enter` on a draft row |
 | `d` | pane | delete my draft | `d` on a draft row |

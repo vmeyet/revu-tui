@@ -7,7 +7,7 @@ expression: "render(&mut app, 160, 45)"
 │ ▎ feat char╭ keys ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮             │
 │ ▎ omar · !4│                                                                                                                                   │             │
 │            │  MOVE                                                                 COMMENT & PUBLISH                                           │             │
-│   ── MINE ·│        j k  move                                                              c  comment on the line                              │             │
+│   ── MINE ·│        j k  move                                                              c  comment on the line, reply on a thread           │             │
 │   fix flaky│        g G  first, last                                                       C  comment on the old side                          │             │
 │   nina · !4│      ^d ^u  half a page; space too                                            V  select lines                                     │             │
 │            │      ^f ^b  a full page; PgDn PgUp too                                        s  suggest a change                                 │             │
@@ -23,7 +23,7 @@ expression: "render(&mut app, 160, 45)"
 │            │      )m (m  next, previous MR in the queue                                    Y  share the MR, after a preview                    │             │
 │            │                                                                                                                                   │             │
 │            │  QUEUE                                                                THREAD PANE                                                 │             │
-│            │          /  filter: words @author !42 ~label                                  r  reply, as a draft                                │             │
+│            │          /  filter: words @author !42 ~label                                r c  reply, as a draft                                │             │
 │            │      ' 1-9  a saved view, by letter or rank                                   R  resolve, unresolve                               │             │
 │            │          *  this repo, or every project                                     J K  next, previous thread                            │             │
 │            │          s  next sort order                                                   T  every thread; enter goes to it                   │             │

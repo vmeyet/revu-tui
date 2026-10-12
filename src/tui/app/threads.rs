@@ -101,6 +101,12 @@ impl Open {
 }
 
 impl App {
+    /// The diff has the keys and its cursor is on a thread row.
+    pub(super) fn on_thread_row(&self) -> bool {
+        let row = self.open.as_ref().and_then(|open| open.row());
+        self.focus == Focus::Review && matches!(row, Some(Row::Thread { .. }))
+    }
+
     /// The row the compose box hangs under in the diff; none while the pane holds the box, or the diff has no
     /// row for what is written.
     pub fn compose_row(&self) -> Option<usize> {
@@ -346,6 +352,66 @@ mod tests {
         let top = lines.iter().position(|line| line.contains(&format!("╭ {label}"))).unwrap_or_else(|| panic!("a box:\n{screen}"));
         let foot = lines.iter().position(|line| line.contains("╰ enter save")).unwrap_or_else(|| panic!("its foot:\n{screen}"));
         (lines[top - 1].trim().to_owned(), lines[foot + 1].trim().to_owned())
+    }
+
+    /// What the compose box is open on, once `keys` were pressed; the box closes again.
+    fn written_with(app: &mut App, keys: &str) -> Option<Input> {
+        press(app, keys);
+        let input = app.input.clone();
+        app.handle_key(code(KeyCode::Esc));
+        input
+    }
+
+    fn reply_to(thread: &str) -> Input {
+        Input::Reply { thread: thread.into() }
+    }
+
+    #[test]
+    fn c_replies_on_a_thread_row_as_r_does_and_still_starts_a_thread_on_a_line() {
+        let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 2)]);
+        assert!(matches!(written_with(&mut app, "c"), Some(Input::Comment { .. })), "a new thread on a code line");
+        press(&mut app, "j");
+        assert_eq!((written_with(&mut app, "c"), written_with(&mut app, "r")), (Some(reply_to("aaa")), Some(reply_to("aaa"))));
+        assert_eq!(written_with(&mut app, "C"), None, "C only ever starts a thread, on the old side of a pair");
+    }
+
+    #[test]
+    fn c_replies_in_the_pane_as_r_does_and_big_c_writes_nothing_there() {
+        let mut app = with_review();
+        press(&mut app, "]N");
+        enter(&mut app);
+        assert_eq!(app.focus, Focus::Side);
+        let nina = "c0ffee00c0ffee00";
+        assert_eq!((written_with(&mut app, "c"), written_with(&mut app, "r")), (Some(reply_to(nina)), Some(reply_to(nina))));
+        assert_eq!(written_with(&mut app, "C"), None);
+        let mut list = zen_with_threads(vec![]);
+        press(&mut list, "T");
+        assert_eq!(written_with(&mut list, "c"), Some(reply_to("6a9c1750b2d6e4f0")), "under zen's diff too");
+    }
+
+    #[test]
+    fn a_key_bound_to_comment_replies_on_a_thread_and_comments_on_a_line() {
+        let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 2)]);
+        app.keymap = keymap(r#"bind = { comment = "F" }"#);
+        assert!(matches!(written_with(&mut app, "F"), Some(Input::Comment { .. })));
+        press(&mut app, "j");
+        assert_eq!(written_with(&mut app, "F"), Some(reply_to("aaa")));
+        press(&mut app, "T");
+        assert_eq!(written_with(&mut app, "F"), Some(reply_to("6a9c1750b2d6e4f0")), "in the pane as well");
+    }
+
+    #[test]
+    fn c_on_a_thread_counts_as_a_reply_and_on_a_line_as_a_comment() {
+        let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 2)]);
+        app.usage = Some(crate::usage::Tally::default());
+        written_with(&mut app, "c");
+        press(&mut app, "j");
+        written_with(&mut app, "c");
+        written_with(&mut app, "r");
+        press(&mut app, "T");
+        written_with(&mut app, "c");
+        let counts = app.take_usage().unwrap();
+        assert_eq!((counts.actions.get("comment"), counts.actions.get("reply"), counts.actions.get("refresh")), (Some(&1), Some(&3), None));
     }
 
     #[test]

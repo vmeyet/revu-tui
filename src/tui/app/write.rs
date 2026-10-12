@@ -275,7 +275,7 @@ impl App {
 
     pub(super) fn reply_here(&mut self) {
         let Some(thread) = self.stop_here().and_then(|stop| stop.thread) else {
-            self.toast("r replies to a thread; c starts a new one");
+            self.toast("r and c reply to a thread; c on a line starts a new one");
             return;
         };
         self.open_input(Input::Reply { thread }, "");

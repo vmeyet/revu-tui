@@ -85,7 +85,7 @@ pub const GROUPS: [Group; 8] = [
     Group {
         title: "comment & publish",
         keys: &[
-            ("c", "comment on the line"),
+            ("c", "comment on the line, reply on a thread"),
             ("C", "comment on the old side"),
             ("V", "select lines"),
             ("s", "suggest a change"),
@@ -105,7 +105,7 @@ pub const GROUPS: [Group; 8] = [
     Group {
         title: "thread pane",
         keys: &[
-            ("r", "reply, as a draft"),
+            ("r c", "reply, as a draft"),
             ("R", "resolve, unresolve"),
             ("J K", "next, previous thread"),
             ("T", "every thread; enter goes to it"),

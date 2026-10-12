@@ -41,7 +41,7 @@ Your own draft of a new thread shows whole.
 | `enter` on the line | Unfold every thread of the line, or fold them once none is folded |
 | `enter` on a thread | Unfold or fold that thread alone |
 | `j` `k` | Walk the notes of an unfolded thread, one by one, then the code again |
-| `r` `R` `+` `S` on a thread | Reply, resolve, react, apply the suggestion, as in the thread pane |
+| `r` or `c`, `R` `+` `S` on a thread | Reply, resolve, react, apply the suggestion, as in the thread pane |
 | `e` `d` on your draft | Edit it, delete it |
 | `u` `o` `y` on a thread | Open its first link, open it in the browser, copy its link |
 
