@@ -152,6 +152,7 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 
 - Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk, as a call tree; `enter` jumps there.
 - Pins `b` (`03-ui-ux.md` § The queue, 2026-10-02): MRs kept on top of the queue in `PINNED`, per scope, until merged or closed.
+- Changelog (`12-changelog.md`, 2026-10-12): `CHANGELOG.md` built into the binary, `revu news`, the end of `revu update`, a toast on the first start after an update and the `:news` page.
 
 ## Next · Prose diff
 
@@ -172,4 +173,5 @@ Acceptance: a README with one edited paragraph, one added bullet and one removed
 - Tests green, `cargo clippy -- -D warnings` clean, `cargo fmt` clean.
 - No comment in the diff that explains what the code does.
 - `?` help and the generated `docs/reference/keys.md` updated (`cargo run -- docs`).
+- A `feat` or `fix` a user can notice has its entry under `Unreleased` in `CHANGELOG.md` (`AGENTS.md` § Releases).
 - The MR description says what the user can now do, in two sentences.

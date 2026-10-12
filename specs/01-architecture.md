@@ -9,7 +9,7 @@ Crate `revu`, binary `revu`, edition 2024, Rust 1.90+.
 src/
   main.rs            parse Cli, dispatch, print errors as `✗ message` + dimmed causes
   lib.rs             the library behind the binary
-  cli.rs             clap: login, logout, whoami, list, show, diff, comment, approve, merge, ready, publish, share, ai, tui, completions, update, usage, docs
+  cli.rs             clap: login, logout, whoami, list, show, diff, comment, approve, merge, ready, publish, share, ai, tui, completions, update, news, usage, docs
   ctx.rs             Ctx { forge: Forge, config, cache, json, project } opened once per command
   config.rs          ~/.config/revu/config.toml
   cache.rs           ~/.cache/revu/<host>/…  json files, atomic writes
@@ -24,6 +24,7 @@ src/
   usage.rs           `[usage]`: what revu is used for, counted on this machine only
   version.rs         `revu --version` = crate version + commit from build.rs
   update.rs          `revu update`, copied from slack-tui
+  changelog.rs       `CHANGELOG.md` built into the binary: sections, entries, what is new past a position (12-changelog.md)
   syntax/mod.rs      tree-sitter grammars, loaded on first use
   auth/
     mod.rs           SERVICE, Credentials { host, token }, resolve(env, store, config, host)
@@ -231,6 +232,7 @@ mr/<group+project>/<number>/drafts.json
 mr/<group+project>/<number>/state.json    viewed files, folds, last opened
 mr/<group+project>/<number>/ai/answer.<request_hash>.json   Claude's answer, its title, time, head, request
 pruned.json                         (shared root) when the cache was last pruned
+news.json                           (shared root) how far the reader got in revu's own changelog
 ```
 
 Files are written to a temp name then renamed, mode 0600, directory 0700.

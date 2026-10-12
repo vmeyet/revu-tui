@@ -403,7 +403,7 @@ While `'` waits, the status line lists the views. Views are checked when the con
 
 ### Command line (`>` in the search)
 
-Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:pin`, `:unpin` (post-M5), `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:pin`, `:unpin` (post-M5), `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:news` (`12-changelog.md`), `:help`, `:quit`.
 While the verb is typed, `↑` `↓` move a cursor through the command list and `enter` runs the command under it, or writes it and waits when it needs an argument (`go `, `set `). Past the verb, `↑` `↓` walk the argument's completions as Tab does. Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `ctrl-p` `ctrl-n` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:cache clear`.
 
@@ -472,4 +472,4 @@ A frame styles only the visible window; moving a cursor or scrolling rebuilds no
 - `revu comment <ref> <path>:<line> <text>` and `revu approve <ref>` for scripts and other agents.
 - `<ref>` accepts `group/project!42`, `42`, `!42` or `#42` (current repo from `git remote`; quote `'!42'`, bash and zsh expand `!`), an MR URL, or nothing (current branch).
 - Error lines are `✗ message` plus dimmed causes, same as slack-tui.
-- `revu --version` prints the crate version and the commit; `revu update` rebuilds from the repo.
+- `revu --version` prints the crate version and the commit; `revu update` rebuilds from the repo and ends with what is new since the version it replaced; `revu news` prints the changelog (`12-changelog.md`).

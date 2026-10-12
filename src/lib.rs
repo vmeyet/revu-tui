@@ -2,6 +2,7 @@
 mod ai;
 mod auth;
 mod cache;
+mod changelog;
 pub mod cli;
 pub mod commands;
 mod config;

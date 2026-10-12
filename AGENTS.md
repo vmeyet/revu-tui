@@ -23,6 +23,12 @@ The design lives in `specs/`; read `specs/06-roadmap.md` first, it says what to 
 - Anything that can run twice (draft sync, cache writes, logout) is safe to run twice.
 - Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else speaks the neutral model in `src/forge/model.rs` (`specs/07-forges.md`).
 
+## Releases
+
+- `CHANGELOG.md` is for users and ships in the binary (`revu news`, `:news`, the end of `revu update`); `specs/12-changelog.md` has its shape.
+- An MR with a `feat` or `fix` a user can notice adds its entry under `Unreleased` in the same MR: what it is, where it applies, how to use it, one sentence per line.
+- Bumping the version in `Cargo.toml` renames `## Unreleased` to `## <version> - <date>` and starts an empty `## Unreleased` above it; a test fails when a bump leaves entries behind.
+
 ## Adding a syntax language
 
 1. Add the grammar crate to `Cargo.toml` (`tree-sitter-<lang>`, a version that builds with the `tree-sitter` already there).

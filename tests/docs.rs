@@ -11,9 +11,9 @@ fn root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// README.md and every Markdown file under docs/.
+/// README.md, CHANGELOG.md and every Markdown file under docs/.
 fn pages() -> Vec<PathBuf> {
-    let mut found = vec![root().join("README.md")];
+    let mut found = vec![root().join("README.md"), root().join("CHANGELOG.md")];
     let mut dirs = vec![root().join("docs")];
     while let Some(dir) = dirs.pop() {
         for entry in std::fs::read_dir(&dir).unwrap() {
