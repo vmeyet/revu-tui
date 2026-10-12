@@ -278,8 +278,9 @@ impl App {
             }
             KeyCode::Char('=') => return self.expand_context(),
             KeyCode::Char('w') => {
-                self.wrap = !self.wrap;
-                self.toast(if self.wrap { "long lines wrap" } else { "long lines end in …" });
+                let wrap = !self.wraps();
+                self.wrap = Some(wrap);
+                self.toast(if wrap { "long lines wrap" } else { "long lines end in …" });
             }
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),

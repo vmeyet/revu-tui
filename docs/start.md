@@ -44,6 +44,7 @@ Quote `'!42'` if you write it that way: bash and zsh read `!` as history.
 In a window under 120 columns the diff takes the whole width and shows one line number per line.
 `[tui] narrow_width` moves that limit, see the [config reference](reference/config.md).
 `h` or `esc` brings the queue back, and `l` or `enter` hides it again.
+Under 70 columns revu shows one page at a time, see [Review from a phone](guides/phone.md).
 
 | Key | Does |
 |---|---|

@@ -1,0 +1,34 @@
+---
+source: src/tui/app/compact.rs
+expression: phone(&mut app)
+---
+╭ acme/widgets!42 · feat: charge cards … ─── L12 ╮
+│  omar · 2h · +5 −3 · 2 files · ✓ success       │
+│   1 of 2 approvals · 3 threads, 1 unresolved   │
+│  ◆ 1 on the MR  enter opens                    │
+│                                                │
+│  ▾ src/pay/charge.rs    +4 −2  ✓1 · 1 outdated │
+│     ▾ @@ -12,4 +12,5 @@ pub async fn charge    │
+│ ▎   pub async fn charge(card: &Card, amount: M │
+│     oney) -> Result<Receipt> {                 │
+│  ✓ -    let client = Client::new();            │
+│   │ ✓ resolved · you · Why drop the plain cl…  │
+│    +    let client = Client::with_key(idempote │
+│     ncy_key(card));                            │
+│    +    let attempt = Attempt::first();        │
+│         let response = client.charge(amount).a │
+│     wait?;                                     │
+│         audit::record(&response);              │
+│     ▾ @@ -40,3 +41,4 @@ fn idempotency_key     │
+│     fn idempotency_key(card: &Card) -> Key {   │
+│    -    Key::from(card.number())               │
+│    +    Key::from((card.number(), card.expiry( │
+│     )))                                        │
+│    +    // hunk two, line 43 is new            │
+│     }                                          │
+│                                                │
+│  ▸ Cargo.lock                    +1 −1  folded │
+│                                                │
+│                                                │
+╰────────────────────────────────────────────────╯
+ gitlab.com · nina · 1 unresolved          ? help

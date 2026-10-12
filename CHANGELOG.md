@@ -18,6 +18,15 @@ Each entry says what changed, then where, then how to use it.
 - **Copy a link from the command line.**
   In the queue and in the diff.
   `:copy` copies the link `:open` would show in the browser.
+- **Review from a phone, one page at a time.**
+  In a window under 70 columns: the queue, the diff and the right pane each take the whole screen.
+  `enter` opens the diff, `h` goes back a page, and `[tui] layout = "compact"` forces it at any width.
+- **A diff that fits a phone.**
+  In the compact layout: long lines wrap, only the sign shows, and the title tells the cursor's line.
+  `w` cuts long lines again, and a long file path keeps its folder and its name.
+- **More rows for the page when the keyboard is up.**
+  In the compact layout under 20 rows: the status row and the MR header hide.
+  A question, the search and the queue filter keep their row, and a toast shows on the bottom row.
 
 ### Fixed
 

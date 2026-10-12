@@ -1,0 +1,73 @@
+# 13 · Compact layout
+
+Goal: review from a phone.
+revu runs inside tmux on the Mac and is reached from a phone terminal over mosh or ssh, often in a session shared with the desk.
+A phone held upright gives 45 to 60 columns, and 12 to 20 rows once its keyboard is up.
+
+## When it applies
+
+A third width tier, under narrow and wide (`09-thread-pane.md` § Width).
+
+- `[tui] compact_width` (70): below it the window is compact. It is at least 1 and never above `narrow_width`; unset, it follows a `narrow_width` set under 70.
+- `[tui] layout`: `auto` (default) follows the width, `compact` forces the layout at any width, `full` never uses it. Narrow and wide still follow the width under `full`.
+- The tier is decided at every frame, like narrow: turning the phone, or a desk client taking the tmux window over, changes layout with no restart.
+- `Tui::widths()` folds `layout` into `Widths.compact`: `u16::MAX` under `compact`, 0 under `full`. Nothing else knows the setting.
+- Compact is narrow too: the threads of a line read in the diff and the compose box opens there (`09-thread-pane.md` § Threads in the diff).
+- Zen keeps its own column and its one-number gutter at any width; the rest of this page is outside zen.
+
+## One page at a time
+
+Never two columns.
+
+- The queue is the page while it has the keys, over the whole width, with or without an MR open.
+- Opening an MR (`enter`, `l`, a second click on its row) makes the diff the page; `h` or `esc` brings the queue back.
+- The right pane (threads, tree, pipeline, outline, answer) is the page while it has the keys, as under narrow.
+- The frames stay: the title of a pane says which page this is, and it costs two rows and four columns.
+
+## The queue
+
+Two lines per MR, whatever `[tui] queue` says: one line leaves a title no room at 45 columns.
+
+```
+│ ▎ feat charge cards at checkout                │
+│ ▎ omar · !42 · +412 −38                 2h     │
+```
+
+- Line one: the kind chip and the title, alone.
+- Line two: who, the number, the size, the age, then the marks a wider queue puts after the title (Jev's, the approval, the badge).
+- A stack follows the same rule.
+- The cursor, click to pick, the wheel, grouping and PINNED work as on a wide screen: a row's click area is its two lines.
+
+## The diff
+
+- Long lines wrap by default. `w` still flips it, and what `w` chose holds in every layout until revu quits; before any `w`, compact wraps and the other tiers cut.
+- The gutter is the sign alone (`Gutter::Sign`): no line number, so code starts four columns in.
+- The cursor's line number reads at the right of the pane's title, `L12`: the new side's, the old one's on a removed line, the line a thread row hangs under. Nothing shows on a file, a hunk or the MR row.
+- The title is on the frame, so the number survives a short screen and never hides code.
+- A file path too long for its row is cut in its middle (`services/pay…/charge.rs`), so the folder and the name both read; the other tiers keep cutting its end.
+
+## A short screen
+
+Under `SHORT_BELOW` (20) rows, in the compact layout only.
+
+- The status row is dropped, as in zen. A question (a confirmation, the quit prompt, the reaction picker, the `'` views, the offer of the next MR) and the search bring it back while they wait; the queue filter keeps its own row.
+- A fresh toast shows on the bottom row of the page for two seconds, as in zen.
+- The MR header (two rows) is dropped from the diff.
+- Not shown there: the host and user, the count of unresolved threads and drafts, `offline`, the rate limit and `loading`.
+
+## Unchanged
+
+From 70 columns up, wide, narrow and zen draw exactly as before: their snapshots do not move.
+
+## Tests
+
+- `columns()`: the queue page, the diff page, the pane page, zen, and both ends of `layout`.
+- Config: the default, a compact width above the narrow one, zero, and the three values of `layout`.
+- Snapshots on `TestBackend` at 50×30 (queue, diff) and 50×14 (diff, short).
+- The tier follows the width frame after frame; two-line rows answer a click and the wheel; the cursor's line in the title; wrap by default and `w`; the path cut; the prompts a short screen keeps.
+
+## Considered
+
+- **No frames in compact**, as zen: four more columns of code and two more rows. Rejected for now: the title carries the page's name, the MR and the cursor's line, and every pane would need a second look.
+- **The cursor's line at the end of its own row**: it hides the end of the code it numbers.
+- **A separate `wrap` setting**: `w` already says it, and a default that follows the tier needs no key in the config.

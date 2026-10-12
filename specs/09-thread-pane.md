@@ -80,6 +80,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - 150 columns and more: queue, diff and pane side by side.
 - 120 to 149 columns: the queue hides while the pane is open, and comes back when it closes.
 - Under 120 columns: the pane takes the whole review area, like a page; `h` or `esc` returns to the diff at the same line. The queue follows the same rule there, pane or not: with an MR open it shows only while it has the keys (`03-ui-ux.md`). The threads of a line never open the pane there: they read in the diff.
+- Under 70 columns (`[tui] compact_width`, never above narrow): the compact layout, where the queue is a page too (`13-compact.md`).
 - Reading mode (`zz`): no queue and no pane beside the diff; the thread pane opens under the diff in zen's column, see Zen. The threads of a line read in the diff.
 
 ### What it shows

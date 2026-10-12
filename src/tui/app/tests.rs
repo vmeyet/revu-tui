@@ -718,7 +718,7 @@ fn a_narrow_window_numbers_each_line_once_and_a_wide_one_on_both_sides() {
 #[test]
 fn a_set_narrow_width_moves_the_queue_and_the_gutter_with_it() {
     let mut app = with_review();
-    app.widths = crate::config::Widths { narrow: 100, wide: 150 };
+    app.widths = crate::config::Widths { narrow: 100, ..crate::config::Widths::default() };
     let roomy = render(&mut app, 110, 24);
     assert_eq!(app.areas.queue.width, 34, "110 columns are no longer narrow");
     assert!(roomy.contains("      14   15      let response"), "{roomy}");

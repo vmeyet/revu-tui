@@ -3,6 +3,7 @@ mod apply;
 mod ask;
 mod brief;
 mod commands;
+mod compact;
 mod feedback;
 mod inbox;
 mod incoming;

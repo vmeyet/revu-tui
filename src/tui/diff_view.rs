@@ -4,7 +4,7 @@ use super::drag::{self, TextRow};
 use super::table::{self, TableLine};
 use super::theme::Theme;
 use super::thread_view;
-use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate, truncate_tabs};
+use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate, truncate_middle, truncate_tabs};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::{Deployment, Kind, PipelineStatus};
@@ -33,11 +33,13 @@ const MIN_BRANCH_W: usize = 12;
 /// What sets a thread's rows off from the code, ending in the sign's column.
 const THREAD_RULE: &str = "│ ";
 
-/// The line numbers before the sign: both sides, or the one side a line is read on when the window is narrow.
+/// The line numbers before the sign: both sides, the one side a line is read on when the window is narrow, or none
+/// in the compact layout, which leaves the sign alone.
 #[derive(Clone, Copy)]
 pub enum Gutter {
     Both,
     One,
+    Sign,
 }
 
 impl Gutter {
@@ -46,6 +48,7 @@ impl Gutter {
         match self {
             Self::Both => format!("{} {} ", number(old), number(new)),
             Self::One => format!("{} ", number(new.or(old))),
+            Self::Sign => String::new(),
         }
     }
 
@@ -53,7 +56,23 @@ impl Gutter {
         match self {
             Self::Both => 2 * (GUTTER_W + 1),
             Self::One => GUTTER_W + 1,
+            Self::Sign => 0,
         }
+    }
+
+    /// A file's path cut to `room`: from its end, or from its middle in the compact layout, where a cut end would
+    /// take the file's name.
+    fn path(self, path: &str, room: usize) -> String {
+        match self {
+            Self::Both | Self::One => truncate(path, room),
+            Self::Sign => truncate_middle(path, room),
+        }
+    }
+
+    /// The cursor's line at the right of the pane's title, where no row shows its number.
+    fn cursor_title(self, line: Option<u32>, theme: Theme) -> Option<Line<'static>> {
+        let number = line.filter(|_| matches!(self, Self::Sign))?;
+        Some(Line::from(Span::styled(format!(" L{number} "), Style::default().fg(theme.muted))).right_aligned())
     }
 
     /// Continuation rows start under the text: past the cursor bar, the anchor column, the numbers and the sign.
@@ -88,6 +107,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     };
     let zen = app.zen;
     let block = if zen { Block::default().padding(Padding::horizontal(1)) } else { pane(theme, &title, app.focus == Focus::Review) };
+    let block = match gutter.cursor_title(app.cursor_line(), theme) {
+        Some(line) => block.title_top(line),
+        None => block,
+    };
     if let Some(open) = app.open.as_ref().filter(|_| !zen) {
         app.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
     }
@@ -103,7 +126,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     let today = app.today;
     let folded = app.header_folded;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
-    let wrap = app.wrap;
+    let wrap = app.wraps();
+    let short = app.short;
     let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let compose_row = app.compose_row();
@@ -112,6 +136,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     let Some(open) = app.open.as_mut() else { return };
     let header = match (zen, folded) {
         (true, _) => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
+        (false, _) if short => vec![],
         (false, true) => vec![folded_header(open, theme)],
         (false, false) => header_lines(open, theme, today, inner.width as usize),
     };
@@ -580,7 +605,7 @@ fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, marked: bool, gut
     match row {
         Row::Gap | Row::Thread { .. } => {}
         Row::Header => spans.extend(on_the_mr_spans(review, theme)),
-        Row::File { index, open } => spans.extend(file_spans(review, &review.files[*index], *open, body, theme)),
+        Row::File { index, open } => spans.extend(file_spans(review, &review.files[*index], *open, gutter, body, theme)),
         Row::Hunk { file, index, open } => spans.extend(hunk_spans(&review.files[*file], *index, *open, body, theme)),
         Row::Line { file, hunk, index } => {
             let file = &review.files[*file];
@@ -816,7 +841,7 @@ fn on_the_mr_spans<'a>(review: &Review, theme: Theme) -> Vec<Span<'a>> {
     ]
 }
 
-fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme: Theme) -> Vec<Span<'a>> {
+fn file_spans<'a>(review: &Review, file: &File, open: bool, gutter: Gutter, width: usize, theme: Theme) -> Vec<Span<'a>> {
     let mark = if open { "▾ " } else { "▸ " };
     let (dir, base) = match file.new_path.rsplit_once('/') {
         Some((dir, base)) => (format!("{dir}/"), base.to_owned()),
@@ -846,7 +871,7 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, width: usize, theme:
     let state = file_state(file, review, open);
     let tail_w = counts.width() + anchors_w + state.as_ref().map_or(0, |s| s.width() + 2);
     let name_room = width.saturating_sub(mark.width() + tail_w + 2);
-    let name = truncate(&format!("{dir}{base}"), name_room);
+    let name = gutter.path(&format!("{dir}{base}"), name_room);
     let (dir, base) = match name.rsplit_once('/') {
         Some((d, b)) => (format!("{d}/"), b.to_owned()),
         None => (String::new(), name),
@@ -1137,7 +1162,7 @@ mod tests {
     }
 
     fn file_row(review: &Review) -> Vec<Span<'static>> {
-        file_spans(review, &review.files[0], true, 120, Theme::default())
+        file_spans(review, &review.files[0], true, Gutter::Both, 120, Theme::default())
     }
 
     #[test]

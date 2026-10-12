@@ -550,7 +550,7 @@ mod tests {
     #[test]
     fn a_set_narrow_width_moves_where_threads_read_in_the_diff() {
         let mut app = with_review();
-        app.widths = crate::config::Widths { narrow: 100, wide: 150 };
+        app.widths = crate::config::Widths { narrow: 100, ..crate::config::Widths::default() };
         render(&mut app, 110, 30);
         assert_eq!(thread_rows(&app), 0, "110 columns are no longer narrow");
         render(&mut app, 99, 30);

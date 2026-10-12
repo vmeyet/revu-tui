@@ -91,12 +91,16 @@ pub struct App {
     /// Queue sections folded to their header; Done starts folded.
     /// The review header on one row instead of two.
     pub header_folded: bool,
-    /// Long diff lines wrap under their text instead of ending in `…`, `w`.
-    pub wrap: bool,
+    /// Long diff lines wrap under their text instead of ending in `…`, once `w` chose; until then the layout does.
+    pub wrap: Option<bool>,
     /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.
     pub zen: bool,
     /// The last frame was too narrow for the right pane beside the diff.
     pub narrow: bool,
+    /// The last frame showed the compact layout: one page at a time, full screen.
+    pub compact: bool,
+    /// The last frame was compact and too short for the rows around the page.
+    pub short: bool,
     /// How wide the diff reads in zen, `[tui] zen_width`; `None` grows it with the screen.
     pub zen_width: Option<u16>,
     /// The terminal widths the layout turns on, `[tui] narrow_width` and `wide_width`.
@@ -261,9 +265,11 @@ impl App {
             views: settings.views,
             filtering: false,
             header_folded: false,
-            wrap: false,
+            wrap: None,
             zen: false,
             narrow: false,
+            compact: false,
+            short: false,
             zen_width: settings.zen_width,
             widths: settings.widths,
             zen_switch: None,

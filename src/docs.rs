@@ -192,6 +192,22 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "tui",
+        key: "layout",
+        kind: "`auto`, `compact` or `full`",
+        default: "`auto`",
+        meaning: "`auto` shows the compact layout below `compact_width`, `compact` at any width, `full` never.",
+        example: "\"auto\"",
+    },
+    Setting {
+        table: "tui",
+        key: "compact_width",
+        kind: "number",
+        default: "70",
+        meaning: "Below this many columns the window is compact, as on a phone: one page at a time, the queue, the diff or the right pane. `narrow_width` at most.",
+        example: "60",
+    },
+    Setting {
+        table: "tui",
         key: "narrow_width",
         kind: "number",
         default: "120",

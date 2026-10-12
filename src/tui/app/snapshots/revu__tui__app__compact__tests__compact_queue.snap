@@ -1,0 +1,34 @@
+---
+source: src/tui/app/compact.rs
+expression: phone(&mut app)
+---
+╭ Queue · all ───────────────────────────────────╮
+│   ── TO REVIEW · 1 ─────────────────────────── │
+│ ▎ feat charge cards at checkout                │
+│ ▎ omar · !42 · +412 −38                 2h     │
+│                                                │
+│   ── MINE · 1 ──────────────────────────────── │
+│   fix flaky cache test                         │
+│   nina · !41 · +3 −1                    4h   D │
+│                                                │
+│   ── WATCHING · 1 ──────────────────────────── │
+│   infra: new runner                            │
+│   omar · !35 · +0 −0                    2d   ⠋ │
+│                                                │
+│   ── ▸ DONE · 1 ────────────────────────────── │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+╰────────────────────────────────────────────────╯
+ gitlab.com · nina                         ? help

@@ -1,5 +1,5 @@
 //! The queue pane: sections under faded rules, two lines per MR by default (one with
-//! `[tui] queue = "compact"`), and one author's chained MRs folded into a stack.
+//! `[tui] queue = "compact"`, outside the compact layout), and one author's chained MRs folded into a stack.
 use super::app::{App, Badge, Focus, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
 use super::ui::{Link, draw_empty, pane, short_age, truncate};
@@ -40,7 +40,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let height = inner.height as usize;
     let rows = app.queue_rows();
-    let heights: Vec<usize> = rows.iter().enumerate().map(|(i, row)| height_of(app.queue_layout, row, i == 0)).collect();
+    let heights: Vec<usize> = rows.iter().enumerate().map(|(i, row)| height_of(app.row_layout(), row, i == 0)).collect();
     let scroll = settle(app.queue_scroll, app.queue_selected, &heights, height);
     let mut lines: Vec<Line<'static>> = vec![];
     let mut links = vec![];
@@ -116,7 +116,7 @@ fn row_lines(app: &App, row: &QueueRow<'_>, selected: bool, first: bool, width: 
 }
 
 fn mr_lines(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
-    match app.queue_layout {
+    match app.row_layout() {
         QueueLayout::Comfortable => comfortable(app, mr, selected, indent, width),
         QueueLayout::Compact => compact(app, mr, selected, indent, width),
     }
@@ -153,13 +153,31 @@ fn indent_span(theme: Theme, indent: usize) -> Option<Span<'static>> {
     (indent > 0).then(|| Span::styled(format!("{:<indent$}", "│"), Style::default().fg(theme.faded)))
 }
 
+/// Where a two-line row puts its marks: after the title, or after the line under it in the compact layout, where
+/// the title needs every column.
+struct Tails {
+    title: Vec<Span<'static>>,
+    under: Vec<Span<'static>>,
+}
+
+impl Tails {
+    fn of(app: &App, marks: Vec<Span<'static>>) -> Self {
+        if app.compact {
+            return Self { title: vec![], under: [vec![Span::raw(" ")], marks].concat() };
+        }
+        Self { title: marks, under: vec![] }
+    }
+}
+
 /// Line one: the kind as a chip, the title, then Jev's mark, the approval mark and the badge at the right edge.
 /// Line two, all faded: who, the number, the size when it fits, and the age at the right edge.
+/// In the compact layout the marks end line two instead.
 fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
     let (kind, rest) = conventional(&mr.title);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
-    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
+    let marks = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
+    let Tails { title: tail, under } = Tails::of(app, marks);
     let used = BAR_W + indent + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
     let title = truncate(rest, width.saturating_sub(used));
     let pad = width.saturating_sub(used + title.width()) + 1;
@@ -169,10 +187,11 @@ fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: us
     first.extend(chip);
     first.extend([Span::styled(title, title_style), Span::raw(" ".repeat(pad))]);
     first.extend(tail);
-    let (meta, number_at) = meta(app, mr, width.saturating_sub(BAR_W + indent));
+    let (meta, number_at) = meta(app, mr, width.saturating_sub(BAR_W + indent + tail_w(&under)));
     let mut second = vec![bar(theme, selected)];
     second.extend(indent_span(theme, indent));
     second.extend(meta);
+    second.extend(under);
     let link = RowLink { line: 1, x: (BAR_W + indent + number_at) as u16, text: number_of(app, mr), url: mr.web_url.clone() };
     (vec![Line::from(first), Line::from(second)], Some(link))
 }
@@ -241,8 +260,9 @@ fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: u
     let who = short_name(&base.author);
     let count = format!("{} MRs", mrs.len());
     let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
-    match app.queue_layout {
+    match app.row_layout() {
         QueueLayout::Comfortable => {
+            let Tails { title: tail, under } = Tails::of(app, tail);
             let used = BAR_W + 2 + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
             let title = truncate(&title, width.saturating_sub(used));
             let pad = width.saturating_sub(used + title.width()) + 1;
@@ -252,7 +272,7 @@ fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: u
             first.extend(tail);
             let newest = mrs.iter().map(|mr| mr.updated_at).max().unwrap_or(base.updated_at);
             let age = short_age((app.today - newest).to_std().unwrap_or_default());
-            let room = width.saturating_sub(BAR_W + 2);
+            let room = width.saturating_sub(BAR_W + 2 + tail_w(&under));
             let text = format!("{who} · {count} · stack");
             let pad = room.saturating_sub(text.width() + age.width());
             let second = vec![
@@ -261,7 +281,7 @@ fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: u
                 Span::styled(text, dim),
                 Span::styled(format!("{}{age}", " ".repeat(pad)), dim),
             ];
-            vec![Line::from(first), Line::from(second)]
+            vec![Line::from(first), Line::from([second, under].concat())]
         }
         QueueLayout::Compact => {
             let head = format!("{who} · {count} · ");

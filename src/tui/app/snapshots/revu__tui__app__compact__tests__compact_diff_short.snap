@@ -1,0 +1,18 @@
+---
+source: src/tui/app/compact.rs
+expression: screen
+---
+╭ acme/widgets!42 · feat: charge cards … ─── L12 ╮
+│  ◆ 1 on the MR  enter opens                    │
+│                                                │
+│  ▾ src/pay/charge.rs    +4 −2  ✓1 · 1 outdated │
+│     ▾ @@ -12,4 +12,5 @@ pub async fn charge    │
+│ ▎   pub async fn charge(card: &Card, amount: M │
+│     oney) -> Result<Receipt> {                 │
+│  ✓ -    let client = Client::new();            │
+│   │ ✓ resolved · you · Why drop the plain cl…  │
+│    +    let client = Client::with_key(idempote │
+│     ncy_key(card));                            │
+│    +    let attempt = Attempt::first();        │
+│         let response = client.charge(amount).a │
+╰────────────────────────────────────────────────╯

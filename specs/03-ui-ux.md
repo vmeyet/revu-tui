@@ -55,6 +55,8 @@ The mockup below predates it.
 
 Focus moves with `h` `l` between the three panes, like slack-tui's channels, messages and thread; `Tab` is reserved for the next file inside the review.
 
+Under 70 columns (`[tui] compact_width`) the layout is compact: one pane at a time, as a full-screen page (`13-compact.md`).
+
 ## Zen
 
 `zz` hides everything but the diff, and `zz`, `esc`, `h` or `←` bring it back.

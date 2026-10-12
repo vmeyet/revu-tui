@@ -283,6 +283,12 @@ pub struct Tui {
     /// How wide the diff reads in zen, `zz`, in columns; unset, it grows with the screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zen_width: Option<u16>,
+    /// Whether the compact layout follows the width, always shows or never does.
+    #[serde(default, skip_serializing_if = "ScreenLayout::is_default")]
+    pub layout: ScreenLayout,
+    /// Below this many columns the window is compact; unset, `Widths::default` says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_width: Option<u16>,
     /// Below this many columns the window is narrow; unset, `Widths::default` says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narrow_width: Option<u16>,
@@ -294,34 +300,68 @@ pub struct Tui {
 /// Narrower than this, a diff line and its gutters no longer fit.
 const MIN_ZEN_WIDTH: u16 = 60;
 
-/// The terminal widths the layout turns on. Below `narrow` an open MR hides the queue unless it has
-/// the keys, the right pane is a page of its own and the diff shows one line number; from `wide`
-/// the queue, the diff and the right pane sit side by side.
+/// `[tui] layout`: the compact layout below `compact_width`, at any width, or never.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScreenLayout {
+    #[default]
+    Auto,
+    Compact,
+    Full,
+}
+
+impl ScreenLayout {
+    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// The terminal widths the layout turns on. Below `compact` one page shows at a time, full screen.
+/// Below `narrow` an open MR hides the queue unless it has the keys, the right pane is a page of
+/// its own and the diff shows one line number; from `wide` the queue, the diff and the right pane
+/// sit side by side.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Widths {
+    pub compact: u16,
     pub narrow: u16,
     pub wide: u16,
 }
 
 impl Default for Widths {
     fn default() -> Self {
-        Self { narrow: 120, wide: 150 }
+        Self { compact: 70, narrow: 120, wide: 150 }
     }
 }
 
 impl Tui {
+    /// `layout` moves the compact limit past every window, or under every one; unset, it never passes the narrow one.
     pub fn widths(&self) -> Widths {
         let default = Widths::default();
-        Widths { narrow: self.narrow_width.unwrap_or(default.narrow), wide: self.wide_width.unwrap_or(default.wide) }
+        let narrow = self.narrow_width.unwrap_or(default.narrow);
+        let compact = match self.layout {
+            ScreenLayout::Auto => self.compact_width.unwrap_or(default.compact.min(narrow)),
+            ScreenLayout::Compact => u16::MAX,
+            ScreenLayout::Full => 0,
+        };
+        Widths { compact, narrow, wide: self.wide_width.unwrap_or(default.wide) }
     }
 
     fn check(&self) -> Result<()> {
         if let Some(width) = self.zen_width.filter(|&width| width < MIN_ZEN_WIDTH) {
             bail!("`tui.zen_width = {width}` is too narrow: {MIN_ZEN_WIDTH} is the least");
         }
-        let Widths { narrow, wide } = self.widths();
+        let Widths { narrow, wide, .. } = self.widths();
+        if self.compact_width == Some(0) {
+            bail!("`tui.compact_width = 0` is no width: 1 is the least, and `tui.layout = \"full\"` turns the compact layout off");
+        }
         if narrow == 0 {
             bail!("`tui.narrow_width = 0` is no width: 1 is the least");
+        }
+        if let Some(compact) = self.compact_width.filter(|&compact| compact > narrow) {
+            bail!(
+                "`tui.compact_width = {compact}` is above `tui.narrow_width = {narrow}`: a compact window ends where a narrow one starts, or before"
+            );
         }
         if narrow > wide {
             bail!(
@@ -708,26 +748,46 @@ mod tests {
         assert!(narrow.contains("zen_width") && narrow.contains("config.toml"), "{narrow}");
     }
 
+    fn widths_of(toml: &str) -> Result<Widths, String> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, toml).unwrap();
+        Config::load_from(&path).map(|config| config.tui.widths()).map_err(|e| format!("{e:#}"))
+    }
+
     #[test]
     fn layout_widths_default_to_120_and_150_and_refuse_a_narrow_above_the_wide() {
-        let load = |toml: &str| {
-            let dir = tempfile::tempdir().unwrap();
-            let path = dir.path().join("config.toml");
-            std::fs::write(&path, toml).unwrap();
-            Config::load_from(&path).map(|config| config.tui.widths()).map_err(|e| format!("{e:#}"))
-        };
-        assert_eq!(load("").unwrap(), Widths { narrow: 120, wide: 150 });
-        assert_eq!(load("[tui]\nnarrow_width = 100\n").unwrap(), Widths { narrow: 100, wide: 150 });
-        assert_eq!(load("[tui]\nwide_width = 180\n").unwrap(), Widths { narrow: 120, wide: 180 });
-        assert_eq!(load("[tui]\nnarrow_width = 130\nwide_width = 130\n").unwrap(), Widths { narrow: 130, wide: 130 });
-        let zero = load("[tui]\nnarrow_width = 0\n").unwrap_err();
+        assert_eq!(widths_of("").unwrap(), Widths { compact: 70, narrow: 120, wide: 150 });
+        assert_eq!(widths_of("[tui]\nnarrow_width = 100\n").unwrap(), Widths { compact: 70, narrow: 100, wide: 150 });
+        assert_eq!(widths_of("[tui]\nwide_width = 180\n").unwrap(), Widths { compact: 70, narrow: 120, wide: 180 });
+        assert_eq!(widths_of("[tui]\nnarrow_width = 130\nwide_width = 130\n").unwrap(), Widths { compact: 70, narrow: 130, wide: 130 });
+        let zero = widths_of("[tui]\nnarrow_width = 0\n").unwrap_err();
         assert!(zero.contains("narrow_width = 0") && zero.contains("config.toml"), "{zero}");
-        let no_wide = load("[tui]\nwide_width = 0\n").unwrap_err();
+        let no_wide = widths_of("[tui]\nwide_width = 0\n").unwrap_err();
         assert!(no_wide.contains("wide_width = 0") && no_wide.contains("config.toml"), "{no_wide}");
-        let above = load("[tui]\nnarrow_width = 160\n").unwrap_err();
+        let above = widths_of("[tui]\nnarrow_width = 160\n").unwrap_err();
         assert!(above.contains("narrow_width = 160") && above.contains("wide_width = 150"), "{above}");
-        let below = load("[tui]\nwide_width = 100\n").unwrap_err();
+        let below = widths_of("[tui]\nwide_width = 100\n").unwrap_err();
         assert!(below.contains("narrow_width = 120") && below.contains("wide_width = 100"), "{below}");
+    }
+
+    #[test]
+    fn the_compact_width_defaults_to_70_and_never_passes_the_narrow_one() {
+        assert_eq!(widths_of("[tui]\ncompact_width = 60\n").unwrap().compact, 60);
+        assert_eq!(widths_of("[tui]\ncompact_width = 100\nnarrow_width = 100\n").unwrap().compact, 100);
+        assert_eq!(widths_of("[tui]\nnarrow_width = 50\n").unwrap().compact, 50, "an unset one follows a narrow width set under it");
+        let above = widths_of("[tui]\ncompact_width = 130\n").unwrap_err();
+        assert!(above.contains("compact_width = 130") && above.contains("narrow_width = 120") && above.contains("config.toml"), "{above}");
+        let zero = widths_of("[tui]\ncompact_width = 0\n").unwrap_err();
+        assert!(zero.contains("compact_width = 0") && zero.contains("layout = \"full\""), "{zero}");
+    }
+
+    #[test]
+    fn the_layout_setting_forces_the_compact_layout_or_turns_it_off() {
+        assert_eq!(widths_of("[tui]\nlayout = \"auto\"\n").unwrap().compact, 70);
+        assert_eq!(widths_of("[tui]\nlayout = \"compact\"\n").unwrap().compact, u16::MAX, "every window is under it");
+        assert_eq!(widths_of("[tui]\nlayout = \"full\"\ncompact_width = 60\n").unwrap().compact, 0, "no window is under it");
+        assert!(widths_of("[tui]\nlayout = \"phone\"\n").unwrap_err().contains("layout"));
     }
 
     #[test]
