@@ -168,6 +168,8 @@ pub struct App {
     pub unsent: HashMap<String, String>,
     /// Where the compose box was opened from: the keys go back there once it closes.
     pub compose_from: Focus,
+    /// The diff row the cursor left for the compose box under another row; it goes back there once the box closes.
+    pub compose_left: Option<crate::review::Row>,
     pub publish: Option<Publish>,
     /// The MR description modal.
     pub brief: Option<Brief>,
@@ -297,6 +299,7 @@ impl App {
             buffer: Field::default(),
             unsent: HashMap::new(),
             compose_from: Focus::default(),
+            compose_left: None,
             publish: None,
             brief: None,
             links: vec![],

@@ -43,7 +43,7 @@ impl Thread {
     }
 }
 
-pub(super) fn anchor_of(position: &Position) -> Option<Anchor> {
+pub fn anchor_of(position: &Position) -> Option<Anchor> {
     let line = position.line.number()?;
     Some(Anchor { path: position.path().to_owned(), side: position.line.side(), line })
 }

@@ -56,7 +56,7 @@ In a window under 120 columns the diff takes the whole width and shows one line 
 
 1. Put the cursor on a line of the diff.
 2. Press `c`.
-3. Type your comment in the box at the bottom of the right pane, or under the diff in a narrow window.
+3. Type your comment in the box at the bottom of the right pane, or under the line in a narrow window.
 4. Press `enter`.
 
 Your comment is now a [draft](concepts.md#draft): only you see it.

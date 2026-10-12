@@ -26,7 +26,8 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 | `s` | Suggest a change: the box starts with the lines to edit |
 | `E` | Write the comment in `$EDITOR` |
 
-The comment box sits at the bottom of the right pane; in a narrow window and in zen, at the foot of the diff.
+The comment box sits at the bottom of the right pane.
+In a narrow window and in zen it sits in the diff, under the line or the thread you write on.
 `enter` saves the draft.
 `⌘enter` posts a new comment or a reply at once, with no draft; `ctrl-s` does the same where the terminal keeps `⌘enter` for itself.
 `⌥enter` adds a new line, `↑` and `↓` move between lines.

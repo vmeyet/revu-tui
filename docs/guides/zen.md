@@ -47,7 +47,9 @@ Your own draft of a new thread shows whole.
 
 `]n` and `]N` stop on the marked lines, not on the rows under them.
 A folded hunk or file hides its threads with its lines.
-The comment box opens at the foot of the diff.
+The comment box opens in the diff, where the text will land.
+A reply is written under the last note of its thread, which unfolds for it.
+A new comment is written under its line, after the threads already on it, and an edited draft under its own row.
 A picture in a note reads as `[image: …]` here; the thread pane draws it.
 Side by side, `D`, keeps the threads of a line in the pane.
 

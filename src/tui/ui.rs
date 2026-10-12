@@ -205,7 +205,7 @@ fn zen_areas(app: &App, main: Rect, shown: Columns, [review, side]: [Rect; 2]) -
     let column = zen_column(main, width);
     let threads = app.open.as_ref().is_some_and(super::app::Open::shows_threads);
     let needs = threads.then(|| thread_view::rows_needed(app, column.width));
-    match needs.and_then(|needs| zen_split(column, needs, app.input.is_some())) {
+    match needs.and_then(|needs| zen_split(column, needs, app.composes_outside_the_diff())) {
         Some([diff, pane]) => (Columns { queue: 0, side: column.width, diff: true }, diff, pane),
         None => (shown, zen_column(review, width), zen_column(side, width)),
     }

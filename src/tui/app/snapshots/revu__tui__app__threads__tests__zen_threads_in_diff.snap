@@ -16,10 +16,13 @@ expression: "render(&mut app, 138, 34)"
                       │ ◆ unresolved
                       │ lea · 1h
                       │ note 0 of aaa
-          ▎           │ lea · 1h
-          ▎           │ note 1 of aaa
                       │ lea · 1h
-                      │ note 2 of aaa
+                      │ note 1 of aaa
+          ▎           │ lea · 1h
+          ▎           │ note 2 of aaa
+                       ╭ reply to lea ─────────────────────────────────────────────────────────────────────────────────────────╮
+                       │agreed                                                                                                 │
+                       ╰ enter save · ⌘enter post · ⌥enter newline ────────────────────────────────────────────────────────────╯
                       │ ◆ unresolved · lea · note 0 of bbb · 1 reply
                     14 +    let attempt = Attempt::first();
                14   15      let response = client.charge(amount).await?;
@@ -32,7 +35,3 @@ expression: "render(&mut app, 138, 34)"
                42   44  }
 
            ▸ Cargo.lock                                                                                            +1 −1  folded
-
-          ╭ reply to lea ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
-          │agreed                                                                                                              │
-          ╰ enter save · ⌘enter post · ⌥enter newline ─────────────────────────────────────────────────────────────────────────╯

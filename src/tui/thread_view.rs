@@ -127,7 +127,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
     }
     let Some(PaneLayout { laid: Laid { title, rows, marks }, .. }) = &app.pane_layout else { return vec![] };
     f.render_widget(block(title), area);
-    let inner = if app.input.is_some() {
+    let inner = if app.composes_outside_the_diff() {
         let height = if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) };
         let [list, box_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(inner);
         draw_compose(f, theme, &app.input_label(), &app.buffer, box_area);
@@ -193,7 +193,7 @@ pub fn rows_needed(app: &App, width: u16) -> u16 {
         Some(laid) => laid.rows.len(),
         None => lay_out_pane(app, width).map_or(0, |laid| laid.rows.len()),
     };
-    let compose = if app.input.is_some() { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { 0 };
+    let compose = if app.composes_outside_the_diff() { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { 0 };
     u16::try_from(rows).unwrap_or(u16::MAX).saturating_add(compose).saturating_add(1)
 }
 

@@ -65,6 +65,13 @@ impl Gutter {
     fn thread_width(self, width: usize) -> usize {
         width.saturating_sub(self.wrap_indent() + 1)
     }
+
+    /// The columns of `body` a compose box takes under a thread: its frame around the columns of the thread's rows.
+    fn thread_box(self, body: Rect) -> Rect {
+        let frame = 1;
+        let width = self.thread_width(usize::from(body.width)) + 2 * frame;
+        Rect { x: body.x + (self.wrap_indent() - frame) as u16, width: width as u16, ..body }
+    }
 }
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
@@ -99,7 +106,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     let wrap = app.wrap;
     let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
-    let compose = (app.input.is_some() && app.areas.side.is_empty()).then(|| app.input_label());
+    let compose_row = app.compose_row();
+    let compose_label = app.input_label();
+    let composes_at_foot = app.composes_outside_the_diff() && app.areas.side.is_empty();
     let Some(open) = app.open.as_mut() else { return };
     let header = match (zen, folded) {
         (true, _) => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
@@ -114,10 +123,9 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     if open.prose.is_some() {
         return super::prose_view::draw(f, app, body);
     }
-    let body = match compose {
-        Some(label) => above_compose(f, theme, &label, &app.buffer, body),
-        None => body,
-    };
+    let body = if composes_at_foot { above_compose(f, theme, &compose_label, &app.buffer, body) } else { body };
+    let compose_box = gutter.thread_box(body);
+    let compose = compose_row.map(|row| (row, usize::from(thread_view::box_height(&app.buffer, compose_box))));
     let look = thread_view::Look { theme, today, me: &app.me, ascii: app.ascii, width: gutter.thread_width(usize::from(body.width)) };
     if open.review.reads_threads_in_diff() {
         app.thread_rows.fit(open, look);
@@ -129,7 +137,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     let anchors = Anchors { markers: app.kept.markers(open), stretch };
     let height = body.height as usize;
     let width = body.width as usize;
-    let mut render = |open: &Open, i: usize| -> Vec<Line<'static>> {
+    let mut row_lines = |open: &Open, i: usize| -> Vec<Line<'static>> {
         let row = &open.rows[i];
         let marked = i == open.selected || open.is_selected(i);
         if let (Row::Thread { stop, .. }, Some(place)) = (row, open.review.place_of(row)) {
@@ -155,6 +163,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
             vec![found(row_line(&open.review, &anchors, row, marked, gutter, Overflow::Cut(width), theme))]
         }
     };
+    let mut render = |open: &Open, i: usize| -> Vec<Line<'static>> {
+        let room = compose.filter(|(row, _)| *row == i).map_or(0, |(_, rows)| rows);
+        row_lines(open, i).into_iter().chain(std::iter::repeat_n(Line::default(), room)).collect()
+    };
     let pinning = height >= PIN_MIN_HEIGHT;
     let pinned_at = |open: &Open| if pinning { pins(&open.rows, open.scroll, open.selected) } else { Pins::default() };
     open.scroll = if pinning {
@@ -177,6 +189,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
         .collect();
     let mut lines: Vec<Line> = pinned_lines;
     let mut selectable = vec![];
+    let mut compose_area = None;
     for i in open.scroll..open.rows.len() {
         if lines.len() >= height {
             break;
@@ -184,14 +197,22 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
         let top = body.y + lines.len() as u16;
         selectable.extend(text_rows(&open.review, &open.rows[i], i, Rect { y: top, ..body }, gutter, wrap));
         lines.extend(drawn.pop_front().unwrap_or_else(|| render(open, i)));
+        if let Some((_, rows)) = compose.filter(|(row, _)| *row == i) {
+            let top = body.y + lines.len().saturating_sub(rows) as u16;
+            compose_area = Some(Rect { y: top, height: rows as u16, ..compose_box }.intersection(body));
+        }
     }
     lines.truncate(height);
     selectable.retain(|row| row.at.y < body.bottom());
     f.render_widget(Paragraph::new(lines), body);
+    if let Some(area) = compose_area.filter(|area| !area.is_empty()) {
+        thread_view::draw_compose(f, theme, &compose_label, &app.buffer, area);
+    }
     app.text_rows.extend(selectable);
 }
 
-/// The diff's `body` over the compose box, drawn at its foot while a comment is written and no pane shows it.
+/// The diff's `body` over the compose box, drawn at its foot while what is written has no row on screen to hang
+/// under and no pane shows the box.
 fn above_compose(f: &mut Frame, theme: Theme, label: &str, text: &super::field::Field, body: Rect) -> Rect {
     let rows = thread_view::box_height(text, body);
     let [body, compose] = Layout::vertical([Constraint::Min(0), Constraint::Length(rows)]).areas(body);

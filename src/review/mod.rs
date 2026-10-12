@@ -9,7 +9,7 @@ pub mod tree;
 
 pub use draft::{Draft, DraftId};
 pub use place::{Conversation, Entry, EntryKind, Mark, Marker, Markers, Place, Spot};
-pub use thread::{Anchor, Side, Thread};
+pub use thread::{Anchor, Side, Thread, anchor_of};
 
 use crate::diff::fold::{FileMeta, FoldState};
 use crate::diff::words::{self, InlineRule};
