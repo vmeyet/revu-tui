@@ -65,6 +65,7 @@ impl App {
             Command::AiOff | Command::AiOn => ":ai",
             Command::Ask(_) => ":ask",
             Command::Share(_) => ":share",
+            Command::News => ":news",
             Command::Help => ":help",
             Command::Quit => ":quit",
         });

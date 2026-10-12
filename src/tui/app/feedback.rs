@@ -16,6 +16,10 @@ pub struct Toast {
 }
 
 impl Toast {
+    pub(super) fn starting(text: String, danger: bool, now: Instant) -> Self {
+        Self { text, danger, until: now + TOAST_LIFE }
+    }
+
     pub fn live(&self, now: Instant) -> bool {
         now < self.until
     }
@@ -28,11 +32,11 @@ impl Toast {
 
 impl App {
     pub(super) fn toast(&mut self, text: impl Into<String>) {
-        self.toast = Some(Toast { text: text.into(), danger: false, until: self.now + TOAST_LIFE });
+        self.toast = Some(Toast::starting(text.into(), false, self.now));
     }
 
     pub(super) fn warn(&mut self, text: impl Into<String>) {
-        self.toast = Some(Toast { text: text.into(), danger: true, until: self.now + TOAST_LIFE });
+        self.toast = Some(Toast::starting(text.into(), true, self.now));
     }
 
     pub fn live_toast(&self) -> Option<&Toast> {

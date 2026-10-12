@@ -39,6 +39,7 @@ mod tree;
 mod triage;
 mod usage;
 mod view;
+mod whats_new;
 mod write;
 mod zen;
 
@@ -64,6 +65,7 @@ pub use share::{Sharing, Stage as ShareStage};
 pub use state::{App, Settings};
 pub use tree::Tree;
 pub use triage::Mark;
+pub use whats_new::WhatsNew;
 pub use write::Publish;
 
 use crate::diff::fold::FoldState;

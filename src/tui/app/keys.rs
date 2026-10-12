@@ -54,6 +54,9 @@ impl App {
         if self.brief.is_some() {
             return self.handle_brief_key(paged(key));
         }
+        if self.news_page.is_some() {
+            return self.handle_news_page_key(paged(key));
+        }
         if self.filtering {
             return self.handle_filter_key(key);
         }

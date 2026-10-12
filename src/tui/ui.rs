@@ -125,6 +125,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.brief.is_some() {
         brief_view::draw(f, app, main);
     }
+    if app.news_page.is_some() {
+        super::whats_new_view::draw(f, app, main);
+    }
     if let Some(sharing) = &app.sharing {
         super::share_view::draw(f, app, sharing, main);
     }

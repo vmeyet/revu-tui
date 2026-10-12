@@ -193,6 +193,10 @@ impl App {
                 self.start_share(target.as_deref());
                 vec![]
             }
+            Command::News => {
+                self.open_whats_new();
+                vec![]
+            }
             Command::Help => {
                 self.help = Some(Help::default());
                 vec![]

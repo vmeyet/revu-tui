@@ -1,0 +1,24 @@
+---
+source: src/tui/app/whats_new.rs
+expression: "render(&mut app, 60, 20)"
+---
+╭ Queue · all ───────────────────╮╭ Review ────────────────╮
+│  ╭ what's new · revu 0.6.0 ───────────────────────────╮  │
+│ ▎│                                                    │  │
+│ ▎│  Unreleased  ● new since you                       │  │
+│  │  NEW                                               │  │
+│  │  • Pick a row with the mouse.                      │  │
+│  │    In the queue.                                   │  │
+│  │    Click a row to pick it.                         │  │
+│  │                                                    │  │
+│  │  0.6.0  2026-10-06  ● new since you                │e │
+│  │  NEW                                               │  │
+│  │  • Read a Markdown file as a page.                 │  │
+│  │    In the diff, on a Markdown file.                │  │
+│  │    v opens the page, and v again goes back.        │  │
+│  │  • Move a full page at a time.                     │  │
+│  │    In the queue and the diff.                      │  │
+│  │                                                    │  │
+│  ╰ j k scroll · esc close ────────────────────────────╯  │
+╰────────────────────────────────╯╰────────────────────────╯
+ ✓ revu 0.6.0 · 4 new things · :news                 ? help

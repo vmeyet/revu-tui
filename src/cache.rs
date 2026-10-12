@@ -261,6 +261,11 @@ pub mod keys {
         "pruned.json".to_owned()
     }
 
+    /// How far the reader got in revu's own changelog, in the shared cache.
+    pub fn news() -> String {
+        "news.json".to_owned()
+    }
+
     fn slug(project: &str) -> String {
         project.replace('/', "+")
     }

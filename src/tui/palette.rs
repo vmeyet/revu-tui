@@ -83,11 +83,13 @@ pub enum Command {
     Ask(String),
     /// `:share [target]`: post the MR through a `[share]` command, after a preview.
     Share(Option<String>),
+    /// `:news`: what changed in revu, version by version.
+    News,
     Help,
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 18] = [
+pub const VERBS: [(&str, &str); 19] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("approve", "approve the open MR, or take the approval back"),
@@ -104,6 +106,7 @@ pub const VERBS: [(&str, &str); 18] = [
     ("ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
     ("ai", "switch AI off or back on for this session: :ai off, :ai on"),
     ("share", "post the MR through a [share] command: :share · :share review"),
+    ("news", "what changed in revu, the newest version first"),
     ("help", "show the keys"),
     ("quit", "leave"),
 ];
@@ -148,6 +151,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "ask" if rest.is_empty() => Err(":ask needs a question".into()),
         "ask" => Ok(Command::Ask(rest.to_owned())),
         "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
+        "news" => Ok(Command::News),
         "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => {
@@ -347,6 +351,7 @@ mod tests {
         assert_eq!(parse("set theme=nord"), Ok(Command::Set { key: "theme".into(), value: "nord".into() }));
         assert_eq!(parse("*"), Ok(Command::All));
         assert_eq!(parse(":threads"), Ok(Command::Threads));
+        assert_eq!(parse(":news"), Ok(Command::News));
         assert_eq!(parse("q"), Ok(Command::Quit));
         assert_eq!(parse("view old"), Ok(Command::View("old".into())));
         assert_eq!(parse("v src/a.rs:42"), Ok(Command::View("src/a.rs:42".into())));

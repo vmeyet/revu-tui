@@ -162,9 +162,10 @@ impl App {
         }
     }
 
-    /// An overlay holds the screen: help, publish, the cover, the palette or a share preview.
+    /// An overlay holds the screen: help, publish, the cover, the news page, the palette or a share preview.
     pub fn modal(&self) -> bool {
-        self.help.is_some() || self.publish.is_some() || self.brief.is_some() || self.palette.is_some() || self.sharing.is_some()
+        let page = self.brief.is_some() || self.news_page.is_some();
+        self.help.is_some() || self.publish.is_some() || page || self.palette.is_some() || self.sharing.is_some()
     }
 }
 

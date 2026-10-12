@@ -52,6 +52,8 @@ pub struct Settings {
     pub quit_confirm: bool,
     /// `[usage] enabled`: count the actions used and the time per screen.
     pub usage: bool,
+    /// revu's own changelog, and how far the reader had got in it.
+    pub whats_new: super::WhatsNew,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -173,6 +175,10 @@ pub struct App {
     pub publish: Option<Publish>,
     /// The MR description modal.
     pub brief: Option<Brief>,
+    /// revu's own changelog, and how far the reader had got in it before this start.
+    pub whats_new: super::WhatsNew,
+    /// The first row of the `:news` page while it is open.
+    pub news_page: Option<usize>,
     /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
     pub links: Vec<crate::tui::ui::Link>,
     /// Where the panes were drawn this frame, so the wheel scrolls the one under the pointer.
@@ -302,6 +308,9 @@ impl App {
             compose_left: None,
             publish: None,
             brief: None,
+            toast: settings.whats_new.announcement().map(|text| Toast::starting(text, false, now)),
+            whats_new: settings.whats_new,
+            news_page: None,
             links: vec![],
             areas: super::Areas::default(),
             text_rows: vec![],
@@ -328,7 +337,6 @@ impl App {
             verdicts: HashMap::new(),
             triage_asked: std::collections::HashSet::new(),
             readings: HashMap::new(),
-            toast: None,
             offline: None,
             poll: Poll::default(),
             should_quit: false,

@@ -60,6 +60,7 @@ pub(super) fn settings() -> Settings {
         ascii: false,
         quit_confirm: true,
         usage: false,
+        whats_new: WhatsNew::default(),
     }
 }
 

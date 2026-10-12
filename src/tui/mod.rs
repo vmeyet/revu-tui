@@ -28,6 +28,7 @@ mod theme;
 mod thread_view;
 mod tree_view;
 mod ui;
+mod whats_new_view;
 
 use crate::ai;
 use crate::ai::anthropic::Claude;
@@ -97,6 +98,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         ascii: ctx.config.tui.ascii,
         quit_confirm: ctx.config.keys.quit_confirm,
         usage: ctx.config.usage.enabled,
+        whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
     };
     let mut app = App::new(settings);
     let first = match start {
@@ -176,6 +178,19 @@ async fn event_loop(
         save_usage(counts).await;
     }
     Ok(())
+}
+
+/// What is new since the last start. This start is remembered at once, so the next one has nothing to say again.
+fn whats_new(cache: &Cache, changelog: crate::changelog::Changelog) -> app::WhatsNew {
+    let key = crate::cache::keys::news();
+    let seen = cache.read::<String>(&key).and_then(|position| position.parse().ok()).unwrap_or_else(|| changelog.previous());
+    let here = changelog.position();
+    if seen != here
+        && let Err(err) = cache.write(&key, &here.to_string())
+    {
+        tracing::warn!("remembering the changelog position failed: {err}");
+    }
+    app::WhatsNew { changelog, seen }
 }
 
 /// The last frame on the terminal: an unchanged one needs no links printed and no quick tick after it.
@@ -345,7 +360,37 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + '
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn what_is_new_is_announced_on_the_first_start_after_an_update_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path());
+        let changelog = crate::changelog::tests::sample();
+        let first = whats_new(&cache, changelog.clone());
+        assert_eq!(
+            first.announcement().as_deref(),
+            Some("revu 0.6.0 · 4 new things · :news"),
+            "nothing remembered: the last release is new"
+        );
+        assert_eq!(whats_new(&cache, changelog.clone()).announcement(), None, "never twice for the same version");
+        let text = crate::changelog::tests::SAMPLE.replace("## Unreleased", "## 0.7.0 - 2026-10-20");
+        let updated = crate::changelog::Changelog::parse(&text, "0.7.0".parse().unwrap()).unwrap();
+        assert_eq!(whats_new(&cache, updated.clone()).announcement().as_deref(), Some("revu 0.7.0 · 1 new thing · :news"));
+        assert_eq!(whats_new(&cache, updated).announcement(), None);
+        assert_eq!(whats_new(&cache, changelog).announcement(), None, "an older binary has nothing new");
+    }
+
+    #[test]
+    fn a_build_from_main_announces_only_the_entries_added_since_the_last_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path());
+        let changelog = crate::changelog::tests::sample();
+        cache.write(&crate::cache::keys::news(), &"0.6.0").unwrap();
+        assert_eq!(whats_new(&cache, changelog.clone()).announcement().as_deref(), Some("revu 0.6.0 · 1 new thing · :news"));
+        assert_eq!(whats_new(&cache, changelog).announcement(), None, "the same build again");
+    }
 
     #[test]
     fn a_frame_is_new_until_the_terminal_shows_it_and_again_once_another_program_drew() {
