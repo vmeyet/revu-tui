@@ -74,6 +74,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 ### Width
 
 - Slack-tui's rule: 40 % of the width, at least 36 columns.
+- The two limits below are `[tui] wide_width` (150) and `[tui] narrow_width` (120): narrow is at least 1 and never above wide.
 - 150 columns and more: queue, diff and pane side by side.
 - 120 to 149 columns: the queue hides while the pane is open, and comes back when it closes.
 - Under 120 columns: the pane takes the whole review area, like a page; `h` or `esc` returns to the diff at the same line. The queue follows the same rule there, pane or not: with an MR open it shows only while it has the keys (`03-ui-ux.md`).

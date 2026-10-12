@@ -53,6 +53,7 @@ pub(super) fn settings() -> Settings {
         pictures: None,
         queue_layout: crate::config::QueueLayout::default(),
         zen_width: None,
+        widths: crate::config::Widths::default(),
         views: vec![],
         share: vec![],
         prefetch: 0,

@@ -46,7 +46,7 @@ The mockup below predates it.
  gitlab.com · vivien · 2 drafts · P to publish                                                     ⠋ refreshing · ? help
 ```
 
-- Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below. Under 120 columns, once an MR is open, it shows only while it has the keys: the diff takes the window, and `h` or `esc` brings the queue back beside it.
+- Left pane: 34 columns, the queue. Hidden in zen (`zz`), see below. Under 120 columns, once an MR is open, it shows only while it has the keys: the diff takes the window, and `h` or `esc` brings the queue back beside it. `[tui] narrow_width` sets the 120, and `[tui] wide_width` the 150 from which all three panes show.
 - Middle: the review, `Min(60)`.
 - Right: 32 columns or 40 % of the width, only when a thread, the pipeline, the outline, the file tree or an AI answer is open.
 - Row above the status line: the input row, only while typing.

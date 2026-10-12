@@ -90,6 +90,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         pictures,
         queue_layout: ctx.config.tui.queue,
         zen_width: ctx.config.tui.zen_width,
+        widths: ctx.config.tui.widths(),
         views: ctx.config.queue.views.clone().into_iter().collect(),
         share: crate::share::targets(&ctx.config.share),
         prefetch: ctx.config.queue.prefetch,

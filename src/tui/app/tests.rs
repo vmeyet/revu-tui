@@ -701,6 +701,18 @@ fn a_narrow_window_numbers_each_line_once_and_a_wide_one_on_both_sides() {
 }
 
 #[test]
+fn a_set_narrow_width_moves_the_queue_and_the_gutter_with_it() {
+    let mut app = with_review();
+    app.widths = crate::config::Widths { narrow: 100, wide: 150 };
+    let roomy = render(&mut app, 110, 24);
+    assert_eq!(app.areas.queue.width, 34, "110 columns are no longer narrow");
+    assert!(roomy.contains("      14   15      let response"), "{roomy}");
+    let narrow = render(&mut app, 99, 24);
+    assert_eq!(app.areas.queue.width, 0);
+    assert!(narrow.contains("      15      let response"), "{narrow}");
+}
+
+#[test]
 fn in_a_narrow_window_a_drag_and_a_search_start_where_the_text_does() {
     let mut app = with_review();
     let (x, y) = spot(&mut app, "let client = Client::new()", 100, 24);

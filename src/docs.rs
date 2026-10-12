@@ -192,6 +192,22 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "tui",
+        key: "narrow_width",
+        kind: "number",
+        default: "120",
+        meaning: "Below this many columns the window is narrow: an open MR hides the queue unless it has the keys, the right pane is a page of its own and the diff shows one line number. `wide_width` at most.",
+        example: "100",
+    },
+    Setting {
+        table: "tui",
+        key: "wide_width",
+        kind: "number",
+        default: "150",
+        meaning: "From this many columns the queue, the diff and the right pane sit side by side.",
+        example: "140",
+    },
+    Setting {
+        table: "tui",
         key: "ascii",
         kind: "true or false",
         default: "false",

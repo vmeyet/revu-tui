@@ -38,6 +38,8 @@ pub struct Settings {
     pub queue_layout: crate::config::QueueLayout,
     /// How wide the diff reads in zen; `None` grows it with the screen.
     pub zen_width: Option<u16>,
+    /// `[tui] narrow_width` and `wide_width`.
+    pub widths: crate::config::Widths,
     /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
     /// `[share]`: where `Y` can post an MR, the bare target first.
     pub share: Vec<crate::share::Target>,
@@ -93,6 +95,8 @@ pub struct App {
     pub zen: bool,
     /// How wide the diff reads in zen, `[tui] zen_width`; `None` grows it with the screen.
     pub zen_width: Option<u16>,
+    /// The terminal widths the layout turns on, `[tui] narrow_width` and `wide_width`.
+    pub widths: crate::config::Widths,
     /// The MR zen just switched to, shown on top for a moment: when, and what it says.
     pub zen_switch: Option<(Instant, String)>,
     /// Notifications that arrived in zen, sent when it ends.
@@ -248,6 +252,7 @@ impl App {
             wrap: false,
             zen: false,
             zen_width: settings.zen_width,
+            widths: settings.widths,
             zen_switch: None,
             quiet_notices: vec![],
             rate: crate::forge::RateLimit::default(),

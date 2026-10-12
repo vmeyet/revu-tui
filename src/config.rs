@@ -283,17 +283,52 @@ pub struct Tui {
     /// How wide the diff reads in zen, `zz`, in columns; unset, it grows with the screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zen_width: Option<u16>,
+    /// Below this many columns the window is narrow; unset, `Widths::default` says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrow_width: Option<u16>,
+    /// From this many columns the queue, the diff and the right pane sit side by side; unset, `Widths::default` says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wide_width: Option<u16>,
 }
 
 /// Narrower than this, a diff line and its gutters no longer fit.
 const MIN_ZEN_WIDTH: u16 = 60;
 
+/// The terminal widths the layout turns on. Below `narrow` an open MR hides the queue unless it has
+/// the keys, the right pane is a page of its own and the diff shows one line number; from `wide`
+/// the queue, the diff and the right pane sit side by side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Widths {
+    pub narrow: u16,
+    pub wide: u16,
+}
+
+impl Default for Widths {
+    fn default() -> Self {
+        Self { narrow: 120, wide: 150 }
+    }
+}
+
 impl Tui {
+    pub fn widths(&self) -> Widths {
+        let default = Widths::default();
+        Widths { narrow: self.narrow_width.unwrap_or(default.narrow), wide: self.wide_width.unwrap_or(default.wide) }
+    }
+
     fn check(&self) -> Result<()> {
-        match self.zen_width {
-            Some(width) if width < MIN_ZEN_WIDTH => bail!("`tui.zen_width = {width}` is too narrow: {MIN_ZEN_WIDTH} is the least"),
-            _ => Ok(()),
+        if let Some(width) = self.zen_width.filter(|&width| width < MIN_ZEN_WIDTH) {
+            bail!("`tui.zen_width = {width}` is too narrow: {MIN_ZEN_WIDTH} is the least");
         }
+        let Widths { narrow, wide } = self.widths();
+        if narrow == 0 {
+            bail!("`tui.narrow_width = 0` is no width: 1 is the least");
+        }
+        if narrow > wide {
+            bail!(
+                "`tui.narrow_width = {narrow}` is above `tui.wide_width = {wide}`: a narrow window ends where a wide one starts, or before"
+            );
+        }
+        Ok(())
     }
 }
 
@@ -671,6 +706,28 @@ mod tests {
         assert_eq!(load("[tui]\nzen_width = 120\n").unwrap().tui.zen_width, Some(120));
         let narrow = load("[tui]\nzen_width = 40\n").unwrap_err();
         assert!(narrow.contains("zen_width") && narrow.contains("config.toml"), "{narrow}");
+    }
+
+    #[test]
+    fn layout_widths_default_to_120_and_150_and_refuse_a_narrow_above_the_wide() {
+        let load = |toml: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("config.toml");
+            std::fs::write(&path, toml).unwrap();
+            Config::load_from(&path).map(|config| config.tui.widths()).map_err(|e| format!("{e:#}"))
+        };
+        assert_eq!(load("").unwrap(), Widths { narrow: 120, wide: 150 });
+        assert_eq!(load("[tui]\nnarrow_width = 100\n").unwrap(), Widths { narrow: 100, wide: 150 });
+        assert_eq!(load("[tui]\nwide_width = 180\n").unwrap(), Widths { narrow: 120, wide: 180 });
+        assert_eq!(load("[tui]\nnarrow_width = 130\nwide_width = 130\n").unwrap(), Widths { narrow: 130, wide: 130 });
+        let zero = load("[tui]\nnarrow_width = 0\n").unwrap_err();
+        assert!(zero.contains("narrow_width = 0") && zero.contains("config.toml"), "{zero}");
+        let no_wide = load("[tui]\nwide_width = 0\n").unwrap_err();
+        assert!(no_wide.contains("wide_width = 0") && no_wide.contains("config.toml"), "{no_wide}");
+        let above = load("[tui]\nnarrow_width = 160\n").unwrap_err();
+        assert!(above.contains("narrow_width = 160") && above.contains("wide_width = 150"), "{above}");
+        let below = load("[tui]\nwide_width = 100\n").unwrap_err();
+        assert!(below.contains("narrow_width = 120") && below.contains("wide_width = 100"), "{below}");
     }
 
     #[test]

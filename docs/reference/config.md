@@ -77,6 +77,8 @@ Tokens never go here: they live in the macOS keychain.
 | `queue` | `comfortable` or `compact` | `comfortable` | Two lines per MR in the queue, or one. |
 | `images` | true or false | true | Draw pictures from comments where the terminal can. |
 | `zen_width` | number | 70 % of the screen, 100 at least | How wide the diff reads in zen, `zz`, in columns; 60 at least. Set, it stays fixed. |
+| `narrow_width` | number | 120 | Below this many columns the window is narrow: an open MR hides the queue unless it has the keys, the right pane is a page of its own and the diff shows one line number. `wide_width` at most. |
+| `wide_width` | number | 150 | From this many columns the queue, the diff and the right pane sit side by side. |
 | `ascii` | true or false | false | Reactions in plain words (`+1 2`) for terminals that draw emoji at the wrong width. |
 
 ## `[open]`
@@ -179,6 +181,8 @@ theme = "catppuccin"
 queue = "compact"
 images = false
 zen_width = 100
+narrow_width = 100
+wide_width = 140
 ascii = false
 
 [open]
