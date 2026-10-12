@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.7.0 - 2026-10-12
+
 ### New
 
 - **See what changed in revu.**
