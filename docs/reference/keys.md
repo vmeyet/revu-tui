@@ -114,7 +114,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 
 | Keys | Does |
 |---|---|
-| `^k` | MRs · / files · > commands |
+| `^k` `,` | MRs · / files · > commands |
 | `:` | commands: :go !42, :set theme=nord |
 | `o` `y` | open in the browser, copy the link |
 | `r` | refresh |

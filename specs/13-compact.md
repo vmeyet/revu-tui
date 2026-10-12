@@ -55,9 +55,42 @@ Under `SHORT_BELOW` (20) rows, in the compact layout only.
 - The MR header (two rows) is dropped from the diff.
 - Not shown there: the host and user, the count of unresolved threads and drafts, `offline`, the rate limit and `loading`.
 
+## The tap bar
+
+Shifted keys, `ctrl-` keys, `esc`, `[` and `]` are slow on a phone keyboard, and a tap arrives as a mouse click.
+One bottom row of labels, under the status row, in the compact layout only; `[tui] tap_bar = false` hides it.
+
+| Page | Labels and the keys they press |
+|---|---|
+| Queue | open `enter` · filter `/` · refresh `r` · copy `y` · more `:` |
+| Diff | file `tab` · thread `]n` · viewed `zv` · comment `c` · back `h` · more `:` |
+| Thread: a thread row in the diff, or the thread pane | reply `r` · resolve `R` · react `+` · copy `y` · back `h` · more `:` |
+| Pane: tree, pipeline, outline, answer | back `h` · more `:` |
+
+- A label is a key list (`src/tui/app/taps.rs`). A click on it goes through `handle_key`, key after key, so it does what the keys do, user bindings and usage counts included.
+- `more` is the last label of every page: it opens the palette on commands, where `approve`, `publish` and the rest are. Approve and publish get no label of their own: seven letters each, they do not fit beside the others at 45 columns.
+- `copy` is `y`, the link of the MR or the thread: a link opens on the Mac, so the phone takes it by the clipboard. The diff has no room for it at 45 columns and leaves it to `more` (`:copy`).
+- `back` is `h`: one page back. On a thread row in the diff that is the queue, as on any other row of the diff.
+- Each label sits in a cell one blank wider on each side, and the cells share the columns left over, so a thumb has more to hit. The whole cell answers.
+- A row too narrow for the labels drops them from the end, keeping `more`.
+- It costs one row, kept on a short screen: there it is the only row around the page.
+- It gives its row up, and its labels answer nothing, while a question waits (a confirmation, the quit prompt, the reaction picker, the `'` views, the next MR offered), while the search or the filter is typed or kept, while a comment is written, and under an overlay.
+- It shows in zen too: `revu 42` starts there, and a phone needs the labels as much.
+
+## The short key list
+
+In the compact layout the first `?` lists one group, named after the page: the keys of its tap bar and what each does.
+The second `?` lists every key, as everywhere; no key is taken away, the list is only shorter.
+
+## A plain key for the search
+
+`,` opens the palette on MRs, as `ctrl-k` does, in every layout.
+It is the free key a phone keyboard reaches soonest: every lowercase letter but `f` is taken, and `f` is the key the tests and the docs give to the user.
+It is a second key of the `jump` action: a key bound to `jump` under `[keys.bind]` stands for both, and `,` can no longer be bound to something else.
+
 ## Unchanged
 
-From 70 columns up, wide, narrow and zen draw exactly as before: their snapshots do not move.
+From 70 columns up, wide, narrow and zen draw exactly as before: their snapshots do not move, but for the `,` beside `^k` in the key list.
 
 ## Tests
 
@@ -65,6 +98,8 @@ From 70 columns up, wide, narrow and zen draw exactly as before: their snapshots
 - Config: the default, a compact width above the narrow one, zero, and the three values of `layout`.
 - Snapshots on `TestBackend` at 50×30 (queue, diff) and 50×14 (diff, short).
 - The tier follows the width frame after frame; two-line rows answer a click and the wheel; the cursor's line in the title; wrap by default and `w`; the path cut; the prompts a short screen keeps.
+- The tap bar: the labels of each page, a click on each label against its keys typed, the row given up to a question and to typed text, the setting, a bar too wide, and every set fitting 45 columns with keys that parse.
+- The short `?` list and the full one after it; `,` against `ctrl-k`.
 
 ## Considered
 

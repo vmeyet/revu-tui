@@ -31,6 +31,7 @@ mod search;
 mod share;
 mod stack;
 mod state;
+mod taps;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
@@ -64,6 +65,7 @@ pub use review::Open;
 pub use search::{Search, mark as mark_search};
 pub use share::{Sharing, Stage as ShareStage};
 pub use state::{App, Settings};
+pub use taps::{Tap, TapSpot};
 pub use tree::Tree;
 pub use triage::Mark;
 pub use whats_new::WhatsNew;

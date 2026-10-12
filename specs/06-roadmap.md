@@ -152,7 +152,7 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 
 - Symbol outline `O` (`10-outline.md`, 2026-10-01): the functions, methods and classes the MR changes, read with each grammar's tags query, public ones first by risk, as a call tree; `enter` jumps there.
 - Pins `b` (`03-ui-ux.md` § The queue, 2026-10-02): MRs kept on top of the queue in `PINNED`, per scope, until merged or closed.
-- Compact layout (`13-compact.md`, 2026-10-12): under 70 columns one page at a time, a diff that fits 45 columns, and fewer rows around the page on a short screen.
+- Compact layout (`13-compact.md`, 2026-10-12): under 70 columns one page at a time, a diff that fits 45 columns, fewer rows around the page on a short screen, a tap bar and `,` for the search.
 - Changelog (`12-changelog.md`, 2026-10-12): `CHANGELOG.md` built into the binary, `revu news`, the end of `revu update`, a toast on the first start after an update and the `:news` page.
 
 ## Next · Prose diff

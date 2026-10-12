@@ -4,7 +4,7 @@
 
 ## Search with ⌘K
 
-Press `⌘K` or `ctrl-k`.
+Press `⌘K`, `ctrl-k` or `,`.
 Type to search.
 The first character picks what you search.
 

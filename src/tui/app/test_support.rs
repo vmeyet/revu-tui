@@ -54,6 +54,7 @@ pub(super) fn settings() -> Settings {
         queue_layout: crate::config::QueueLayout::default(),
         zen_width: None,
         widths: crate::config::Widths::default(),
+        tap_bar: true,
         views: vec![],
         share: vec![],
         prefetch: 0,
@@ -543,15 +544,26 @@ pub(super) fn mouse(app: &mut App, kind: crossterm::event::MouseEventKind, (colu
     app.handle_mouse(crossterm::event::MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE })
 }
 
-/// Draws, then presses the left button on the last cell of the row of `list` with cursor stop `index`, and lets go.
-pub(super) fn click_row(app: &mut App, list: super::List, index: usize) -> Vec<Action> {
+/// Presses the left button at `at` and lets go there.
+pub(super) fn click(app: &mut App, at: (u16, u16)) -> Vec<Action> {
     use crossterm::event::{MouseButton, MouseEventKind};
+    mouse(app, MouseEventKind::Down(MouseButton::Left), at);
+    mouse(app, MouseEventKind::Up(MouseButton::Left), at)
+}
+
+/// Draws, then clicks the last cell of the row of `list` with cursor stop `index`.
+pub(super) fn click_row(app: &mut App, list: super::List, index: usize) -> Vec<Action> {
     render(app, 160, 30);
     let row =
         app.list_rows.iter().find(|row| row.list == list && row.index == index).unwrap_or_else(|| panic!("{list:?} row {index} on screen"));
-    let at = (row.area.right() - 1, row.area.y);
-    mouse(app, MouseEventKind::Down(MouseButton::Left), at);
-    mouse(app, MouseEventKind::Up(MouseButton::Left), at)
+    click(app, (row.area.right() - 1, row.area.y))
+}
+
+/// A phone held upright: under the compact width, with rows to spare.
+pub(super) const PHONE: (u16, u16) = (50, 30);
+
+pub(super) fn phone(app: &mut App) -> String {
+    render(app, PHONE.0, PHONE.1)
 }
 
 /// Presses the left button at `from`, drags to `to` and lets go, drawing between each step as the loop does.

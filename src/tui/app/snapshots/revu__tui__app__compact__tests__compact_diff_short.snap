@@ -14,5 +14,5 @@ expression: screen
 │    +    let client = Client::with_key(idempote │
 │     ncy_key(card));                            │
 │    +    let attempt = Attempt::first();        │
-│         let response = client.charge(amount).a │
 ╰────────────────────────────────────────────────╯
+ file   thread   viewed   comment   back   more

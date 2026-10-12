@@ -2,6 +2,7 @@
 //! A drag with the left button selects the text of the pane it starts in and copies it on release.
 //! A click on a link opens it: the terminal hands revu the clicks, so it no longer opens links itself.
 //! A click on a list row picks it, and a click on the picked row does what `enter` does on it.
+//! A click on a label of the tap bar presses its keys.
 use super::{Action, App, Focus, Open, Pane, Tree};
 use crate::tui::drag::Drag;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
@@ -84,16 +85,17 @@ impl App {
         (0..times).flat_map(|_| self.pane_key(pane, KeyEvent::from(arrow))).collect()
     }
 
-    /// A release where the press was is a click, on a link or a list row; any other ends the drag.
+    /// A release where the press was is a click, on a link, a label of the tap bar or a list row; any other ends
+    /// the drag.
     fn release(&mut self, at: Position) -> Vec<Action> {
         if self.pressed.take() != Some(at) {
             return self.copy_drag();
         }
         self.drag = None;
-        match self.link_at(at) {
-            Some(url) => vec![Action::OpenUrl(url)],
-            None => self.click_row(at),
+        if let Some(url) = self.link_at(at) {
+            return vec![Action::OpenUrl(url)];
         }
+        self.tap_at(at).unwrap_or_else(|| self.click_row(at))
     }
 
     /// The row takes the cursor and its pane the keys; on the row the cursor is already on, `enter`.

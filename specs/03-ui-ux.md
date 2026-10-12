@@ -319,7 +319,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `b` | queue: pin the MR on top, or unpin it | post-M5 |
 | `i` | the MR cover: description, checks, reviews, threads, files | M3 |
 | `:` | command line | M3 |
-| `ctrl-k` `⌘k` | jump to an MR or a file | M3 |
+| `ctrl-k` `⌘k` `,` | jump to an MR or a file | M3 |
 | `zz` | zen: the diff alone, quiet (`z` is the fold prefix) | M3 |
 | `[m` `]m` | the previous, next MR in the queue's order, in zen or not | M3 |
 | `?` | help: the focused pane's keys; again, every key | M1 |
@@ -385,11 +385,11 @@ A two-key binding holds its first key; a second key that matches nothing hands b
 The config fails to load, naming the file, on an unknown action, a key that does not parse, a key revu already reads (named with its action), and two actions on one key or on keys where one starts the other.
 `?` shows the keys in effect: with the preset, `]n [n` reads `)n (n`, and a bound key comes first (`F )n (n`).
 
-### Search: `ctrl-k`, `⌘k`, `:`
+### Search: `ctrl-k`, `⌘k`, `,`, `:`
 
 One popup finds MRs, files and commands, picked by the first character as VS Code does.
 Nothing typed searches the queue's MRs; `/` first searches the open MR's files; `>` first runs commands, and `⌫` on an empty line steps back to MRs.
-`ctrl-k` and `⌘k` open it on MRs; `:` and `⌘⇧k` (where the terminal tells it apart) open it on commands.
+`ctrl-k`, `⌘k` and `,` open it on MRs; `:` and `⌘⇧k` (where the terminal tells it apart) open it on commands.
 The prompt shows the mode (`›`, `/`, `>`) and the title says what it searches.
 
 MR terms (`src/query.rs`, shared with the queue filter and saved views): free words, `"quoted words"`, `@author` (`@me`; several are any of them), `!42` or `#42` (several are any of them), `~label` (`~"two words"`; several are all of them).
@@ -422,6 +422,7 @@ Every key, grouped by task in the order a review goes: MOVE, QUEUE, VIEW, COMMEN
 The first `?` shows only the groups of the focused pane; `?` again shows every group; a third `?`, like any key that does not scroll, closes it.
 The queue gets MOVE, QUEUE, SEARCH & APP; the diff MOVE, VIEW, COMMENT & PUBLISH, ASK CLAUDE, SEARCH & APP; the right pane COMMENT & PUBLISH, THREAD PANE, ASK CLAUDE, SEARCH & APP.
 While filtered, the bottom border ends on `? every key`.
+In the compact layout the first `?` lists the keys of the page's tap bar instead (`13-compact.md` § The short key list).
 Group titles are faded uppercase; keys are right-aligned in the accent, bold; what they do is plain text, a few words each.
 Two columns when the overlay is at least 100 columns wide, split between groups so both columns end level; one column below.
 The frame pads two columns on the sides and one row above and below; a blank row separates groups and six columns separate the two columns.

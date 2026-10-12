@@ -35,13 +35,8 @@ mod tests {
     use crate::tui::app::test_support::*;
     use ratatui::layout::Rect;
 
-    /// A phone held upright, and the same phone with its keyboard up.
-    const PHONE: (u16, u16) = (50, 30);
+    /// The phone with its keyboard up.
     const KEYBOARD_UP: (u16, u16) = (50, 14);
-
-    fn phone(app: &mut App) -> String {
-        render(app, PHONE.0, PHONE.1)
-    }
 
     /// The text of the screen row holding `text`.
     fn row_with<'s>(screen: &'s str, text: &str) -> &'s str {
@@ -112,8 +107,7 @@ mod tests {
         let other = *app.list_rows.iter().find(|row| row.index != picked).expect("a second MR row");
         assert_eq!(other.area.height, 2);
         let under_the_title = (other.area.x + 4, other.area.y + 1);
-        mouse(&mut app, crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left), under_the_title);
-        mouse(&mut app, crossterm::event::MouseEventKind::Up(crossterm::event::MouseButton::Left), under_the_title);
+        click(&mut app, under_the_title);
         assert_eq!(app.queue_selected, other.index);
         wheel(&mut app, false, 10, 10);
         assert_ne!(app.queue_selected, other.index, "the wheel walks the page under it");
@@ -225,13 +219,14 @@ mod tests {
     }
 
     #[test]
-    fn a_short_screen_says_a_toast_on_its_bottom_row() {
+    fn a_short_screen_says_a_toast_on_the_bottom_row_of_its_page() {
         let (width, height) = KEYBOARD_UP;
         let mut app = with_review();
         render(&mut app, width, height);
         press(&mut app, "w");
         let screen = render(&mut app, width, height);
-        assert!(screen.lines().last().unwrap().contains("long lines end in …"), "{screen}");
+        let page_bottom = usize::from(app.areas.review.bottom()) - 1;
+        assert!(screen.lines().nth(page_bottom).unwrap().contains("long lines end in …"), "{screen}");
     }
 
     #[test]

@@ -208,6 +208,14 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "tui",
+        key: "tap_bar",
+        kind: "true or false",
+        default: "true",
+        meaning: "In the compact layout, a bottom row of labels to tap, each pressing a key.",
+        example: "true",
+    },
+    Setting {
+        table: "tui",
         key: "narrow_width",
         kind: "number",
         default: "120",

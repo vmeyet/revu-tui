@@ -222,7 +222,8 @@ fn pick(forward: bool, next: &'static str, prev: &'static str) -> &'static str {
 fn single(key: KeyEvent, place: Place) -> Option<&'static str> {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let command = key.modifiers.contains(KeyModifiers::SUPER);
-    if matches!(key.code, KeyCode::Char('k' | 'K')) && (ctrl || command) {
+    let palette_chord = matches!(key.code, KeyCode::Char('k' | 'K')) && (ctrl || command);
+    if palette_chord || key.code == KeyCode::Char(',') {
         return Some("jump");
     }
     if ctrl && key.code == KeyCode::Char('v') && place != Place::Queue {

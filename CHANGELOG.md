@@ -27,6 +27,15 @@ Each entry says what changed, then where, then how to use it.
 - **More rows for the page when the keyboard is up.**
   In the compact layout under 20 rows: the status row and the MR header hide.
   A question, the search and the queue filter keep their row, and a toast shows on the bottom row.
+- **Tap a label instead of typing a key.**
+  In the compact layout, on the bottom row: the main actions of the page, and `more` for every command.
+  Tap a label to press its key, and set `[tui] tap_bar = false` to hide the row.
+- **A short key list for the page you are on.**
+  In the compact layout, on the first `?`: the keys of the tap bar.
+  `?` again lists every key.
+- **Open the search with a comma.**
+  In the queue, the diff and the right pane, wherever `ctrl-k` works.
+  `,` opens it on MRs, then `/` finds files and `>` runs commands.
 
 ### Fixed
 

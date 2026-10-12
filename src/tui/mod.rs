@@ -25,6 +25,7 @@ mod queue_view;
 mod screen;
 mod share_view;
 mod table;
+mod taps_view;
 mod theme;
 mod thread_view;
 mod tree_view;
@@ -94,6 +95,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         queue_layout: ctx.config.tui.queue,
         zen_width: ctx.config.tui.zen_width,
         widths: ctx.config.tui.widths(),
+        tap_bar: ctx.config.tui.tap_bar,
         views: ctx.config.queue.views.clone().into_iter().collect(),
         share: crate::share::targets(&ctx.config.share),
         prefetch: ctx.config.queue.prefetch,

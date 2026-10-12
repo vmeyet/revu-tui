@@ -268,7 +268,7 @@ fn on() -> bool {
     true
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tui {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -295,6 +295,26 @@ pub struct Tui {
     /// From this many columns the queue, the diff and the right pane sit side by side; unset, `Widths::default` says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wide_width: Option<u16>,
+    /// The compact layout ends on a row of labels to tap; `false` gives the row back to the page.
+    #[serde(default = "on")]
+    pub tap_bar: bool,
+}
+
+impl Default for Tui {
+    fn default() -> Self {
+        Self {
+            theme: None,
+            ascii: false,
+            images: None,
+            queue: QueueLayout::default(),
+            zen_width: None,
+            layout: ScreenLayout::default(),
+            compact_width: None,
+            narrow_width: None,
+            wide_width: None,
+            tap_bar: true,
+        }
+    }
 }
 
 /// Narrower than this, a diff line and its gutters no longer fit.
@@ -788,6 +808,14 @@ mod tests {
         assert_eq!(widths_of("[tui]\nlayout = \"compact\"\n").unwrap().compact, u16::MAX, "every window is under it");
         assert_eq!(widths_of("[tui]\nlayout = \"full\"\ncompact_width = 60\n").unwrap().compact, 0, "no window is under it");
         assert!(widths_of("[tui]\nlayout = \"phone\"\n").unwrap_err().contains("layout"));
+    }
+
+    #[test]
+    fn the_tap_bar_is_on_unless_switched_off() {
+        assert!(toml::from_str::<Config>("").unwrap().tui.tap_bar);
+        assert!(toml::from_str::<Config>("[tui]\ntheme = \"nord\"\n").unwrap().tui.tap_bar, "another key leaves it on");
+        assert!(!toml::from_str::<Config>("[tui]\ntap_bar = false\n").unwrap().tui.tap_bar);
+        assert!(!toml::to_string_pretty(&Config::default()).unwrap().contains("[tui]"), "the default is not written");
     }
 
     #[test]

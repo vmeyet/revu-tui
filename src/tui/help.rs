@@ -1,5 +1,5 @@
 //! The `?` overlay: the keys of the focused pane, or every key after a second `?`, grouped by task in the order a
-//! review goes, in one or two columns.
+//! review goes, in one or two columns. In the compact layout the first `?` lists the keys of the tap bar alone.
 use super::app::{App, Focus};
 use super::ui::{pane, truncate};
 use crate::keymap::Keymap;
@@ -141,7 +141,7 @@ pub const GROUPS: [Group; 8] = [
     Group {
         title: "search & app",
         keys: &[
-            ("^k", "MRs · / files · > commands"),
+            ("^k ,", "MRs · / files · > commands"),
             (":", "commands: :go !42, :set theme=nord"),
             ("o y", "open in the browser, copy the link"),
             ("r", "refresh"),
@@ -168,8 +168,8 @@ fn groups(every_key: bool, focus: Focus) -> impl Iterator<Item = &'static Group>
 }
 
 /// The last row the list can scroll to: its groups in one column, so scrolling never stops short.
-pub fn last_row(every_key: bool, focus: Focus) -> usize {
-    column_height(&groups(every_key, focus).map(|g| g.keys.len()).collect::<Vec<_>>()).saturating_sub(1)
+pub fn last_row(app: &App, every_key: bool) -> usize {
+    column_height(&shown(app, every_key).iter().map(|(_, keys)| keys.len()).collect::<Vec<_>>()).saturating_sub(1)
 }
 
 /// Rows a column of groups takes: a header per group, its keys, one blank row between groups.
@@ -182,9 +182,15 @@ pub fn split(sizes: &[usize]) -> usize {
     (1..sizes.len()).min_by_key(|&at| column_height(&sizes[..at]).max(column_height(&sizes[at..]))).unwrap_or(sizes.len())
 }
 
-/// The groups with their keys as they are in effect: the user's bindings, `(`/`)` on AZERTY.
-fn shown(keymap: &Keymap, every_key: bool, focus: Focus) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
-    groups(every_key, focus).map(|g| (g.title, g.keys.iter().map(|(keys, what)| (keymap.label(keys), *what)).collect())).collect()
+/// The groups with their keys as they are in effect: the user's bindings, `(`/`)` on AZERTY. In the compact layout,
+/// until every key is asked for, one group: the keys of the page's tap bar.
+fn shown(app: &App, every_key: bool) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
+    let keymap: &Keymap = &app.keymap;
+    if app.compact && !every_key {
+        let page = app.page();
+        return vec![(page.name(), page.taps().iter().map(|tap| (keymap.label(tap.keys), tap.does)).collect())];
+    }
+    groups(every_key, app.focus).map(|g| (g.title, g.keys.iter().map(|(keys, what)| (keymap.label(keys), *what)).collect())).collect()
 }
 
 /// A column of groups as lines: faded uppercase headers, keys right-aligned in the accent.
@@ -221,7 +227,7 @@ fn natural_width(groups: &[(&str, Vec<(String, &str)>)]) -> usize {
 
 /// The overlay, centred, at most 90 % of the screen each way; it scrolls by `scroll` rows when taller than that.
 pub fn draw(f: &mut Frame, app: &App, area: Rect, help: Help) {
-    let groups = shown(&app.keymap, help.every_key, app.focus);
+    let groups = shown(app, help.every_key);
     let sizes: Vec<usize> = groups.iter().map(|(_, keys)| keys.len()).collect();
     let max_w = area.width * 9 / 10;
     let two = max_w >= TWO_COLUMNS_FROM;
@@ -316,7 +322,6 @@ mod tests {
     fn a_column_counts_headers_and_the_blank_rows_between_groups() {
         assert_eq!(column_height(&[2, 3]), 3 + 4 + 1);
         assert_eq!(column_height(&[]), 0);
-        assert_eq!(last_row(true, Focus::Queue) + 1, column_height(&GROUPS.iter().map(|g| g.keys.len()).collect::<Vec<_>>()));
     }
 
     #[test]

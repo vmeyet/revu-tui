@@ -26,7 +26,7 @@ expression: "render(&mut app, 160, 45)"
 │                          │      esc x  close the pane, back to the queue              zo zc  open, fold the section or stack     │                           │
 │                          │  tab S-tab  next, previous file                                                                       │                           │
 │                          │      ]c [c  next, previous hunk                            SEARCH & APP                               │                           │
-│                          │      ]n [n  next, previous open conversation                  ^k  MRs · / files · > commands          │                           │
+│                          │      ]n [n  next, previous open conversation                ^k ,  MRs · / files · > commands          │                           │
 │                          │      ]N [N  next, previous conversation, resolved too          :  commands: :go !42, :set theme=nord  │                           │
 │                          │      ]f [f  next, previous file with a thread                o y  open in the browser, copy the link  │                           │
 │                          │      ]r [r  next, previous MR that needs you                   r  refresh                             │                           │

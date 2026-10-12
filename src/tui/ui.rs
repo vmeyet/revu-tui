@@ -48,14 +48,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     app.links.clear();
     app.text_rows.clear();
     app.list_rows.clear();
+    app.taps.clear();
     let screen = f.area();
     app.compact = screen.width < app.widths.compact;
     app.narrow = app.compact || screen.width < app.widths.narrow;
     app.short = app.compact && screen.height < SHORT_BELOW;
     let input_rows = u16::from(app.filtering);
     let status_rows = status_rows(app);
-    let [main, input, status] =
-        Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(screen);
+    let tap_rows = u16::from(app.shows_taps());
+    let rows = [Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows), Constraint::Length(tap_rows)];
+    let [main, input, status, taps] = Layout::vertical(rows).areas(screen);
     app.fit_threads();
     let side_open = app.open.as_ref().is_some_and(super::app::Open::side_open);
     let shown = columns(main.width, app.widths, app.open.is_some(), side_open, app.focus, app.zen);
@@ -94,6 +96,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
     if status_rows > 0 {
         draw_status(f, app, status);
+    }
+    if tap_rows > 0 {
+        super::taps_view::draw(f, app, taps);
     }
     let modal = app.modal();
     if modal {
@@ -142,10 +147,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
 /// The status row shows unless zen or a short compact screen drops it; whatever asks the reader something brings it back.
 fn status_rows(app: &App) -> u16 {
-    let asking =
-        app.confirm.is_some() || app.pending == Some('\'') || app.quit_prompt().is_some() || app.react.is_some() || app.search.is_some();
     let dropped = app.zen || (app.short && app.offer.is_none());
-    u16::from(asking || !dropped)
+    u16::from(app.asks() || !dropped)
 }
 
 /// The line numbers the diff shows: none in the compact layout, where the pane's title carries the cursor's.
