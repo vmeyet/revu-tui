@@ -2,7 +2,7 @@
 //! `[tui] queue = "compact"`), and one author's chained MRs folded into a stack.
 use super::app::{App, Badge, Focus, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
-use super::ui::{Link, draw_empty, pane, short_age, spinner, truncate};
+use super::ui::{Link, draw_empty, pane, short_age, truncate};
 use crate::config::QueueLayout;
 use crate::forge::QueueMr;
 use ratatui::Frame;
@@ -340,15 +340,10 @@ fn kind_colour(theme: Theme, kind: &str) -> Color {
     }
 }
 
-/// The activity dot breathes: bright one second, faded the next.
-fn pulse_on(app: &App) -> bool {
-    app.now.duration_since(app.started).as_secs().is_multiple_of(2)
-}
-
 fn mark_span(app: &App, mark: Option<Mark>) -> Span<'static> {
     let theme = app.theme;
     match mark {
-        Some(Mark::WaitsOnMe) => Span::styled("◆ ", Style::default().fg(if pulse_on(app) { theme.warn } else { theme.faded })),
+        Some(Mark::WaitsOnMe) => Span::styled("◆ ", Style::default().fg(theme.warn)),
         Some(Mark::Urgent) => Span::styled("! ", Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)),
         Some(Mark::Sprawling) => Span::styled("~ ", Style::default().fg(theme.muted)),
         None => Span::raw("  "),
@@ -359,8 +354,8 @@ fn badge_span(app: &App, badge: Badge) -> Span<'static> {
     let theme = app.theme;
     match badge {
         Badge::Failed => Span::styled("✗", Style::default().fg(theme.danger)),
-        Badge::Running => Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.muted)),
-        Badge::Activity => Span::styled("●", Style::default().fg(if pulse_on(app) { theme.accent } else { theme.faded })),
+        Badge::Running => Span::styled("⠋", Style::default().fg(theme.muted)),
+        Badge::Activity => Span::styled("●", Style::default().fg(theme.accent)),
         Badge::Draft => Span::styled("D", Style::default().fg(theme.muted)),
     }
 }

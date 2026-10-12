@@ -31,7 +31,8 @@ const ZEN_PANE_PCT: u16 = 25;
 const ZEN_COMPOSE_PCT: u16 = 50;
 const ZEN_PANE_MIN: u16 = 8;
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER_FRAME: Duration = Duration::from_millis(80);
+/// Slow on purpose: each step is a repaint a phone link pays for, and four a second still read as alive.
+pub const SPINNER_FRAME: Duration = Duration::from_millis(250);
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Link {
@@ -673,6 +674,12 @@ mod tests {
         fn tabs_drawn_while_cutting_read_as_tabs_drawn_first(text in "[a-z漢\t ]{0,20}", width in 1..24usize) {
             proptest::prop_assert_eq!(truncate_tabs(&text, "→   ", width), truncate(&text.replace('\t', "→   "), width));
         }
+    }
+
+    #[test]
+    fn the_spinner_steps_four_times_a_second() {
+        let at = |ms: u64| spinner(Duration::from_millis(ms));
+        assert_eq!((1..=1000).filter(|&ms| at(ms) != at(ms - 1)).count(), 4);
     }
 
     #[test]

@@ -7,6 +7,11 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### Fixed
+
+- **A screen at rest sends nothing to a slow link.**
+  In the queue, where the marks stay lit, and wherever a spinner turns, now four steps a second.
+
 ## 0.7.0 - 2026-10-12
 
 ### New

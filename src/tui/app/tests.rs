@@ -381,6 +381,19 @@ fn a_picture_arriving_after_the_pane_was_drawn_is_painted_on_the_next_frame() {
 }
 
 #[test]
+fn a_queue_at_rest_draws_the_same_frame_second_after_second() {
+    let mut app = with_queue();
+    app.opened.insert(mr_key(), "2026-09-21T00:00:00Z".parse().unwrap());
+    let screen = render(&mut app, 120, 40);
+    assert!(screen.contains('⠋') && screen.contains('●'), "a running pipeline and fresh activity are on screen:\n{screen}");
+    let at_rest = cells(&mut app, 120, 40);
+    for second in 1..=3 {
+        app.now += Duration::from_secs(1);
+        assert_eq!(cells(&mut app, 120, 40), at_rest, "after {second}s");
+    }
+}
+
+#[test]
 fn snapshot_queue_compact() {
     let mut app = with_queue();
     app.queue_layout = crate::config::QueueLayout::Compact;

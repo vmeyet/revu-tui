@@ -45,8 +45,9 @@ use futures_util::StreamExt;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
-const TICK: Duration = Duration::from_millis(100);
-/// A screen that stood still for a tick is looked at once a second: ages, toasts, pulses and polls need no more.
+/// A screen that moves is looked at once per spinner step: nothing on it moves faster.
+const TICK: Duration = ui::SPINNER_FRAME;
+/// A screen that stood still for a tick is looked at once a second: ages, toasts and polls need no more.
 const IDLE_TICK: Duration = Duration::from_secs(1);
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out; on `start` in zen when given.
@@ -403,6 +404,14 @@ mod tests {
         shown.forget();
         assert!(shown.changed(&busy));
         assert!(shown.changed(&ratatui::buffer::Buffer::empty(area)));
+    }
+
+    #[test]
+    fn a_loading_screen_is_drawn_once_per_spinner_step() {
+        let drawn: Vec<&str> = (0..=20).map(|tick| ui::spinner(TICK * tick)).collect();
+        assert!(drawn.windows(2).all(|pair| pair[0] != pair[1]), "no tick draws the step already on screen: {drawn:?}");
+        let turn: std::collections::BTreeSet<&str> = drawn[..10].iter().copied().collect();
+        assert_eq!(turn.len(), 10, "and none of the ten steps is skipped: {drawn:?}");
     }
 
     #[test]
