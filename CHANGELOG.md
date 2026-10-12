@@ -7,6 +7,18 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **Copy a link to the device in your hand.**
+  Over ssh or mosh, and inside tmux with `set-clipboard on`.
+  `y` copies the link of the MR, line, thread or job, and every copy reaches your terminal's clipboard.
+- **Copy the first link of a thread.**
+  In the thread pane and on a thread row of the diff.
+  `U` copies what `u` opens, or the thread's first picture when it has no link.
+- **Copy a link from the command line.**
+  In the queue and in the diff.
+  `:copy` copies the link `:open` would show in the browser.
+
 ### Fixed
 
 - **A screen at rest sends nothing to a slow link.**

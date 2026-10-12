@@ -162,7 +162,8 @@ impl App {
     fn run_command(&mut self, command: Command) -> Vec<Action> {
         match command {
             Command::Go(reference) => self.go(&reference),
-            Command::Open => self.open_in_browser(),
+            Command::Open => self.link_here().map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default(),
+            Command::Copy => self.link_here().map(|url| vec![Action::copy_link(url)]).unwrap_or_default(),
             Command::Approve => self.toggle_approval(),
             Command::Merge => self.merge_here(),
             Command::Ready => self.toggle_draft(),
@@ -226,10 +227,11 @@ impl App {
         self.queue_mrs().into_iter().find(|mr| mr.number == number).map(crate::forge::QueueMr::key)
     }
 
-    fn open_in_browser(&self) -> Vec<Action> {
+    /// The page of the line under the cursor in an open MR, else of the MR selected in the queue.
+    fn link_here(&self) -> Option<String> {
         match (&self.open, self.focus) {
-            (Some(open), Focus::Review | Focus::Side) => vec![Action::OpenUrl(open.line_url(self.hosts.kind_of(&open.key)))],
-            _ => self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
+            (Some(open), Focus::Review | Focus::Side) => Some(open.line_url(self.hosts.kind_of(&open.key))),
+            _ => self.selected_mr().map(|mr| mr.web_url.clone()),
         }
     }
 
@@ -273,6 +275,19 @@ mod tests {
         assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.project == "other/thing" && key.number == 7), "{actions:?}");
         assert_eq!(run_line(&mut app, "go !999"), vec![]);
         assert!(app.live_toast().unwrap().text.contains("no MR !999"));
+    }
+
+    #[test]
+    fn copy_takes_the_link_open_would_show_in_the_browser() {
+        let copied = |url: &str| vec![Action::Copy { text: url.into(), done: format!("copied {url}") }];
+        let mut app = with_queue();
+        assert_eq!(run_line(&mut app, "copy"), copied("https://gitlab.com/acme/widgets/-/merge_requests/42"));
+        let mut app = with_review();
+        press(&mut app, "]cj");
+        let opened = run_line(&mut app, "open");
+        let [Action::OpenUrl(line)] = opened.as_slice() else { panic!("the line in the browser: {opened:?}") };
+        assert!(line.contains("/diffs#"), "{line}");
+        assert_eq!(run_line(&mut app, "copy"), copied(line));
     }
 
     #[test]

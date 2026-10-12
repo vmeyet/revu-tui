@@ -91,7 +91,7 @@ impl App {
             KeyCode::Char('g') => 0,
             KeyCode::Char('G') => last,
             KeyCode::Char('o') => return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
-            KeyCode::Char('y') => return url.map(|u| vec![Action::Yank(u)]).unwrap_or_default(),
+            KeyCode::Char('y') => return url.map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
             KeyCode::Char('r') => {
                 let action = load(open);
                 self.update_open(|open| Open { pipeline: open.pipeline.map(|p| Pipeline { due: None, ..p }), ..open });
@@ -216,7 +216,8 @@ mod tests {
         assert_eq!(pipeline.jobs()[pipeline.selected].name, "flaky", "the cursor lands on the failure");
         assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl("https://ci.example/flaky".into())]);
         press(&mut app, "j");
-        assert_eq!(press(&mut app, "y"), vec![Action::Yank("https://ci.example/unit".into())]);
+        let copy = Action::Copy { text: "https://ci.example/unit".into(), done: "copied https://ci.example/unit".into() };
+        assert_eq!(press(&mut app, "y"), vec![copy]);
         press(&mut app, "p");
         assert!(app.open.as_ref().unwrap().pipeline.is_none());
         assert_eq!(app.focus, Focus::Review);

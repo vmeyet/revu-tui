@@ -44,6 +44,7 @@ Your own draft of a new thread shows whole.
 | `r` or `c`, `R` `+` `S` on a thread | Reply, resolve, react, apply the suggestion, as in the thread pane |
 | `e` `d` on your draft | Edit it, delete it |
 | `u` `o` `y` on a thread | Open its first link, open it in the browser, copy its link |
+| `U` on a thread | Copy its first link, or its first picture when it has no link |
 
 `]n` and `]N` stop on the marked lines, not on the rows under them.
 A folded hunk or file hides its threads with its lines.

@@ -203,7 +203,7 @@ fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
     let open = app.open.as_ref()?;
     let (conversations, entries, _) = open.pane_view()?;
     let pane = open.pane.as_ref()?;
-    let web = |url: &str| crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&app.host), &open.key.project, url);
+    let web = |url: &str| app.web_url(open, url);
     let here = at_cursor(open, pane);
     let mut lines: Vec<(Option<Entry>, Piece)> = vec![];
     for (index, conversation) in conversations.iter().enumerate() {

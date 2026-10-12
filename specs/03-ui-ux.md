@@ -13,7 +13,7 @@ The terminal has no pixels to spare, so the design is typographic: alignment, rh
 6. **Unfocused panes fade** (`fade()` from slack-tui) so the eye finds focus without a loud frame: every frame sits close to the ground (`border`), the focused one, a modal and the compose box one step up (`border_focus`), and focus shows in the title's accent.
 7. **The terminal keeps its background.** Themes set foregrounds and two surfaces only, exactly as in slack-tui, so the app matches any terminal.
 8. **Glyphs have fallbacks.** `[tui] ascii = true` swaps `▎ ◆ ◇ ● ▸ ▾ ✓ ✗ ⠋` for `| * o * > v + x -`. Nerd Font icons are not used.
-9. **Motion is calm.** Spinners at 80 ms, the `●` pulse at 1 s, nothing else moves. No sliding, no blinking text.
+9. **Motion is calm.** A spinner steps every 250 ms while something loads, and nothing else moves: a screen at rest draws the same frame again, so a slow link carries nothing. No sliding, no blinking text.
 10. **Nothing modal without a way out on `esc`.** Every overlay closes on `esc`, and the status line says so.
 
 The screenshot test: open `acme/widgets!42` in Ghostty with `tokyonight`, resize to 120×40, take a screenshot, put it next to GitHub's and delta's diff views.
@@ -105,7 +105,7 @@ The badge is the most pressing of:
 | Badge | Means |
 |---|---|
 | `✗` danger | pipeline failed or conflicts |
-| `⠋` muted | pipeline running (spinner) |
+| `⠋` muted | pipeline running (steady: it may run for minutes) |
 | `●` accent | activity since I last opened it |
 | `◆` warn | waits on me (Jev `waits_on_me`, M4) |
 | `D` muted | draft MR |
@@ -270,7 +270,7 @@ One of:
 
 `zv` (in the diff or the tree) marks the file viewed and folds it. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
 
-The MR's description, checks, reviews, threads and files are the cover (`i`), drawn over the main area rather than in this pane; `o` opens the MR in the browser.
+The MR's description, checks, reviews, threads and files are the cover (`i`), drawn over the main area rather than in this pane; `o` opens the MR in the browser and `y` copies its link.
 
 ## Publish modal (`P`)
 
@@ -310,7 +310,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `enter` | open the thing under the cursor | M1 |
 | `esc` | close overlay, drop selection, go back | M1 |
 | `o` | open in browser | M1 |
-| `y` | copy the URL (line URL in the review) | M1 |
+| `y` | copy the URL (line URL in the review); the toast reads `copied <url>` | M1 |
 | `r` | refresh | M1 |
 | `/` | filter (queue) or search text (review) | M1 |
 | `*` | queue: this checkout's project, or every project | M3 |
@@ -368,7 +368,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `R` | resolve, unresolve (also on a marked line in the diff) |
 | `S` | commit the note's suggestion on the MR branch, after a `y` (M5): GitLab applies it by its id; on GitHub, which has no API for it, revu commits the change itself through the contents API, only on the PR's own branch and with push access, else `o` opens it on the web |
 | `e` `d` `E` | edit, delete my draft; edit it in `$EDITOR` |
-| `u` `o` `y` `^v` | first link; the thread in the browser; copy its link; the file in your program |
+| `u` `U` `o` `y` `^v` | open, copy the first link (the first picture when it has none); the thread in the browser; copy its link; the file in your program |
 | `x` `esc` `q` | close |
 
 In the compose box: `enter` saves the draft, `⌘enter` (or `ctrl-s`, where the terminal keeps `⌘enter`) posts a new thread or a reply at once with no draft, `⌥enter` adds a line, `↑`/`↓` go to the line above or below at the same column, `⌥←`/`⌥→` jump a word (also `esc b`/`esc f`), `⌥⌫` deletes one, `ctrl-o` moves the text to `$EDITOR`, `esc` leaves it with the text kept.
@@ -403,7 +403,7 @@ While `'` waits, the status line lists the views. Views are checked when the con
 
 ### Command line (`>` in the search)
 
-Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:pin`, `:unpin` (post-M5), `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:news` (`12-changelog.md`), `:help`, `:quit`.
+Built (M3): `:go !42` (or `#42`, `42`, `acme/widgets!42`), `:open`, `:copy` (the link `:open` shows, on the clipboard), `:approve`, `:merge`, `:ready`, `:publish`, `:threads` (M3b, as `T`), `:all`, `:pin`, `:unpin` (post-M5), `:set theme=nord` (saved to the config), `:view`, `:view old`, `:view <path>[:<line>]` (M3b, `08-open-file.md`), `:outline` (as `O`), `:ask <text>`, `:ai off`, `:ai on` (M4), `:share`, `:share <target>`, `:news` (`12-changelog.md`), `:help`, `:quit`.
 While the verb is typed, `↑` `↓` move a cursor through the command list and `enter` runs the command under it, or writes it and waits when it needs an argument (`go `, `set `). Past the verb, `↑` `↓` walk the argument's completions as Tab does. Tab cycles the completions for the token under the cursor (verbs, the queue's MRs, themes), `→` accepts the grey ghost, `ctrl-p` `ctrl-n` walk the history.
 Planned with their features: `:reply <text>`, `:draft <text>`, `:resolve`, `:viewed`, `:cache clear`.
 
@@ -454,6 +454,8 @@ A frame styles only the visible window; moving a cursor or scrolling rebuilds no
 - Mouse: the wheel scrolls the pane under the pointer (three diff rows, one queue MR or note a notch) and leaves the focus where it is.
   A left drag selects text in the pane it starts in and never leaves it: in the diff only the code, past the anchor, the numbers and the sign, side by side only the half it started in; in the thread pane only note and draft bodies (`09-thread-pane.md`); file, hunk, header, status and author rows give nothing.
   The selected cells show reversed while the drag goes; on release the raw text goes to the clipboard and the status says `copied N lines`.
+  Every copy goes two ways: `pbcopy` for the machine revu runs on, and the OSC 52 escape for the terminal the reader looks at, which over ssh or mosh is another machine.
+  Inside tmux (`TMUX` set) the escape goes out wrapped for a passthrough, then plain: `allow-passthrough on` hands on the first, `set-clipboard on` the second.
   Raw means what the drawing stands for: tabs and table pipes as written, the rows of a wrapped line joined back into one, the struck words of an inline pair left out, and a row taken to its edge brings the rest of its line, past a `…` cut too.
   The highlight stays until the next key or click, and the wheel drops it; a click on a link (`!42`, the diff's title, the pipeline, a review app) opens it in the browser, since the terminal hands the clicks to revu.
   A click is a press and a release on the same cell; anything else is a drag and never picks or opens a row.

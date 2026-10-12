@@ -39,7 +39,7 @@ impl App {
             KeyCode::Char('y') if self.open.as_ref().is_some_and(|o| o.select_from.is_some()) => {
                 let text = self.selected_lines().join("\n");
                 self.drop_select();
-                vec![Action::Yank(text)]
+                vec![Action::Copy { text, done: "copied".into() }]
             }
             _ => return None,
         };
@@ -444,7 +444,7 @@ mod tests {
         on_line(&mut app);
         press(&mut app, "Vj");
         let actions = press(&mut app, "y");
-        let [Action::Yank(text)] = actions.as_slice() else { panic!("{actions:?}") };
+        let [Action::Copy { text, .. }] = actions.as_slice() else { panic!("{actions:?}") };
         assert_eq!(text, " pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {\n-    let client = Client::new();");
         assert_eq!(app.open.as_ref().unwrap().select_from, None, "copying drops the selection");
         press(&mut app, "k");

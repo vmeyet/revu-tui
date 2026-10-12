@@ -532,7 +532,7 @@ mod tests {
         let mut app = with_review();
         press(&mut app, "]cj");
         let url = match press(&mut app, "y").as_slice() {
-            [Action::Yank(url)] => url.clone(),
+            [Action::Copy { text, done }] if *done == format!("copied {text}") => text.clone(),
             other => panic!("{other:?}"),
         };
         let digest = sha1_smol::Sha1::from("src/pay/charge.rs".as_bytes()).digest().to_string();

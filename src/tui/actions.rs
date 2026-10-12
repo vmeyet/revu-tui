@@ -109,7 +109,6 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::Share { target, message, done } => {
                 send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
-            Action::Yank(url) => send(copy(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("copied".into()))),
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
             Action::SaveDraft { key, draft } => send(backend.save_draft(key, draft).await.unwrap_or_else(|e| failed(Failure::Draft, &e))),
             Action::UpdateDraft { key, id, draft } => {

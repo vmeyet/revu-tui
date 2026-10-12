@@ -129,7 +129,6 @@ pub enum Action {
         spot: Option<Spot>,
     },
     OpenUrl(String),
-    Yank(String),
     /// Put `text` on the clipboard; `done` is the toast when it worked.
     Copy {
         text: String,
@@ -280,6 +279,13 @@ pub enum Action {
         input: Input,
         draft: String,
     },
+}
+
+impl Action {
+    /// A link on its way to the clipboard; the toast spells it out, for a reader whose browser is on another machine.
+    pub(super) fn copy_link(url: String) -> Self {
+        Self::Copy { done: format!("copied {url}"), text: url }
+    }
 }
 
 /// Where a comment posted at once goes: a new thread on a line (or range), or the end of a thread.

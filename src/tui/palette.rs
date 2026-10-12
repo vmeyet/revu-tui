@@ -54,6 +54,8 @@ pub enum Command {
     /// Open an MR: `!42`, `#42`, `42`, `group/project!42`, `owner/repo#42`.
     Go(String),
     Open,
+    /// `:copy`: the link `:open` would show, on the clipboard.
+    Copy,
     /// `:merge`: my approved MR, after a yes.
     Merge,
     /// `:ready`: my MR, ready for review when a draft, a draft when ready.
@@ -89,9 +91,10 @@ pub enum Command {
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 19] = [
+pub const VERBS: [(&str, &str); 20] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
+    ("copy", "copy the link of the MR, or of the line"),
     ("approve", "approve the open MR, or take the approval back"),
     ("merge", "merge my approved MR, after a yes"),
     ("ready", "mark my MR ready for review, or a draft again"),
@@ -131,6 +134,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "go" | "g" if rest.is_empty() => Err(":go needs an MR, like !42".into()),
         "go" | "g" => Ok(Command::Go(rest.to_owned())),
         "open" | "o" => Ok(Command::Open),
+        "copy" => Ok(Command::Copy),
         "approve" | "a" => Ok(Command::Approve),
         "merge" => Ok(Command::Merge),
         "ready" => Ok(Command::Ready),

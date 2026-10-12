@@ -289,15 +289,10 @@ impl App {
     pub(super) fn handle_thread_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let actions = match key.code {
-            KeyCode::Char('u') if !ctrl => {
-                let Some(url) = self.thread_link() else {
-                    self.toast("no link in this thread");
-                    return Some(vec![]);
-                };
-                vec![Action::OpenUrl(url)]
-            }
+            KeyCode::Char('u') if !ctrl => self.link_or_toast().map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default(),
+            KeyCode::Char('U') => self.link_or_toast().map(|url| vec![Action::copy_link(url)]).unwrap_or_default(),
             KeyCode::Char('o') => self.thread_url().map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
-            KeyCode::Char('y') => self.thread_url().map(|u| vec![Action::Yank(u)]).unwrap_or_default(),
+            KeyCode::Char('y') => self.thread_url().map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
             KeyCode::Char('v') if ctrl => self.view_thread(),
             KeyCode::Char('R') => self.toggle_resolved(),
             KeyCode::Char('d') if !ctrl => self.delete_draft_here(),
@@ -368,11 +363,29 @@ impl App {
         self.update_open(|open| open.with_pane(Some(pane)));
     }
 
-    /// The first `http` link in the focused thread, for `u`.
+    /// The link `u` opens and `U` copies, or a toast that the focused thread has none.
+    fn link_or_toast(&mut self) -> Option<String> {
+        let link = self.thread_link();
+        if link.is_none() {
+            self.toast("no link in this thread");
+        }
+        link
+    }
+
+    /// The first `http` link in the focused thread, else its first picture, as the page a browser opens.
     pub(super) fn thread_link(&self) -> Option<String> {
         let open = self.open.as_ref()?;
         let thread = open.review.thread(&self.stop_here()?.thread?)?;
-        thread.notes.iter().find_map(|n| first_link(&n.body))
+        let picture = || {
+            let image = thread.notes.iter().find_map(|n| crate::review::image::images_in(&n.body).into_iter().next())?;
+            Some(self.web_url(open, &image.url))
+        };
+        thread.notes.iter().find_map(|n| first_link(&n.body)).or_else(picture)
+    }
+
+    /// The page a browser opens for `url` as a note of the open MR wrote it.
+    pub fn web_url(&self, open: &Open, url: &str) -> String {
+        crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&self.host), &open.key.project, url)
     }
 
     /// The focused thread's page on the forge.
@@ -440,6 +453,25 @@ mod tests {
         assert_eq!(first_link("no link"), None);
     }
 
+    fn copied(url: &str) -> Vec<Action> {
+        vec![Action::Copy { text: url.into(), done: format!("copied {url}") }]
+    }
+
+    #[test]
+    fn u_opens_the_first_link_of_the_thread_and_shift_u_copies_it() {
+        let mut app = with_note("see https://docs.example/refunds then\n![chart](/uploads/ab12/chart.png)");
+        assert_eq!(press(&mut app, "u"), vec![Action::OpenUrl("https://docs.example/refunds".into())]);
+        assert_eq!(press(&mut app, "U"), copied("https://docs.example/refunds"));
+    }
+
+    #[test]
+    fn a_picture_is_the_link_of_a_thread_that_has_no_other() {
+        let mut app = with_note("Look:\n![chart](/uploads/ab12/chart.png)");
+        let picture = "https://gitlab.com/acme/widgets/uploads/ab12/chart.png";
+        assert_eq!(press(&mut app, "U"), copied(picture));
+        assert_eq!(press(&mut app, "u"), vec![Action::OpenUrl(picture.into())]);
+    }
+
     #[test]
     fn enter_toggles_a_hunk_and_opens_the_pane_on_a_marked_line() {
         let mut app = with_review();
@@ -455,6 +487,7 @@ mod tests {
         assert_eq!(open.focused_thread().as_deref(), Some("c0ffee00c0ffee00"));
         assert_eq!(press(&mut app, "u"), vec![], "no link in that thread");
         assert!(app.live_toast().is_some());
+        assert_eq!(press(&mut app, "U"), vec![], "none to copy either");
         app.handle_key(code(KeyCode::Esc));
         assert_eq!(app.focus, Focus::Review);
         assert_eq!(app.open.as_ref().unwrap().pane, None);

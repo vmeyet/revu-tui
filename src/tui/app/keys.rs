@@ -192,7 +192,7 @@ impl App {
             KeyCode::Enter => return self.open_selected(),
             KeyCode::Char('r') => return self.refresh_queue(),
             KeyCode::Char('o') => return self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
-            KeyCode::Char('y') => return self.selected_mr().map(|mr| vec![Action::Yank(mr.web_url.clone())]).unwrap_or_default(),
+            KeyCode::Char('y') => return self.selected_mr().map(|mr| vec![Action::copy_link(mr.web_url.clone())]).unwrap_or_default(),
             KeyCode::Esc if !self.filter.is_empty() => {
                 self.filter.clear();
                 self.view = None;
@@ -296,7 +296,7 @@ impl App {
                 return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }
             KeyCode::Char('y') => {
-                return self.open.as_ref().map(|o| vec![Action::Yank(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
+                return self.open.as_ref().map(|o| vec![Action::copy_link(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }
             _ => {}
         }
@@ -487,7 +487,7 @@ mod tests {
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
         let url = "https://gitlab.com/acme/widgets/-/merge_requests/42".to_owned();
         assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(url.clone())]);
-        assert_eq!(press(&mut app, "y"), vec![Action::Yank(url)]);
+        assert_eq!(press(&mut app, "y"), vec![Action::Copy { text: url.clone(), done: format!("copied {url}") }]);
     }
 
     #[test]

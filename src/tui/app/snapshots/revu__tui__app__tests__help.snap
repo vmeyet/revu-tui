@@ -30,7 +30,7 @@ expression: "render(&mut app, 160, 45)"
 │            │          S  group by author                                                   m  every thread: only mine, or all                  │             │
 │            │          b  pin on top of the queue, or unpin                               e d  edit, delete my draft                            │             │
 │            │      zo zc  open, fold the section or stack                                 S +  apply the suggestion, react                      │             │
-│            │                                                                               u  open the first link                              │             │
+│            │                                                                             u U  open, copy the first link                        │             │
 │            │  VIEW                                                                                                                             │             │
 │            │      / n N  find text in the MR, next, previous                       OUTLINE PANE                                                │             │
 │            │          i  the MR cover page                                                 t  call tree, or the flat list                      │             │

@@ -51,6 +51,7 @@ impl App {
         self.count(match command {
             Command::Go(_) => ":go",
             Command::Open => ":open",
+            Command::Copy => ":copy",
             Command::Merge => ":merge",
             Command::Ready => ":ready",
             Command::Approve => ":approve",

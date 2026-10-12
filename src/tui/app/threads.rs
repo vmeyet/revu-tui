@@ -319,7 +319,9 @@ mod tests {
         let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 3)]);
         enter(&mut app);
         press(&mut app, "jj");
-        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl("https://gitlab.com/acme/widgets/-/merge_requests/42#note_7000".into())]);
+        let url = "https://gitlab.com/acme/widgets/-/merge_requests/42#note_7000";
+        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(url.into())]);
+        assert_eq!(press(&mut app, "y"), vec![Action::Copy { text: url.into(), done: format!("copied {url}") }]);
         press(&mut app, "+");
         assert_eq!(app.react.as_ref().map(|pick| (pick.thread.as_str(), pick.note)), Some(("aaa", 1)), "the note under the cursor");
         app.handle_key(code(KeyCode::Esc));

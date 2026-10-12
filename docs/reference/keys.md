@@ -88,7 +88,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `m` | every thread: only mine, or all |
 | `e` `d` | edit, delete my draft |
 | `S` `+` | apply the suggestion, react |
-| `u` | open the first link |
+| `u` `U` | open, copy the first link |
 
 ## Outline pane
 

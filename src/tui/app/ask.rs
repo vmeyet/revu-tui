@@ -244,7 +244,7 @@ impl App {
             KeyCode::Char('b') if ctrl => self.scroll_answer(-super::keys::full_page(self.areas.side)),
             KeyCode::Char('g') => self.scroll_answer(isize::MIN / 2),
             KeyCode::Char('G') => self.scroll_answer(isize::MAX / 2),
-            KeyCode::Char('y') => return vec![Action::Yank(answer.text.clone())],
+            KeyCode::Char('y') => return vec![Action::Copy { text: answer.text.clone(), done: "copied".into() }],
             KeyCode::Char('c') => self.draft_from_answer(&answer.clone()),
             KeyCode::Enter if answer.state != AnswerState::Streaming => return self.question_box(Input::FollowUp),
             KeyCode::Char('R') => {

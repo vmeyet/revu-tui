@@ -11,6 +11,9 @@ Find your problem in the left column, then apply the fix.
 | Dragging the mouse copies only the code or the comment | That is revu's own selection; hold shift while dragging (Ghostty, Kitty, WezTerm) or ⌥ (iTerm2, Terminal.app) to select whole screen rows |
 | `revu update` is slow | The first update builds every library; the next ones build only revu |
 | Pictures in comments do not show | Use a terminal that draws pictures, and check `[tui] images` is not `false` |
+| A picture leaves an empty gap over ssh, mosh or tmux | Set `[tui] images = false`: each picture reads as `[image: alt]`, and `U` copies its link |
+| `o` opens the browser on another machine | Over ssh or mosh, copy the link instead: `y`, `U` on a thread, or `:copy` |
+| A copy does not reach my clipboard over ssh or mosh | Use a terminal that takes OSC 52 copies; in tmux, add `set -g set-clipboard on` |
 | `no token for gitlab.com` | Run `revu login --from-glab`, or set `GITLAB_TOKEN` |
 | `no token for github.com` | Run `revu login --from-gh github.com`, or set `GITHUB_TOKEN` (`GH_TOKEN` works too) |
 | `token rejected` at login | The token expired or lacks a scope: GitLab needs `api`, GitHub needs `repo` |

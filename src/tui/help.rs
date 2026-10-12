@@ -112,7 +112,7 @@ pub const GROUPS: [Group; 8] = [
             ("m", "every thread: only mine, or all"),
             ("e d", "edit, delete my draft"),
             ("S +", "apply the suggestion, react"),
-            ("u", "open the first link"),
+            ("u U", "open, copy the first link"),
         ],
         focus: &[Focus::Side],
     },

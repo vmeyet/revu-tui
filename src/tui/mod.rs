@@ -4,6 +4,7 @@ mod answer_view;
 mod app;
 mod backend;
 mod brief_view;
+mod clipboard;
 mod complete;
 mod compose;
 mod diff_view;
@@ -166,7 +167,12 @@ async fn event_loop(
                     }
                     shown.forget();
                 }
-                other => spawn(other, backend, tx.clone()),
+                other => {
+                    if let Action::Copy { text, .. } = &other {
+                        clipboard::print(text);
+                    }
+                    spawn(other, backend, tx.clone());
+                }
             }
         }
         if let Some(view) = app.take_view() {

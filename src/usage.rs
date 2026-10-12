@@ -43,6 +43,7 @@ const INTERNAL: &[&str] = &[
     "next_in_line",
     "prev_in_line",
     "open_link",
+    "copy_first_link",
     "ask_explain",
     "ask_risks",
     "ask_summary",
@@ -53,6 +54,7 @@ const INTERNAL: &[&str] = &[
     "palette_file",
     ":go",
     ":open",
+    ":copy",
     ":approve",
     ":merge",
     ":publish",
@@ -149,6 +151,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "next_in_line",
             "prev_in_line",
             "open_link",
+            "copy_first_link",
         ],
     ),
     ("ask claude", &["ask_explain", "ask_risks", "ask_summary", "ask_thread", "ask_comment", "ask_free"]),
@@ -156,8 +159,8 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "commands",
         &[
-            ":go", ":open", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":outline", ":set", ":view", ":ai", ":ask",
-            ":share", ":help", ":quit",
+            ":go", ":open", ":copy", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":outline", ":set", ":view", ":ai",
+            ":ask", ":share", ":help", ":quit",
         ],
     ),
 ];
@@ -329,6 +332,7 @@ fn pane_key(code: KeyCode) -> Option<&'static str> {
 pub fn thread_key(code: KeyCode) -> Option<&'static str> {
     Some(match code {
         KeyCode::Char('u') => "open_link",
+        KeyCode::Char('U') => "copy_first_link",
         KeyCode::Char('o') => "open_browser",
         KeyCode::Char('y') => "copy_link",
         KeyCode::Char('r' | 'c') => "reply",

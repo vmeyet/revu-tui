@@ -40,8 +40,8 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
             let room = usize::from(width).saturating_sub(4 + keys.width());
             format!(" {}{keys}", keep_end(&thread.place, room))
         }
-        (true, None) => " j k move · p pipeline · o browser · esc close ".to_owned(),
-        (false, _) => " enter open the MR · j k scroll · o browser · esc close ".to_owned(),
+        (true, None) => " j k move · p pipeline · o browser · y copy · esc close ".to_owned(),
+        (false, _) => " enter open the MR · j k scroll · o browser · y copy · esc close ".to_owned(),
     };
     let block = pane(theme, &format!("{}{} {}", brief.sigil, brief.number, brief.title), true)
         .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y))

@@ -184,6 +184,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `]N` `[N` | diff | the same, resolved-only lines too | next thread row |
 | `x`, `esc`, `q` | diff or pane | close the pane | `esc` |
 | `u`, `o`, `y` | pane | open the first link, open the thread in the browser, copy its link | `u` only |
+| `U` | pane | copy the first link; a thread with no link gives its first picture, as the page the forge serves | none |
 
 Muscle memory holds: `c` comments, `r` replies, `R` resolves, `]n` walks the open conversations.
 `r` keeps meaning refresh in the diff and the queue; it means reply only when the pane has focus, which is where it meant reply before.

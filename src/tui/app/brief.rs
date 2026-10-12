@@ -220,6 +220,7 @@ impl App {
         self.brief = match key.code {
             KeyCode::Esc | KeyCode::Char('i' | 'q') => None,
             KeyCode::Char('o') => return vec![Action::OpenUrl(brief.web_url)],
+            KeyCode::Char('y') => return vec![Action::copy_link(brief.web_url)],
             KeyCode::Enter => return self.brief_enter(&brief),
             KeyCode::Char('p') => return self.brief_pipeline(),
             KeyCode::Char('d') if ctrl => Some(brief.scrolled(HALF_PAGE as isize)),
@@ -309,7 +310,9 @@ mod tests {
         press(&mut app, "i");
         let brief = app.brief.clone().unwrap();
         assert_eq!((brief.number, brief.description.as_str()), (50, "Adds the refund flow."));
-        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(brief.web_url)]);
+        assert_eq!(press(&mut app, "o"), vec![Action::OpenUrl(brief.web_url.clone())]);
+        assert!(app.brief.is_some(), "the cover stays for the next key");
+        assert_eq!(press(&mut app, "y"), vec![Action::Copy { done: format!("copied {}", brief.web_url), text: brief.web_url }]);
         app.handle_key(code(KeyCode::Esc));
         assert_eq!(app.brief, None);
         let mut app = with_review();
