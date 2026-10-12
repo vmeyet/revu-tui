@@ -11,24 +11,24 @@ expression: "render(&mut app, 100, 30)"
 │     ▾ @@ -12,│      ^d ^u  half a page; space too                                │               │
 │      12  pub │      ^f ^b  a full page; PgDn PgUp too                            │               │
 │  ✓   13 -    │        h l  pane to the left, to the right                        │               │
-│      13 +    │      enter  open, or toggle the fold                              │               │
-│      14 +    │      esc x  close the pane, back to the queue                     │               │
-│      15      │  tab S-tab  next, previous file                                   │               │
-│      16      │      ]c [c  next, previous hunk                                   │               │
-│     ▾ @@ -40,│      ]n [n  next, previous open conversation                      │               │
-│      41  fn i│      ]N [N  next, previous conversation, resolved too             │               │
-│      41 -    │      ]f [f  next, previous file with a thread                     │               │
-│      42 +    │      ]r [r  next, previous MR that needs you                      │               │
-│      43 +    │      ]m [m  next, previous MR in the queue                        │               │
-│      44  }   │                                                                   │               │
-│              │  VIEW                                                             │               │
-│  ▸ Cargo.lock│      / n N  find text in the MR, next, previous                   │ +1 −1  folded │
-│              │          i  the MR cover page                                     │               │
+│        │ ✓ re│      enter  open, or toggle the fold or the thread                │               │
+│      13 +    │      esc x  close the pane, back to the queue                     │               │
+│      14 +    │  tab S-tab  next, previous file                                   │               │
+│      15      │      ]c [c  next, previous hunk                                   │               │
+│      16      │      ]n [n  next, previous open conversation                      │               │
+│     ▾ @@ -40,│      ]N [N  next, previous conversation, resolved too             │               │
+│      41  fn i│      ]f [f  next, previous file with a thread                     │               │
+│      41 -    │      ]r [r  next, previous MR that needs you                      │               │
+│      42 +    │      ]m [m  next, previous MR in the queue                        │               │
+│      43 +    │                                                                   │               │
+│      44  }   │  VIEW                                                             │               │
+│              │      / n N  find text in the MR, next, previous                   │               │
+│  ▸ Cargo.lock│          i  the MR cover page                                     │ +1 −1  folded │
 │              │          D  inline or side by side, diff and prose                │               │
 │              │        > <  the code after, before, alone                         │               │
 │              │          t  file tree                                             │               │
 │              │                                                                   │               │
-│              ╰──────────────── 1–22 of 63 · j k scroll · ? every key · esc close ╯               │
+│              ╰──────────────── 1–22 of 64 · j k scroll · ? every key · esc close ╯               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

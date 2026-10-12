@@ -11,7 +11,7 @@ expression: screen
 │     ▾ @@ -12,4 +12,5 @@ pub async fn charge                                                      │
 │      12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {                    │
 │  ✓   13 -    let client = Client::new();                                                         │
-│      13 +    let client = Client::with_key(idempotency_key(card));                               │
+│        │ ✓ resolved · you · Why drop the plain client?                                           │
 │    ╭ !42 feat: charge cards at checkout ────────────────────────────────────────────────────╮    │
 │    │                                                                                        │    │
 │    │  omar  feat/checkout → main  2h                                                        │    │
@@ -22,8 +22,8 @@ expression: screen
 │    │  ✓ success                                                                             │    │
 │    │                                                                                        │    │
 │    │  REVIEW                                                                                │    │
-│  ▸ │  1 of 2 approvals  ·  you are not a reviewer                                           │ded │
-│    │                                                                                        │    │
+│    │  1 of 2 approvals  ·  you are not a reviewer                                           │    │
+│  ▸ │                                                                                        │ded │
 │    │  THREADS  2 open                                                                       │    │
 │    │  ▎ nina · should this retry on timeout, the provider says keys are safe to reuse       │    │
 │    │  ▎ syncSlackUsers.ts:10                                                                │    │

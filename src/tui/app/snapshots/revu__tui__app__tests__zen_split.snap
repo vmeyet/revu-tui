@@ -5,12 +5,13 @@ expression: screen
 
           !42 feat: charge cards at checkout · omar · +5 −3 ✓ · ◆1
 
-           ◆ 1 on the MR  enter opens
+          ▎◆ 1 on the MR  enter opens
 
            ▾ src/pay/charge.rs                                                                            +4 −2  ✓1 · 1 outdated
               ▾ @@ -12,4 +12,5 @@ pub async fn charge
                12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {
-          ▎✓   13      -    let client = Client::new();
+           ✓   13      -    let client = Client::new();
+                      │ ✓ resolved · you · Why drop the plain client?
                     13 +    let client = Client::with_key(idempotency_key(card));
                     14 +    let attempt = Attempt::first();
                14   15      let response = client.charge(amount).await?;
@@ -37,8 +38,7 @@ expression: screen
 
 
 
-
-         ─ charge.rs:-13 · 1 thread ─────────────────────────────────────────────────────────────────────────────────────────────
-          ▎✓ resolved
-          ▎you · 2h
-          ▎Why drop the plain client?
+         ─ on the MR · 1 thread ─────────────────────────────────────────────────────────────────────────────────────────────────
+          ▎· comment
+          ▎lea · 2h
+          ▎Looks good overall, one question inline.

@@ -1,5 +1,5 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
-use super::{Action, App, Failure, Input, MrKey, Open};
+use super::{Action, App, EntryKind, Failure, Input, MrKey, Open};
 use crate::forge::Position;
 use crate::review::{Draft, Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -117,9 +117,12 @@ impl App {
             .collect()
     }
 
-    /// My draft under the pane's cursor.
-    fn draft_here(&self) -> Option<usize> {
-        self.open.as_ref()?.focused_draft()
+    /// My draft under the cursor of the pane, or of the diff on a thread row.
+    pub(super) fn draft_here(&self) -> Option<usize> {
+        match self.stop_here()?.kind {
+            EntryKind::Draft(index) => Some(index),
+            EntryKind::Note(_) => None,
+        }
     }
 
     pub(super) fn delete_draft_here(&mut self) -> Vec<Action> {
@@ -156,12 +159,12 @@ impl App {
     /// `E` in the pane: my draft under the cursor in the editor, else a reply to the thread.
     pub(super) fn compose_draft_here(&mut self) -> Vec<Action> {
         let Some(open) = self.open.as_ref() else { return vec![] };
-        if let Some(draft) = open.focused_draft().map(|index| &open.review.drafts[index])
+        if let Some(draft) = self.draft_here().map(|index| &open.review.drafts[index])
             && let Some(id) = draft.draft_id()
         {
             return vec![Action::Compose { input: Input::EditDraft { draft: id }, draft: draft.body.clone() }];
         }
-        match open.focused_thread() {
+        match self.stop_here().and_then(|stop| stop.thread) {
             Some(thread) => vec![Action::Compose { input: Input::Reply { thread }, draft: String::new() }],
             None => vec![],
         }
@@ -271,18 +274,18 @@ impl App {
     }
 
     pub(super) fn reply_here(&mut self) {
-        let Some(thread) = self.open.as_ref().and_then(Open::focused_thread) else {
+        let Some(thread) = self.stop_here().and_then(|stop| stop.thread) else {
             self.toast("r replies to a thread; c starts a new one");
             return;
         };
         self.open_input(Input::Reply { thread }, "");
     }
 
-    /// The thread `R` acts on: the pane's, else the first open one on the cursor's line.
+    /// The thread `R` acts on: the pane's or the thread row's, else the first open one on the cursor's line.
     fn thread_to_resolve(&self) -> Option<String> {
         let open = self.open.as_ref()?;
-        if self.focus == super::Focus::Side {
-            return open.focused_thread();
+        if self.focus == super::Focus::Side || matches!(open.row(), Some(Row::Thread { .. })) {
+            return self.stop_here()?.thread;
         }
         let place = open.review.place_of(open.row()?)?;
         let listed = open.review.conversations(&place);
@@ -516,7 +519,7 @@ mod tests {
     fn e_in_the_pane_edits_my_draft_and_d_deletes_it() {
         let mut app = with_saved_draft();
         press(&mut app, "l");
-        assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
+        assert_eq!(app.draft_here(), Some(0));
         press(&mut app, "e");
         assert_eq!((app.input_label(), app.buffer.text()), ("edit draft".to_owned(), "nit"));
         let actions = type_text(&mut app, " (typo)");
@@ -746,7 +749,7 @@ mod tests {
         assert!(matches!(actions.as_slice(), [Action::SaveDraft { .. }]), "{actions:?}");
         assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "from the editor");
         press(&mut app, "kl");
-        assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
+        assert_eq!(app.draft_here(), Some(0));
         let actions = press(&mut app, "E");
         assert!(
             matches!(actions.as_slice(), [Action::Compose { input: Input::EditDraft { draft: crate::review::DraftId::Local(1) }, draft }] if draft == "from the editor")

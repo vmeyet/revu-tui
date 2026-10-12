@@ -1,7 +1,7 @@
 //! The right pane: the conversations of one place, opened from a marked line and following the cursor,
 //! or every conversation of the MR, opened with `T`.
 use super::{Action, App, Focus, Open};
-use crate::review::{Conversation, Mark, Markers, Place, Review, Row, Spot};
+use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeSet;
 
@@ -45,21 +45,6 @@ impl Pane {
     }
 }
 
-/// One stop of the cursor bar: a note of a thread, or one of my drafts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Entry {
-    pub conversation: usize,
-    pub kind: EntryKind,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EntryKind {
-    /// The note at this index of the thread.
-    Note(usize),
-    /// The draft at this index of `Review::drafts`.
-    Draft(usize),
-}
-
 /// Every stop of the cursor bar at `place`: all notes of an open thread and my replies after
 /// them, the first note alone of a folded resolved thread, my new draft on its own.
 pub fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTreeSet<String>) -> Vec<Entry> {
@@ -77,6 +62,13 @@ pub fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTree
 /// The stop under the pane's cursor, the last one when the cursor ran past them.
 pub(super) fn focused(entries: &[Entry], pane: &Pane) -> Option<Entry> {
     entries.get(pane.note.min(entries.len().saturating_sub(1))).copied()
+}
+
+/// What the thread keys act on: a note of a thread, one of my drafts in it, or my new draft.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Stop {
+    pub thread: Option<String>,
+    pub kind: EntryKind,
 }
 
 impl Open {
@@ -106,14 +98,6 @@ impl Open {
         conversations.get(focused?.conversation)?.thread.clone()
     }
 
-    /// My draft under the pane's cursor.
-    pub fn focused_draft(&self) -> Option<usize> {
-        match self.pane_view()?.2?.kind {
-            EntryKind::Draft(index) => Some(index),
-            EntryKind::Note(_) => None,
-        }
-    }
-
     /// The pane lists every conversation of the MR, not those of one place.
     pub fn lists_every_thread(&self) -> bool {
         self.pane.as_ref().is_some_and(|pane| pane.place == Place::All)
@@ -136,9 +120,18 @@ impl Open {
     }
 }
 
+/// The stop under the cursor of a view of conversations.
+pub(super) fn stop_of((conversations, _, focused): (Vec<Conversation>, Vec<Entry>, Option<Entry>)) -> Option<Stop> {
+    let focused = focused?;
+    Some(Stop { thread: conversations.get(focused.conversation)?.thread.clone(), kind: focused.kind })
+}
+
 impl App {
-    /// The pane on `place`, focused, in place of the file tree.
+    /// The pane on `place`, focused, in place of the file tree; never on a line whose threads read in the diff.
     pub(super) fn open_pane(&mut self, place: Place) {
+        if self.open.as_ref().is_some_and(|open| !open.pane_takes(&place)) {
+            return;
+        }
         self.update_open(|open| Open { tree: None, answer: None, pipeline: None, outline: None, ..open.with_pane(Some(Pane::at(place))) });
         self.focus = Focus::Side;
     }
@@ -147,9 +140,16 @@ impl App {
     pub(super) fn open_pane_here(&mut self) -> bool {
         let Some(open) = &self.open else { return false };
         let Some(row) = open.row().filter(|row| open.is_marked(row)).cloned() else { return false };
-        let Some(place) = open.review.place_of(&row) else { return false };
+        let Some(place) = open.review.place_of(&row).filter(|place| open.pane_takes(place)) else { return false };
         self.open_pane(place);
         true
+    }
+
+    /// The stop under the diff's cursor on a thread row while the diff has the keys, else under the pane's.
+    pub(super) fn stop_here(&self) -> Option<Stop> {
+        let open = self.open.as_ref()?;
+        let on_row = if self.focus == Focus::Review { open.row_view() } else { None };
+        stop_of(on_row.or_else(|| open.pane_view())?)
     }
 
     /// `l` on a file row with outdated threads opens them.
@@ -205,7 +205,7 @@ impl App {
         let Some(pane) = &open.pane else { return };
         let markers = self.kept.markers(open);
         let Some(row) = open.row().filter(|row| open.mark_in(markers, row).is_some()) else { return };
-        let Some(place) = open.review.place_of(row).filter(|place| *place != pane.place) else { return };
+        let Some(place) = open.review.place_of(row).filter(|place| *place != pane.place && open.pane_takes(place)) else { return };
         self.update_open(|open| open.with_pane(Some(Pane::at(place))));
     }
 
@@ -278,32 +278,51 @@ impl App {
             KeyCode::Enter => self.unfold_focused(),
             KeyCode::Char('T') => self.toggle_every_thread(),
             KeyCode::Char('m') if self.open.as_ref().is_some_and(Open::lists_every_thread) => self.toggle_mine(),
-            KeyCode::Char('u') => {
+            KeyCode::Char('P') => self.open_publish(),
+            KeyCode::Esc | KeyCode::Char('x') => self.close_pane(),
+            _ => return self.handle_thread_key(key).unwrap_or_default(),
+        }
+        vec![]
+    }
+
+    /// The keys that act on the thread, note or draft under the cursor, in the pane or on a thread row of the diff.
+    pub(super) fn handle_thread_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        let actions = match key.code {
+            KeyCode::Char('u') if !ctrl => {
                 let Some(url) = self.thread_link() else {
                     self.toast("no link in this thread");
-                    return vec![];
+                    return Some(vec![]);
                 };
-                return vec![Action::OpenUrl(url)];
+                vec![Action::OpenUrl(url)]
             }
-            KeyCode::Char('o') => return self.thread_url().map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
-            KeyCode::Char('y') => return self.thread_url().map(|u| vec![Action::Yank(u)]).unwrap_or_default(),
-            KeyCode::Char('v') if ctrl => return self.view_thread(),
-            KeyCode::Char('r') => self.reply_here(),
-            KeyCode::Char('R') => return self.toggle_resolved(),
-            KeyCode::Char('S') => self.apply_here(),
-            KeyCode::Char('+') => self.open_react(),
-            KeyCode::Char('e') => {
+            KeyCode::Char('o') => self.thread_url().map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
+            KeyCode::Char('y') => self.thread_url().map(|u| vec![Action::Yank(u)]).unwrap_or_default(),
+            KeyCode::Char('v') if ctrl => self.view_thread(),
+            KeyCode::Char('R') => self.toggle_resolved(),
+            KeyCode::Char('d') if !ctrl => self.delete_draft_here(),
+            KeyCode::Char('E') => self.compose_draft_here(),
+            KeyCode::Char('r') => {
+                self.reply_here();
+                vec![]
+            }
+            KeyCode::Char('S') => {
+                self.apply_here();
+                vec![]
+            }
+            KeyCode::Char('+') => {
+                self.open_react();
+                vec![]
+            }
+            KeyCode::Char('e') if !ctrl => {
                 if !self.edit_draft_here() {
                     self.toast("e edits one of your drafts");
                 }
+                vec![]
             }
-            KeyCode::Char('d') => return self.delete_draft_here(),
-            KeyCode::Char('E') => return self.compose_draft_here(),
-            KeyCode::Char('P') => self.open_publish(),
-            KeyCode::Esc | KeyCode::Char('x') => self.close_pane(),
-            _ => {}
-        }
-        vec![]
+            _ => return None,
+        };
+        Some(actions)
     }
 
     fn pane_move(&mut self, delta: isize) {
@@ -352,14 +371,14 @@ impl App {
     /// The first `http` link in the focused thread, for `u`.
     pub(super) fn thread_link(&self) -> Option<String> {
         let open = self.open.as_ref()?;
-        let thread = open.review.thread(&open.focused_thread()?)?;
+        let thread = open.review.thread(&self.stop_here()?.thread?)?;
         thread.notes.iter().find_map(|n| first_link(&n.body))
     }
 
     /// The focused thread's page on the forge.
     fn thread_url(&self) -> Option<String> {
         let open = self.open.as_ref()?;
-        let thread = open.review.thread(&open.focused_thread()?)?;
+        let thread = open.review.thread(&self.stop_here()?.thread?)?;
         Some(format!("{}#note_{}", open.review.mr.web_url, thread.first().id))
     }
 }
@@ -379,7 +398,8 @@ fn next_marked(open: &Open, forward: bool, threads: Threads) -> Option<Row> {
     let len = every.len();
     (1..=len)
         .map(|k| if forward { (here + k) % len } else { (here + len - k % len) % len })
-        .find(|&i| i != here && open.mark_in(&markers, &every[i]).is_some_and(|mark| threads.stops_at(mark)))
+        .filter(|&i| i != here && !matches!(every[i], Row::Thread { .. }))
+        .find(|&i| open.mark_in(&markers, &every[i]).is_some_and(|mark| threads.stops_at(mark)))
         .map(|i| every[i].clone())
 }
 
@@ -401,13 +421,8 @@ fn unfolded_for(open: &Open, target: &Row) -> crate::diff::fold::FoldState {
     let Some(file) = target.file() else { return fold };
     let path = &open.review.files[file].new_path;
     let fold = if fold.file_is_open(path) { fold } else { fold.toggle_file(path) };
-    let hunk = match target {
-        Row::Hunk { index, .. } => Some(*index),
-        Row::Line { hunk, .. } | Row::Pair { hunk, .. } | Row::Context { hunk, .. } => Some(*hunk),
-        _ => None,
-    };
-    match hunk {
-        Some(hunk) if !fold.hunk_is_open(path, hunk) => fold.toggle_hunk(path, hunk),
+    match target.hunk() {
+        Some((_, hunk)) if !fold.hunk_is_open(path, hunk) => fold.toggle_hunk(path, hunk),
         _ => fold,
     }
 }
@@ -495,13 +510,13 @@ mod tests {
     #[test]
     fn below_120_columns_the_pane_is_a_page_and_h_goes_back_to_the_diff() {
         let mut app = with_review();
-        press(&mut app, "]N");
-        press(&mut app, "l");
+        press(&mut app, "k");
+        app.handle_key(code(KeyCode::Enter));
         let page = render(&mut app, 100, 20);
-        assert!(page.contains("charge.rs:-13") && !page.contains("Queue"), "the pane alone:\n{page}");
+        assert!(page.contains("on the MR · 1 thread") && !page.contains("Queue"), "the pane alone:\n{page}");
         press(&mut app, "h");
         let diff = render(&mut app, 100, 20);
-        assert!(diff.contains("let client = Client::new()") && !diff.contains("charge.rs:-13 ·"), "the diff alone:\n{diff}");
+        assert!(diff.contains("let client = Client::new()") && !diff.contains("on the MR · 1 thread"), "the diff alone:\n{diff}");
         assert!(app.open.as_ref().unwrap().pane.is_some(), "the pane waits for l");
     }
 
@@ -664,7 +679,7 @@ mod tests {
     fn e_and_d_in_every_thread_act_on_my_draft_and_keep_the_list() {
         let mut app = with_saved_draft();
         press(&mut app, "TJJ");
-        assert_eq!(app.open.as_ref().unwrap().focused_draft(), Some(0));
+        assert_eq!(app.draft_here(), Some(0));
         press(&mut app, "e");
         assert_eq!((app.input_label(), listed_place(&app)), ("edit draft".to_owned(), Some(Place::All)));
         app.handle_key(code(KeyCode::Esc));

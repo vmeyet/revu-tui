@@ -14,7 +14,8 @@ It takes every form `revu show` takes, `acme/widgets!42` or an MR URL too; quote
 | The MR header | One faded line on top; `◆3` counts the unresolved threads |
 | File and hunk headers | Pinned at the top of the column while you scroll |
 | The diff | A centred column, 70 % of the screen and 120 columns at least; the whole screen when `D` shows it side by side |
-| The thread pane | Under the diff in the same column, behind a faded rule with its title, no frame |
+| The threads of a line | In the diff, under their line: one row each, `enter` unfolds them |
+| The thread pane | Under the diff in the same column, behind a faded rule with its title, no frame; for the MR's own threads, a file's outdated ones and the list of every thread |
 | Notifications | Held until you leave zen |
 
 ## Move between MRs
@@ -28,10 +29,33 @@ A line on top says which MR you are on, for example `3/12`.
 ## Leave
 
 `zz`, `esc`, `h` or `←` bring the queue back.
-The thread pane still opens with `enter` or `→` on a marked line, or with `T` on every thread; `q`, `x` or `esc` close it.
+
+## Threads in the diff
+
+A marked line shows each of its threads on one row under it.
+The row gives its state, who started it, the first words and the number of replies.
+Your own draft of a new thread shows whole.
+
+| Key | Does |
+|---|---|
+| `enter` on the line | Unfold every thread of the line, or fold them once none is folded |
+| `enter` on a thread | Unfold or fold that thread alone |
+| `j` `k` | Walk the notes of an unfolded thread, one by one, then the code again |
+| `r` `R` `+` `S` on a thread | Reply, resolve, react, apply the suggestion, as in the thread pane |
+| `e` `d` on your draft | Edit it, delete it |
+| `u` `o` `y` on a thread | Open its first link, open it in the browser, copy its link |
+
+`]n` and `]N` stop on the marked lines, not on the rows under them.
+A folded hunk or file hides its threads with its lines.
+The comment box opens at the foot of the diff.
+A picture in a note reads as `[image: …]` here; the thread pane draws it.
+Side by side, `D`, keeps the threads of a line in the pane.
 
 ## The thread pane
 
+`enter` or `→` on the row of the MR's own threads opens them in the pane.
+`→` on a file row opens its outdated threads, and `T` every thread.
+`q`, `x` or `esc` close it.
 It opens under the diff, which keeps your line in view.
 It takes the rows its threads need, up to a quarter of the column, and grows up to half while you write a comment.
 `h` and `l`, or `←` and `→`, move between the diff and the pane.

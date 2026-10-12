@@ -11,6 +11,7 @@ expression: "render(&mut app, 160, 30)"
                          ▾ @@ -12,4 +12,5 @@ pub async fn charge
                           12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {
                       ✓   13      -    let client = Client::new();
+                                 │ ✓ resolved · you · Why drop the plain client?
                                13 +    let client = Client::with_key(idempotency_key(card));
                                14 +    let attempt = Attempt::first();
                           14   15      let response = client.charge(amount).await?;
@@ -23,7 +24,6 @@ expression: "render(&mut app, 160, 30)"
                           42   44  }
 
                       ▸ Cargo.lock                                                                                            +1 −1  folded
-
                     ─ the whole MR · 3 threads ─────────────────────────────────────────────────────────────────────────────────────────────
                      ▎on the MR
                      ▎· comment

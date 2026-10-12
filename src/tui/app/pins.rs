@@ -50,7 +50,9 @@ pub fn settle(rows: &[Row], scroll: usize, selected: usize, height: usize) -> (u
 fn hunk_above(rows: &[Row], file: usize, scroll: usize, selected: usize) -> Option<usize> {
     let Row::File { index: file_index, .. } = rows[file] else { return None };
     let (in_file, hunk) = match rows.get(selected)? {
-        Row::Line { file, hunk, .. } | Row::Pair { file, hunk, .. } | Row::Context { file, hunk, .. } => (*file, *hunk),
+        Row::Line { file, hunk, .. } | Row::Pair { file, hunk, .. } | Row::Context { file, hunk, .. } | Row::Thread { file, hunk, .. } => {
+            (*file, *hunk)
+        }
         _ => return None,
     };
     if in_file != file_index || selected < scroll {

@@ -12,11 +12,11 @@ expression: "render(&mut app, 100, 18)"
 │       1  fn main() {                                                                             │
 │       2      let a = 1;                                                                          │
 │  ◆    3 ~    let b = 2;20;                                                                       │
+│        │ ◆ unresolved · lea · Why twenty?                                                        │
 │       4      println!("{}", a + b);                                                              │
 │       5 -    let d = 4;                                                                          │
 │       5 +    println!("{}", c);                                                                  │
 │       6  }                                                                                       │
-│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ✓ side by side needs a wider window                                                         ? help

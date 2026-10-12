@@ -4,6 +4,8 @@ Comments stop living inside the code.
 The diff only marks the lines that carry a conversation; the conversation itself opens in a pane on the right, like a thread in slack-tui.
 Replies and new comments are written there too, in a compose box under the thread, never in the middle of the diff.
 
+Where no pane fits beside the diff, in zen and under 120 columns, the threads of a line read under it instead, folded to one row each: § Threads in the diff.
+
 ## Why
 
 Today every thread and draft is a row inserted under its line (`Row::Thread`, `Row::Draft`, `Row::Outdated`).
@@ -35,7 +37,7 @@ Slack-tui already solved this shape: the channel on the left, the thread on the 
 
 ## The diff: one anchor column, no inserted rows
 
-- `Review::rows()` never emits `Row::Thread`, `Row::Draft` or `Row::Outdated` again; those variants are deleted.
+- `Review::rows()` never emits `Row::Draft` or `Row::Outdated` again; those variants are deleted. `Row::Thread` is only emitted where threads read in the diff (§ Threads in the diff).
 - Every line row gets a two-cell **anchor column** at its far left, before the old line number.
 - The first cell is a glyph for the most pressing thing on that line, in this order:
 
@@ -77,8 +79,8 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 - The two limits below are `[tui] wide_width` (150) and `[tui] narrow_width` (120): narrow is at least 1 and never above wide.
 - 150 columns and more: queue, diff and pane side by side.
 - 120 to 149 columns: the queue hides while the pane is open, and comes back when it closes.
-- Under 120 columns: the pane takes the whole review area, like a page; `h` or `esc` returns to the diff at the same line. The queue follows the same rule there, pane or not: with an MR open it shows only while it has the keys (`03-ui-ux.md`).
-- Reading mode (`zz`): no queue and no pane beside the diff; the thread pane opens under the diff in zen's column, see Zen.
+- Under 120 columns: the pane takes the whole review area, like a page; `h` or `esc` returns to the diff at the same line. The queue follows the same rule there, pane or not: with an MR open it shows only while it has the keys (`03-ui-ux.md`). The threads of a line never open the pane there: they read in the diff.
+- Reading mode (`zz`): no queue and no pane beside the diff; the thread pane opens under the diff in zen's column, see Zen. The threads of a line read in the diff.
 
 ### What it shows
 
@@ -114,7 +116,7 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 
 ### Zen
 
-Zen's column is at least 120 columns, so a pane beside the diff would squeeze the code, and a screen of 138 has no room for both: the thread pane (one line, the compose box, every thread) opens under the diff instead.
+Zen's column is at least 120 columns, so a pane beside the diff would squeeze the code, and a screen of 138 has no room for both: the thread pane (the MR's own threads, a file's outdated ones, every thread, and a line's threads while the diff is side by side) opens under the diff instead.
 
 - The diff on top keeps its cursor line in view; the pane under it takes what it needs, up to a quarter of the column, and never fewer than 8 rows for that share.
 - While a comment is written the pane grows for the box, up to half the column.
@@ -122,6 +124,24 @@ Zen's column is at least 120 columns, so a pane beside the diff would squeeze th
 - `h` `l` and the arrows move focus between the two; the wheel scrolls the part under the pointer, and a drag stays in the part it started in.
 - A column under 24 rows has no room for both: the pane takes it whole while it has the keys, and `h` shows the diff in its place.
 - The file tree, the pipeline and an AI answer still take the whole column.
+
+### Threads in the diff
+
+In zen and under `[tui] narrow_width` (120 columns) no pane fits beside the diff: a pane under it, or in its place, hides the code the thread is about.
+There the conversations of a line hang under it, as on the forge's web page, and the pane of one line never opens.
+Side by side (`D`) has no single column to hang them in, so it keeps the pane.
+
+- `Review::threads_in_diff` says so: zen, or a last frame under the narrow width, set at each draw and at once by `zz`. `Review::rows()` then follows each marked line with one `Row::Thread` per cursor stop of its conversations, in the pane's order.
+- A thread is **folded** by default to one row: its status as in the pane, who started it, the first line of the first note cut to fit, ` · n replies`, and `◇` while a reply of mine waits in it.
+- My draft of a new thread shows whole: `◇ draft`, `you · draft ◇`, its body.
+- `enter` on the line unfolds every thread on it, or folds them once none is folded; `enter` on a thread row unfolds or folds that thread and leaves the cursor on its first row. `Review::unfolded` holds the unfolded ids, kept through a refresh.
+- An unfolded thread is a row per note, then per draft reply of mine, drawn as the pane draws them and wrapped to the text column: its rows start where the code does, behind a `│` in `border` one column before the sign, whichever gutter the diff shows (one number under the narrow width, both above).
+- `j` `k` stop on each of those rows, so a thread longer than the screen scrolls note by note; `]n` `]N` stop on marked lines only; a folded hunk or file hides its thread rows.
+- On a thread row `r`, `R`, `S`, `+`, `e`, `d`, `E`, `u`, `o`, `y` and `ctrl-v` act as in the pane on the thread, note or draft under the cursor; elsewhere in the diff they keep their own meaning.
+- The compose box opens at the foot of the diff, which gives it its last rows, and the keys go back to the diff after it; while a pane is on screen (the list of every thread under zen's diff) the box stays in it.
+- Rows are laid out once per line and kept while the review, the unfolded set, the width and the theme stay the same, so code in a note is not highlighted on each frame.
+- Not built: a picture is its `[image: alt]` line, not a thumbnail, and does not click through; a drag copies code only, not the text of a note; `J` `K` do not jump between thread rows.
+- A pane open on a line closes when the layout starts reading that line's threads in the diff (a resize under the narrow width, `zz`, `D` back to inline).
 
 ### Moving inside it
 
@@ -189,7 +209,7 @@ Delete the tests of the removed rows rather than keeping them alive with shims.
 
 ## Considered
 
-- **Keep threads inline and add the pane**: the code would still read like a chat log; the point is that the diff shows code.
+- **Keep threads inline and add the pane**: the code would still read like a chat log; the point is that the diff shows code. Where the pane cannot sit beside the diff they do read inline, folded to one row each so the diff still shows code.
 - **Open the pane automatically when the cursor lands on a marked line**: scrolling would resize the diff every few lines.
 - **A tooltip under the line**: too small for a conversation and nowhere to type.
 - **Keep the one-row input for replies**: one line of text, far from the thread it answers.

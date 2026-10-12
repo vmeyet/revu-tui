@@ -12,6 +12,7 @@ expression: "render(&mut app, 80, 24)"
 │      12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt>  │
 │          {                                                                   │
 │  ✓   13 -    let client = Client::new();                                     │
+│        │ ✓ resolved · you · Why drop the plain client?                       │
 │      13 +    let client = Client::with_key(idempotency_key(card));           │
 │      14 +    let attempt = Attempt::first();                                 │
 │      15      let response = client.charge(amount).await?;                    │
@@ -23,6 +24,5 @@ expression: "render(&mut app, 80, 24)"
 │      43 +    // hunk two, line 43 is new                                     │
 │      44  }                                                                   │
 │                                                                              │
-│  ▸ Cargo.lock                                                  +1 −1  folded │
 ╰──────────────────────────────────────────────────────────────────────────────╯
  ✓ long lines wrap                                                       ? help

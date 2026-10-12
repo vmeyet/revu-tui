@@ -22,7 +22,7 @@ expression: "render(&mut app, 160, 45)"
 │                          │      ^d ^u  half a page; space too                             *  this repo, or every project         │                           │
 │                          │      ^f ^b  a full page; PgDn PgUp too                         s  next sort order                     │                           │
 │                          │        h l  pane to the left, to the right                     S  group by author                     │                           │
-│                          │      enter  open, or toggle the fold                           b  pin on top of the queue, or unpin   │                           │
+│                          │      enter  open, or toggle the fold or the thread             b  pin on top of the queue, or unpin   │                           │
 │                          │      esc x  close the pane, back to the queue              zo zc  open, fold the section or stack     │                           │
 │                          │  tab S-tab  next, previous file                                                                       │                           │
 │                          │      ]c [c  next, previous hunk                            SEARCH & APP                               │                           │

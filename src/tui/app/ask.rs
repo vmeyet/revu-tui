@@ -116,7 +116,7 @@ impl App {
             'r' => (file_here(open).map_or(Scope::Mr, Scope::File), Target::Nowhere),
             's' => (Scope::Mr, Target::Nowhere),
             't' => {
-                let Some(id) = open.focused_thread().or_else(|| thread_on_line(open)) else {
+                let Some(id) = self.stop_here().and_then(|stop| stop.thread).or_else(|| thread_on_line(open)) else {
                     self.toast("no thread here · a t works on a line with ◆");
                     return vec![];
                 };

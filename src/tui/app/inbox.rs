@@ -28,6 +28,7 @@ pub fn spot_at(review: &Review, row: &Row) -> Option<Spot> {
         Row::Line { file, hunk, index } => line(file, hunk, index).and_then(|l| at(file, l.old, l.new)),
         Row::Pair { file, hunk, added, .. } => line(file, hunk, added).and_then(|l| at(file, l.old, l.new)),
         Row::Context { file, old, new, .. } => at(file, Some(old), Some(new)),
+        Row::Thread { file, old, new, .. } => at(file, old, new),
         _ => None,
     }
 }

@@ -19,8 +19,11 @@ impl App {
     /// `v` in the pane: the file at the line of the thread, or draft, under the cursor.
     pub(super) fn view_thread(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let thread = open.focused_thread().and_then(|id| open.review.thread(&id)).and_then(|t| t.anchor.clone());
-        let anchor = thread.or_else(|| open.focused_draft().and_then(|i| open.review.drafts[i].anchor.clone()));
+        let anchor = self.stop_here().and_then(|stop| match (stop.thread, stop.kind) {
+            (Some(id), _) => open.review.thread(&id)?.anchor.clone(),
+            (None, super::EntryKind::Draft(index)) => open.review.drafts[index].anchor.clone(),
+            (None, super::EntryKind::Note(_)) => None,
+        });
         let Some(anchor) = anchor else {
             self.toast("this thread is on the MR, not on a file");
             return vec![];

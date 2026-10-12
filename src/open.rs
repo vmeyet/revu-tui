@@ -24,6 +24,7 @@ pub fn line_for(review: &Review, row: &Row, side: Side) -> u32 {
             nearest(&review.files[*file].hunks[*hunk], index, side)
         }
         Row::Context { old, new, .. } => pick(side, Some(*old), Some(*new)).unwrap_or(1),
+        Row::Thread { new, old, .. } => pick(side, *old, *new).or(*new).or(*old).unwrap_or(1),
         Row::Hunk { file, index, .. } => {
             let hunk = &review.files[*file].hunks[*index];
             hunk.lines.iter().find_map(|l| number(l, side)).unwrap_or_else(|| start(hunk, side))

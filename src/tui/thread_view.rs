@@ -18,11 +18,13 @@ use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 
 /// The compose box grows with its text up to this many rows, then scrolls.
 const COMPOSE_ROWS: usize = 8;
+const SEPARATOR: &str = " · ";
 
 /// One piece of a conversation as the pane lays it out: a line of text, or a picture that takes
 /// the rows its thumbnail needs, or a line of its own when it cannot be drawn.
@@ -209,7 +211,11 @@ fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
             lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
         let look = Look { theme, today: app.today, me: &app.me, ascii: app.ascii, width };
-        lines.extend(conversation_lines(open, conversation, index, &entries, look));
+        if open.lists_every_thread() {
+            let first = entries.iter().find(|e| e.conversation == index).copied();
+            lines.extend(heading(&open.review, conversation, look).into_iter().map(|line| (first, Piece::Text(line))));
+        }
+        lines.extend(conversation_lines(&open.review, conversation, index, &entries, look));
     }
     if conversations.is_empty() && pane.only_with.is_some() {
         lines.push((
@@ -376,18 +382,120 @@ fn title(review: &Review, pane: &Pane, count: usize, here: bool) -> String {
 /// How notes read: the palette, today for ages, who "you" is, emoji or their plain words, and
 /// the columns a table may take.
 #[derive(Clone, Copy)]
-struct Look<'a> {
-    theme: Theme,
-    today: DateTime<Utc>,
-    me: &'a str,
-    ascii: bool,
-    width: usize,
+pub(super) struct Look<'a> {
+    pub(super) theme: Theme,
+    pub(super) today: DateTime<Utc>,
+    pub(super) me: &'a str,
+    pub(super) ascii: bool,
+    pub(super) width: usize,
 }
 
-/// A thread, or my new draft, as the pane shows it: status, notes, my replies; each line tagged
-/// with the cursor stop it belongs to.
+/// The conversations of each line as the diff draws them under it, kept while what they are laid out from stays
+/// the same: code in a note is highlighted when its rows are laid out, never on each frame.
+#[derive(Debug, Default)]
+pub struct InlineLayout {
+    inputs: Option<InlineInputs>,
+    stops: BTreeMap<LineKey, Vec<StopRows>>,
+}
+
+/// A line of a file: the file, its new number, its old one.
+type LineKey = (usize, Option<u32>, Option<u32>);
+/// The screen rows of one cursor stop.
+type StopRows = Vec<Line<'static>>;
+
+#[derive(Debug, PartialEq)]
+struct InlineInputs {
+    review: ReviewInputs,
+    unfolded: BTreeSet<String>,
+    width: usize,
+    theme: Theme,
+    second: i64,
+    me: String,
+    ascii: bool,
+}
+
+impl InlineLayout {
+    /// Forgets the rows laid out from anything but what `open` and `look` show now.
+    pub(super) fn fit(&mut self, open: &Open, look: Look) {
+        let inputs = InlineInputs {
+            review: ReviewInputs::of(open),
+            unfolded: open.review.unfolded.clone(),
+            width: look.width,
+            theme: look.theme,
+            second: look.today.timestamp(),
+            me: look.me.to_owned(),
+            ascii: look.ascii,
+        };
+        if self.inputs.as_ref() != Some(&inputs) {
+            *self = Self { inputs: Some(inputs), stops: BTreeMap::new() };
+        }
+    }
+
+    /// The rows of each cursor stop of the conversations on a line.
+    pub(super) fn stops(&mut self, review: &Review, place: &Place, look: Look) -> &[StopRows] {
+        let Place::Line { file, new, old } = place else { return &[] };
+        self.stops.entry((*file, *new, *old)).or_insert_with(|| inline_stops(review, place, look))
+    }
+}
+
+/// The conversations of `place` as the rows of each cursor stop, `look.width` columns wide: a folded thread is its
+/// one summary row, any other reads as in the pane. A picture reads as its `[image: …]` line.
+fn inline_stops(review: &Review, place: &Place, look: Look) -> Vec<StopRows> {
+    let conversations = review.conversations(place);
+    let entries = review.stops(&conversations);
+    let thumbs = Thumbs::off();
+    let rows_of = |piece: Piece| lay_out(piece, &thumbs, look.width, look.theme, &str::to_owned).into_iter().map(|(line, _)| line);
+    let mut stops = vec![vec![]; entries.len()];
+    for (index, conversation) in conversations.iter().enumerate() {
+        let thread = conversation.thread.as_deref().and_then(|id| review.thread(id));
+        let pieces = match thread.filter(|thread| review.reads_folded(thread)) {
+            Some(folded) => {
+                let first = entries.iter().find(|e| e.conversation == index).copied();
+                vec![(first, Piece::Text(summary(folded, conversation.drafts.len(), look)))]
+            }
+            None => conversation_lines(review, conversation, index, &entries, look),
+        };
+        for (entry, piece) in pieces {
+            if let Some(stop) = entries.iter().position(|e| Some(*e) == entry) {
+                stops[stop].extend(rows_of(piece));
+            }
+        }
+    }
+    stops
+}
+
+/// A folded thread on one row: its state, who started it, the first line they wrote, how many notes follow, and
+/// a `◇` while replies of mine wait in it.
+fn summary(thread: &Thread, drafts: usize, look: Look) -> Line<'static> {
+    let Look { theme, me, width, .. } = look;
+    let faded = Style::default().fg(theme.faded);
+    let first = thread.first();
+    let author = author_of(first, me);
+    let replies = match thread.notes.len().saturating_sub(1) {
+        0 => String::new(),
+        1 => " · 1 reply".to_owned(),
+        n => format!(" · {n} replies"),
+    };
+    let waiting = if drafts > 0 { " ◇" } else { "" };
+    let words = first.body.lines().map(str::trim).find(|line| !line.is_empty()).unwrap_or_default();
+    let state = status(thread, thread.notes.len(), theme);
+    let taken = state.width() + author.width() + replies.width() + waiting.width() + 2 * SEPARATOR.width();
+    let mut spans = state.spans;
+    spans.extend([
+        Span::styled(SEPARATOR, faded),
+        Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
+        Span::styled(SEPARATOR, faded),
+        Span::raw(super::ui::truncate(words, width.saturating_sub(taken))),
+        Span::styled(replies, faded),
+        Span::styled(waiting, Style::default().fg(theme.accent)),
+    ]);
+    Line::from(spans)
+}
+
+/// A thread, or my new draft, as the pane shows it: status, the notes `entries` stop on, my replies; each line
+/// tagged with the cursor stop it belongs to.
 fn conversation_lines(
-    open: &Open,
+    review: &Review,
     conversation: &Conversation,
     index: usize,
     entries: &[Entry],
@@ -396,14 +504,10 @@ fn conversation_lines(
     let theme = look.theme;
     let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
     let mut lines = vec![];
-    if open.lists_every_thread() {
-        let first = entries.iter().find(|e| e.conversation == index).copied();
-        lines.extend(heading(&open.review, conversation, look).into_iter().map(|line| (first, Piece::Text(line))));
-    }
-    if let Some(thread) = conversation.thread.as_deref().and_then(|id| open.review.thread(id)) {
+    if let Some(thread) = conversation.thread.as_deref().and_then(|id| review.thread(id)) {
         let shown = entries.iter().filter(|e| e.conversation == index && matches!(e.kind, EntryKind::Note(_))).count();
         lines.push((stop(EntryKind::Note(0)), Piece::Text(status(thread, shown, theme))));
-        let replaced = Replaced::at(&open.review, thread.first().position.as_ref());
+        let replaced = Replaced::at(review, thread.first().position.as_ref());
         for (n, note) in thread.notes.iter().take(shown).enumerate() {
             let entry = stop(EntryKind::Note(n));
             lines.extend(note_lines(note, &replaced, look).into_iter().map(|line| (entry, line)));
@@ -411,15 +515,15 @@ fn conversation_lines(
     }
     for &draft in &conversation.drafts {
         let entry = stop(EntryKind::Draft(draft));
-        let draft = &open.review.drafts[draft];
+        let draft = &review.drafts[draft];
         if conversation.thread.is_none() {
             lines.push((entry, Piece::Text(Line::from(Span::styled("◇ draft", Style::default().fg(theme.accent))))));
         }
         let position = draft.position.as_ref().or_else(|| {
-            let thread = conversation.thread.as_deref().and_then(|id| open.review.thread(id))?;
+            let thread = conversation.thread.as_deref().and_then(|id| review.thread(id))?;
             thread.first().position.as_ref()
         });
-        let replaced = Replaced::at(&open.review, position);
+        let replaced = Replaced::at(review, position);
         lines.extend(draft_lines(draft, &replaced, look).into_iter().map(|line| (entry, line)));
     }
     lines
@@ -514,9 +618,14 @@ fn draft_lines(draft: &crate::review::Draft, replaced: &Replaced, look: Look) ->
     lines
 }
 
+/// Who wrote a note, `you` for me.
+fn author_of(note: &Note, me: &str) -> String {
+    if note.author.username == me { "you".to_owned() } else { note.author.username.clone() }
+}
+
 fn note_lines(note: &Note, replaced: &Replaced, look: Look) -> Vec<Piece> {
     let Look { theme, today, me, ascii, width } = look;
-    let author = if note.author.username == me { "you".to_owned() } else { note.author.username.clone() };
+    let author = author_of(note, me);
     let age = short_age((today - note.created_at).to_std().unwrap_or_default());
     let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),

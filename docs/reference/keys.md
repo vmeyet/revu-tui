@@ -14,7 +14,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `^d` `^u` | half a page; space too |
 | `^f` `^b` | a full page; PgDn PgUp too |
 | `h` `l` | pane to the left, to the right |
-| `enter` | open, or toggle the fold |
+| `enter` | open, or toggle the fold or the thread |
 | `esc` `x` | close the pane, back to the queue |
 | `tab` `S-tab` | next, previous file |
 | `]c` `[c` | next, previous hunk |
@@ -67,6 +67,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `V` | select lines |
 | `s` | suggest a change |
 | `E` | write in $EDITOR |
+| `r` `R` `e` `d` | on a thread row: reply, resolve, edit, delete |
 | `⌘enter` `^s` | in the box: post now, no draft |
 | `⌥enter` `^o` | in the box: new line, $EDITOR |
 | `⌥←` `⌥→` `⌥⌫` | in the box: word back, on, delete |

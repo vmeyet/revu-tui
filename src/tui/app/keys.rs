@@ -234,6 +234,10 @@ impl App {
         if self.prose_open() {
             return self.handle_prose_key(key);
         }
+        let on_thread = matches!(self.open.as_ref().and_then(|o| o.row()), Some(Row::Thread { .. }));
+        if on_thread && let Some(actions) = self.handle_thread_key(key) {
+            return actions;
+        }
         if !key.modifiers.contains(KeyModifiers::CONTROL)
             && let Some(actions) = self.handle_write_key(key)
         {

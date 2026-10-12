@@ -21,7 +21,8 @@ It has to look like it belongs there.
 
 ## Layout
 
-Since M3b the diff holds no thread rows: conversations are marked in an anchor column and read and written in the right pane; `09-thread-pane.md` has the layout, keys and width rules.
+Since M3b the diff holds no thread rows beside the pane: conversations are marked in an anchor column and read and written in the right pane; `09-thread-pane.md` has the layout, keys and width rules.
+Where no pane fits beside the diff, in zen and under 120 columns, the threads of a line read under it (`09-thread-pane.md` § Threads in the diff).
 The mockup below predates it.
 
 ```
@@ -64,7 +65,8 @@ A question that needs an answer (applying a suggestion, the `'` views) brings th
 `[m` `]m` open the previous or next MR in the order the queue shows them, without leaving zen, and outside zen as well: filter, sort, sections and stacks all count, folded sections do not.
 The arrows mean what they mean outside zen: `←` `→` move focus.
 A line on top says where you are for a moment: `‹  !1797 feat add a page  ·  3/12  ›`.
-The thread pane still opens with `enter` or `l` on a marked line, and `esc`, `x` or `q` close it.
+The threads of a line read in the diff, under it (`09-thread-pane.md` § Threads in the diff); side by side keeps them in the pane.
+The thread pane still opens with `enter` or `l` on the MR's own threads, `l` on a file's outdated ones and `T`, and `esc`, `x` or `q` close it.
 It opens under the diff in zen's column, with no frame: a faded rule carries its title, and it takes what it needs up to a quarter of the column (8 rows at least for that share, half while a comment is written); `09-thread-pane.md` § Zen.
 `T` lists every thread there too; `enter` on one moves the diff above to its line.
 A column under 24 rows keeps the pane a page of its own: one faded title line where the zen header sits, `enter` in the list of every thread shows the diff at its line, and `l` or `T` bring the list back.
@@ -242,7 +244,7 @@ The old file on the left, the new one on the right, as GitLab shows it:
 
 ### Anchors in the flow
 
-Built (M3b, `09-thread-pane.md`): no row is inserted for a conversation.
+Built (M3b, `09-thread-pane.md`): no row is inserted for a conversation, except in zen and under 120 columns, where a line's threads hang under it.
 A two-cell anchor column left of the numbers shows `◆` (unresolved, `warn`), `◇` (my draft, `accent`, `danger` while unsaved) or `✓` (resolved, `faded`), then a count when the line holds several.
 The row under the header lists the threads on the MR; file rows add `· n outdated`.
 While the pane is on a range comment, the range's other lines show `│` in `accent`.
@@ -260,7 +262,7 @@ While the pane is on a range comment, the range's other lines show `│` in `acc
 
 One of:
 
-- **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, a file's outdated threads, or with `T` the whole MR, each headed by its line), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff, a table as aligned columns split by `│` under a `─┼─` rule, its widest columns cut with `…` when the pane is narrower and left as raw text when even that does not fit. The compose box sits at its bottom. It follows the cursor onto marked lines, except while it lists the whole MR. Width: three columns from 150, the queue steps aside from 120, a page of its own below; in zen, under the diff.
+- **Conversations** (M3b, `09-thread-pane.md`): every thread and draft of one line (or of the MR, a file's outdated threads, or with `T` the whole MR, each headed by its line), unresolved first, resolved folded; notes as `author · age` then the body as light markdown, a suggestion drawn as a small `-`/`+` diff, a table as aligned columns split by `│` under a `─┼─` rule, its widest columns cut with `…` when the pane is narrower and left as raw text when even that does not fit. The compose box sits at its bottom. It follows the cursor onto marked lines, except while it lists the whole MR. Width: three columns from 150, the queue steps aside from 120, a page of its own below; in zen, under the diff. Below 120 and in zen the threads of a line are not in it: they read in the diff.
 - **Pipeline** (`p`): the CI run of the head commit (GitLab's newest MR pipeline, GitHub's check runs grouped by workflow): a count per state, then each stage in the order it ran with its jobs, counted failures first, glyph, name and duration; the cursor starts on the first failure; `o` opens the job, `y` copies its link, `r` asks again, and a run still going is asked again every 15 s while the pane shows it. A failure the forge lets pass shows `!` in the warning colour. The header's pipeline word links to the run. Above the jobs, `REVIEW APPS` lists each environment the branch went to with its address, the newest successful deployment of each, and a click on an address opens it; they are asked when the MR opens, after a push, and once a run the pane shows ends. The cover (`i`) from an open MR shows the app to try, its address clickable too: over the cover a click on a link still answers, nothing else does.
 - **Outline** (`O`, `10-outline.md`): the functions, methods and classes the MR changes, by file, riskiest first: `-` removed, `~` signature changed (old → new below), `+` added, `→` renamed, `·` body only; as a call tree (`t` for the list, `u` for called by) with unchanged bridges dimmed; public ones only until `a`; a first row counts `n breaking · n added · n renamed`; `enter` puts the diff's cursor on the call or the symbol.
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` unresolved threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.

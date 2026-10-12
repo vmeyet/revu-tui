@@ -45,16 +45,15 @@ impl Search {
 impl App {
     /// `+`: the picker on the focused note, or why there is none.
     pub(super) fn open_react(&mut self) {
-        let Some(open) = &self.open else { return };
-        let Some((conversations, _, Some(focused))) = open.pane_view() else {
+        let Some(stop) = self.stop_here() else {
             self.toast("open a thread first");
             return;
         };
-        let EntryKind::Note(note) = focused.kind else {
+        let EntryKind::Note(note) = stop.kind else {
             self.toast("a draft is not published yet: nothing to react to");
             return;
         };
-        let Some(thread) = conversations.get(focused.conversation).and_then(|c| c.thread.clone()) else { return };
+        let Some(thread) = stop.thread else { return };
         self.react = Some(Pick::on(thread, note));
     }
 

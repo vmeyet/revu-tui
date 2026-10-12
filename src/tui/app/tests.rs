@@ -297,10 +297,12 @@ fn snapshot_wrapped_lines() {
 #[test]
 fn snapshot_narrow_pane_and_a_three_line_box() {
     let mut app = with_review();
-    press(&mut app, "]N");
-    press(&mut app, "l");
+    press(&mut app, "k");
+    app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("pane_narrow", render(&mut app, 100, 20));
-    press(&mut app, "r");
+    let mut app = with_review();
+    press(&mut app, "]N");
+    press(&mut app, "lr");
     press(&mut app, "agreed");
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
     press(&mut app, "keys are per card");
@@ -443,10 +445,10 @@ fn zen_opens_the_thread_pane_under_the_diff_behind_a_rule() {
     let mut app = zen_on_a_thread();
     let screen = render(&mut app, 138, 40);
     assert!(!screen.contains('╭') && !screen.contains('╰'), "no frame:\n{screen}");
-    assert!(screen.contains("▎✓   13      -    let client = Client::new();"), "the diff keeps its cursor line:\n{screen}");
+    assert!(screen.contains("▎◆ 1 on the MR"), "the diff keeps its cursor row:\n{screen}");
     let rows = screen.lines().collect::<Vec<_>>();
-    let rule = rows.iter().position(|row| row.trim_start().starts_with("─ charge.rs:-13 · 1 thread ──")).expect("a rule over the pane");
-    assert!(rows[rule + 3].contains("Why drop the plain client?"), "the thread right under it:\n{screen}");
+    let rule = rows.iter().position(|row| row.trim_start().starts_with("─ on the MR · 1 thread ──")).expect("a rule over the pane");
+    assert!(rows[rule + 3].contains("Looks good overall, one question inline."), "the thread right under it:\n{screen}");
     let (diff, pane) = (app.areas.review, app.areas.side);
     assert_eq!((diff.x, diff.width, diff.bottom()), (pane.x, pane.width, pane.y), "one column, the pane right under the diff");
     assert_eq!(pane.height, 4, "no more rows than the thread takes");
@@ -457,9 +459,9 @@ fn zen_opens_the_thread_pane_under_the_diff_behind_a_rule() {
 fn a_short_zen_column_opens_the_thread_pane_as_a_page_of_its_own() {
     let mut app = zen_on_a_thread();
     let screen = render(&mut app, 100, 24);
-    assert!(!screen.contains("let client = Client::new()") && screen.contains("charge.rs:-13 · 1 thread"), "{screen}");
+    assert!(!screen.contains("let client = Client::new()") && screen.contains("on the MR · 1 thread"), "{screen}");
     let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
-    assert!(first.starts_with(" charge.rs:-13"), "the title starts where the zen header does:\n{screen}");
+    assert!(first.starts_with(" on the MR"), "the title starts where the zen header does:\n{screen}");
     assert!(!app.areas.both_shown());
     insta::assert_snapshot!("zen_thread_short", screen);
 }
@@ -475,7 +477,7 @@ fn in_zen_the_compose_box_lets_the_pane_under_the_diff_grow() {
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
     }
     let screen = render(&mut app, 138, 40);
-    assert!(screen.contains("reply to nina") && screen.contains("agreed") && screen.contains("and per amount"), "{screen}");
+    assert!(screen.contains("reply to lea") && screen.contains("agreed") && screen.contains("and per amount"), "{screen}");
     assert_eq!((reading, app.areas.side.height), (4, 10), "past the quarter: the thread and a box of four lines");
     insta::assert_snapshot!("zen_split_compose", screen);
     press(&mut app, &"one more line ".repeat(60));
@@ -717,7 +719,8 @@ fn in_a_narrow_window_a_drag_and_a_search_start_where_the_text_does() {
     let mut app = with_review();
     let (x, y) = spot(&mut app, "let client = Client::new()", 100, 24);
     assert_eq!(drag(&mut app, (x - 5, y), (x + 9, y), 100, 24), vec![], "the sign is no text");
-    let actions = drag(&mut app, (x - 4, y), (x + 9, y + 1), 100, 24);
+    let past_the_thread_row = y + 2;
+    let actions = drag(&mut app, (x - 4, y), (x + 9, past_the_thread_row), 100, 24);
     let text = "    let client = Client::new();\n    let client".to_owned();
     assert_eq!(actions, vec![Action::Copy { text, done: "copied 2 lines".into() }]);
     type_text(&mut app, "/pub");

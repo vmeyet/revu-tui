@@ -436,12 +436,40 @@ pub(super) fn sharing_queue(targets: Vec<crate::share::Target>) -> App {
     app
 }
 
-/// Zen on the line with the resolved thread, its pane open and focused.
+/// Zen on the thread on the MR itself, its pane open and focused.
 pub(super) fn zen_on_a_thread() -> App {
     let mut app = with_review();
-    press(&mut app, "zz]N");
+    press(&mut app, "zzk");
     app.handle_key(code(KeyCode::Enter));
-    assert_eq!(app.focus, Focus::Side);
+    assert_eq!((listed_place(&app), app.focus), (Some(Place::Mr), Focus::Side));
+    app
+}
+
+/// A thread `id` of `notes` notes by lea on added line 13 of `charge.rs`, as the forge lists it.
+pub(super) fn thread_on_line_13(id: &str, notes: usize) -> Discussion {
+    let mut thread: serde_json::Value = serde_json::from_str(include_str!("../../forge/gitlab/fixtures/diff_note.json")).unwrap();
+    let first = thread["notes"][0].clone();
+    let note = |n: usize| {
+        let mut note = first.clone();
+        note["id"] = json!(7000 + n);
+        note["body"] = json!(format!("note {n} of {id}"));
+        note["position"]["new_line"] = json!(13);
+        note
+    };
+    thread["id"] = json!(id);
+    thread["notes"] = json!((0..notes).map(note).collect::<Vec<_>>());
+    fixture::discussion(&thread.to_string())
+}
+
+/// The added line 13 of `charge.rs`, where `thread_on_line_13` hangs.
+pub(super) const ADDED_LINE_13: Row = Row::Line { file: 0, hunk: 0, index: 2 };
+
+/// The review in zen, where threads read in the diff, with `threads` more than the fixture's; the cursor on added line 13.
+pub(super) fn zen_with_threads(threads: Vec<Discussion>) -> App {
+    let mut app = with_review();
+    app.apply(Incoming::Discussions { key: mr_key(), discussions: discussions().into_iter().chain(threads).collect() });
+    press(&mut app, "zz");
+    app.review_jump_to(|row| *row == ADDED_LINE_13);
     app
 }
 

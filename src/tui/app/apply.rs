@@ -1,4 +1,5 @@
 //! `S` in the thread pane and `M` in the review: a commit that waits for the reader's `y`.
+use super::pane::Stop;
 use super::{Action, App, EntryKind, Open};
 use crate::forge::{MergePlan, MrKey, Note, Side, Suggestion};
 use crate::review::suggestion;
@@ -31,7 +32,7 @@ impl App {
     /// `S`: the note's suggestion, anchored where its thread is, waits for `y`.
     pub(super) fn apply_here(&mut self) {
         let Some(open) = &self.open else { return };
-        match suggestion_here(open) {
+        match suggestion_here(open, self.stop_here()) {
             Ok(suggestion) => self.confirm = Some(Confirm::Apply { suggestion, branch: open.review.mr.source_branch.clone() }),
             Err(reason) => self.toast(reason),
         }
@@ -60,13 +61,11 @@ impl App {
     }
 }
 
-/// The suggestion of the note under the pane's cursor, or why there is none to apply.
-fn suggestion_here(open: &Open) -> Result<Suggestion, &'static str> {
-    let (conversations, _, focused) = open.pane_view().ok_or("open a thread first")?;
-    let focused = focused.ok_or("open a thread first")?;
-    let EntryKind::Note(index) = focused.kind else { return Err("a draft is not published yet: nothing to apply") };
-    let thread = conversations.get(focused.conversation).and_then(|c| c.thread.as_deref()).and_then(|id| open.review.thread(id));
-    let thread = thread.ok_or("open a thread first")?;
+/// The suggestion of the note at `stop`, the cursor's, or why there is none to apply.
+fn suggestion_here(open: &Open, stop: Option<Stop>) -> Result<Suggestion, &'static str> {
+    let stop = stop.ok_or("open a thread first")?;
+    let EntryKind::Note(index) = stop.kind else { return Err("a draft is not published yet: nothing to apply") };
+    let thread = stop.thread.as_deref().and_then(|id| open.review.thread(id)).ok_or("open a thread first")?;
     let note = thread.notes.get(index).ok_or("open a thread first")?;
     let proposal = suggestion::parse(&note.body).ok_or("this note has no suggestion")?;
     let anchor = thread.anchor.as_ref().ok_or("this thread is on the MR, not on a line")?;

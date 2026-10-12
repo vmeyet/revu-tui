@@ -56,6 +56,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     );
     let [main, input, status] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows)]).areas(f.area());
+    app.narrow = main.width < app.widths.narrow;
+    app.fit_threads();
     let side_open = app.open.as_ref().is_some_and(super::app::Open::side_open);
     let shown = columns(main.width, app.widths, app.open.is_some(), side_open, app.focus, app.zen);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
@@ -74,7 +76,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         super::queue_view::draw(f, app, queue);
     }
     if shown.diff {
-        let gutter = if main.width < app.widths.narrow { diff_view::Gutter::One } else { diff_view::Gutter::Both };
+        let gutter = if app.narrow { diff_view::Gutter::One } else { diff_view::Gutter::Both };
         diff_view::draw(f, app, review, gutter);
     }
     let mut pictures = vec![];

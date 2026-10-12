@@ -16,6 +16,7 @@ impl App {
         }
         self.zen = true;
         self.focus = Focus::Review;
+        self.fit_threads();
         vec![]
     }
 
@@ -27,6 +28,7 @@ impl App {
         }
         self.zen = false;
         self.zen_switch = None;
+        self.fit_threads();
         std::mem::take(&mut self.quiet_notices)
     }
 
@@ -197,9 +199,9 @@ mod tests {
     #[test]
     fn arrows_in_zen_move_focus_as_outside_it() {
         let mut app = with_review();
-        press(&mut app, "zz]N");
+        press(&mut app, "zzk");
         assert!(app.handle_key(code(KeyCode::Right)).is_empty(), "→ never changes MR");
-        assert!(app.open.as_ref().unwrap().pane.is_some(), "→ on a marked line opens the pane");
+        assert!(app.open.as_ref().unwrap().pane.is_some(), "→ on the MR's threads opens the pane");
         assert_eq!(app.focus, Focus::Side);
         app.handle_key(code(KeyCode::Left));
         assert_eq!(app.focus, Focus::Review);
@@ -267,7 +269,7 @@ mod tests {
         render(&mut app, 138, 40);
         press(&mut app, "h");
         assert_eq!((app.focus, app.zen), (Focus::Review, true), "h from the pane stays in zen");
-        assert!(render(&mut app, 138, 40).contains("─ charge.rs:-13 · 1 thread"), "the pane stays under the diff");
+        assert!(render(&mut app, 138, 40).contains("─ on the MR · 1 thread"), "the pane stays under the diff");
         press(&mut app, "l");
         assert_eq!(app.focus, Focus::Side);
         app.handle_key(code(KeyCode::Left));

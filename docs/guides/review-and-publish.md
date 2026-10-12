@@ -26,7 +26,7 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 | `s` | Suggest a change: the box starts with the lines to edit |
 | `E` | Write the comment in `$EDITOR` |
 
-The comment box sits at the bottom of the right pane.
+The comment box sits at the bottom of the right pane; in a narrow window and in zen, at the foot of the diff.
 `enter` saves the draft.
 `⌘enter` posts a new comment or a reply at once, with no draft; `ctrl-s` does the same where the terminal keeps `⌘enter` for itself.
 `⌥enter` adds a new line, `↑` and `↓` move between lines.
@@ -46,7 +46,7 @@ A line with a conversation has a mark left of its numbers.
 
 | Key | Does |
 |---|---|
-| `enter` or `l` on a marked line | Open its threads in the right pane |
+| `enter` or `l` on a marked line | Open its threads in the right pane; in a narrow window, `enter` unfolds them under the line |
 | `]n` `[n` | Next, previous line with an open thread or your draft; a folded file or hunk on the way opens |
 | `]N` `[N` | The same, resolved threads too |
 | `T` or `:threads` | Every thread of the MR in the right pane, open ones first; `J` `K` walk them, `enter` takes the diff to one |
@@ -57,6 +57,18 @@ A line with a conversation has a mark left of its numbers.
 | `e` `d` | Edit, delete your draft |
 | `S` | Apply the suggestion under the cursor, after a `y` |
 | `+` | React to the note under the cursor; in the diff, to the first note of the line's thread |
+
+## In a narrow window
+
+Under 120 columns there is no room for the pane beside the diff, so the threads of a line read in the diff, under it.
+`[tui] narrow_width` moves that limit, see the [config reference](../reference/config.md).
+Each thread is one row: its state, who started it, the first words and the number of replies.
+`enter` on the line unfolds them, `enter` on a thread unfolds or folds that one, and `j` `k` walk its notes.
+`r`, `R`, `e`, `d`, `S` and `+` act on the thread or note under the cursor.
+[Zen](zen.md#threads-in-the-diff) reads threads the same way, at any width.
+The MR's own threads, a file's outdated ones and the list of every thread, `T`, still open in the pane.
+There the pane takes the diff's place until `h`.
+Side by side, `D`, keeps every thread in the pane.
 
 ## React
 

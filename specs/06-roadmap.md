@@ -117,6 +117,7 @@ Decisions taken while building them:
 - `E` in the compose box would type an E, so the box hands its text to `$EDITOR` with `ctrl-o`.
 - After saving or leaving the box, the keys go back where it was opened from: the diff for `c`, the pane for `r`.
 - `e` in the publish modal closes the modal and edits in the pane.
+- Later: in zen and under 120 columns the threads of a line read in the diff, under it, folded to one row each (`09-thread-pane.md` § Threads in the diff).
 
 ## M4 · AI (done 2026-09-23)
 

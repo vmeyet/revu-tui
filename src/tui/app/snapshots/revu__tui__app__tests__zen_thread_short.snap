@@ -3,8 +3,8 @@ source: src/tui/app/tests.rs
 expression: screen
 ---
 
- charge.rs:-13 · 1 thread
+ on the MR · 1 thread
 
- ▎✓ resolved
- ▎you · 2h
- ▎Why drop the plain client?
+ ▎· comment
+ ▎lea · 2h
+ ▎Looks good overall, one question inline.

@@ -4,8 +4,8 @@ use crate::review::{Draft, DraftId, Place, Review};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
-    /// Opens the compose box on `input`, in the pane at its line; `text` prefills it, else the text
-    /// left unsent for that target earlier comes back.
+    /// Opens the compose box on `input`, in the pane at its line, or under the diff where its line's threads read
+    /// there; `text` prefills it, else the text left unsent for that target earlier comes back.
     pub(super) fn open_input(&mut self, input: Input, text: &str) {
         let kept = self.unsent.remove(&target_key(&input));
         let text = if text.is_empty() { kept.unwrap_or_default() } else { text.to_owned() };
@@ -15,9 +15,13 @@ impl App {
         self.input = Some(input);
     }
 
-    /// The pane shows where the text goes: the line of a new thread, the thread of a reply.
+    /// The pane shows where the text goes: the line of a new thread, the thread of a reply. Written from a thread
+    /// row, or on a line whose threads read in the diff, the diff already shows it.
     fn show_target(&mut self, input: &Input) {
         let Some(open) = &self.open else { return };
+        if self.focus == super::Focus::Review && matches!(open.row(), Some(crate::review::Row::Thread { .. })) {
+            return;
+        }
         let review = &open.review;
         let place = match input {
             Input::Comment { position } => place_of_position(review, position),
@@ -34,6 +38,7 @@ impl App {
             }
         };
         match place {
+            Some(place) if !open.pane_takes(&place) => {}
             Some(place) if open.pane.as_ref().is_none_or(|p| p.place != place) => self.open_pane(place),
             _ => self.focus = super::Focus::Side,
         }

@@ -76,6 +76,8 @@ impl Open {
             wide: old.wide,
             peek: old.peek,
             quiet_whitespace: old.quiet_whitespace,
+            threads_in_diff: old.threads_in_diff,
+            unfolded: old.unfolded,
             context: if same_head { old.context } else { crate::review::Context::default() },
             ..review
         })
@@ -132,12 +134,7 @@ impl Open {
     fn fold_target(&self) -> Option<(String, Option<usize>)> {
         let row = self.row()?;
         let file = &self.review.files[row.file()?];
-        let hunk = match row {
-            Row::Hunk { index, .. } => Some(*index),
-            Row::Line { hunk, .. } | Row::Pair { hunk, .. } | Row::Context { hunk, .. } => Some(*hunk),
-            _ => None,
-        };
-        Some((file.new_path.clone(), hunk))
+        Some((file.new_path.clone(), row.hunk().map(|(_, hunk)| hunk)))
     }
 
     pub(super) fn with_fold(self, fold: FoldState) -> Self {
@@ -153,7 +150,8 @@ impl Open {
         let anchor = self.row().cloned();
         let review = change(self.review);
         let rows = review.rows();
-        let selected = anchor.and_then(|row| find_again(&rows, &row)).unwrap_or(self.selected).min(rows.len().saturating_sub(1));
+        let found = anchor.and_then(|row| find_again(&review, &rows, &row));
+        let selected = found.unwrap_or(self.selected).min(rows.len().saturating_sub(1));
         Self { review, rows, selected, ..self }
     }
 
@@ -209,11 +207,21 @@ pub(super) fn same_place(before: &Row, after: &Row) -> bool {
     }
 }
 
-/// Where `row` sits in `rows`: itself or its pair, else the hunk it sat in.
-fn find_again(rows: &[Row], row: &Row) -> Option<usize> {
+/// Where `row` sits in `rows`: itself or its pair, a thread row that went the stop before it or its line, else the
+/// hunk it sat in.
+fn find_again(review: &Review, rows: &[Row], row: &Row) -> Option<usize> {
     let hunk = row.hunk();
     let in_hunk = |r: &Row| hunk.is_some() && matches!(r, Row::Hunk { .. }) && r.hunk() == hunk;
-    rows.iter().position(|r| same_place(r, row)).or_else(|| rows.iter().position(in_hunk))
+    let same = rows.iter().position(|r| same_place(r, row));
+    same.or_else(|| before_stop(review, rows, row)).or_else(|| rows.iter().position(in_hunk))
+}
+
+/// The last row of the line a thread row hangs under that comes before its stop.
+fn before_stop(review: &Review, rows: &[Row], row: &Row) -> Option<usize> {
+    let Row::Thread { stop, .. } = row else { return None };
+    let place = review.place_of(row);
+    let later = |r: &Row| matches!(r, Row::Thread { stop: other, .. } if other >= stop);
+    rows.iter().rposition(|r| !later(r) && review.place_of(r) == place)
 }
 
 /// The side `>` shows after `peek`, or `<` when not `forward`: diff, after, before, and round.
@@ -322,7 +330,8 @@ impl App {
         let Row::File { index: file, .. } = open.rows.get(open.pinned_file?)? else { return None };
         let file = *file;
         let row = open.row()?;
-        if !matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. }) || row.file() != Some(file) {
+        let in_hunk = matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. } | Row::Thread { .. });
+        if !in_hunk || row.file() != Some(file) {
             return None;
         }
         let path = open.review.files[file].new_path.clone();
@@ -399,16 +408,7 @@ impl App {
     /// `+`: ten more unchanged lines above and below the hunk under the cursor, read from the whole file.
     pub(super) fn expand_context(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let target = match open.row() {
-            Some(
-                Row::Hunk { file, index: hunk, .. }
-                | Row::Line { file, hunk, .. }
-                | Row::Pair { file, hunk, .. }
-                | Row::Context { file, hunk, .. },
-            ) => Some((*file, *hunk)),
-            _ => None,
-        };
-        let Some((file, hunk)) = target else {
+        let Some((file, hunk)) = open.row().and_then(Row::hunk) else {
             self.toast("move into a hunk first");
             return vec![];
         };
@@ -468,7 +468,7 @@ impl App {
     }
 
     pub(super) fn enter_review_row(&mut self) -> Vec<Action> {
-        if self.open_pane_here() {
+        if self.toggle_threads_here() || self.open_pane_here() {
             return vec![];
         }
         match self.open.as_ref().and_then(|o| o.row().cloned()) {

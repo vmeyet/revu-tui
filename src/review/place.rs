@@ -69,7 +69,42 @@ pub struct Conversation {
     pub drafts: Vec<usize>,
 }
 
+/// One stop of the cursor among the conversations of a place: a note of a thread, or one of my drafts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub conversation: usize,
+    pub kind: EntryKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryKind {
+    /// The note at this index of the thread.
+    Note(usize),
+    /// The draft at this index of `Review::drafts`.
+    Draft(usize),
+}
+
 impl Review {
+    /// A thread reads as one row in the diff until it is unfolded.
+    pub fn reads_folded(&self, thread: &Thread) -> bool {
+        !self.unfolded.contains(&thread.id)
+    }
+
+    /// The cursor stops of `conversations` where they read in the diff: a folded thread is one stop on its first
+    /// note, an unfolded one each of its notes then my replies, my new draft its own.
+    pub fn stops(&self, conversations: &[Conversation]) -> Vec<Entry> {
+        let stops_of = |(index, conversation): (usize, &Conversation)| {
+            let drafts = conversation.drafts.iter().map(|&draft| EntryKind::Draft(draft));
+            let kinds: Vec<EntryKind> = match conversation.thread.as_deref().and_then(|id| self.thread(id)) {
+                Some(thread) if self.reads_folded(thread) => vec![EntryKind::Note(0)],
+                Some(thread) => (0..thread.notes.len()).map(EntryKind::Note).chain(drafts).collect(),
+                None => drafts.collect(),
+            };
+            kinds.into_iter().map(move |kind| Entry { conversation: index, kind })
+        };
+        conversations.iter().enumerate().flat_map(stops_of).collect()
+    }
+
     /// Every line carrying a thread or one of my drafts, with what its anchor column shows.
     pub fn markers(&self) -> Markers {
         let mut markers = Markers::default();
@@ -110,7 +145,7 @@ impl Review {
         }
     }
 
-    /// The place a row stands for in the pane; the header is the MR itself.
+    /// The place a row stands for in the pane, a thread row the place of its line; the header is the MR itself.
     pub fn place_of(&self, row: &Row) -> Option<Place> {
         match row {
             Row::Line { file, hunk, index } => {
@@ -122,6 +157,7 @@ impl Review {
                 Some(Place::Line { file: *file, new: lines[*added].new, old: lines[*removed].old })
             }
             Row::Context { file, old, new, .. } => Some(Place::Line { file: *file, new: Some(*new), old: Some(*old) }),
+            Row::Thread { file, new, old, .. } => Some(Place::Line { file: *file, new: *new, old: *old }),
             Row::Header => Some(Place::Mr),
             Row::File { .. } | Row::Hunk { .. } | Row::Gap => None,
         }
@@ -339,6 +375,18 @@ mod tests {
         );
         let resolved = review.with_resolved("c0ffee00c0ffee00", true);
         assert_eq!(resolved.conversations(&place)[0].thread, None, "a resolved thread goes last");
+    }
+
+    #[test]
+    fn in_the_diff_a_folded_thread_is_one_stop_and_an_unfolded_one_stops_on_each_note_then_my_replies() {
+        let drafts = vec![Draft::reply("c0ffee00c0ffee00", "agreed"), Draft::new(Some(old_13()), "nit")];
+        let review = review().with_drafts(drafts);
+        let listed = review.conversations(&review.place_of(&removed_line()).unwrap());
+        let stop = |conversation, kind| Entry { conversation, kind };
+        assert_eq!(review.stops(&listed), [stop(0, EntryKind::Draft(1)), stop(1, EntryKind::Note(0))], "my new draft, the resolved thread");
+        let unfolded = review.with_unfolded(std::collections::BTreeSet::from(["c0ffee00c0ffee00".to_owned()]));
+        let stops = unfolded.stops(&listed);
+        assert_eq!(stops[1..], [stop(1, EntryKind::Note(0)), stop(1, EntryKind::Draft(0))], "its one note, then my reply");
     }
 
     #[test]

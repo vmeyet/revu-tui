@@ -159,7 +159,7 @@ fn hit_of(row: &Row) -> Option<Hit> {
         &Row::Hunk { file, index, .. } => Some(Hit { file, hunk: Some(index), line: None }),
         &Row::Line { file, hunk, index } => Some(Hit { file, hunk: Some(hunk), line: Some(index) }),
         &Row::Pair { file, hunk, removed, .. } => Some(Hit { file, hunk: Some(hunk), line: Some(removed) }),
-        &Row::Context { file, hunk, .. } => Some(Hit { file, hunk: Some(hunk), line: None }),
+        &Row::Context { file, hunk, .. } | &Row::Thread { file, hunk, .. } => Some(Hit { file, hunk: Some(hunk), line: None }),
         Row::Header | Row::Gap => None,
     }
 }
