@@ -59,6 +59,8 @@ pub(super) struct Backend {
     pub(super) jev: Option<TypeSafe>,
     /// Claude, when `[ai.anthropic]` is on and a key was found.
     pub(super) claude: Option<Claude>,
+    /// The agent whose sessions `a g` opens, when `[agent]` is on.
+    pub(super) agent: Option<crate::agent::Agent>,
     /// MRs being opened right now: loading ahead waits while there are any.
     pub(super) opening: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     /// The order of the last state save written per MR; also the one lock every write of `state.json` takes.
@@ -570,6 +572,21 @@ impl Backend {
         Ok(Incoming::ViewReady { key, view: crate::open::View { argv, shown, note, _copy: dir } })
     }
 
+    /// The agent session of `mr`, found or started, then on show in tmux or ready for the terminal.
+    pub(super) async fn session(&self, mr: crate::agent::Mr, choice: crate::agent::Choice) -> Result<Incoming> {
+        use crate::agent::Outcome;
+        let agent = self.agent.clone().context("agent sessions are off")?;
+        let cache = self.cache_of(&mr.key).clone();
+        blocking(move || {
+            Ok(match agent.open(&mr, &cache, choice)? {
+                Outcome::Pick(sessions) => Incoming::SessionPick { mr: Box::new(mr), sessions },
+                Outcome::Window(shown) => Incoming::Done(shown),
+                Outcome::Handoff(handoff) => Incoming::SessionReady(handoff),
+            })
+        })
+        .await
+    }
+
     /// The symbols the files change and the calls between them, a few files read at once.
     pub(super) async fn outline(
         &self,
@@ -787,6 +804,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
         };
@@ -829,6 +847,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
         };
@@ -876,6 +895,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: Some(Claude::with_base(&server.uri(), ai::Secret::new("sk-ant-test"), "claude-opus-5")),
+            agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
         };
@@ -1028,6 +1048,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
         }
@@ -1129,6 +1150,7 @@ mod tests {
             checkout: None,
             jev: None,
             claude: None,
+            agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
         }

@@ -295,6 +295,11 @@ pub mod keys {
         format!("{}/state.json", dir(key))
     }
 
+    /// The agent session revu last opened for an MR.
+    pub fn session(key: &MrKey) -> String {
+        format!("{}/session.json", dir(key))
+    }
+
     /// What Jev said about an MR as a queue row.
     pub fn verdict(key: &MrKey) -> String {
         format!("{}/ai/verdict.json", dir(key))

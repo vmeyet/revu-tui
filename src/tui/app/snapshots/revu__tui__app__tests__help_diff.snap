@@ -28,7 +28,7 @@ expression: "render(&mut app, 100, 30)"
 │              │        > <  the code after, before, alone                         │               │
 │              │          t  file tree                                             │               │
 │              │                                                                   │               │
-│              ╰──────────────── 1–22 of 64 · j k scroll · ? every key · esc close ╯               │
+│              ╰──────────────── 1–22 of 65 · j k scroll · ? every key · esc close ╯               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

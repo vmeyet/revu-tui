@@ -63,6 +63,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
     let theme = ground.map_or(theme, |ground| theme.with_ground(ground));
     let others = ctx.others();
     let hosts = ctx.hosts(&others);
+    let checkout = std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host()));
     let backend = Backend {
         forge: ctx.forge.clone(),
         cache: ctx.cache.clone(),
@@ -73,7 +74,8 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         ready_command: ctx.config.queue.ready.command.clone(),
         inline: ctx.config.review.inline(),
         open: ctx.config.open.clone(),
-        checkout: std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host())),
+        agent: agent(&ctx.config.agent, checkout.as_ref()),
+        checkout,
         jev: jev(&ctx.config.ai),
         claude: claude(&ctx.config.ai),
         opening: std::sync::Arc::default(),
@@ -102,6 +104,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         quit_confirm: ctx.config.keys.quit_confirm,
         usage: ctx.config.usage.enabled,
         whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
+        agent: backend.agent.is_some(),
     };
     let mut app = App::new(settings);
     let first = match start {
@@ -178,6 +181,12 @@ async fn event_loop(
         }
         if let Some(view) = app.take_view() {
             view_inline(terminal, screen, &mut keys, app, view);
+            shown.forget();
+        }
+        if let (Some(handoff), Some(agent)) = (app.take_handoff(), &backend.agent) {
+            let outcome = lend(terminal, screen, &mut keys, || agent.run.foreground(&handoff.call));
+            wake(app);
+            app.apply(Incoming::SessionLeft { said: handoff.said, outcome });
             shown.forget();
         }
     }
@@ -359,6 +368,22 @@ fn claude(ai: &crate::config::Ai) -> Option<Claude> {
     let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
     let (key, _) = ai::key(ai::Provider::Anthropic, &ai::KeyEnv::from_process(), &keychain).ok().flatten()?;
     Some(Claude::new(key, ai.anthropic.model()))
+}
+
+/// The agent of `[agent]`, when it is switched on, with what this machine says: the home folder, Claude
+/// Code's own folder, whether revu runs in tmux, and the checkout it was started in.
+fn agent(config: &crate::config::Agent, checkout: Option<&crate::open::Checkout>) -> Option<crate::agent::Agent> {
+    if !config.enabled {
+        return None;
+    }
+    let home = dirs::home_dir()?;
+    let machine = crate::agent::Machine {
+        claude_home: std::env::var_os("CLAUDE_CONFIG_DIR").map_or_else(|| home.join(".claude"), std::path::PathBuf::from),
+        home,
+        tmux: std::env::var_os("TMUX").is_some_and(|socket| !socket.is_empty()),
+        started_in: checkout.map(|checkout| (checkout.project.clone(), checkout.root.clone())),
+    };
+    Some(crate::agent::Agent::new(config, machine, std::sync::Arc::new(crate::agent::Programs)))
 }
 
 /// Runs `work` on tokio's blocking pool: file I/O and CPU-heavy work stay off the threads that drive the network.

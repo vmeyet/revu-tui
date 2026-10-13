@@ -28,6 +28,7 @@ mod ready;
 mod repeat;
 mod review;
 mod search;
+mod session;
 mod share;
 mod stack;
 mod state;
@@ -63,6 +64,7 @@ pub use queue::{Badge, QueueRow};
 pub use react::{Pick, failure as react_failure};
 pub use review::Open;
 pub use search::{Search, mark as mark_search};
+pub use session::SessionPick;
 pub use share::{Sharing, Stage as ShareStage};
 pub use state::{App, Settings};
 pub use taps::{Tap, TapSpot};
@@ -276,6 +278,11 @@ pub enum Action {
         head: Sha,
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
+    },
+    /// `a g`: find or start the agent session of `mr`, then show it.
+    Session {
+        mr: Box<crate::agent::Mr>,
+        choice: crate::agent::Choice,
     },
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
     Compose {
@@ -499,6 +506,18 @@ pub enum Incoming {
     /// Back from the program, with what went wrong if anything did.
     Viewed {
         view: crate::open::View,
+        outcome: Result<(), String>,
+    },
+    /// Several agent sessions could be the MR's: the reader picks one, or a new one.
+    SessionPick {
+        mr: Box<crate::agent::Mr>,
+        sessions: Vec<crate::agent::Session>,
+    },
+    /// The session's program, ready for the terminal; the loop lends it.
+    SessionReady(crate::agent::Handoff),
+    /// Back from the session `said` names, with what went wrong if anything did.
+    SessionLeft {
+        said: String,
         outcome: Result<(), String>,
     },
     /// What came back from the editor; `None` when the user backed out.

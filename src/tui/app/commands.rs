@@ -95,6 +95,7 @@ impl App {
                 self.show_past_answer(index);
                 vec![]
             }
+            Some(Target::Session(index)) => self.pick_session(index),
             None => vec![],
         }
     }
@@ -106,6 +107,7 @@ impl App {
             Mode::Mrs => self.mr_candidates(&palette.input),
             Mode::Files => self.file_candidates(&palette.input),
             Mode::Answers => self.answer_candidates(&palette.input),
+            Mode::Sessions => self.session_candidates(&palette.input),
             Mode::Commands => vec![],
         }
     }
@@ -194,6 +196,7 @@ impl App {
                 self.start_share(target.as_deref());
                 vec![]
             }
+            Command::Session => self.open_session(),
             Command::News => {
                 self.open_whats_new();
                 vec![]

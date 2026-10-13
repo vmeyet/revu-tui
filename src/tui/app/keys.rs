@@ -109,9 +109,7 @@ impl App {
             KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
             KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
             KeyCode::Char('z') if self.outline_keys() => self.pending = Some('z'),
-            KeyCode::Char('a') if self.focus != Focus::Queue && self.open.is_some() && !self.answer_open() && !self.outline_keys() => {
-                self.pending = Some('a');
-            }
+            KeyCode::Char('a') if self.reads_a_prefix() => self.pending = Some('a'),
             _ => {
                 return match self.focus {
                     Focus::Queue => self.handle_queue_key(key),
@@ -319,6 +317,9 @@ impl App {
             self.apply_view(c);
             return vec![];
         }
+        if (prefix, c) == ('a', 'g') {
+            return self.open_session();
+        }
         if self.focus == Focus::Queue {
             let open = match (prefix, c) {
                 ('[' | ']', 'r') => return self.walk_reviews(prefix == ']'),
@@ -366,6 +367,12 @@ impl App {
             _ => {}
         }
         vec![]
+    }
+
+    /// `a` opens its family in the queue, for `a g`, and on an open MR; the answer and the outline read `a` themselves.
+    fn reads_a_prefix(&self) -> bool {
+        let on_open_mr = self.open.is_some() && !self.answer_open() && !self.outline_keys();
+        self.focus == Focus::Queue || on_open_mr
     }
 
     /// The outline reads `a` itself while it has the keys.

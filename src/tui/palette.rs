@@ -15,6 +15,8 @@ pub enum Mode {
     Commands,
     /// The answers Claude gave before on the open MR, `a h`.
     Answers,
+    /// The agent sessions that could be an MR's, `a g`.
+    Sessions,
 }
 
 impl Mode {
@@ -25,6 +27,7 @@ impl Mode {
             Mode::Files => ("/", "files of the open MR"),
             Mode::Commands => (">", "commands"),
             Mode::Answers => ("", "answers kept for this MR"),
+            Mode::Sessions => ("", "sessions of this checkout"),
         }
     }
 }
@@ -36,6 +39,8 @@ pub enum Target {
     File(usize),
     /// A kept answer, by its index in the list `a h` found.
     Answer(usize),
+    /// An agent session, by its index in the list `a g` found; `None` for a new one.
+    Session(Option<usize>),
 }
 
 /// One row of the palette's list: what it shows, and where `enter` goes.
@@ -85,13 +90,15 @@ pub enum Command {
     Ask(String),
     /// `:share [target]`: post the MR through a `[share]` command, after a preview.
     Share(Option<String>),
+    /// `:session`: the agent session of the MR, as `a g` does.
+    Session,
     /// `:news`: what changed in revu, version by version.
     News,
     Help,
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 20] = [
+pub const VERBS: [(&str, &str); 21] = [
     ("go", "open an MR: :go !42 · :go acme/widgets!42"),
     ("open", "open the MR, or the line, in the browser"),
     ("copy", "copy the link of the MR, or of the line"),
@@ -109,6 +116,7 @@ pub const VERBS: [(&str, &str); 20] = [
     ("ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
     ("ai", "switch AI off or back on for this session: :ai off, :ai on"),
     ("share", "post the MR through a [share] command: :share · :share review"),
+    ("session", "open the agent session of the MR, or start one"),
     ("news", "what changed in revu, the newest version first"),
     ("help", "show the keys"),
     ("quit", "leave"),
@@ -155,6 +163,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "ask" if rest.is_empty() => Err(":ask needs a question".into()),
         "ask" => Ok(Command::Ask(rest.to_owned())),
         "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
+        "session" => Ok(Command::Session),
         "news" => Ok(Command::News),
         "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
@@ -356,6 +365,7 @@ mod tests {
         assert_eq!(parse("*"), Ok(Command::All));
         assert_eq!(parse(":threads"), Ok(Command::Threads));
         assert_eq!(parse(":news"), Ok(Command::News));
+        assert_eq!(parse(":session"), Ok(Command::Session));
         assert_eq!(parse("q"), Ok(Command::Quit));
         assert_eq!(parse("view old"), Ok(Command::View("old".into())));
         assert_eq!(parse("v src/a.rs:42"), Ok(Command::View("src/a.rs:42".into())));

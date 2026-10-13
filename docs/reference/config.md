@@ -134,6 +134,20 @@ Tokens never go here: they live in the macOS keychain.
 | `enabled` | true or false | false | `a` asks Claude about the diff. |
 | `model` | text | `claude-opus-5` | The Claude model to ask. |
 
+## `[agent]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `enabled` | true or false | `false` | `a g` opens a coding-agent session that belongs to the MR: Claude Code, unless `start` is set. |
+| `start` | command line with placeholders | none: Claude Code | Another agent: the command that starts its session, run in a worktree on the MR's branch. |
+| `open` | command line with placeholders | `start` runs again | With `start`: the command that opens the session of an MR again. |
+
+## `[agent.checkouts]`
+
+| Key | Type | Default | Does |
+|---|---|---|---|
+| `<project>` | folder | the checkout revu was started in | Where a project is checked out on this machine: a full path, or one from `~/`. |
+
 ## `[hosts."<host>"]`
 
 | Key | Type | Default | Does |
@@ -216,6 +230,14 @@ enabled = true
 [ai.anthropic]
 enabled = true
 model = "claude-opus-5"
+
+[agent]
+enabled = true
+start = "aider --message 'Review {ref}: {title}'"
+open = "aider --restore"
+
+[agent.checkouts]
+"acme/widgets" = "~/code/widgets"
 
 [hosts."git.acme.dev"]
 forge = "github"

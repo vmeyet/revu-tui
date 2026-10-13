@@ -118,7 +118,7 @@ pub fn check_template(template: &str, key: &str) -> Result<()> {
     Ok(())
 }
 
-fn placeholders(template: &str) -> impl Iterator<Item = &str> {
+pub(crate) fn placeholders(template: &str) -> impl Iterator<Item = &str> {
     template.split('{').skip(1).filter_map(|rest| {
         let word = rest.split_once('}')?.0;
         (!word.is_empty() && word.chars().all(|c| c.is_ascii_lowercase() || c == '_')).then_some(word)

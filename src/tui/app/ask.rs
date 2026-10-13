@@ -124,7 +124,7 @@ impl App {
             }
             'c' => (lines_here(open, self.position_here().as_ref()), self.lines_target()),
             _ => {
-                self.toast("a then e explain · r risks · s summary · t thread · c comment · a ask");
+                self.toast("a then e explain · r risks · s summary · t thread · c comment · a ask · g agent session");
                 return vec![];
             }
         };

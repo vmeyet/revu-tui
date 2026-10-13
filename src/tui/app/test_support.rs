@@ -62,6 +62,7 @@ pub(super) fn settings() -> Settings {
         quit_confirm: true,
         usage: false,
         whats_new: WhatsNew::default(),
+        agent: false,
     }
 }
 

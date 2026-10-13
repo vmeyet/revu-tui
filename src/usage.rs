@@ -155,12 +155,12 @@ const GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("ask claude", &["ask_explain", "ask_risks", "ask_summary", "ask_thread", "ask_comment", "ask_free"]),
-    ("search & app", &["palette", "jump", "palette_mr", "palette_file", "open_browser", "copy_link", "help", "quit"]),
+    ("search & app", &["palette", "jump", "palette_mr", "palette_file", "open_browser", "copy_link", "session", "help", "quit"]),
     (
         "commands",
         &[
             ":go", ":open", ":copy", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":outline", ":set", ":view", ":ai",
-            ":ask", ":share", ":help", ":quit",
+            ":ask", ":share", ":session", ":help", ":quit",
         ],
     ),
 ];
@@ -211,6 +211,7 @@ fn prefixed(prefix: char, key: KeyEvent) -> Option<&'static str> {
         ('a', 't') => "ask_thread",
         ('a', 'c') => "ask_comment",
         ('a', 'a') => "ask_free",
+        ('a', 'g') => "session",
         _ => return None,
     })
 }

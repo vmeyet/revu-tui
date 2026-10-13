@@ -54,6 +54,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     ("merge", "M"),
     ("ready", "H"),
     ("share", "Y"),
+    ("session", "ag"),
     ("react", "+"),
     ("open_browser", "o"),
     ("copy_link", "y"),
@@ -72,7 +73,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
 const TAKEN: &str = "bqhHl:,z[]ai/*royjkgGDtTpOWw+=<>xcCVsEPAMmedJKRSuUYnNv?'123456789";
 
 /// The second keys each built-in prefix already reads.
-const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "erstah")];
+const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "erstahg")];
 
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

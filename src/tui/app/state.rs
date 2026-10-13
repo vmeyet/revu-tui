@@ -56,6 +56,8 @@ pub struct Settings {
     pub usage: bool,
     /// revu's own changelog, and how far the reader had got in it.
     pub whats_new: super::WhatsNew,
+    /// `[agent] enabled`: `a g` opens an agent session on an MR.
+    pub agent: bool,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
@@ -211,6 +213,12 @@ pub struct App {
     pub thread_rows: crate::tui::thread_view::InlineLayout,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
     pub viewing: Option<crate::open::View>,
+    /// `[agent] enabled`: `a g` opens an agent session on an MR.
+    pub agent: bool,
+    /// The sessions `a g` found for an MR, which the search box lists.
+    pub session_pick: Option<super::SessionPick>,
+    /// An agent session ready for the terminal; the loop takes it and hands the terminal over.
+    pub handoff: Option<crate::agent::Handoff>,
     /// What the editor's text turned into; the loop drains it after `apply`.
     pub composed: Vec<Action>,
     /// The key list, open.
@@ -336,6 +344,9 @@ impl App {
             thread_rows: crate::tui::thread_view::InlineLayout::default(),
             thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
             viewing: None,
+            agent: settings.agent,
+            session_pick: None,
+            handoff: None,
             composed: vec![],
             help: None,
             palette: None,

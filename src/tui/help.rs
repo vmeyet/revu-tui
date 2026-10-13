@@ -144,6 +144,7 @@ pub const GROUPS: [Group; 8] = [
             ("^k ,", "MRs · / files · > commands"),
             (":", "commands: :go !42, :set theme=nord"),
             ("o y", "open in the browser, copy the link"),
+            ("ag", "the agent session of the MR: a, then g"),
             ("r", "refresh"),
             ("?", "this help"),
             ("q ^c", "quit: twice; q closes a pane first"),
