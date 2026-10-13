@@ -559,27 +559,40 @@ mod tests {
         assert_eq!(kept().pane, None, "a session lent the terminal is in no pane");
     }
 
-    #[test]
-    fn a_program_is_found_in_the_first_folder_of_the_path_that_has_it() {
-        let has = |file: &Path| file == Path::new("/Users/nina/.local/bin/claude") || file == Path::new("/usr/bin/claude");
-        assert_eq!(
-            find_in("/usr/local/bin:/Users/nina/.local/bin:/usr/bin", "claude", has).as_deref(),
-            Some("/Users/nina/.local/bin/claude")
-        );
-        assert_eq!(find_in("/usr/local/bin:/bin", "claude", has), None);
-        assert_eq!(find_in("/bin", "/opt/tools/claude", |_| false).as_deref(), Some("/opt/tools/claude"), "a path is taken as written");
-        assert_eq!(Programs.locate("sh").as_deref(), Some("/bin/sh"));
-        assert_eq!(Programs.locate("revu-no-such-program"), None);
-        assert!(Programs.search_path().is_some());
+    /// A file named `program` in `folder`, runnable or not.
+    fn file_in(folder: &Path, program: &str, runnable: bool) {
+        use std::os::unix::fs::PermissionsExt;
+        let file = folder.join(program);
+        std::fs::write(&file, "").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(if runnable { 0o755 } else { 0o644 })).unwrap();
     }
 
     #[test]
-    fn the_real_runner_returns_what_a_program_printed_and_names_the_one_that_failed() {
-        let dir = tempfile::tempdir().unwrap();
-        let printed = Programs.output(&Call::new(&["pwd"]).in_dir(dir.path())).unwrap();
-        assert!(printed.trim().ends_with(dir.path().file_name().unwrap().to_str().unwrap()), "{printed}");
-        let failed = Programs.output(&Call::new(&["ls", "/revu-no-such-folder"])).unwrap_err().to_string();
-        assert!(failed.starts_with("`ls /revu-no-such-folder` failed:"), "{failed}");
+    fn a_program_is_found_in_the_first_folder_of_the_path_that_has_a_runnable_one() {
+        let root = tempfile::tempdir().unwrap();
+        let folders: Vec<PathBuf> = ["first", "second", "third", "my tools"].iter().map(|name| root.path().join(name)).collect();
+        for folder in &folders {
+            std::fs::create_dir(folder).unwrap();
+        }
+        file_in(&folders[0], "agent", false);
+        std::fs::create_dir(folders[0].join("folder")).unwrap();
+        file_in(&folders[1], "agent", true);
+        file_in(&folders[2], "agent", true);
+        file_in(&folders[2], "folder", true);
+        file_in(&folders[3], "tool", true);
+        let search_path = std::env::join_paths(&folders).unwrap().into_string().unwrap();
+        let found = |program: &str| find_in(&search_path, program, is_runnable);
+        assert_eq!(found("agent"), Some(folders[1].join("agent").to_string_lossy().into_owned()), "a file that cannot run is passed over");
+        assert_eq!(found("folder"), Some(folders[2].join("folder").to_string_lossy().into_owned()), "so is a folder of that name");
+        assert_eq!(found("tool"), Some(folders[3].join("tool").to_string_lossy().into_owned()), "a folder with a space is read whole");
+        assert_eq!(found("missing"), None);
+        assert_eq!(find_in("", "agent", is_runnable), None);
+        assert_eq!(found("/opt/tools/agent").as_deref(), Some("/opt/tools/agent"), "a path is kept as written, there or not");
+        assert_eq!(found("./agent").as_deref(), Some("./agent"));
+    }
+
+    #[test]
+    fn a_failed_program_gives_the_line_that_carries_its_reason() {
         let fetch = "From gitlab.com:acme/widgets\n ! [rejected] feat/checkout -> origin/feat/checkout  (non-fast-forward)\n";
         assert_eq!(reason(fetch, ""), "! [rejected] feat/checkout -> origin/feat/checkout  (non-fast-forward)", "not the heading");
         assert_eq!(
@@ -587,11 +600,26 @@ mod tests {
             "fatal: couldn't find remote ref x"
         );
         assert_eq!(reason("first\nlast\n", ""), "last");
+        assert_eq!(reason("", "said on its output\n"), "said on its output");
         assert_eq!(reason("", ""), "no message");
-        let warned = Programs.output(&Call::new(&["sh", "-c", "echo '[]'; echo 'a warning' >&2"])).unwrap();
+    }
+
+    /// Only `sh` is asked of the machine, found through `PATH` wherever it lives.
+    fn sh(script: &str) -> Call {
+        Call::new(&["sh", "-c", script])
+    }
+
+    #[test]
+    fn the_real_runner_returns_what_a_program_printed_and_names_the_one_that_failed() {
+        let dir = tempfile::tempdir().unwrap();
+        let printed = Programs.output(&sh("pwd").in_dir(dir.path())).unwrap();
+        assert!(printed.trim().ends_with(dir.path().file_name().unwrap().to_str().unwrap()), "{printed}");
+        let failed = Programs.output(&sh("echo 'a heading' >&2; echo 'fatal: broken' >&2; exit 3")).unwrap_err().to_string();
+        assert_eq!(failed, "`sh -c` failed: fatal: broken");
+        let warned = Programs.output(&sh("echo '[]'; echo 'a warning' >&2")).unwrap();
         assert_eq!(warned, "[]\n", "a warning beside the answer is not part of it");
         assert!(Programs.output(&Call::new(&["revu-no-such-program"])).unwrap_err().to_string().contains("revu-no-such-program"));
-        assert_eq!(Programs.foreground(&Call::new(&["true"])), Ok(()));
-        assert!(Programs.foreground(&Call::new(&["false"])).unwrap_err().starts_with("false ended with"));
+        assert_eq!(Programs.foreground(&sh("exit 0")), Ok(()));
+        assert!(Programs.foreground(&sh("exit 3")).unwrap_err().starts_with("sh ended with"));
     }
 }
