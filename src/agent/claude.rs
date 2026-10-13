@@ -127,13 +127,13 @@ fn page(url: &str) -> String {
 /// A new background session in a worktree on the MR's branch: a plan only on someone else's MR.
 fn start(agent: &Agent, mr: &Mr) -> Result<Ready> {
     let run = agent.run.as_ref();
-    let dir = worktree::on_branch(run, agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
+    let folder = worktree::on_branch(run, agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
     let name = mr.session_name();
-    let printed = run.output(&start_call(mr, &name).in_dir(&dir))?;
+    let printed = run.output(&start_call(mr, &name).in_dir(&folder.dir))?;
     let active = sessions(&run.output(&Call::new(&[PROGRAM, "agents", "--json"]))?);
     let session =
         started(&active, &printed, &name).with_context(|| format!("claude started a session it does not list: {}", printed.trim()))?;
-    Ok(ready(session, Case::New))
+    Ok(Ready { notice: folder.notice, ..ready(session, Case::New) })
 }
 
 fn start_call(mr: &Mr, name: &str) -> Call {
@@ -166,7 +166,7 @@ fn started(active: &[Session], printed: &str, name: &str) -> Option<Session> {
 
 fn ready(session: Session, case: Case) -> Ready {
     let call = Call::new(&[PROGRAM, "attach", &session.id]);
-    Ready { kept: Kept { name: session.name, dir: session.dir, id: Some(session.resume_id), pane: None }, call, case }
+    Ready { kept: Kept { name: session.name, dir: session.dir, id: Some(session.resume_id), pane: None }, call, case, notice: None }
 }
 
 #[cfg(test)]
@@ -363,8 +363,8 @@ mod tests {
             [
                 LIST,
                 "git worktree list --porcelain",
+                "git fetch origin +refs/heads/feat/checkout:refs/remotes/origin/feat/checkout",
                 "git rev-parse --verify --quiet refs/heads/feat/checkout",
-                "git fetch origin refs/heads/feat/checkout:refs/remotes/origin/feat/checkout",
                 "git worktree add -b feat/checkout /code/widgets/.claude/worktrees/feat+checkout origin/feat/checkout",
             ]
         );
@@ -393,10 +393,14 @@ mod tests {
     fn a_new_session_reuses_the_worktree_that_has_the_branch() {
         let jobs = tempfile::tempdir().unwrap();
         let worktrees = format!("worktree {REPO}\nHEAD aaaa\nbranch refs/heads/feat/checkout\n");
-        let (agent, script) = claude(starting("[]").says("git worktree list", &worktrees), jobs.path(), false);
+        let behind = starting("[]").says("git worktree list", &worktrees).says("git rev-list", "0\t2\n");
+        let (agent, script) = claude(behind, jobs.path(), false);
         let (_dir, cache) = cache();
-        agent.open(&mr(), &cache, Choice::New).unwrap();
-        assert!(!script.lines().iter().any(|line| line.starts_with("git fetch") || line.starts_with("git worktree add")));
+        let handoff = handed(agent.open(&mr(), &cache, Choice::New).unwrap());
+        let said =
+            "a new session for !42 · revu: !42 charge cards at checkout · its branch is 2 commits behind origin: pull before you trust it";
+        assert_eq!(handoff.said, said, "the branch is used as it is, and the toast says where it stands");
+        assert!(!script.lines().iter().any(|line| line.starts_with("git worktree add")));
         let started = script.calls().into_iter().find(|call| call.argv.get(1).is_some_and(|word| word == "--bg")).unwrap();
         assert_eq!(started.dir.as_deref(), Some(Path::new(REPO)));
     }

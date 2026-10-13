@@ -48,12 +48,15 @@ It starts in the background, in a folder on the MR's own branch.
 
 | The branch | The folder |
 |---|---|
-| Is checked out somewhere, the main checkout included | That folder |
-| Is in your checkout, checked out nowhere | A new worktree, `.claude/worktrees/feat+checkout` for `feat/checkout` |
-| Is only on origin | Fetched, then the same new worktree |
+| Is checked out somewhere, the main checkout included | That folder, as it is |
+| Is in your checkout, checked out nowhere | A new worktree on it, as it is: `.claude/worktrees/feat+checkout` for `feat/checkout` |
+| Is only on origin | The same new worktree, started from origin's branch |
 | Is on a fork | No session: the toast says the branch is not on origin |
 
-revu never makes a new branch and never moves one you have.
+revu fetches origin's branch first, a rebased and force-pushed one included.
+It never makes a new branch and never moves one you have.
+When a branch you have is behind origin, or has gone its own way, the toast says so.
+When the fetch fails for another reason, the toast gives git's own words.
 
 | The MR | The session starts |
 |---|---|
@@ -236,7 +239,9 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 
 - "The session that opened the MR" comes from a file Claude Code keeps for itself: if that file changes, revu goes on to the list.
 - A session revu did not start may work in another folder than the MR's branch: revu opens it as it is.
-- A branch you already have is used as it is, even behind origin: ask the session to pull.
+- A branch you already have is used as it is, even behind origin: the toast says so, and you ask the session to pull.
+- A pane runs the agent by its full path, with the `PATH` revu was started with, and the terminal's own environment for the rest.
+- An agent that is not on revu's `PATH` opens no pane: the toast names the program.
 - revu finds a session's pane by a mark it sets on it, so only a pane revu opened is found again.
 - In Ghostty, switch to another tab right after `a g` and the split may open there: revu cannot ask Ghostty which terminal it runs in.
 - revu does not send the line or the thread under the cursor to the session, and shows no session state in the queue.

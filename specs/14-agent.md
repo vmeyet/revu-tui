@@ -54,11 +54,14 @@ A session with a `status` in the list is running or waiting and opens as it is; 
 
 - **The checkout**: the one revu was started in when its remote is the MR's project, else `[agent.checkouts]`, else a toast naming that setting. No disk search. Started inside a worktree, revu takes the repository's main checkout, so worktrees never nest.
 - **The folder**: a worktree on the MR's source branch, never a new branch.
-  - `git worktree list --porcelain` shows the branch checked out, the main checkout included: that folder.
+  - First `git fetch origin +refs/heads/<branch>:refs/remotes/origin/<branch>`. The `+` matters: a branch rebased and force-pushed since the last fetch is otherwise rejected as non-fast-forward, and a remote-tracking ref is safe to overwrite.
+  - `git worktree list --porcelain` shows the branch checked out, the main checkout included: that folder, as it is.
   - The checkout holds the branch: `git worktree add <folder> <branch>`, the branch as it is.
-  - Else `git fetch origin refs/heads/<branch>:refs/remotes/origin/<branch>`, then `git worktree add -b <branch> <folder> origin/<branch>`.
+  - Neither: `git worktree add -b <branch> <folder> origin/<branch>`, so a worktree revu creates starts from what origin has now.
+  - A branch found already there is never reset or moved. `git rev-list --left-right --count <branch>...origin/<branch>` says where it stands, and the toast repeats it: so many commits behind origin, or gone separate ways. Ahead of origin is the reader's own work and says nothing.
   - The folder is `<checkout>/.claude/worktrees/<branch>` with `+` for `/`.
-  - The fetch fails, as for a fork's branch: a toast says so and nothing starts.
+  - The fetch fails and no local branch exists: nothing starts. Only git's "couldn't find remote ref" reads as "not on origin, as with an MR from a fork"; any other failure shows git's own reason.
+  - A failed program's reason is its `fatal:`, `error:` or `!` line, else its last line: git's first line is often only `From <remote>`.
   - A branch name starting with `-` or holding `..` is refused before git runs.
 - **The session**: `claude --bg --name <name> [--permission-mode plan] <prompt>`, run in that folder.
   - The name is `revu: <ref> <title>`, cut at 60 characters.
@@ -69,7 +72,12 @@ A session with a `status` in the list is running or waiting and opens as it is; 
 
 ## Showing it
 
-- A stopped session first: `claude --bg --resume <session-id>`, in the folder it was started in.
+- A stopped session first: `claude --bg --resume <session-id>`, in the folder it was started in. revu runs it itself, with its own environment.
+- **What a pane runs**: `/usr/bin/env PATH=<revu's PATH> <full path of the program> <arguments…>`, for tmux, the three terminals and the split command alike.
+  - A pane gets the terminal's environment, not revu's: Ghostty starts a surface's command from a bare `bash --noprofile --norc`, where `claude` in `~/.local/bin` is not found.
+  - The full path comes from revu's own `PATH`, so the program starts; `PATH` goes with it, so what the agent starts in turn (git, node, hooks) is found too. Nothing else is passed: `HOME`, `USER`, `LANG` and `TERM` come from the terminal.
+  - A program revu's `PATH` does not have opens no pane, and the toast names it.
+  - The terminal lent outside any split is revu's own, so the program runs there as written.
 - **In tmux** (`TMUX` set), beside revu when it fits, so the diff stays in view:
   - Already on show: `tmux list-panes -s -F '#{pane_id}<tab>#{window_id}<tab>#{@revu_session}'` lists the panes of revu's tmux session. A pane marked with this session gets `tmux select-window -t <window>` then `tmux select-pane -t <pane>`, and nothing opens.
   - A pane: `tmux split-window -h -P -F '#{pane_id}' claude attach <id>`. revu keeps the left half and the session takes the keys.

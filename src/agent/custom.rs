@@ -20,12 +20,13 @@ pub fn check(command: &str, key: &str) -> Result<()> {
 pub(super) fn session(agent: &Agent, start: &str, open: Option<&str>, mr: &Mr, kept: Option<&Kept>) -> Result<Step> {
     if let (Some(kept), Some(open)) = (kept, open) {
         let call = call(open, mr, &kept.name, &kept.dir)?;
-        return Ok(Step::Ready(Ready { kept: kept.clone(), call, case: Case::Remembered }));
+        return Ok(Step::Ready(Ready { kept: kept.clone(), call, case: Case::Remembered, notice: None }));
     }
-    let dir = worktree::on_branch(agent.run.as_ref(), agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
+    let folder = worktree::on_branch(agent.run.as_ref(), agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
     let name = mr.session_name();
-    let call = call(start, mr, &name, &dir)?;
-    Ok(Step::Ready(Ready { kept: Kept { name, dir, id: None, pane: None }, call, case: Case::New }))
+    let call = call(start, mr, &name, &folder.dir)?;
+    let kept = Kept { name, dir: folder.dir, id: None, pane: None };
+    Ok(Step::Ready(Ready { kept, call, case: Case::New, notice: folder.notice }))
 }
 
 /// The command's words with the MR filled in, word by word after the split, so a title with a quote stays one word.

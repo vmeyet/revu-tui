@@ -7,6 +7,8 @@ use crate::config::AgentShow;
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
+/// Runs a program with one more variable set; a pane starts whatever words it is given, this one included.
+const ENV: &str = "/usr/bin/env";
 /// The word of `[agent] split` that becomes the session's program, word by word.
 const COMMAND: &str = "{command}";
 const PLACEHOLDERS: [&str; 2] = ["command", "dir"];
@@ -71,10 +73,13 @@ impl Place {
 
     /// Shows the session of `ready`; `pane` is where revu showed it last, if it did.
     pub(super) fn put(&self, run: &dyn Run, origin: Option<&str>, ready: &Ready, pane: Option<&str>, reference: &str) -> Result<Placed> {
+        if self.screen == Screen::Plain {
+            return show::show(run, None, ready, reference).map(Placed::unmarked);
+        }
+        let ready = &Ready { call: pane_call(run, &ready.call)?, ..ready.clone() };
         let tmux = Tmux { show: self.show, compact_width: self.compact_width };
         match &self.screen {
-            Screen::Tmux => show::show(run, Some(tmux), ready, reference).map(Placed::unmarked),
-            Screen::Plain => show::show(run, None, ready, reference).map(Placed::unmarked),
+            Screen::Tmux | Screen::Plain => show::show(run, Some(tmux), ready, reference).map(Placed::unmarked),
             Screen::Terminal(terminal) => Ok(self.in_terminal(run, terminal, origin, ready, pane, reference)),
             Screen::Command(command) => Ok(self.by_command(run, command, ready, reference)),
         }
@@ -125,6 +130,16 @@ impl Place {
     }
 }
 
+/// The program as a pane runs it. A pane starts with the terminal's own environment, not revu's: the
+/// program is named by its full path, and it gets revu's `PATH` so what it starts in turn is found too.
+fn pane_call(run: &dyn Run, call: &Call) -> Result<Call> {
+    let program = call.program();
+    let located = run.locate(program).with_context(|| format!("no session shown: `{program}` is not on revu's PATH"))?;
+    let with_path = run.search_path().map(|search_path| vec![ENV.to_owned(), format!("PATH={search_path}")]).unwrap_or_default();
+    let argv = with_path.into_iter().chain([located]).chain(call.argv.iter().skip(1).cloned()).collect();
+    Ok(Call { argv, dir: call.dir.clone() })
+}
+
 /// The split command's words, `{command}` replaced by the program's own words and `{dir}` by its folder.
 fn split_call(command: &str, program: &Call, dir: &Path) -> Result<Call> {
     let words = shell_words::split(command).with_context(|| format!("`{command}` does not split into words"))?;
@@ -153,6 +168,7 @@ mod tests {
             },
             call: Call::new(&["claude", "attach", "ab12cd34"]),
             case: Case::New,
+            notice: None,
         }
     }
 
@@ -270,6 +286,61 @@ mod tests {
         let missing = Script::default().fails("kitty", "cannot run `kitty`: No such file or directory");
         let placed = custom(AgentShow::Split).put(&missing, None, &ready(), None, "!42").unwrap();
         assert_eq!(placed, lent(&format!("{SAID} · the split command failed: cannot run `kitty`: No such file or directory")));
+    }
+
+    const PATH: &str = "/Users/nina/.local/bin:/usr/bin";
+
+    #[test]
+    fn a_pane_gets_the_program_by_its_full_path_and_revus_own_path() {
+        let script = Script::default().with_path(PATH);
+        let call = pane_call(&script, &Call::new(&["claude", "attach", "ab12cd34"]).in_dir(Path::new("/code/widgets"))).unwrap();
+        assert_eq!(
+            call.argv,
+            ["/usr/bin/env", "PATH=/Users/nina/.local/bin:/usr/bin", "/Users/nina/.local/bin/claude", "attach", "ab12cd34"]
+        );
+        assert_eq!(call.dir.as_deref(), Some(Path::new("/code/widgets")));
+        let no_path = pane_call(&Script::default(), &Call::new(&["/opt/bin/aider", "--restore"])).unwrap();
+        assert_eq!(no_path.argv, ["/opt/bin/aider", "--restore"]);
+    }
+
+    #[test]
+    fn every_screen_that_opens_a_pane_runs_the_located_program_with_the_path() {
+        let program = ["/usr/bin/env", "PATH=/Users/nina/.local/bin:/usr/bin", "/Users/nina/.local/bin/claude", "attach", "ab12cd34"];
+        let quoted = "/usr/bin/env 'PATH=/Users/nina/.local/bin:/usr/bin' /Users/nina/.local/bin/claude attach ab12cd34";
+        let tmux = Script::default().with_path(PATH).says("tmux split-window", "%5\n");
+        place(Screen::Tmux, AgentShow::Split).put(&tmux, None, &ready(), None, "!42").unwrap();
+        assert_eq!(tmux.calls()[1].argv[6..], program);
+        let ghostty = Script::default().with_path(PATH).says("osascript", "B2\n");
+        self::ghostty(AgentShow::Split).put(&ghostty, Some("A1"), &ready(), None, "!42").unwrap();
+        assert_eq!(ghostty.calls()[0].argv[3..], ["A1", quoted, "/code/my widgets"]);
+        let iterm = Script::default().with_path(PATH).says("osascript", "9F\n");
+        place(Screen::Terminal(Terminal::ITerm { session: "5A".into() }), AgentShow::Split)
+            .put(&iterm, None, &ready(), None, "!42")
+            .unwrap();
+        assert_eq!(iterm.calls()[0].argv[3..], ["5A", quoted]);
+        let wezterm = Script::default().with_path(PATH).says("wezterm", "7\n");
+        let screen = Screen::Terminal(Terminal::WezTerm { program: "wezterm".into() });
+        place(screen, AgentShow::Split).put(&wezterm, None, &ready(), None, "!42").unwrap();
+        assert_eq!(wezterm.calls()[0].argv[7..], program);
+        let custom = Script::default().with_path(PATH);
+        place(Screen::Command(KITTY.into()), AgentShow::Split).put(&custom, None, &ready(), None, "!42").unwrap();
+        assert_eq!(custom.calls()[0].argv[6..], program);
+    }
+
+    #[test]
+    fn a_program_that_is_not_on_the_path_opens_no_pane_and_is_named() {
+        for screen in [Screen::Tmux, Screen::Terminal(Terminal::Ghostty), Screen::Command(KITTY.into())] {
+            let script = Script::default().with_path(PATH).without("claude");
+            let err = place(screen, AgentShow::Split).put(&script, Some("A1"), &ready(), None, "!42").unwrap_err().to_string();
+            assert_eq!(err, "no session shown: `claude` is not on revu's PATH");
+            assert_eq!(script.lines(), [] as [String; 0]);
+        }
+        let plain = Script::default().with_path(PATH).without("claude");
+        assert_eq!(
+            place(Screen::Plain, AgentShow::Split).put(&plain, None, &ready(), None, "!42").unwrap(),
+            lent(SAID),
+            "lent, the terminal is revu's own"
+        );
     }
 
     #[test]

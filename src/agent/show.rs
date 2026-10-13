@@ -20,7 +20,8 @@ pub(super) struct Tmux {
 
 /// Which session this is and how it was found, for the toast.
 pub(super) fn said(ready: &Ready, reference: &str) -> String {
-    format!("{} · {}", ready.case.said(reference), ready.kept.name)
+    let notice = ready.notice.as_ref().map(|notice| format!(" · {notice}")).unwrap_or_default();
+    format!("{} · {}{notice}", ready.case.said(reference), ready.kept.name)
 }
 
 pub(super) fn show(run: &dyn Run, tmux: Option<Tmux>, ready: &Ready, reference: &str) -> Result<Outcome> {
@@ -95,6 +96,7 @@ mod tests {
             kept: Kept { name: "revu: !42 charge cards".into(), dir: "/code/widgets".into(), id: Some(ID.into()), pane: None },
             call: Call { dir: dir.map(Into::into), ..call },
             case: Case::Remembered,
+            notice: None,
         }
     }
 

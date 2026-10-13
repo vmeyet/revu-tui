@@ -87,6 +87,33 @@ pub trait Run: Send + Sync {
     fn foreground(&self, call: &Call) -> Result<(), String>;
     /// How many columns revu's own terminal has, when it says.
     fn width(&self) -> Option<u16>;
+    /// revu's own `PATH`, which a pane opened by a terminal does not get by itself.
+    fn search_path(&self) -> Option<String>;
+    /// The full path of `program` as revu's own `PATH` finds it.
+    fn locate(&self, program: &str) -> Option<String>;
+}
+
+/// The first folder of `search_path` that holds something `is_runnable` under the name `program`;
+/// a program already written as a path is that path.
+fn find_in(search_path: &str, program: &str, is_runnable: impl Fn(&Path) -> bool) -> Option<String> {
+    if program.contains('/') {
+        return Some(program.to_owned());
+    }
+    let found = std::env::split_paths(search_path).map(|folder| folder.join(program)).find(|file| is_runnable(file))?;
+    Some(found.to_string_lossy().into_owned())
+}
+
+fn is_runnable(file: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    file.metadata().is_ok_and(|about| about.is_file() && about.permissions().mode() & 0o111 != 0)
+}
+
+/// The line of what a failed program wrote that carries the reason: git's `fatal:`, `error:` or
+/// `!` line when there is one, else the last line, since the first is often only a heading.
+fn reason<'a>(complained: &'a str, printed: &'a str) -> &'a str {
+    let lines: Vec<&str> = complained.lines().chain(printed.lines()).map(str::trim).filter(|line| !line.is_empty()).collect();
+    let marked = lines.iter().find(|line| ["fatal:", "error:", "!"].iter().any(|mark| line.starts_with(mark)));
+    marked.or(lines.last()).copied().unwrap_or("no message")
 }
 
 /// The programs of this machine.
@@ -98,8 +125,7 @@ impl Run for Programs {
         let output = call.command().stdin(Stdio::null()).output().with_context(|| format!("cannot run `{program}`"))?;
         let (printed, complained) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
         if !output.status.success() {
-            let why = complained.lines().chain(printed.lines()).map(str::trim).find(|line| !line.is_empty()).unwrap_or("no message");
-            bail!("`{program} {}` failed: {why}", call.argv.get(1).map_or("", String::as_str));
+            bail!("`{program} {}` failed: {}", call.argv.get(1).map_or("", String::as_str), reason(&complained, &printed));
         }
         Ok(printed.into_owned())
     }
@@ -112,6 +138,14 @@ impl Run for Programs {
 
     fn width(&self) -> Option<u16> {
         crossterm::terminal::size().ok().map(|(columns, _)| columns)
+    }
+
+    fn search_path(&self) -> Option<String> {
+        std::env::var("PATH").ok().filter(|path| !path.is_empty())
+    }
+
+    fn locate(&self, program: &str) -> Option<String> {
+        find_in(&self.search_path()?, program, is_runnable)
     }
 }
 
@@ -179,6 +213,8 @@ struct Ready {
     kept: Kept,
     call: Call,
     case: Case,
+    /// Something the reader should know about the folder it works in, for the toast.
+    notice: Option<String>,
 }
 
 enum Step {
@@ -303,6 +339,8 @@ mod tests {
         answers: Vec<(String, Result<String, String>)>,
         calls: Mutex<Vec<Call>>,
         width: Option<u16>,
+        search_path: Option<String>,
+        missing: Vec<String>,
     }
 
     impl Script {
@@ -313,6 +351,16 @@ mod tests {
         /// revu's terminal is `width` columns wide.
         pub fn wide(self, width: u16) -> Self {
             Self { width: Some(width), ..self }
+        }
+
+        /// revu's `PATH` is `search_path`, and every program but the missing ones is in its first folder.
+        pub fn with_path(self, search_path: &str) -> Self {
+            Self { search_path: Some(search_path.to_owned()), ..self }
+        }
+
+        pub fn without(mut self, program: &str) -> Self {
+            self.missing.push(program.to_owned());
+            self
         }
 
         pub fn fails(self, starts_with: &str, why: &str) -> Self {
@@ -352,6 +400,19 @@ mod tests {
 
         fn width(&self) -> Option<u16> {
             self.width
+        }
+
+        fn search_path(&self) -> Option<String> {
+            self.search_path.clone()
+        }
+
+        /// With no `PATH` set by the test, a program is found under its own name.
+        fn locate(&self, program: &str) -> Option<String> {
+            if self.missing.iter().any(|missing| missing == program) {
+                return None;
+            }
+            let Some(search_path) = &self.search_path else { return Some(program.to_owned()) };
+            find_in(search_path, program, |_| true)
         }
     }
 
@@ -499,12 +560,34 @@ mod tests {
     }
 
     #[test]
+    fn a_program_is_found_in_the_first_folder_of_the_path_that_has_it() {
+        let has = |file: &Path| file == Path::new("/Users/nina/.local/bin/claude") || file == Path::new("/usr/bin/claude");
+        assert_eq!(
+            find_in("/usr/local/bin:/Users/nina/.local/bin:/usr/bin", "claude", has).as_deref(),
+            Some("/Users/nina/.local/bin/claude")
+        );
+        assert_eq!(find_in("/usr/local/bin:/bin", "claude", has), None);
+        assert_eq!(find_in("/bin", "/opt/tools/claude", |_| false).as_deref(), Some("/opt/tools/claude"), "a path is taken as written");
+        assert_eq!(Programs.locate("sh").as_deref(), Some("/bin/sh"));
+        assert_eq!(Programs.locate("revu-no-such-program"), None);
+        assert!(Programs.search_path().is_some());
+    }
+
+    #[test]
     fn the_real_runner_returns_what_a_program_printed_and_names_the_one_that_failed() {
         let dir = tempfile::tempdir().unwrap();
         let printed = Programs.output(&Call::new(&["pwd"]).in_dir(dir.path())).unwrap();
         assert!(printed.trim().ends_with(dir.path().file_name().unwrap().to_str().unwrap()), "{printed}");
         let failed = Programs.output(&Call::new(&["ls", "/revu-no-such-folder"])).unwrap_err().to_string();
         assert!(failed.starts_with("`ls /revu-no-such-folder` failed:"), "{failed}");
+        let fetch = "From gitlab.com:acme/widgets\n ! [rejected] feat/checkout -> origin/feat/checkout  (non-fast-forward)\n";
+        assert_eq!(reason(fetch, ""), "! [rejected] feat/checkout -> origin/feat/checkout  (non-fast-forward)", "not the heading");
+        assert_eq!(
+            reason("From gitlab.com:acme/widgets\nfatal: couldn't find remote ref x\nmore\n", ""),
+            "fatal: couldn't find remote ref x"
+        );
+        assert_eq!(reason("first\nlast\n", ""), "last");
+        assert_eq!(reason("", ""), "no message");
         let warned = Programs.output(&Call::new(&["sh", "-c", "echo '[]'; echo 'a warning' >&2"])).unwrap();
         assert_eq!(warned, "[]\n", "a warning beside the answer is not part of it");
         assert!(Programs.output(&Call::new(&["revu-no-such-program"])).unwrap_err().to_string().contains("revu-no-such-program"));
