@@ -4,7 +4,7 @@ use super::drag::{self, TextRow};
 use super::table::{self, TableLine};
 use super::theme::Theme;
 use super::thread_view;
-use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, spinner, truncate, truncate_middle, truncate_tabs};
+use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, truncate, truncate_middle, truncate_tabs};
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::{Deployment, Kind, PipelineStatus};
@@ -118,7 +118,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     f.render_widget(block, area);
     if app.open.is_none() {
         let lines: &[&str] = match app.opening {
-            Some(_) => &[spinner(app.now.duration_since(app.started)), "", "fetching the merge request"],
+            Some(_) => &[app.spinner(), "", "fetching the merge request"],
             None => &["open a merge request", "to read its diff here"],
         };
         return draw_empty(f, theme, inner, lines);

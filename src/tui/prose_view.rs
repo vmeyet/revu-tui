@@ -1,7 +1,7 @@
 //! The prose view in the diff area: the file's title, then the rows in view of its rendered blocks.
 use super::app::{App, Texts, Versions};
 use super::theme::Theme;
-use super::ui::{draw_empty, spinner};
+use super::ui::draw_empty;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -12,7 +12,7 @@ use ratatui::widgets::Paragraph;
 const TITLE_ROWS: u16 = 2;
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
-    let (theme, elapsed) = (app.theme, app.now.duration_since(app.started));
+    let theme = app.theme;
     let Some(open) = app.open.as_mut() else { return };
     let beside = open.review.side_by_side && open.review.wide;
     let Some(prose) = open.prose.as_mut() else { return };
@@ -20,7 +20,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(Paragraph::new(title), area);
     let body = Rect { y: area.y + TITLE_ROWS, height: area.height.saturating_sub(TITLE_ROWS), ..area };
     let versions = match &prose.texts {
-        Texts::Waiting => return draw_empty(f, theme, body, &[spinner(elapsed), "", "reading the file at both commits"]),
+        Texts::Waiting => return draw_empty(f, theme, body, &[app.spinner(), "", "reading the file at both commits"]),
         Texts::Failed(message) => return draw_empty(f, theme, body, &[message, "", "r to retry"]),
         Texts::Ready(versions) => versions,
     };

@@ -88,6 +88,22 @@ The second `?` lists every key, as everywhere; no key is taken away, the list is
 It is the free key a phone keyboard reaches soonest: every lowercase letter but `f` is taken, and `f` is the key the tests and the docs give to the user.
 It is a second key of the `jump` action: a key bound to `jump` under `[keys.bind]` stands for both, and `,` can no longer be bound to something else.
 
+## Motion
+
+A phone link pays for every repaint, so the compact layout moves less than the others.
+
+| | Wide, narrow, zen | Compact |
+|---|---|---|
+| Spinner step | 80 ms | 250 ms |
+| Next look at a screen that changed | 100 ms | 250 ms, one spinner step |
+| Queue marks `●` `◆` | pulse once a second | steady |
+| Running pipeline badge | spins | steady `⠋` |
+
+- One rule: `Motion` (`src/tui/motion.rs`), `Lively` or `Calm`, which `App::motion()` reads from the tier of the last frame. The spinner, the loop's tick and the queue marks ask it; none of them looks at the tier.
+- It follows the tier at every draw: a window crossing 70 columns changes how it moves with no restart, and `layout = "compact"` is calm at any width.
+- A compact queue at rest draws the same buffer second after second, so the loop falls back to its one-second look and sends nothing.
+- A screen still at rest is looked at once a second in every tier.
+
 ## Unchanged
 
 From 70 columns up, wide, narrow and zen draw exactly as before: their snapshots do not move, but for the `,` beside `^k` in the key list.
@@ -100,6 +116,7 @@ From 70 columns up, wide, narrow and zen draw exactly as before: their snapshots
 - The tier follows the width frame after frame; two-line rows answer a click and the wheel; the cursor's line in the title; wrap by default and `w`; the path cut; the prompts a short screen keeps.
 - The tap bar: the labels of each page, a click on each label against its keys typed, the row given up to a question and to typed text, the setting, a bar too wide, and every set fitting 45 columns with keys that parse.
 - The short `?` list and the full one after it; `,` against `ctrl-k`.
+- Motion: both values of the spinner step and the tick; a wide and a narrow queue pulse and spin; a compact one, by width and forced, draws one buffer over three seconds; crossing the width switches.
 
 ## Considered
 

@@ -100,7 +100,7 @@ The TUI loop is the one from slack-tui `src/tui/mod.rs`:
 ```
 loop {
   draw(app); print links only when the frame changed
-  wake = select! { terminal event, incoming channel, tick }   // tick: 250 ms (one spinner step) after a changed frame, 1 s after a still one
+  wake = select! { terminal event, incoming channel, tick }   // tick: 100 ms after a changed frame (250 ms, one spinner step, in the compact layout), 1 s after a still one
   match wake {
     Event(key)   => actions = app.handle_key(key)
     Incoming(i)  => app.apply(i)
@@ -244,7 +244,7 @@ Opening an MR paints from cache, then three requests refresh it in parallel; a d
 - Queue: every 60 s while the TUI runs, one GraphQL call.
 - Open MR: discussions every 30 s, MR every 60 s (pipeline, approvals, head sha).
   While the head sha is the one shown, that poll reads the MR alone; once it moved, diffs (from the cache when loading ahead kept them), discussions and drafts follow and the review is built again.
-- A change in the open MR shows in the status line (`● 2 new notes`, `● new commits`) until the next key; it never moves the cursor. Queue rows with activity since they were last opened carry a steady `●`.
+- A change in the open MR shows in the status line (`● 2 new notes`, `● new commits`) until the next key; it never moves the cursor. Queue rows with activity since they were last opened carry a `●` that pulses once a second, steady in the compact layout.
 - Both forge clients keep the rate-limit count their answers report (`forge::budget`); under 100 requests left, every poll interval is five times longer, and a request waiting out a 429 shows `⏳ 42s` in the status line.
 - Backoff to 5 min after a `429` or a network error, reset after one success.
 - A write the reader makes succeeds (approve, merge, publish, resolve, post, draft or ready): its effect shows at once from what revu knows (my approval counts in `approved_by` and `approvals_left`), then the MR and the queue are read again right away, so the forge's own numbers replace the guess within a request.

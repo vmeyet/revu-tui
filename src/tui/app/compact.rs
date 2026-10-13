@@ -4,8 +4,24 @@
 use super::App;
 use crate::config::QueueLayout;
 use crate::review::Place;
+use crate::tui::motion::Motion;
+use std::time::Duration;
 
 impl App {
+    /// The screen moves on its own as little as a phone link likes in the compact layout, freely anywhere else.
+    pub fn motion(&self) -> Motion {
+        if self.compact { Motion::Calm } else { Motion::Lively }
+    }
+
+    /// How long revu has run, which is what every spinner and pulse counts from.
+    pub fn elapsed(&self) -> Duration {
+        self.now.duration_since(self.started)
+    }
+
+    pub fn spinner(&self) -> &'static str {
+        self.motion().spinner(self.elapsed())
+    }
+
     /// Long diff lines wrap: what `w` chose, else on in the compact layout, where a cut line hides most of itself.
     pub fn wraps(&self) -> bool {
         self.wrap.unwrap_or(self.compact)

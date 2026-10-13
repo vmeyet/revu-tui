@@ -1,7 +1,7 @@
 //! The pipeline pane: the run's state and counts, then each stage and its jobs, failures first.
 use super::app::{App, Focus, Open, Run};
 use super::theme::Theme;
-use super::ui::{DEPLOYED, Link, counts, draw_empty, settle_scroll, side_pane, spinner, truncate};
+use super::ui::{DEPLOYED, Link, counts, draw_empty, settle_scroll, side_pane, truncate};
 use crate::forge::checks::{Checks, Job, JobState};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -14,7 +14,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(pipeline) = &open.pipeline else { return };
-    let tick = spinner(app.now.duration_since(app.started));
+    let tick = app.spinner();
     let title = match &pipeline.run {
         Run::Ready(checks) => format!("Pipeline · {}", word(checks.state())),
         _ => "Pipeline".to_owned(),

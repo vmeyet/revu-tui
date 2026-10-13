@@ -2,7 +2,7 @@
 use super::app::{Answer, AnswerState, App, Focus, Input};
 use super::theme::Theme;
 use super::thread_view::{body_lines, box_height, draw_compose, wrap};
-use super::ui::{side_pane, spinner, truncate};
+use super::ui::{side_pane, truncate};
 use crate::ai::anthropic::{Outcome, Stop};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -14,7 +14,7 @@ use unicode_width::UnicodeWidthStr;
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
     let focused = app.focus == Focus::Side;
-    let elapsed = app.now.duration_since(app.started);
+
     let compose = matches!(app.input, Some(Input::Ask { .. } | Input::FollowUp)).then(|| (app.input_label(), app.buffer.clone()));
     let Some(answer) = app.open.as_ref().and_then(|o| o.answer.as_ref()) else { return };
     let title = if answer.cached { format!("Claude · {} · cached", answer.label) } else { format!("Claude · {}", answer.label) };
@@ -36,7 +36,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let scroll = scroll_of(answer, lines.len(), height);
     let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|l| indent(l)).collect();
     f.render_widget(Paragraph::new(shown), body);
-    f.render_widget(Paragraph::new(footer_line(answer, theme, spinner(elapsed), footer.width as usize)), footer);
+    f.render_widget(Paragraph::new(footer_line(answer, theme, app.spinner(), footer.width as usize)), footer);
 }
 
 /// While it streams the pane follows the end; once done the reader's scroll holds.

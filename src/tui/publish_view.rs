@@ -1,6 +1,6 @@
 //! The publish modal: every draft on one screen, the approval tick, one key to send them all.
 use super::app::{App, Publish};
-use super::ui::{pane, spinner, truncate};
+use super::ui::{pane, truncate};
 use crate::review::{Draft, Side};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -42,10 +42,7 @@ pub fn draw(f: &mut Frame, app: &App, publish: &Publish, area: Rect) {
     ]));
     lines.push(Line::default());
     let footer = if publish.busy {
-        Line::from(vec![
-            Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.accent)),
-            Span::styled(" publishing", muted),
-        ])
+        Line::from(vec![Span::styled(app.spinner(), Style::default().fg(theme.accent)), Span::styled(" publishing", muted)])
     } else {
         let on_footer = publish.selected >= drafts.len();
         Line::from(vec![

@@ -32,9 +32,7 @@ const ZEN_COMPOSE_PCT: u16 = 50;
 const ZEN_PANE_MIN: u16 = 8;
 /// Under this many rows the compact layout is short: the status row and the MR header give their rows to the page.
 const SHORT_BELOW: u16 = 20;
-const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-/// Slow on purpose: each step is a repaint a phone link pays for, and four a second still read as alive.
-pub const SPINNER_FRAME: Duration = Duration::from_millis(250);
+
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Link {
@@ -427,7 +425,7 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![rate, dot.clone(), Span::styled("? help ", muted)])
     } else if app.loading() {
         Line::from(vec![
-            Span::styled(spinner(app.now.duration_since(app.started)), Style::default().fg(theme.accent)),
+            Span::styled(app.spinner(), Style::default().fg(theme.accent)),
             Span::styled(" loading", muted),
             dot,
             Span::styled("? help ", muted),
@@ -467,10 +465,6 @@ pub fn settle_scroll(scroll: usize, selected: usize, height: usize) -> usize {
     } else {
         scroll
     }
-}
-
-pub fn spinner(elapsed: Duration) -> &'static str {
-    SPINNER[(elapsed.as_millis() / SPINNER_FRAME.as_millis()) as usize % SPINNER.len()]
 }
 
 /// `text` cut to `width` columns, an ellipsis in the last one when it does not fit.
@@ -748,12 +742,6 @@ mod tests {
         fn tabs_drawn_while_cutting_read_as_tabs_drawn_first(text in "[a-z漢\t ]{0,20}", width in 1..24usize) {
             proptest::prop_assert_eq!(truncate_tabs(&text, "→   ", width), truncate(&text.replace('\t', "→   "), width));
         }
-    }
-
-    #[test]
-    fn the_spinner_steps_four_times_a_second() {
-        let at = |ms: u64| spinner(Duration::from_millis(ms));
-        assert_eq!((1..=1000).filter(|&ms| at(ms) != at(ms - 1)).count(), 4);
     }
 
     #[test]

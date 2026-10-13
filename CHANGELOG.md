@@ -40,7 +40,7 @@ Each entry says what changed, then where, then how to use it.
 ### Fixed
 
 - **A screen at rest sends nothing to a slow link.**
-  In the queue, where the marks stay lit, and wherever a spinner turns, now four steps a second.
+  In the compact layout: the queue marks stay lit, and a spinner turns four steps a second.
 
 ## 0.7.0 - 2026-10-12
 

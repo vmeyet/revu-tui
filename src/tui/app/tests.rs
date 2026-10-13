@@ -380,17 +380,59 @@ fn a_picture_arriving_after_the_pane_was_drawn_is_painted_on_the_next_frame() {
     assert!(!screen.contains("… loading image"), "the layout of the last frame is not kept: {screen}");
 }
 
-#[test]
-fn a_queue_at_rest_draws_the_same_frame_second_after_second() {
+/// A queue with a running pipeline and fresh activity on screen, which is all that may move at rest.
+fn queue_with_marks(width: u16, height: u16) -> App {
     let mut app = with_queue();
     app.opened.insert(mr_key(), "2026-09-21T00:00:00Z".parse().unwrap());
-    let screen = render(&mut app, 120, 40);
+    let screen = render(&mut app, width, height);
     assert!(screen.contains('⠋') && screen.contains('●'), "a running pipeline and fresh activity are on screen:\n{screen}");
-    let at_rest = cells(&mut app, 120, 40);
-    for second in 1..=3 {
+    app
+}
+
+fn moves_within_three_seconds(app: &mut App, width: u16, height: u16) -> bool {
+    let at_rest = cells(app, width, height);
+    (1..=3).any(|_| {
         app.now += Duration::from_secs(1);
-        assert_eq!(cells(&mut app, 120, 40), at_rest, "after {second}s");
+        cells(app, width, height) != at_rest
+    })
+}
+
+#[test]
+fn a_compact_queue_at_rest_draws_the_same_frame_second_after_second() {
+    let (width, height) = PHONE;
+    let mut app = queue_with_marks(width, height);
+    assert_eq!(app.motion(), crate::tui::motion::Motion::Calm);
+    assert!(!moves_within_three_seconds(&mut app, width, height));
+    let mut forced = queue_with_marks(120, 40);
+    forced.widths = crate::config::Widths { compact: u16::MAX, ..crate::config::Widths::default() };
+    render(&mut forced, 120, 40);
+    assert!(!moves_within_three_seconds(&mut forced, 120, 40), "forced at any width, it rests the same");
+}
+
+#[test]
+fn a_wide_and_a_narrow_queue_pulse_their_marks_and_spin_the_running_badge() {
+    for width in [160, 100] {
+        let mut app = queue_with_marks(width, 40);
+        assert_eq!(app.motion(), crate::tui::motion::Motion::Lively, "{width} columns");
+        let lit = cell_of(&cells(&mut app, width, 40), "●").fg;
+        app.now += Duration::from_secs(1);
+        let screen = render(&mut app, width, 40);
+        assert_eq!(cell_of(&cells(&mut app, width, 40), "●").fg, app.theme.faded, "the dot fades for a second");
+        assert_ne!(lit, app.theme.faded);
+        assert!(!screen.contains('⠋'), "a second on, the badge is at another step:\n{screen}");
     }
+}
+
+#[test]
+fn a_window_that_crosses_the_compact_width_changes_how_it_moves() {
+    let mut app = queue_with_marks(120, 40);
+    assert!(moves_within_three_seconds(&mut app, 120, 40));
+    render(&mut app, 50, 30);
+    assert_eq!((app.motion(), app.motion().tick()), (crate::tui::motion::Motion::Calm, Duration::from_millis(250)));
+    assert!(!moves_within_three_seconds(&mut app, 50, 30), "calm as soon as it is compact");
+    render(&mut app, 120, 40);
+    assert_eq!(app.motion().tick(), Duration::from_millis(100));
+    assert!(moves_within_three_seconds(&mut app, 120, 40), "and lively again from 70 columns");
 }
 
 #[test]

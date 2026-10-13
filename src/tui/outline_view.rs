@@ -2,7 +2,7 @@
 use super::app::{App, Focus, List, ListRow, Outline, OutlineEntry, PaneLine, Symbols};
 use super::queue_view::rule;
 use super::theme::Theme;
-use super::ui::{counts, draw_empty, settle_scroll, side_pane, spinner, truncate};
+use super::ui::{counts, draw_empty, settle_scroll, side_pane, truncate};
 use crate::diff::words::Segment;
 use crate::outline::{Change, Direction, Item, Section, State};
 use ratatui::Frame;
@@ -19,7 +19,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let block = side_pane(theme, &title(outline), app.focus == Focus::Side, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
-    let tick = spinner(app.now.duration_since(app.started));
+    let tick = app.spinner();
     match &outline.symbols {
         Symbols::Waiting => return draw_empty(f, theme, inner, &[tick, "", "reading the symbols"]),
         Symbols::Failed(message) => return draw_empty(f, theme, inner, &["outline unreadable", message, "", "r to retry"]),

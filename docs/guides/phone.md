@@ -13,6 +13,7 @@ It fits a phone held upright, about 50 columns wide, reaching revu on your Mac t
 | Line numbers | Only the sign shows; the title of the diff tells the cursor's line, as `L12` |
 | A long file path | Cut in its middle, so the folder and the file name both read |
 | The threads of a line | In the diff, under their line, where the comment box opens too |
+| What moves | A spinner steps four times a second, and the queue marks stay lit: a screen at rest sends nothing |
 
 `enter` or `l` on a queue row opens the diff as the page.
 `h` goes back one page: from the right pane to the diff, from the diff to the queue.

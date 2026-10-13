@@ -360,10 +360,15 @@ fn kind_colour(theme: Theme, kind: &str) -> Color {
     }
 }
 
+/// The colour of a mark that asks for attention: its own while lit, faded between two pulses.
+fn pulsing(app: &App, colour: Color) -> Color {
+    if app.motion().lit(app.elapsed()) { colour } else { app.theme.faded }
+}
+
 fn mark_span(app: &App, mark: Option<Mark>) -> Span<'static> {
     let theme = app.theme;
     match mark {
-        Some(Mark::WaitsOnMe) => Span::styled("◆ ", Style::default().fg(theme.warn)),
+        Some(Mark::WaitsOnMe) => Span::styled("◆ ", Style::default().fg(pulsing(app, theme.warn))),
         Some(Mark::Urgent) => Span::styled("! ", Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)),
         Some(Mark::Sprawling) => Span::styled("~ ", Style::default().fg(theme.muted)),
         None => Span::raw("  "),
@@ -374,8 +379,8 @@ fn badge_span(app: &App, badge: Badge) -> Span<'static> {
     let theme = app.theme;
     match badge {
         Badge::Failed => Span::styled("✗", Style::default().fg(theme.danger)),
-        Badge::Running => Span::styled("⠋", Style::default().fg(theme.muted)),
-        Badge::Activity => Span::styled("●", Style::default().fg(theme.accent)),
+        Badge::Running => Span::styled(app.motion().running(app.elapsed()), Style::default().fg(theme.muted)),
+        Badge::Activity => Span::styled("●", Style::default().fg(pulsing(app, theme.accent))),
         Badge::Draft => Span::styled("D", Style::default().fg(theme.muted)),
     }
 }

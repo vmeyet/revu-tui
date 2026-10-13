@@ -13,7 +13,7 @@ The terminal has no pixels to spare, so the design is typographic: alignment, rh
 6. **Unfocused panes fade** (`fade()` from slack-tui) so the eye finds focus without a loud frame: every frame sits close to the ground (`border`), the focused one, a modal and the compose box one step up (`border_focus`), and focus shows in the title's accent.
 7. **The terminal keeps its background.** Themes set foregrounds and two surfaces only, exactly as in slack-tui, so the app matches any terminal.
 8. **Glyphs have fallbacks.** `[tui] ascii = true` swaps `▎ ◆ ◇ ● ▸ ▾ ✓ ✗ ⠋` for `| * o * > v + x -`. Nerd Font icons are not used.
-9. **Motion is calm.** A spinner steps every 250 ms while something loads, and nothing else moves: a screen at rest draws the same frame again, so a slow link carries nothing. No sliding, no blinking text.
+9. **Motion is calm.** Spinners at 80 ms, the `●` pulse at 1 s, nothing else moves. No sliding, no blinking text. The compact layout is calmer still, since a phone link pays for every repaint: a spinner steps every 250 ms and nothing else moves, so a screen at rest draws the same frame again (`13-compact.md` § Motion).
 10. **Nothing modal without a way out on `esc`.** Every overlay closes on `esc`, and the status line says so.
 
 The screenshot test: open `acme/widgets!42` in Ghostty with `tokyonight`, resize to 120×40, take a screenshot, put it next to GitHub's and delta's diff views.
@@ -107,7 +107,7 @@ The badge is the most pressing of:
 | Badge | Means |
 |---|---|
 | `✗` danger | pipeline failed or conflicts |
-| `⠋` muted | pipeline running (steady: it may run for minutes) |
+| `⠋` muted | pipeline running (spinner; steady in the compact layout) |
 | `●` accent | activity since I last opened it |
 | `◆` warn | waits on me (Jev `waits_on_me`, M4) |
 | `D` muted | draft MR |
