@@ -14,13 +14,7 @@ pub fn check(command: &str, key: &str) -> Result<()> {
     if crate::share::placeholders(program).next().is_some() {
         bail!("`{key}` starts with a placeholder: its first word is the program to run");
     }
-    for word in crate::share::placeholders(command) {
-        if !PLACEHOLDERS.contains(&word) {
-            let known = PLACEHOLDERS.iter().map(|p| format!("{{{p}}}")).collect::<Vec<_>>().join(" ");
-            bail!("`{key}` names `{{{word}}}`, which revu does not fill; the placeholders are {known}");
-        }
-    }
-    Ok(())
+    crate::share::check_placeholders(command, key, &PLACEHOLDERS)
 }
 
 pub(super) fn session(agent: &Agent, start: &str, open: Option<&str>, mr: &Mr, kept: Option<&Kept>) -> Result<Step> {

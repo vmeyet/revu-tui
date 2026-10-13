@@ -110,9 +110,15 @@ pub fn check_template(template: &str, key: &str) -> Result<()> {
     if template.trim().is_empty() {
         bail!("`{key}` is empty");
     }
+    check_placeholders(template, key, &PLACEHOLDERS)
+}
+
+/// Every `{word}` of `template` is one of `known`; `key` names the setting in the error.
+pub(crate) fn check_placeholders(template: &str, key: &str, known: &[&str]) -> Result<()> {
     for word in placeholders(template) {
-        if !PLACEHOLDERS.contains(&word) {
-            bail!("`{key}` names `{{{word}}}`, which revu does not fill; the placeholders are {}", known());
+        if !known.contains(&word) {
+            let known = known.iter().map(|p| format!("{{{p}}}")).collect::<Vec<_>>().join(" ");
+            bail!("`{key}` names `{{{word}}}`, which revu does not fill; the placeholders are {known}");
         }
     }
     Ok(())
@@ -123,10 +129,6 @@ pub(crate) fn placeholders(template: &str) -> impl Iterator<Item = &str> {
         let word = rest.split_once('}')?.0;
         (!word.is_empty() && word.chars().all(|c| c.is_ascii_lowercase() || c == '_')).then_some(word)
     })
-}
-
-fn known() -> String {
-    PLACEHOLDERS.iter().map(|p| format!("{{{p}}}")).collect::<Vec<_>>().join(" ")
 }
 
 /// Pipes `message` to the target's command; its output is not read further than for errors.

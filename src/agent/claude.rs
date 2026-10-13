@@ -54,8 +54,7 @@ pub(super) fn session(agent: &Agent, jobs: &Path, mr: &Mr, kept: Option<&Kept>, 
         Choice::Session(session) => (*session, Case::Picked),
         Choice::Find => {
             let known = sessions(&run.output(&Call::new(&[PROGRAM, "agents", "--json", "--all"]))?);
-            let openers = openers(jobs, &mr.fields.url);
-            match find(&known, kept, &openers, agent.checkouts.get(&mr.fields.project)) {
+            match find(&known, kept, || openers(jobs, &mr.fields.url), agent.checkouts.get(&mr.fields.project)) {
                 Found::Session(session, case) => (session, case),
                 Found::Pick(sessions) => return Ok(Step::Pick(sessions)),
                 Found::New => return start(agent, mr).map(Step::Ready),
@@ -75,12 +74,14 @@ enum Found {
 }
 
 /// The session of an MR among the `known` ones: the one revu remembers, then the one that opened the
-/// MR, then a pick among those started in the project's checkout, then a new one.
-fn find(known: &[Session], kept: Option<&Kept>, openers: &[String], checkout: Option<&PathBuf>) -> Found {
+/// MR, then a pick among those started in the project's checkout, then a new one. `openers` reads
+/// every session's state file, so it is asked only once nothing is remembered.
+fn find(known: &[Session], kept: Option<&Kept>, openers: impl FnOnce() -> Vec<String>, checkout: Option<&PathBuf>) -> Found {
     let remembered = kept.and_then(|kept| known.iter().find(|session| kept.id.as_deref() == Some(session.resume_id.as_str())));
     if let Some(session) = remembered {
         return Found::Session(session.clone(), Case::Remembered);
     }
+    let openers = openers();
     let opened = known.iter().filter(|session| openers.contains(&session.id) || openers.contains(&session.resume_id));
     if let Some(session) = opened.max_by_key(|session| (session.live, session.started)) {
         return Found::Session(session.clone(), Case::Opener);
@@ -282,7 +283,7 @@ mod tests {
             sessions(&list(&[item("aa", "old", REPO, false, 9), item("bb", "live", REPO, true, 1), item("cc", "new", REPO, false, 5)]));
         let pick = |openers: &[&str]| {
             let openers: Vec<String> = openers.iter().map(|id| (*id).to_owned()).collect();
-            let Found::Session(session, Case::Opener) = find(&known, None, &openers, None) else { panic!("not found") };
+            let Found::Session(session, Case::Opener) = find(&known, None, || openers, None) else { panic!("not found") };
             session.id
         };
         assert_eq!(pick(&["aa", "bb", "cc"]), "bb");
