@@ -166,7 +166,7 @@ fn started(active: &[Session], printed: &str, name: &str) -> Option<Session> {
 
 fn ready(session: Session, case: Case) -> Ready {
     let call = Call::new(&[PROGRAM, "attach", &session.id]);
-    Ready { kept: Kept { name: session.name, dir: session.dir, id: Some(session.resume_id) }, call, case }
+    Ready { kept: Kept { name: session.name, dir: session.dir, id: Some(session.resume_id), pane: None }, call, case }
 }
 
 #[cfg(test)]
@@ -232,7 +232,10 @@ mod tests {
         let (agent, script) = claude(Script::default().says(LIST, &listed), jobs.path(), false);
         let (_dir, cache) = cache();
         cache
-            .write(&keys_session(), &Kept { name: "revu: !42 charge cards".into(), dir: WORKTREE.into(), id: Some(resume_id("ab12cd34")) })
+            .write(
+                &keys_session(),
+                &Kept { name: "revu: !42 charge cards".into(), dir: WORKTREE.into(), id: Some(resume_id("ab12cd34")), pane: None },
+            )
             .unwrap();
         let handoff = handed(agent.open(&mr(), &cache, Choice::Find).unwrap());
         assert_eq!(handoff.call, attach("ab12cd34"));
@@ -251,7 +254,9 @@ mod tests {
         let listed = list(&[item("0pener00", "opened it", REPO, true, 2)]);
         let (agent, _script) = claude(Script::default().says(LIST, &listed), jobs.path(), false);
         let (_dir, cache) = cache();
-        cache.write(&keys_session(), &Kept { name: "gone".into(), dir: WORKTREE.into(), id: Some(resume_id("90900000")) }).unwrap();
+        cache
+            .write(&keys_session(), &Kept { name: "gone".into(), dir: WORKTREE.into(), id: Some(resume_id("90900000")), pane: None })
+            .unwrap();
         let handoff = handed(agent.open(&mr(), &cache, Choice::Find).unwrap());
         assert_eq!((handoff.call, handoff.said.as_str()), (attach("0pener00"), "the session that opened !42 · opened it"));
         assert_eq!(cache.read::<Kept>(&keys_session()).unwrap().id, Some(resume_id("0pener00")), "the session found is remembered instead");
@@ -365,7 +370,10 @@ mod tests {
         );
         assert_eq!(script.lines()[6], "claude agents --json");
         let kept = cache.read::<Kept>(&keys_session()).unwrap();
-        assert_eq!(kept, Kept { name: "revu: !42 charge cards at checkout".into(), dir: WORKTREE.into(), id: Some(resume_id("5e5510n0")) });
+        assert_eq!(
+            kept,
+            Kept { name: "revu: !42 charge cards at checkout".into(), dir: WORKTREE.into(), id: Some(resume_id("5e5510n0")), pane: None }
+        );
     }
 
     #[test]

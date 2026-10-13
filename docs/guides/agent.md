@@ -77,6 +77,22 @@ For any other project, say where it is:
 
 Without it, the toast names this setting and nothing starts.
 
+## Where the session opens
+
+Beside revu when something can split the screen, so the diff stays in view.
+revu takes the first of these that applies:
+
+| revu runs in | The session opens |
+|---|---|
+| tmux | In a tmux pane beside revu, or a tmux window |
+| Ghostty, iTerm2 or WezTerm | In that terminal's own split, on the right |
+| Another terminal, with `[agent] split` set | Where your command puts it |
+| Anything else | In revu's place: the session takes the terminal |
+
+Inside tmux, tmux always wins, whatever terminal is around it.
+The width rule is the same everywhere: a split needs 140 columns, so that revu keeps 70.
+Under that, or with `show = "window"`, nothing splits.
+
 ## In tmux
 
 The session opens beside revu, in a pane on the right, so the diff stays in view.
@@ -106,11 +122,76 @@ To always get one or the other:
 show = "split"    # or "window"; "auto" is the default
 ```
 
-## Outside tmux
+## In Ghostty
+
+Ghostty 1.3.0 or later splits to the right of revu and gives the keys to the session.
+The first time, macOS asks whether your terminal may control Ghostty: allow it.
+Say no, and the session takes the terminal instead, with the reason in the toast.
+
+| To | Press |
+|---|---|
+| Go back to revu | `cmd-[` |
+| Go to the session again | `cmd-]`, or `a g` on the same MR |
+| Close the session's split | `ctrl-z` in the session: it keeps running, and revu takes the full width back |
+
+revu splits the terminal that is in front when you press `a g`, which is revu's own.
+Ghostty needs `macos-applescript` left on, as it is by default.
+
+## In iTerm2
+
+iTerm2 splits the session revu runs in, to the right, with the same profile.
+The first time, macOS asks whether iTerm2 may be controlled: allow it.
+
+| To | Press |
+|---|---|
+| Go back to revu | `cmd-[` |
+| Go to the session again | `cmd-]`, or `a g` on the same MR |
+| Close the session's split | `ctrl-z` in the session |
+
+## In WezTerm
+
+WezTerm splits revu's pane to the right with its own `wezterm cli`.
+No permission is asked.
+
+| To | Press |
+|---|---|
+| Go back to revu | `ctrl-shift-←` |
+| Go to the session again | `ctrl-shift-→`, or `a g` on the same MR |
+| Close the session's split | `ctrl-z` in the session |
+
+In these three terminals, `a g` on an MR whose session is already in a split goes to that split.
+revu keeps the split's id with the session, and opens a new one when the terminal no longer has it.
+
+## In another terminal
+
+Give revu the command that opens a pane beside it.
+
+```toml
+[agent]
+split = "kitty @ launch --location=vsplit --cwd {dir} {command}"
+```
+
+| Placeholder | Becomes |
+|---|---|
+| `{command}` | The session's program, word by word: write it as a word of its own |
+| `{dir}` | The folder the session works in |
+
+The command runs without a shell.
+revu cannot see the pane it opened: `a g` again runs the command again.
+When the command fails, the session takes the terminal and the toast says why.
+
+Two recipes, not tested:
+
+| Tool | `split` |
+|---|---|
+| kitty, with `allow_remote_control` on | `kitty @ launch --location=vsplit --cwd {dir} {command}` |
+| Zellij | `zellij run --direction right --cwd {dir} -- {command}` |
+
+## Anywhere else
 
 The session takes the terminal, as your editor does for `^v`.
 `ctrl-z` brings revu back; the session keeps running.
-`show` changes nothing here: run revu inside tmux to see the diff and the session together.
+Run revu in tmux or in one of the terminals above to see the diff and the session together.
 
 ## From a phone
 
@@ -157,6 +238,7 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 - A session revu did not start may work in another folder than the MR's branch: revu opens it as it is.
 - A branch you already have is used as it is, even behind origin: ask the session to pull.
 - revu finds a session's pane by a mark it sets on it, so only a pane revu opened is found again.
+- In Ghostty, switch to another tab right after `a g` and the split may open there: revu cannot ask Ghostty which terminal it runs in.
 - revu does not send the line or the thread under the cursor to the session, and shows no session state in the queue.
 - revu remembers one session per MR, in its cache, for as long as it keeps the MR there.
 - revu never removes a worktree it added: `git worktree remove` does.

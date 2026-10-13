@@ -38,7 +38,7 @@ Each entry says what changed, then where, then how to use it.
   `,` opens it on MRs, then `/` finds files and `>` runs commands.
 - **Open the Claude Code session of an MR.**
   In the queue, the diff and zen, once `[agent] enabled = true` is in the config.
-  `a` then `g`, or `:session`, opens its session in a tmux pane beside the diff, or starts one on the MR's branch.
+  `a` then `g`, or `:session`, opens it beside the diff in a tmux, Ghostty, iTerm2 or WezTerm split, or starts one on the MR's branch.
 
 ### Fixed
 

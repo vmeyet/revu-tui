@@ -1,5 +1,5 @@
-//! Putting a session on screen. In tmux: a pane beside revu when revu is wide enough for both, else a
-//! window of its own. Outside tmux: the terminal itself.
+//! A session in tmux: a pane beside revu when revu is wide enough for both, else a window of its own.
+//! With no tmux, the session's program goes back to the loop, which lends it the terminal.
 use super::{Call, Handoff, Outcome, Ready, Run};
 use crate::config::AgentShow;
 use anyhow::Result;
@@ -18,8 +18,13 @@ pub(super) struct Tmux {
     pub(super) compact_width: u16,
 }
 
+/// Which session this is and how it was found, for the toast.
+pub(super) fn said(ready: &Ready, reference: &str) -> String {
+    format!("{} · {}", ready.case.said(reference), ready.kept.name)
+}
+
 pub(super) fn show(run: &dyn Run, tmux: Option<Tmux>, ready: &Ready, reference: &str) -> Result<Outcome> {
-    let said = format!("{} · {}", ready.case.said(reference), ready.kept.name);
+    let said = said(ready, reference);
     let Some(tmux) = tmux else {
         return Ok(Outcome::Handoff(Handoff { call: ready.call.clone(), said }));
     };
@@ -57,8 +62,8 @@ fn is_beside(run: &dyn Run, tmux: Tmux) -> bool {
     }
 }
 
-/// tmux leaves revu half of its `width`: enough when that half is no compact window.
-fn fits_beside(width: u16, compact_width: u16) -> bool {
+/// A split leaves revu half of its `width`: enough when that half is no compact window.
+pub(super) fn fits_beside(width: u16, compact_width: u16) -> bool {
     width / 2 >= compact_width
 }
 
@@ -87,7 +92,7 @@ mod tests {
     fn ready(dir: Option<&str>) -> Ready {
         let call = Call::new(&["claude", "attach", "ab12cd34"]);
         Ready {
-            kept: Kept { name: "revu: !42 charge cards".into(), dir: "/code/widgets".into(), id: Some(ID.into()) },
+            kept: Kept { name: "revu: !42 charge cards".into(), dir: "/code/widgets".into(), id: Some(ID.into()), pane: None },
             call: Call { dir: dir.map(Into::into), ..call },
             case: Case::Remembered,
         }

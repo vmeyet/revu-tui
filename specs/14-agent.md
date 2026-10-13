@@ -17,7 +17,8 @@ It sits beside "ask Claude" (`05-ai.md`) and changes nothing there.
 | `start` | Another agent than Claude Code: the command that starts its session. |
 | `open` | With `start`: the command that opens that session again. |
 | `checkouts` | Project path → its folder on this machine, a full path or one from `~/`. |
-| `show` | In tmux: `auto` (default), `split` or `window`. |
+| `show` | `auto` (default), `split` or `window`: beside revu when it fits, always, or never. |
+| `split` | For a terminal revu does not know: the command that opens a pane beside revu. |
 
 Checked when the config loads, with the key named: both commands split into words and name only known placeholders, `open` needs `start`, a checkout is a full path.
 
@@ -78,7 +79,19 @@ A session with a `status` in the list is running or waiting and opens as it is; 
   - `[agent] show`: `split` and `window` skip the question; `auto` asks it.
   - The words go to tmux one by one, so no shell reads them.
   - The pane closes when the program exits; tmux resizes revu and the loop draws again on the resize event, as for any window change.
-- **Outside tmux**: the loop lends the terminal to `claude attach <id>`, as it does for `^v` (`08-open-file.md`), and takes it back when the program exits.
+- **Outside tmux, in a terminal revu knows**: that terminal's own split, on the right.
+  - Detection: `TERM_PROGRAM` alone decides (`ghostty`, `iTerm.app`, `WezTerm`). A terminal started from another inherits the other's variables (`GHOSTTY_RESOURCES_DIR`, `WEZTERM_PANE`) but sets its own `TERM_PROGRAM`.
+  - Every value reaches `osascript` as an argument of `on run argv`, never as script text, as the notification does (`src/tui/actions.rs`).
+  - **Ghostty** (1.3.0, its AppleScript dictionary): `split <terminal> direction right with configuration <cfg>`, the configuration holding `command` (the program's words joined with shell quoting) and `initial working directory`; then `focus`. It prints the new terminal's `id`.
+  - Ghostty gives a terminal no way to know its own id: no property names the calling process and no variable carries it. So revu asks `id of focused terminal of selected tab of front window` first thing after the key, before any slow work, and splits that id later. Considered: writing a marker title and searching for it, which flickers the title and writes to the terminal from a background task.
+  - **iTerm2**: `ITERM_SESSION_ID` ends in the session's `id`; the script walks windows, tabs and sessions to that id and sends `split vertically with same profile command <command>`, then `select`. A program with a folder is started as `/bin/sh -c 'cd <dir> && exec <program>'`, since a split takes no folder.
+  - **WezTerm**: `<wezterm> cli split-pane --right --cwd <dir> -- <program…>`, which prints the pane id and reads revu's own pane from `WEZTERM_PANE`. `<wezterm>` is `$WEZTERM_EXECUTABLE_DIR/wezterm`, else `wezterm`.
+  - **Asking again**: the pane's id is kept with the remembered session (`pane` in `session.json`) when it is the same session. Ghostty and iTerm2 look for it and `focus` / `select` it, answering `gone` otherwise; WezTerm reads `cli list --format json`, then `cli activate-pane --pane-id`. A pane that is gone is replaced and forgotten.
+  - **A failure** (automation refused, a terminal too old, a missing command) lends the terminal and puts the reason in the toast.
+- **Outside tmux, `[agent] split` set**: the command's words, `{command}` replaced by the program's words and `{dir}` by its folder, run without a shell. `{command}` must be a word of its own, which is what `kitty @ launch` and `zellij run` take. Nothing is remembered: asking again runs it again.
+- **Otherwise**: the loop lends the terminal to `claude attach <id>`, as it does for `^v` (`08-open-file.md`), and takes it back when the program exits.
+- Outside tmux `show` uses the same `fits_beside` on the terminal's own width, and "not beside" means lending the terminal: no tab, no window.
+- The order is tmux, a known terminal, the split command, the terminal itself (`place.rs`).
 
 ## What is remembered
 
@@ -106,7 +119,9 @@ It is written every time a session is shown, so the last one found is the one re
 | `claude.rs` | Everything Claude Code: its list, `state.json`, the find order, start, resume, attach |
 | `custom.rs` | The two commands of another agent |
 | `worktree.rs` | The folder on the MR's branch |
+| `place.rs` | The order of the four screens, `show`, the split command, the fallback |
 | `show.rs` | The tmux pane or window, or the hand-off |
+| `terminal.rs` | Ghostty, iTerm2 and WezTerm: detection, split, focus |
 
 A second built-in agent is a second file beside `claude.rs` and one more arm in `Agent::open`.
 The app (`src/tui/app/session.rs`) only asks for `Action::Session` and applies what comes back.
@@ -117,6 +132,8 @@ The app (`src/tui/app/session.rs`) only asks for `Action::Session` and applies w
 
 - The find order: each of the four cases, with a fixture list and fixture `state.json` files, broken and missing ones included.
 - The commands, word for word: attach, resume, new; in tmux and outside.
+- The terminals: detection from the environment, the script and its arguments for each, a folder and a command with spaces and quotes, the remembered pane focused and the one that is gone, the refusal that lends the terminal.
+- The order of the four screens, the split command and its check.
 - The pane against the window: by width on both sides of the limit, by each value of `show`, a width tmux does not give; a session already in a pane and one already in a window.
 - The worktree: reused, added from the local branch, fetched then added, the fork, a name that reads as a flag.
 - Plan mode against the default; the name cut; the id read back.

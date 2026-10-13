@@ -3,7 +3,9 @@
 //! Every program runs through [`Run`], so a test never starts a session, a tmux window or a git command.
 mod claude;
 mod custom;
+mod place;
 mod show;
+mod terminal;
 mod worktree;
 
 use crate::cache::{Cache, keys};
@@ -19,6 +21,8 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 pub use custom::check;
+pub use place::check_split;
+pub use terminal::Terminal;
 
 /// A session name longer than this is cut: it is a tmux window's name too.
 const NAME_CHARS: usize = 60;
@@ -81,6 +85,8 @@ pub trait Run: Send + Sync {
     fn output(&self, call: &Call) -> Result<String>;
     /// The program on the terminal as it is, until it exits; the error is a line for the reader.
     fn foreground(&self, call: &Call) -> Result<(), String>;
+    /// How many columns revu's own terminal has, when it says.
+    fn width(&self) -> Option<u16>;
 }
 
 /// The programs of this machine.
@@ -102,6 +108,10 @@ impl Run for Programs {
         let program = call.program();
         let status = call.command().status().map_err(|e| format!("cannot run {program}: {e}"))?;
         if status.success() { Ok(()) } else { Err(format!("{program} ended with {status}")) }
+    }
+
+    fn width(&self) -> Option<u16> {
+        crossterm::terminal::size().ok().map(|(columns, _)| columns)
     }
 }
 
@@ -128,6 +138,9 @@ pub struct Kept {
     /// The agent's own id for it, when it gives one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// The pane of the terminal revu showed it in, to go back to while the terminal still has it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane: Option<String>,
 }
 
 /// Which session `a g` is after.
@@ -186,9 +199,9 @@ pub struct Handoff {
 pub enum Outcome {
     /// Several sessions could be the one: the reader picks, or starts a new one.
     Pick(Vec<Session>),
-    /// The session is on show in tmux, in a pane beside revu or in a window; the text says which.
+    /// The session is on show beside revu or in a tmux window; the text says which.
     Shown(String),
-    /// Outside tmux: the loop lends the terminal to the session.
+    /// Nothing could split: the loop lends the terminal to the session.
     Handoff(Handoff),
 }
 
@@ -208,6 +221,8 @@ pub struct Machine {
     pub claude_home: PathBuf,
     /// revu runs inside tmux.
     pub tmux: bool,
+    /// The terminal revu runs in, when it is one revu can split.
+    pub terminal: Option<Terminal>,
     /// Under this many columns revu's own window is compact: a pane beside it must leave it that much.
     pub compact_width: u16,
     /// The checkout revu was started in: its project and its root, which may be a worktree.
@@ -220,8 +235,8 @@ pub struct Agent {
     harness: Harness,
     /// Project path → its checkout; the one revu was started in wins over the config's.
     checkouts: BTreeMap<String, PathBuf>,
-    /// Set when revu runs inside tmux.
-    tmux: Option<show::Tmux>,
+    /// What can show a session beside revu, and when it should.
+    place: place::Place,
     pub run: Arc<dyn Run>,
 }
 
@@ -233,25 +248,39 @@ impl Agent {
         };
         let started_in = machine.started_in.map(|(project, folder)| (project, worktree::main_checkout(run.as_ref(), &folder)));
         let checkouts = config.folders(&machine.home).into_iter().chain(started_in).collect();
-        let tmux = machine.tmux.then_some(show::Tmux { show: config.show, compact_width: machine.compact_width });
-        Self { harness, checkouts, tmux, run }
+        let screen = match (machine.tmux, machine.terminal, &config.split) {
+            (true, _, _) => place::Screen::Tmux,
+            (false, Some(terminal), _) => place::Screen::Terminal(terminal),
+            (false, None, Some(command)) => place::Screen::Command(command.clone()),
+            (false, None, None) => place::Screen::Plain,
+        };
+        let place = place::Place { screen, show: config.show, compact_width: machine.compact_width };
+        Self { harness, checkouts, place, run }
     }
 
-    /// Finds or starts the session of `mr`, remembers it in `cache`, and shows it in a tmux pane or window
-    /// when revu runs in tmux. Outside tmux the caller owns the terminal, so the program comes back.
+    /// Finds or starts the session of `mr`, remembers it in `cache`, and shows it beside revu where
+    /// something can split. Where nothing can, the caller owns the terminal, so the program comes back.
     pub fn open(&self, mr: &Mr, cache: &Cache, choice: Choice) -> Result<Outcome> {
+        let run = self.run.as_ref();
         let key = keys::session(&mr.key);
-        let kept = cache.read::<Kept>(&key);
+        let before = cache.read::<Kept>(&key);
+        let origin = self.place.origin(run);
         let step = match &self.harness {
-            Harness::Claude { jobs } => claude::session(self, jobs, mr, kept.as_ref(), choice)?,
-            Harness::Custom { start, open } => custom::session(self, start, open.as_deref(), mr, kept.as_ref())?,
+            Harness::Claude { jobs } => claude::session(self, jobs, mr, before.as_ref(), choice)?,
+            Harness::Custom { start, open } => custom::session(self, start, open.as_deref(), mr, before.as_ref())?,
         };
         let ready = match step {
             Step::Pick(sessions) => return Ok(Outcome::Pick(sessions)),
             Step::Ready(ready) => ready,
         };
-        cache.write(&key, &ready.kept)?;
-        show::show(self.run.as_ref(), self.tmux, &ready, &mr.fields.reference)
+        let is_same = |kept: &Kept| kept.id == ready.kept.id && kept.name == ready.kept.name;
+        let shown_in = before.filter(is_same).and_then(|kept| kept.pane);
+        cache.write(&key, &Kept { pane: shown_in.clone(), ..ready.kept.clone() })?;
+        let placed = self.place.put(run, origin.as_deref(), &ready, shown_in.as_deref(), &mr.fields.reference)?;
+        if placed.pane != shown_in {
+            cache.write(&key, &Kept { pane: placed.pane, ..ready.kept })?;
+        }
+        Ok(placed.outcome)
     }
 
     fn checkout(&self, project: &str) -> Result<&Path> {
@@ -273,11 +302,17 @@ mod tests {
     pub(super) struct Script {
         answers: Vec<(String, Result<String, String>)>,
         calls: Mutex<Vec<Call>>,
+        width: Option<u16>,
     }
 
     impl Script {
         pub fn says(self, starts_with: &str, printed: &str) -> Self {
             self.then(starts_with, Ok(printed.to_owned()))
+        }
+
+        /// revu's terminal is `width` columns wide.
+        pub fn wide(self, width: u16) -> Self {
+            Self { width: Some(width), ..self }
         }
 
         pub fn fails(self, starts_with: &str, why: &str) -> Self {
@@ -314,6 +349,10 @@ mod tests {
             self.calls.lock().unwrap().push(call.clone());
             Ok(())
         }
+
+        fn width(&self) -> Option<u16> {
+            self.width
+        }
     }
 
     pub(super) fn mr() -> Mr {
@@ -341,10 +380,15 @@ mod tests {
     }
 
     pub(super) fn agent(harness: Harness, script: Script, tmux: bool) -> (Agent, Arc<Script>) {
+        let screen = if tmux { place::Screen::Tmux } else { place::Screen::Plain };
+        on_screen(harness, script, screen)
+    }
+
+    pub(super) fn on_screen(harness: Harness, script: Script, screen: place::Screen) -> (Agent, Arc<Script>) {
         let script = Arc::new(script);
         let checkouts = BTreeMap::from([("acme/widgets".to_owned(), PathBuf::from(REPO))]);
-        let tmux = tmux.then_some(show::Tmux { show: config::AgentShow::Auto, compact_width: 70 });
-        (Agent { harness, checkouts, tmux, run: script.clone() }, script)
+        let place = place::Place { screen, show: config::AgentShow::Auto, compact_width: 70 };
+        (Agent { harness, checkouts, place, run: script.clone() }, script)
     }
 
     pub(super) fn cache() -> (tempfile::TempDir, Cache) {
@@ -373,6 +417,7 @@ mod tests {
             home: "/Users/nina".into(),
             claude_home: "/Users/nina/.claude".into(),
             tmux: true,
+            terminal: Some(Terminal::Ghostty),
             compact_width: 60,
             started_in: Some(("acme/widgets".into(), REPO.into())),
         };
@@ -380,13 +425,19 @@ mod tests {
         assert_eq!(agent.checkout("acme/widgets").unwrap(), Path::new(REPO));
         assert_eq!(agent.checkout("acme/api").unwrap(), Path::new("/Users/nina/code/api"));
         assert_eq!(agent.harness, Harness::Claude { jobs: "/Users/nina/.claude/jobs".into() });
-        assert_eq!(agent.tmux, Some(show::Tmux { show: config::AgentShow::Auto, compact_width: 60 }));
-        let outside = Agent::new(
-            &config::Agent { show: config::AgentShow::Split, ..config.clone() },
-            Machine { tmux: false, ..machine() },
-            Arc::new(Script::default()),
+        let placed = |screen| place::Place { screen, show: config::AgentShow::Auto, compact_width: 60 };
+        assert_eq!(agent.place, placed(place::Screen::Tmux), "tmux first, whatever the terminal around it");
+        let with_split = config::Agent { split: Some("kitty @ launch {command}".into()), ..config.clone() };
+        let screen_of = |machine: Machine| Agent::new(&with_split, machine, Arc::new(Script::default())).place.screen;
+        assert_eq!(
+            screen_of(Machine { tmux: false, ..machine() }),
+            place::Screen::Terminal(Terminal::Ghostty),
+            "then a terminal revu knows"
         );
-        assert_eq!(outside.tmux, None, "outside tmux the setting has nothing to place");
+        let unknown = Machine { tmux: false, terminal: None, ..machine() };
+        assert_eq!(screen_of(unknown), place::Screen::Command("kitty @ launch {command}".into()), "then the split command");
+        let plain = Agent::new(&config, Machine { tmux: false, terminal: None, ..machine() }, Arc::new(Script::default()));
+        assert_eq!(plain.place, placed(place::Screen::Plain), "then the terminal itself");
         let missing = agent.checkout("acme/other").unwrap_err().to_string();
         assert!(missing.contains("[agent.checkouts]") && missing.contains("acme/other"), "{missing}");
         let in_a_worktree =
@@ -397,6 +448,54 @@ mod tests {
         let custom = config::Agent { start: Some("aider".into()), open: Some("aider --restore".into()), ..config };
         let agent = Agent::new(&custom, machine(), Arc::new(Script::default()));
         assert_eq!(agent.harness, Harness::Custom { start: "aider".into(), open: Some("aider --restore".into()) });
+    }
+
+    #[test]
+    fn the_pane_a_session_was_shown_in_is_remembered_with_it_and_forgotten_once_gone() {
+        let jobs = tempfile::tempdir().unwrap();
+        let item = |live: &str| {
+            format!(
+                r#"[{{"id": "ab12cd34", "sessionId": "ab12cd34-0000", "name": "revu: nxt", "cwd": "/code/widgets", "kind": "background"{live}}}]"#
+            )
+        };
+        let listed = item(r#", "status": "idle""#);
+        let ghostty = |script: Script| {
+            on_screen(Harness::Claude { jobs: jobs.path().to_owned() }, script.wide(200), place::Screen::Terminal(Terminal::Ghostty))
+        };
+        let front = "osascript -e tell application";
+        let (dir, cache) = cache();
+        let kept = || Cache::in_dir(dir.path()).read::<Kept>(&keys::session(&mr().key)).unwrap();
+        cache
+            .write(
+                &keys::session(&mr().key),
+                &Kept { name: "revu: nxt".into(), dir: REPO.into(), id: Some("ab12cd34-0000".into()), pane: None },
+            )
+            .unwrap();
+
+        let (agent, script) = ghostty(Script::default().says("claude agents", &listed).says(front, "A1\n").says("osascript", "B2\n"));
+        let shown = agent.open(&mr(), &cache, Choice::Find).unwrap();
+        assert_eq!(shown, Outcome::Shown("the session revu remembered for !42 · revu: nxt · in a pane beside revu".into()));
+        assert!(script.lines()[0].starts_with(front), "revu's own terminal is asked before anything slow: {:?}", script.lines());
+        assert_eq!(kept().pane.as_deref(), Some("B2"));
+
+        let (agent, script) = ghostty(Script::default().says("claude agents", &listed).says(front, "A1\n").says("osascript", "focused\n"));
+        let shown = agent.open(&mr(), &cache, Choice::Find).unwrap();
+        assert_eq!(shown, Outcome::Shown("the session revu remembered for !42 · revu: nxt · already open beside revu".into()));
+        assert_eq!(script.calls().last().unwrap().argv[3..], ["B2"], "the remembered pane gets the keys");
+        assert_eq!(kept().pane.as_deref(), Some("B2"));
+
+        let gone = Script::default()
+            .says("claude agents", &listed)
+            .says(front, "A1\n")
+            .says("osascript -e on run argv\n  tell application \"Ghostty\"\n    set found", "gone\n");
+        let (agent, _script) = ghostty(gone.says("osascript", "C3\n"));
+        agent.open(&mr(), &cache, Choice::Find).unwrap();
+        assert_eq!(kept().pane.as_deref(), Some("C3"), "a pane that is gone is forgotten for the new one");
+
+        let (agent, _script) = ghostty(Script::default().says("claude agents", &listed).fails("osascript", "not authorized"));
+        let Outcome::Handoff(handoff) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
+        assert!(handoff.said.contains("Ghostty did not split"), "{}", handoff.said);
+        assert_eq!(kept().pane, None, "a session lent the terminal is in no pane");
     }
 
     #[test]

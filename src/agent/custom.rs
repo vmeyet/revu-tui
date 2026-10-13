@@ -25,7 +25,7 @@ pub(super) fn session(agent: &Agent, start: &str, open: Option<&str>, mr: &Mr, k
     let dir = worktree::on_branch(agent.run.as_ref(), agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
     let name = mr.session_name();
     let call = call(start, mr, &name, &dir)?;
-    Ok(Step::Ready(Ready { kept: Kept { name, dir, id: None }, call, case: Case::New }))
+    Ok(Step::Ready(Ready { kept: Kept { name, dir, id: None, pane: None }, call, case: Case::New }))
 }
 
 /// The command's words with the MR filled in, word by word after the split, so a title with a quote stays one word.

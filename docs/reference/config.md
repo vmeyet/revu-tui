@@ -141,7 +141,8 @@ Tokens never go here: they live in the macOS keychain.
 | `enabled` | true or false | `false` | `a g` opens a coding-agent session that belongs to the MR: Claude Code, unless `start` is set. |
 | `start` | command line with placeholders | none: Claude Code | Another agent: the command that starts its session, run in a worktree on the MR's branch. |
 | `open` | command line with placeholders | `start` runs again | With `start`: the command that opens the session of an MR again. |
-| `show` | `auto`, `split` or `window` | `auto` | In tmux: `auto` opens the session in a pane beside revu when half of revu's width is `compact_width` or more, else in a window; `split` and `window` force one. |
+| `show` | `auto`, `split` or `window` | `auto` | `auto` opens the session in a pane beside revu when half of revu's width is `compact_width` or more; `split` always does; `window` never does. Not beside means a tmux window, or the terminal itself outside tmux. |
+| `split` | command line with placeholders | none | For a terminal other than tmux, Ghostty, iTerm2 and WezTerm: the command that opens a pane beside revu; `{command}` becomes the session's program and `{dir}` its folder. |
 
 ## `[agent.checkouts]`
 
@@ -237,6 +238,7 @@ enabled = true
 start = "aider --message 'Review {ref}: {title}'"
 open = "aider --restore"
 show = "auto"
+split = "kitty @ launch --location=vsplit --cwd {dir} {command}"
 
 [agent.checkouts]
 "acme/widgets" = "~/code/widgets"

@@ -555,9 +555,12 @@ pub struct Agent {
     /// Project path → its checkout on this machine, for MRs of a project revu was not started in.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub checkouts: BTreeMap<String, String>,
-    /// In tmux, where the session opens: beside revu when it fits, always beside, or always in a window.
+    /// Where the session opens: beside revu when it fits, always beside, or never.
     #[serde(default, skip_serializing_if = "AgentShow::is_default")]
     pub show: AgentShow,
+    /// For a terminal revu cannot split itself: the command that opens a pane beside revu and runs `{command}` there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split: Option<String>,
 }
 
 /// `[agent] show`: a pane beside revu when revu is wide enough for both, at any width, or never.
@@ -591,6 +594,9 @@ impl Agent {
             (Some(_), None) => bail!("`agent.open` needs `agent.start`: it opens again what that command started"),
             (Some(open), Some(_)) => crate::agent::check(open, "agent.open")?,
             (None, _) => {}
+        }
+        if let Some(split) = &self.split {
+            crate::agent::check_split(split, "agent.split")?;
         }
         for (project, folder) in &self.checkouts {
             if !folder.starts_with('/') && !folder.starts_with("~/") {
@@ -1061,6 +1067,10 @@ mod tests {
         assert_eq!(load("[agent]\nshow = \"window\"\n").unwrap().agent.show, AgentShow::Window);
         let unknown = load("[agent]\nshow = \"tab\"\n").unwrap_err();
         assert!(unknown.contains("show") && unknown.contains("config.toml"), "{unknown}");
+        let split = load("[agent]\nsplit = \"kitty @ launch --location=vsplit --cwd {dir} {command}\"\n").unwrap();
+        assert!(split.agent.split.is_some());
+        let glued = load("[agent]\nsplit = \"kitty @ launch --cmd={command}\"\n").unwrap_err();
+        assert!(glued.contains("agent.split") && glued.contains("config.toml"), "{glued}");
         let relative = load("[agent.checkouts]\n\"acme/widgets\" = \"code/widgets\"\n").unwrap_err();
         assert!(relative.contains("acme/widgets") && relative.contains("full path"), "{relative}");
     }

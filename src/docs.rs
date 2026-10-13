@@ -347,8 +347,16 @@ pub const SETTINGS: &[Setting] = &[
         key: "show",
         kind: "`auto`, `split` or `window`",
         default: "`auto`",
-        meaning: "In tmux: `auto` opens the session in a pane beside revu when half of revu's width is `compact_width` or more, else in a window; `split` and `window` force one.",
+        meaning: "`auto` opens the session in a pane beside revu when half of revu's width is `compact_width` or more; `split` always does; `window` never does. Not beside means a tmux window, or the terminal itself outside tmux.",
         example: "\"auto\"",
+    },
+    Setting {
+        table: "agent",
+        key: "split",
+        kind: "command line with placeholders",
+        default: "none",
+        meaning: "For a terminal other than tmux, Ghostty, iTerm2 and WezTerm: the command that opens a pane beside revu; `{command}` becomes the session's program and `{dir}` its folder.",
+        example: "\"kitty @ launch --location=vsplit --cwd {dir} {command}\"",
     },
     Setting {
         table: "agent.checkouts",
