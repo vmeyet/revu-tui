@@ -580,7 +580,7 @@ impl Backend {
         blocking(move || {
             Ok(match agent.open(&mr, &cache, choice)? {
                 Outcome::Pick(sessions) => Incoming::SessionPick { mr: Box::new(mr), sessions },
-                Outcome::Window(shown) => Incoming::Done(shown),
+                Outcome::Shown(shown) => Incoming::Done(shown),
                 Outcome::Handoff(handoff) => Incoming::SessionReady(handoff),
             })
         })

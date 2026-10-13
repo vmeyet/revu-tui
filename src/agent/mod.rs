@@ -186,8 +186,8 @@ pub struct Handoff {
 pub enum Outcome {
     /// Several sessions could be the one: the reader picks, or starts a new one.
     Pick(Vec<Session>),
-    /// The session is on show in a tmux window; the text says which.
-    Window(String),
+    /// The session is on show in tmux, in a pane beside revu or in a window; the text says which.
+    Shown(String),
     /// Outside tmux: the loop lends the terminal to the session.
     Handoff(Handoff),
 }
@@ -208,6 +208,8 @@ pub struct Machine {
     pub claude_home: PathBuf,
     /// revu runs inside tmux.
     pub tmux: bool,
+    /// Under this many columns revu's own window is compact: a pane beside it must leave it that much.
+    pub compact_width: u16,
     /// The checkout revu was started in: its project and its root, which may be a worktree.
     pub started_in: Option<(String, PathBuf)>,
 }
@@ -218,7 +220,8 @@ pub struct Agent {
     harness: Harness,
     /// Project path → its checkout; the one revu was started in wins over the config's.
     checkouts: BTreeMap<String, PathBuf>,
-    tmux: bool,
+    /// Set when revu runs inside tmux.
+    tmux: Option<show::Tmux>,
     pub run: Arc<dyn Run>,
 }
 
@@ -230,10 +233,11 @@ impl Agent {
         };
         let started_in = machine.started_in.map(|(project, folder)| (project, worktree::main_checkout(run.as_ref(), &folder)));
         let checkouts = config.folders(&machine.home).into_iter().chain(started_in).collect();
-        Self { harness, checkouts, tmux: machine.tmux, run }
+        let tmux = machine.tmux.then_some(show::Tmux { show: config.show, compact_width: machine.compact_width });
+        Self { harness, checkouts, tmux, run }
     }
 
-    /// Finds or starts the session of `mr`, remembers it in `cache`, and shows it in a tmux window
+    /// Finds or starts the session of `mr`, remembers it in `cache`, and shows it in a tmux pane or window
     /// when revu runs in tmux. Outside tmux the caller owns the terminal, so the program comes back.
     pub fn open(&self, mr: &Mr, cache: &Cache, choice: Choice) -> Result<Outcome> {
         let key = keys::session(&mr.key);
@@ -339,6 +343,7 @@ mod tests {
     pub(super) fn agent(harness: Harness, script: Script, tmux: bool) -> (Agent, Arc<Script>) {
         let script = Arc::new(script);
         let checkouts = BTreeMap::from([("acme/widgets".to_owned(), PathBuf::from(REPO))]);
+        let tmux = tmux.then_some(show::Tmux { show: config::AgentShow::Auto, compact_width: 70 });
         (Agent { harness, checkouts, tmux, run: script.clone() }, script)
     }
 
@@ -368,13 +373,20 @@ mod tests {
             home: "/Users/nina".into(),
             claude_home: "/Users/nina/.claude".into(),
             tmux: true,
+            compact_width: 60,
             started_in: Some(("acme/widgets".into(), REPO.into())),
         };
         let agent = Agent::new(&config, machine(), Arc::new(Script::default()));
         assert_eq!(agent.checkout("acme/widgets").unwrap(), Path::new(REPO));
         assert_eq!(agent.checkout("acme/api").unwrap(), Path::new("/Users/nina/code/api"));
         assert_eq!(agent.harness, Harness::Claude { jobs: "/Users/nina/.claude/jobs".into() });
-        assert!(agent.tmux);
+        assert_eq!(agent.tmux, Some(show::Tmux { show: config::AgentShow::Auto, compact_width: 60 }));
+        let outside = Agent::new(
+            &config::Agent { show: config::AgentShow::Split, ..config.clone() },
+            Machine { tmux: false, ..machine() },
+            Arc::new(Script::default()),
+        );
+        assert_eq!(outside.tmux, None, "outside tmux the setting has nothing to place");
         let missing = agent.checkout("acme/other").unwrap_err().to_string();
         assert!(missing.contains("[agent.checkouts]") && missing.contains("acme/other"), "{missing}");
         let in_a_worktree =

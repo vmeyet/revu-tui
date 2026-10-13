@@ -17,6 +17,7 @@ It sits beside "ask Claude" (`05-ai.md`) and changes nothing there.
 | `start` | Another agent than Claude Code: the command that starts its session. |
 | `open` | With `start`: the command that opens that session again. |
 | `checkouts` | Project path → its folder on this machine, a full path or one from `~/`. |
+| `show` | In tmux: `auto` (default), `split` or `window`. |
 
 Checked when the config loads, with the key named: both commands split into words and name only known placeholders, `open` needs `start`, a checkout is a full path.
 
@@ -68,7 +69,15 @@ A session with a `status` in the list is running or waiting and opens as it is; 
 ## Showing it
 
 - A stopped session first: `claude --bg --resume <session-id>`, in the folder it was started in.
-- **In tmux** (`TMUX` set): `tmux list-windows -F '#{window_id}<tab>#{window_name}'`; a window of the session's name is selected (`tmux select-window -t <id>`), else `tmux new-window -n <name> claude attach <id>`. The words go to tmux one by one, so no shell reads them. revu keeps its own window.
+- **In tmux** (`TMUX` set), beside revu when it fits, so the diff stays in view:
+  - Already on show: `tmux list-panes -s -F '#{pane_id}<tab>#{window_id}<tab>#{@revu_session}'` lists the panes of revu's tmux session. A pane marked with this session gets `tmux select-window -t <window>` then `tmux select-pane -t <pane>`, and nothing opens.
+  - A pane: `tmux split-window -h -P -F '#{pane_id}' claude attach <id>`. revu keeps the left half and the session takes the keys.
+  - A window: `tmux new-window -n <name> -P -F '#{pane_id}' claude attach <id>`.
+  - The mark: `tmux set-option -p -t <pane> @revu_session <session id>` on the pane just made. A pane option survives a rename of the window or of the session; an agent with no id of its own is marked with the session's name.
+  - `fits_beside`: tmux leaves revu half of its pane's width (`tmux display-message -p '#{pane_width}'`), and that half must be `compact_width` or more: 140 columns by default. So a split never pushes revu into the compact layout, and `layout = "compact"` never splits. A width tmux does not give means a window.
+  - `[agent] show`: `split` and `window` skip the question; `auto` asks it.
+  - The words go to tmux one by one, so no shell reads them.
+  - The pane closes when the program exits; tmux resizes revu and the loop draws again on the resize event, as for any window change.
 - **Outside tmux**: the loop lends the terminal to `claude attach <id>`, as it does for `^v` (`08-open-file.md`), and takes it back when the program exits.
 
 ## What is remembered
@@ -97,7 +106,7 @@ It is written every time a session is shown, so the last one found is the one re
 | `claude.rs` | Everything Claude Code: its list, `state.json`, the find order, start, resume, attach |
 | `custom.rs` | The two commands of another agent |
 | `worktree.rs` | The folder on the MR's branch |
-| `show.rs` | The tmux window, or the hand-off |
+| `show.rs` | The tmux pane or window, or the hand-off |
 
 A second built-in agent is a second file beside `claude.rs` and one more arm in `Agent::open`.
 The app (`src/tui/app/session.rs`) only asks for `Action::Session` and applies what comes back.
@@ -107,7 +116,8 @@ The app (`src/tui/app/session.rs`) only asks for `Action::Session` and applies w
 `Run` is replaced by a script that answers from a list and records every call, so no test starts a session, a tmux window or a git command, or reads the real `~/.claude`.
 
 - The find order: each of the four cases, with a fixture list and fixture `state.json` files, broken and missing ones included.
-- The commands, word for word: attach, resume, new; in tmux and outside; a window opened and a window selected.
+- The commands, word for word: attach, resume, new; in tmux and outside.
+- The pane against the window: by width on both sides of the limit, by each value of `show`, a width tmux does not give; a session already in a pane and one already in a window.
 - The worktree: reused, added from the local branch, fetched then added, the fork, a name that reads as a flag.
 - Plan mode against the default; the name cut; the id read back.
 - The mapping kept across a restart; a remembered session Claude Code forgot.
@@ -123,6 +133,8 @@ Sending the line or thread under the cursor to the session, answers streamed int
 
 - **`claude -w` for the worktree**: it makes a new branch, and the session must sit on the MR's own.
 - **A key of its own, `B` or `I`**: reads in every pane, but spends a free letter on one action.
+- **Finding the pane by its window's name**: a rename opened a second one; a pane option costs one more command at creation.
+- **A split on top of the right pane's width only (`narrow_width`)**: half of 240 columns is rare; staying out of compact is the rule that matters.
 - **`tmux switch-client` across every tmux session**: it needs an attached client and finds windows the reader moved away on purpose; the current session is enough.
 - **Passing `--session-id`**: revu would know the id without reading it back, at the cost of making UUIDs.
 - **Sessions listed with `--cwd`**: one call to `--all` already answers the remembered case and the pick.

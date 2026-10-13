@@ -420,20 +420,20 @@ mod tests {
     }
 
     #[test]
-    fn the_session_revu_opened_is_found_again_after_a_restart_in_a_tmux_window() {
+    fn the_session_revu_opened_is_found_again_after_a_restart_in_its_tmux_window() {
         let jobs = tempfile::tempdir().unwrap();
         let (dir, cache) = cache();
         let (first, _script) = claude(starting("[]"), jobs.path(), true);
-        assert!(matches!(first.open(&mr(), &cache, Choice::Find).unwrap(), Outcome::Window(_)));
+        assert!(matches!(first.open(&mr(), &cache, Choice::Find).unwrap(), Outcome::Shown(_)));
         drop((first, cache));
         let listed = list(&[item("5e5510n0", "revu: !42 charge cards at checkout", WORKTREE, false, 5)]);
-        let windows = "@1\trevu\n@4\trevu: !42 charge cards at checkout\n";
-        let (again, script) = claude(Script::default().says(LIST, &listed).says("tmux list-windows", windows), jobs.path(), true);
+        let panes = format!("%0\t@1\t\n%9\t@4\t{}\n", resume_id("5e5510n0"));
+        let (again, script) = claude(Script::default().says(LIST, &listed).says("tmux list-panes", &panes), jobs.path(), true);
         let shown = again.open(&mr(), &crate::cache::Cache::in_dir(dir.path()), Choice::Find).unwrap();
-        let text = "the session revu remembered for !42 · revu: !42 charge cards at checkout · in its tmux window";
-        assert_eq!(shown, Outcome::Window(text.into()));
+        let text = "the session revu remembered for !42 · revu: !42 charge cards at checkout · already open in tmux";
+        assert_eq!(shown, Outcome::Shown(text.into()));
         let resume = format!("claude --bg --resume {}", resume_id("5e5510n0"));
-        let listing = "tmux list-windows -F #{window_id}\t#{window_name}";
-        assert_eq!(script.lines(), [LIST, resume.as_str(), listing, "tmux select-window -t @4"]);
+        let listing = "tmux list-panes -s -F #{pane_id}\t#{window_id}\t#{@revu_session}";
+        assert_eq!(script.lines(), [LIST, resume.as_str(), listing, "tmux select-window -t @4", "tmux select-pane -t %9"]);
     }
 }

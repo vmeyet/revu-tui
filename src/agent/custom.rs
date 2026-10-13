@@ -120,14 +120,14 @@ mod tests {
     }
 
     #[test]
-    fn in_tmux_the_command_gets_a_window_in_the_worktree() {
-        let (agent, script) = agent(custom(None), Script::default(), true);
+    fn in_tmux_the_command_gets_a_pane_in_the_worktree_marked_with_the_session_name() {
+        let wide = Script::default().says("tmux display-message", "200\n").says("tmux split-window", "%5\n");
+        let (agent, script) = agent(custom(None), wide, true);
         let (_dir, cache) = cache();
-        assert!(matches!(agent.open(&mr(), &cache, Choice::Find).unwrap(), Outcome::Window(_)));
-        let window = script.lines().into_iter().find(|line| line.starts_with("tmux new-window")).unwrap();
-        assert!(
-            window.starts_with(&format!("tmux new-window -n revu: !42 charge cards at checkout -c {WORKTREE} aider --message")),
-            "{window}"
-        );
+        assert!(matches!(agent.open(&mr(), &cache, Choice::Find).unwrap(), Outcome::Shown(_)));
+        let lines = script.lines();
+        let pane = lines.iter().find(|line| line.starts_with("tmux split-window")).unwrap();
+        assert!(pane.starts_with(&format!("tmux split-window -h -P -F #{{pane_id}} -c {WORKTREE} aider --message")), "{pane}");
+        assert_eq!(lines.last().unwrap(), "tmux set-option -p -t %5 @revu_session revu: !42 charge cards at checkout");
     }
 }

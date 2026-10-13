@@ -74,7 +74,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         ready_command: ctx.config.queue.ready.command.clone(),
         inline: ctx.config.review.inline(),
         open: ctx.config.open.clone(),
-        agent: agent(&ctx.config.agent, checkout.as_ref()),
+        agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
         checkout,
         jev: jev(&ctx.config.ai),
         claude: claude(&ctx.config.ai),
@@ -372,7 +372,7 @@ fn claude(ai: &crate::config::Ai) -> Option<Claude> {
 
 /// The agent of `[agent]`, when it is switched on, with what this machine says: the home folder, Claude
 /// Code's own folder, whether revu runs in tmux, and the checkout it was started in.
-fn agent(config: &crate::config::Agent, checkout: Option<&crate::open::Checkout>) -> Option<crate::agent::Agent> {
+fn agent(config: &crate::config::Agent, compact_width: u16, checkout: Option<&crate::open::Checkout>) -> Option<crate::agent::Agent> {
     if !config.enabled {
         return None;
     }
@@ -381,6 +381,7 @@ fn agent(config: &crate::config::Agent, checkout: Option<&crate::open::Checkout>
         claude_home: std::env::var_os("CLAUDE_CONFIG_DIR").map_or_else(|| home.join(".claude"), std::path::PathBuf::from),
         home,
         tmux: std::env::var_os("TMUX").is_some_and(|socket| !socket.is_empty()),
+        compact_width,
         started_in: checkout.map(|checkout| (checkout.project.clone(), checkout.root.clone())),
     };
     Some(crate::agent::Agent::new(config, machine, std::sync::Arc::new(crate::agent::Programs)))

@@ -555,6 +555,26 @@ pub struct Agent {
     /// Project path → its checkout on this machine, for MRs of a project revu was not started in.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub checkouts: BTreeMap<String, String>,
+    /// In tmux, where the session opens: beside revu when it fits, always beside, or always in a window.
+    #[serde(default, skip_serializing_if = "AgentShow::is_default")]
+    pub show: AgentShow,
+}
+
+/// `[agent] show`: a pane beside revu when revu is wide enough for both, at any width, or never.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentShow {
+    #[default]
+    Auto,
+    Split,
+    Window,
+}
+
+impl AgentShow {
+    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl Agent {
@@ -1036,6 +1056,11 @@ mod tests {
         assert!(quote.contains("agent.open"), "{quote}");
         let alone = load("[agent]\nopen = \"aider --restore\"\n").unwrap_err();
         assert!(alone.contains("agent.open") && alone.contains("agent.start"), "{alone}");
+        assert_eq!(custom.agent.show, AgentShow::Auto);
+        assert_eq!(load("[agent]\nshow = \"split\"\n").unwrap().agent.show, AgentShow::Split);
+        assert_eq!(load("[agent]\nshow = \"window\"\n").unwrap().agent.show, AgentShow::Window);
+        let unknown = load("[agent]\nshow = \"tab\"\n").unwrap_err();
+        assert!(unknown.contains("show") && unknown.contains("config.toml"), "{unknown}");
         let relative = load("[agent.checkouts]\n\"acme/widgets\" = \"code/widgets\"\n").unwrap_err();
         assert!(relative.contains("acme/widgets") && relative.contains("full path"), "{relative}");
     }

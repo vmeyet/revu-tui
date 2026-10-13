@@ -79,19 +79,44 @@ Without it, the toast names this setting and nothing starts.
 
 ## In tmux
 
-The session opens in a tmux window named after it, and revu keeps running in its own window.
-`a g` again on the same MR goes to that window instead of opening a second one.
-Leave the session with `ctrl-z`: its window closes and the session keeps running.
+The session opens beside revu, in a pane on the right, so the diff stays in view.
+revu keeps the left half, and the keys go to the session.
+
+| revu's pane is | The session opens |
+|---|---|
+| Wide enough for both: 140 columns or more | In a pane beside revu |
+| Narrower, or in the compact layout | In a tmux window named after it |
+
+"Wide enough" means half of revu's width is still `[tui] compact_width` (70) or more.
+After the split revu usually draws its narrow layout: the diff alone, then the queue when you go back to it.
+
+| To | Press |
+|---|---|
+| Go back to revu | The tmux prefix, then `;` |
+| Go to the session again | `a g` on the same MR, or the tmux prefix, then `;` |
+| Close the session's pane | `ctrl-z` in the session: it keeps running, and revu takes the full width back |
+| Come back from a window | The tmux prefix, then `l` |
+
+`a g` on an MR whose session is already on show goes to its pane or its window, and opens no second one.
+
+To always get one or the other:
+
+```toml
+[agent]
+show = "split"    # or "window"; "auto" is the default
+```
 
 ## Outside tmux
 
 The session takes the terminal, as your editor does for `^v`.
 `ctrl-z` brings revu back; the session keeps running.
+`show` changes nothing here: run revu inside tmux to see the diff and the session together.
 
 ## From a phone
 
 Run revu inside tmux on your computer and reach it from the phone, as in [Review from a phone](phone.md).
-`a g` opens the session in the next tmux window, and the tmux key for the last window brings revu back.
+A phone is too narrow for two panes, so `a g` opens the session in the next tmux window.
+The tmux prefix, then `l`, brings revu back.
 With the tap bar, `more` then `session` does the same.
 
 ## Another agent
@@ -107,7 +132,7 @@ open = "aider --restore"
 
 `start` runs in the folder on the MR's branch, the first time.
 `open` runs there the next times; without it, `start` runs again.
-Both run without a shell, in a tmux window or on the terminal.
+Both run without a shell, in a tmux pane or window, or on the terminal.
 revu cannot ask another agent which sessions it has, so there is no list and no search.
 The session is the remembered one, or a new one.
 
@@ -131,7 +156,7 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 - "The session that opened the MR" comes from a file Claude Code keeps for itself: if that file changes, revu goes on to the list.
 - A session revu did not start may work in another folder than the MR's branch: revu opens it as it is.
 - A branch you already have is used as it is, even behind origin: ask the session to pull.
-- The tmux window is found by its name: rename the session and `a g` opens a second window.
+- revu finds a session's pane by a mark it sets on it, so only a pane revu opened is found again.
 - revu does not send the line or the thread under the cursor to the session, and shows no session state in the queue.
 - revu remembers one session per MR, in its cache, for as long as it keeps the MR there.
 - revu never removes a worktree it added: `git worktree remove` does.

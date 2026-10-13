@@ -343,6 +343,14 @@ pub const SETTINGS: &[Setting] = &[
         example: "\"aider --restore\"",
     },
     Setting {
+        table: "agent",
+        key: "show",
+        kind: "`auto`, `split` or `window`",
+        default: "`auto`",
+        meaning: "In tmux: `auto` opens the session in a pane beside revu when half of revu's width is `compact_width` or more, else in a window; `split` and `window` force one.",
+        example: "\"auto\"",
+    },
+    Setting {
         table: "agent.checkouts",
         key: "<project>",
         kind: "folder",
