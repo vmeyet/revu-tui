@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 /// Where revu adds worktrees, under the checkout's root.
 const WORKTREES: &str = ".claude/worktrees";
 
-/// The worktree of `repo` that has `branch` checked out, the main checkout included; without one,
-/// the branch is fetched from origin and a worktree is added for it.
+/// The worktree of `repo` that has `branch` checked out, the main checkout included; without one, a
+/// worktree is added for it: on the branch the checkout already has, as it is, else on origin's, fetched.
 pub(super) fn on_branch(run: &dyn Run, repo: &Path, branch: &str) -> Result<PathBuf> {
     if branch.starts_with('-') || branch.contains("..") {
         bail!("revu does not trust the branch name {}", branch.escape_debug());
@@ -16,11 +16,17 @@ pub(super) fn on_branch(run: &dyn Run, repo: &Path, branch: &str) -> Result<Path
     if let Some(folder) = checked_out(&listed, branch) {
         return Ok(folder);
     }
+    let folder = repo.join(WORKTREES).join(branch.replace('/', "+"));
+    let place = folder.to_string_lossy();
+    let is_here = git(run, repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok();
+    if is_here {
+        git(run, repo, &["worktree", "add", &place, branch])?;
+        return Ok(folder);
+    }
     let refspec = format!("refs/heads/{branch}:refs/remotes/origin/{branch}");
     git(run, repo, &["fetch", "origin", &refspec])
         .with_context(|| format!("no session started: the branch `{branch}` is not on origin, as with an MR from a fork"))?;
-    let folder = repo.join(WORKTREES).join(branch.replace('/', "+"));
-    git(run, repo, &["worktree", "add", &folder.to_string_lossy(), branch])?;
+    git(run, repo, &["worktree", "add", "-b", branch, &place, &format!("origin/{branch}")])?;
     Ok(folder)
 }
 
@@ -59,7 +65,7 @@ mod tests {
     }
 
     #[test]
-    fn a_branch_checked_out_nowhere_is_fetched_and_gets_a_worktree_named_after_it() {
+    fn a_branch_the_checkout_holds_gets_a_worktree_as_it_is_with_no_fetch() {
         let script = Script::default().says("git worktree list", LISTED);
         let folder = on_branch(&script, Path::new(REPO), "feat/checkout").unwrap();
         assert_eq!(folder, PathBuf::from("/code/widgets/.claude/worktrees/feat+checkout"));
@@ -67,8 +73,24 @@ mod tests {
             script.lines(),
             [
                 "git worktree list --porcelain",
-                "git fetch origin refs/heads/feat/checkout:refs/remotes/origin/feat/checkout",
+                "git rev-parse --verify --quiet refs/heads/feat/checkout",
                 "git worktree add /code/widgets/.claude/worktrees/feat+checkout feat/checkout",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_branch_only_origin_holds_is_fetched_and_gets_a_worktree_named_after_it() {
+        let script = Script::default().says("git worktree list", LISTED).fails("git rev-parse", "`git rev-parse` failed: no message");
+        let folder = on_branch(&script, Path::new(REPO), "feat/checkout").unwrap();
+        assert_eq!(folder, PathBuf::from("/code/widgets/.claude/worktrees/feat+checkout"));
+        assert_eq!(
+            script.lines(),
+            [
+                "git worktree list --porcelain",
+                "git rev-parse --verify --quiet refs/heads/feat/checkout",
+                "git fetch origin refs/heads/feat/checkout:refs/remotes/origin/feat/checkout",
+                "git worktree add -b feat/checkout /code/widgets/.claude/worktrees/feat+checkout origin/feat/checkout",
             ]
         );
         assert!(script.calls().iter().all(|call| call.dir.as_deref() == Some(Path::new(REPO))), "git runs in the checkout");
@@ -76,7 +98,10 @@ mod tests {
 
     #[test]
     fn a_branch_origin_does_not_hold_starts_nothing_and_says_it_may_be_a_fork() {
-        let script = Script::default().says("git worktree list", LISTED).fails("git fetch", "`git fetch` failed: couldn't find remote ref");
+        let script = Script::default()
+            .says("git worktree list", LISTED)
+            .fails("git rev-parse", "`git rev-parse` failed: no message")
+            .fails("git fetch", "`git fetch` failed: couldn't find remote ref");
         let err = format!("{:#}", on_branch(&script, Path::new(REPO), "feat/checkout").unwrap_err());
         assert!(err.contains("feat/checkout") && err.contains("fork") && err.contains("couldn't find remote ref"), "{err}");
         assert!(!script.lines().iter().any(|line| line.starts_with("git worktree add")), "no worktree is added");

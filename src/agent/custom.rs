@@ -6,9 +6,14 @@ use std::path::Path;
 
 const PLACEHOLDERS: [&str; 10] = ["ref", "iid", "url", "author", "project", "branch", "target", "dir", "name", "title"];
 
-/// The command splits into words and names only placeholders revu fills; checked when the config loads.
+/// The command splits into words, starts with a program and names only placeholders revu fills; checked
+/// when the config loads. A program that is a placeholder would run text the forge wrote.
 pub fn check(command: &str, key: &str) -> Result<()> {
     crate::program::check(command, key)?;
+    let program = command.split_whitespace().next().unwrap_or_default();
+    if crate::share::placeholders(program).next().is_some() {
+        bail!("`{key}` starts with a placeholder: its first word is the program to run");
+    }
     for word in crate::share::placeholders(command) {
         if !PLACEHOLDERS.contains(&word) {
             let known = PLACEHOLDERS.iter().map(|p| format!("{{{p}}}")).collect::<Vec<_>>().join(" ");
@@ -74,6 +79,8 @@ mod tests {
         assert!(typo.contains("agent.start") && typo.contains("{titel}") && typo.contains("{title}"), "{typo}");
         assert!(check("aider 'open", "agent.open").unwrap_err().to_string().contains("agent.open"));
         assert!(check(" ", "agent.start").is_err());
+        let program = check("{title} --review", "agent.start").unwrap_err().to_string();
+        assert!(program.contains("agent.start") && program.contains("program"), "{program}");
     }
 
     #[test]

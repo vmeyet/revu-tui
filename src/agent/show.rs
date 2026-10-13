@@ -2,7 +2,7 @@
 use super::{Call, Handoff, Outcome, Ready, Run};
 use anyhow::Result;
 
-/// One window per line: its id, a tab, its name.
+/// One window of revu's own tmux session per line: its id, a tab, its name.
 const WINDOWS: &str = "#{window_id}\t#{window_name}";
 
 pub(super) fn show(run: &dyn Run, tmux: bool, ready: &Ready, reference: &str) -> Result<Outcome> {
@@ -10,9 +10,9 @@ pub(super) fn show(run: &dyn Run, tmux: bool, ready: &Ready, reference: &str) ->
     if !tmux {
         return Ok(Outcome::Handoff(Handoff { call: ready.call.clone(), said }));
     }
-    let windows = run.output(&Call::new(&["tmux", "list-windows", "-a", "-F", WINDOWS]))?;
+    let windows = run.output(&Call::new(&["tmux", "list-windows", "-F", WINDOWS]))?;
     let call = match window_named(&windows, &ready.kept.name) {
-        Some(window) => Call::new(&["tmux", "switch-client", "-t", window]),
+        Some(window) => Call::new(&["tmux", "select-window", "-t", window]),
         None => new_window(ready),
     };
     run.output(&call)?;
@@ -62,7 +62,7 @@ mod tests {
         let shown = show(&script, true, &ready(None), "!42").unwrap();
         assert_eq!(shown, Outcome::Window("the session revu remembered for !42 · revu: !42 charge cards · in its tmux window".into()));
         let calls = script.calls();
-        assert_eq!(calls[0].argv, ["tmux", "list-windows", "-a", "-F", "#{window_id}\t#{window_name}"]);
+        assert_eq!(calls[0].argv, ["tmux", "list-windows", "-F", "#{window_id}\t#{window_name}"]);
         assert_eq!(calls[1].argv, ["tmux", "new-window", "-n", "revu: !42 charge cards", "claude", "attach", "ab12cd34"]);
     }
 
@@ -75,10 +75,10 @@ mod tests {
     }
 
     #[test]
-    fn a_window_already_open_for_the_session_is_switched_to_instead_of_opened_twice() {
+    fn a_window_already_open_for_the_session_is_selected_instead_of_opened_twice() {
         let script = Script::default().says("tmux list-windows", "@1\trevu\n@7\trevu: !42 charge cards\n");
         show(&script, true, &ready(None), "!42").unwrap();
-        assert_eq!(script.lines()[1], "tmux switch-client -t @7");
+        assert_eq!(script.lines()[1], "tmux select-window -t @7");
         assert_eq!(script.calls().len(), 2);
     }
 }

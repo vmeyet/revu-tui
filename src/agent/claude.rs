@@ -332,7 +332,8 @@ mod tests {
         let after = list(&[item("5e5510n0", "revu: !42 charge cards at checkout", WORKTREE, true, 5)]);
         Script::default()
             .says(LIST, listed_before)
-            .says("claude --bg", "Started background session 5e5510n0\n")
+            .fails("git rev-parse", "`git rev-parse` failed: no message")
+            .says("claude --bg", "backgrounded · 5e5510n0 · revu: !42 charge cards at checkout\n")
             .says("claude agents --json", &after)
     }
 
@@ -352,15 +353,16 @@ mod tests {
         assert_eq!(started.argv, ["claude", "--bg", "--name", "revu: !42 charge cards at checkout", "--permission-mode", "plan", prompt]);
         assert_eq!(started.dir.as_deref(), Some(Path::new(WORKTREE)));
         assert_eq!(
-            script.lines()[..4],
+            script.lines()[..5],
             [
                 LIST,
                 "git worktree list --porcelain",
+                "git rev-parse --verify --quiet refs/heads/feat/checkout",
                 "git fetch origin refs/heads/feat/checkout:refs/remotes/origin/feat/checkout",
-                "git worktree add /code/widgets/.claude/worktrees/feat+checkout feat/checkout",
+                "git worktree add -b feat/checkout /code/widgets/.claude/worktrees/feat+checkout origin/feat/checkout",
             ]
         );
-        assert_eq!(script.lines()[5], "claude agents --json");
+        assert_eq!(script.lines()[6], "claude agents --json");
         let kept = cache.read::<Kept>(&keys_session()).unwrap();
         assert_eq!(kept, Kept { name: "revu: !42 charge cards at checkout".into(), dir: WORKTREE.into(), id: Some(resume_id("5e5510n0")) });
     }
@@ -393,8 +395,11 @@ mod tests {
     #[test]
     fn a_fork_branch_or_an_unknown_checkout_starts_no_session_and_says_why() {
         let jobs = tempfile::tempdir().unwrap();
-        let (agent, script) =
-            claude(Script::default().fails("git fetch", "`git fetch` failed: couldn't find remote ref"), jobs.path(), false);
+        let (agent, script) = claude(
+            Script::default().fails("git rev-parse", "no").fails("git fetch", "`git fetch` failed: couldn't find remote ref"),
+            jobs.path(),
+            false,
+        );
         let (_dir, cache) = cache();
         let fork = format!("{:#}", agent.open(&mr(), &cache, Choice::Find).unwrap_err());
         assert!(fork.contains("fork") && fork.contains("feat/checkout"), "{fork}");
@@ -427,7 +432,7 @@ mod tests {
         let text = "the session revu remembered for !42 · revu: !42 charge cards at checkout · in its tmux window";
         assert_eq!(shown, Outcome::Window(text.into()));
         let resume = format!("claude --bg --resume {}", resume_id("5e5510n0"));
-        let listing = "tmux list-windows -a -F #{window_id}\t#{window_name}";
-        assert_eq!(script.lines(), [LIST, resume.as_str(), listing, "tmux switch-client -t @4"]);
+        let listing = "tmux list-windows -F #{window_id}\t#{window_name}";
+        assert_eq!(script.lines(), [LIST, resume.as_str(), listing, "tmux select-window -t @4"]);
     }
 }

@@ -154,6 +154,7 @@ Acceptance: `a s` on an open MR streams a summary in under two seconds to the fi
 - Pins `b` (`03-ui-ux.md` § The queue, 2026-10-02): MRs kept on top of the queue in `PINNED`, per scope, until merged or closed.
 - Compact layout (`13-compact.md`, 2026-10-12): under 70 columns one page at a time, a diff that fits 45 columns, fewer rows around the page on a short screen, a tap bar and `,` for the search.
 - Changelog (`12-changelog.md`, 2026-10-12): `CHANGELOG.md` built into the binary, `revu news`, the end of `revu update`, a toast on the first start after an update and the `:news` page.
+- Agent session, step 1 (`14-agent.md`, 2026-10-13): `[agent]`, `a g` and `:session` find or start the Claude Code session of an MR, in a worktree on its branch, and show it in a tmux window or on the terminal.
 
 ## Next · Prose diff
 

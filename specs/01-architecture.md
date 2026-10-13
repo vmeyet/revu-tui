@@ -19,6 +19,7 @@ src/
   fuzzy.rs           fzf-style subsequence matching
   open.rs, program.rs   `^v` and user commands, run without a shell
   ready.rs, share.rs    the ready source and `Y`, both through a user command
+  agent/             `a g`: the agent session of an MR, every program behind one trait (`14-agent.md`)
   render.rs          plain-terminal output for the scriptable commands (copied from slack-tui)
   docs.rs            `revu docs`: docs/reference/ written from the code
   usage.rs           `[usage]`: what revu is used for, counted on this machine only

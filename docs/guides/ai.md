@@ -66,5 +66,6 @@ One asked before the last push says `older push`.
 
 ## See also
 
+- [Open an agent session on an MR](agent.md), for Claude Code itself on the MR's branch.
 - [Config reference: `[ai]`](../reference/config.md).
 - [Troubleshooting](../troubleshooting.md).

@@ -77,7 +77,7 @@ impl Call {
 
 /// Where programs run: on this machine, or in a test's script.
 pub trait Run: Send + Sync {
-    /// What the program printed; a failure names the program and gives its first line.
+    /// What the program printed on its output; a failure names the program and gives the first line it complained with.
     fn output(&self, call: &Call) -> Result<String>;
     /// The program on the terminal as it is, until it exits; the error is a line for the reader.
     fn foreground(&self, call: &Call) -> Result<(), String>;
@@ -90,12 +90,12 @@ impl Run for Programs {
     fn output(&self, call: &Call) -> Result<String> {
         let program = call.program();
         let output = call.command().stdin(Stdio::null()).output().with_context(|| format!("cannot run `{program}`"))?;
-        let printed = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        let (printed, complained) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
         if !output.status.success() {
-            let why = printed.lines().map(str::trim).find(|line| !line.is_empty()).unwrap_or("no message");
+            let why = complained.lines().chain(printed.lines()).map(str::trim).find(|line| !line.is_empty()).unwrap_or("no message");
             bail!("`{program} {}` failed: {why}", call.argv.get(1).map_or("", String::as_str));
         }
-        Ok(printed)
+        Ok(printed.into_owned())
     }
 
     fn foreground(&self, call: &Call) -> Result<(), String> {
@@ -394,6 +394,8 @@ mod tests {
         assert!(printed.trim().ends_with(dir.path().file_name().unwrap().to_str().unwrap()), "{printed}");
         let failed = Programs.output(&Call::new(&["ls", "/revu-no-such-folder"])).unwrap_err().to_string();
         assert!(failed.starts_with("`ls /revu-no-such-folder` failed:"), "{failed}");
+        let warned = Programs.output(&Call::new(&["sh", "-c", "echo '[]'; echo 'a warning' >&2"])).unwrap();
+        assert_eq!(warned, "[]\n", "a warning beside the answer is not part of it");
         assert!(Programs.output(&Call::new(&["revu-no-such-program"])).unwrap_err().to_string().contains("revu-no-such-program"));
         assert_eq!(Programs.foreground(&Call::new(&["true"])), Ok(()));
         assert!(Programs.foreground(&Call::new(&["false"])).unwrap_err().starts_with("false ended with"));

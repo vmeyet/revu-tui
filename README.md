@@ -39,7 +39,7 @@ revu 42             # straight into MR 42 of this project, in zen
 |---|---|
 | [Start here](docs/start.md) | Your first review, step by step |
 | [Concepts](docs/concepts.md) | The words revu uses, and how it works |
-| [Guides](docs/guides/) | One task per page: review mode, search, ready source, share, zen, phone, AI, your editor, keys, hosts, usage, update |
+| [Guides](docs/guides/) | One task per page: review mode, search, ready source, share, zen, phone, AI, agent sessions, your editor, keys, hosts, usage, update |
 | [Keys](docs/reference/keys.md), [config](docs/reference/config.md), [commands](docs/reference/commands.md) | Every key, setting and command |
 | [Troubleshooting](docs/troubleshooting.md) | When something does not work |
 | [What's new](CHANGELOG.md) | What changed in each version, and how to use it |
