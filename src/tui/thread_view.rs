@@ -79,8 +79,7 @@ struct PaneInputs {
     here: bool,
     width: usize,
     theme: Theme,
-    /// Ages next to notes read in whole seconds.
-    second: i64,
+    ages: Vec<String>,
     me: String,
     ascii: bool,
     pictures: u64,
@@ -96,7 +95,7 @@ impl PaneInputs {
             here: at_cursor(open, pane),
             width,
             theme: app.theme,
-            second: app.today.timestamp(),
+            ages: shown_ages(&open.review, app.today),
             me: app.me.clone(),
             ascii: app.ascii,
             pictures: app.thumbs.changes(),
@@ -409,7 +408,7 @@ struct InlineInputs {
     unfolded: BTreeSet<String>,
     width: usize,
     theme: Theme,
-    second: i64,
+    ages: Vec<String>,
     me: String,
     ascii: bool,
 }
@@ -422,7 +421,7 @@ impl InlineLayout {
             unfolded: open.review.unfolded.clone(),
             width: look.width,
             theme: look.theme,
-            second: look.today.timestamp(),
+            ages: shown_ages(&open.review, look.today),
             me: look.me.to_owned(),
             ascii: look.ascii,
         };
@@ -623,10 +622,19 @@ fn author_of(note: &Note, me: &str) -> String {
     if note.author.username == me { "you".to_owned() } else { note.author.username.clone() }
 }
 
+fn note_age(note: &Note, today: DateTime<Utc>) -> String {
+    short_age((today - note.created_at).to_std().unwrap_or_default())
+}
+
+/// The age of every note as it reads now: the layouts hold until one of them reads otherwise.
+pub(super) fn shown_ages(review: &Review, today: DateTime<Utc>) -> Vec<String> {
+    review.threads.iter().flat_map(|thread| &thread.notes).map(|note| note_age(note, today)).collect()
+}
+
 fn note_lines(note: &Note, replaced: &Replaced, look: Look) -> Vec<Piece> {
     let Look { theme, today, me, ascii, width } = look;
     let author = author_of(note, me);
-    let age = short_age((today - note.created_at).to_std().unwrap_or_default());
+    let age = note_age(note, today);
     let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {age}"), Style::default().fg(theme.muted)),

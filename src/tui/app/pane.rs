@@ -447,6 +447,22 @@ mod tests {
     use crate::tui::app::test_support::*;
 
     #[test]
+    fn a_second_that_changes_no_shown_age_keeps_the_ages_and_a_later_one_moves_them_on_screen() {
+        let mut app = with_review();
+        press(&mut app, "T");
+        let ages = |app: &App| crate::tui::thread_view::shown_ages(&app.open.as_ref().unwrap().review, app.today);
+        let before = ages(&app);
+        let screen = render(&mut app, 160, 40);
+        assert!(screen.contains("lea · 1h"), "{screen}");
+        app.today += chrono::Duration::seconds(1);
+        assert_eq!(ages(&app), before, "every age still reads the same");
+        app.today += chrono::Duration::hours(1);
+        assert_ne!(ages(&app), before);
+        let screen = render(&mut app, 160, 40);
+        assert!(screen.contains("lea · 3h") && !screen.contains("lea · 1h"), "{screen}");
+    }
+
+    #[test]
     fn first_link_stops_at_whitespace_and_brackets() {
         assert_eq!(first_link("see https://a.b/c) now"), Some("https://a.b/c".into()));
         assert_eq!(first_link("[x](http://a.b/c?d=1)"), Some("http://a.b/c?d=1".into()));
