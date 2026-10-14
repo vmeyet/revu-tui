@@ -74,6 +74,10 @@ Each entry says what changed, then where, then how to use it.
 - **Notes saved together on a GitHub PR all reach it.**
   On GitHub, when several drafts save at once, as `r` does after you were offline.
   Each draft now waits for the one before it, so none overwrites another.
+- **A big MR opens faster.**
+  In the diff: folded files are coloured only once unfolded, and an unchanged MR opens without fetching its diff again.
+- **An open MR at rest stays quiet.**
+  In the thread pane and under lines, where threads are laid out again only when a thread or the age of a note changes.
 
 ## 0.7.0 - 2026-10-12
 

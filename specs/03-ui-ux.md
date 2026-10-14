@@ -463,6 +463,8 @@ A network failure while browsing does not clear the screen: the stale view stays
 | Memory with a 5 000-line diff | under 50 MB |
 
 What the panes list (diff rows, line markers, the file tree, the pane's conversations) is built once per change of what it reads, then kept.
+A hunk is syntax-highlighted the first time one of its lines is drawn, so a folded file costs nothing until it is unfolded; a refresh keeps the colours of files that did not change.
+Thread layouts are kept until a thread or the shown age of a note changes, and a discussions poll that brings equal threads keeps them all.
 A frame styles only the visible window; moving a cursor or scrolling rebuilds nothing.
 
 ## Accessibility and terminals
