@@ -83,11 +83,14 @@ impl App {
             Run::Ready(checks) => checks.web_url.clone(),
             _ => open.review.mr.pipeline.as_ref().and_then(|p| p.web_url.clone()),
         });
+        let page = super::keys::full_page(self.areas.side).unsigned_abs();
         let selected = match act::act_in(Pane::Pipeline, key) {
             Some(Act::MoveDown) => pipeline.selected + 1,
             Some(Act::MoveUp) => pipeline.selected.saturating_sub(1),
             Some(Act::PageDown) => pipeline.selected + 10,
             Some(Act::PageUp) => pipeline.selected.saturating_sub(10),
+            Some(Act::FullPageDown) => pipeline.selected.saturating_add(page),
+            Some(Act::FullPageUp) => pipeline.selected.saturating_sub(page),
             Some(Act::Top) => 0,
             Some(Act::Bottom) => last,
             Some(Act::OpenBrowser) => return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
@@ -221,6 +224,16 @@ mod tests {
         press(&mut app, "p");
         assert!(app.open.as_ref().unwrap().pipeline.is_none());
         assert_eq!(app.focus, Focus::Review);
+    }
+
+    #[test]
+    fn a_full_page_moves_in_the_pipeline() {
+        let selected = |app: &App| app.open.as_ref().unwrap().pipeline.as_ref().unwrap().selected;
+        let mut app = with_pipeline();
+        app.handle_key(ctrl('b'));
+        assert_eq!(selected(&app), 0);
+        app.handle_key(ctrl('f'));
+        assert_eq!(selected(&app), app.open.as_ref().unwrap().pipeline.as_ref().unwrap().jobs().len() - 1);
     }
 
     #[test]

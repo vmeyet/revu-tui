@@ -141,11 +141,14 @@ impl App {
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return vec![] };
         let last = outline.rows.entries.len().saturating_sub(1);
         let moved = |selected: usize| Outline { selected: selected.min(last), ..outline.clone() };
+        let page = super::keys::full_page(self.areas.side).unsigned_abs();
         let next = match act::act_in(Pane::Outline, key) {
             Some(Act::MoveDown) => moved(outline.selected + 1),
             Some(Act::MoveUp) => moved(outline.selected.saturating_sub(1)),
             Some(Act::PageDown) => moved(outline.selected + 10),
             Some(Act::PageUp) => moved(outline.selected.saturating_sub(10)),
+            Some(Act::FullPageDown) => moved(outline.selected.saturating_add(page)),
+            Some(Act::FullPageUp) => moved(outline.selected.saturating_sub(page)),
             Some(Act::Top) => moved(0),
             Some(Act::Bottom) => moved(last),
             Some(Act::OutlinePublic) => outline.shown_as(|o| Outline { all: !o.all, ..o }),
@@ -317,6 +320,18 @@ mod tests {
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);
+    }
+
+    #[test]
+    fn a_full_page_moves_in_the_outline() {
+        let selected = |app: &App| app.open.as_ref().unwrap().outline.as_ref().unwrap().selected;
+        let mut paged = with_outline();
+        let mut last = with_outline();
+        press(&mut last, "G");
+        paged.handle_key(ctrl('f'));
+        assert_eq!(selected(&paged), selected(&last));
+        paged.handle_key(ctrl('b'));
+        assert_eq!(selected(&paged), 0);
     }
 
     #[test]

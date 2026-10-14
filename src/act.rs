@@ -223,8 +223,6 @@ const ON_A_THREAD_AND_DIFF: &[Place] = &[Place::Diff, Place::Pane, Place::Thread
 /// Every pane with a cursor or a scroll: where the moving keys work.
 const MOVES: &[Pane] =
     &[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Page, Pane::Cover];
-/// Where a full page moves.
-const PAGES: &[Pane] = &[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Answer, Pane::Page, Pane::Cover];
 
 /// What an action is called, and who uses the name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -456,9 +454,9 @@ pub const ROWS: &[Row] = &[
     listed(Act::PageUp, "page_up", &["ctrl-u"]).panes(MOVES).counts(EVERYWHERE),
     listed(Act::FullPageDown, "full_page_down", &["ctrl-f"])
         .help(&[line(Group::Move, "^f ^b", "a full page; PgDn PgUp too")])
-        .panes(PAGES)
+        .panes(MOVES)
         .counts(EVERYWHERE),
-    listed(Act::FullPageUp, "full_page_up", &["ctrl-b"]).panes(PAGES).counts(EVERYWHERE),
+    listed(Act::FullPageUp, "full_page_up", &["ctrl-b"]).panes(MOVES).counts(EVERYWHERE),
     listed(Act::Top, "top", &["g"]).help(&[line(Group::Move, "g G", "first, last")]).panes(MOVES).counts(EVERYWHERE),
     listed(Act::Bottom, "bottom", &["G"]).panes(MOVES).counts(EVERYWHERE),
     listed(Act::Open, "open", &["enter"])
@@ -498,7 +496,7 @@ pub const ROWS: &[Row] = &[
     listed(Act::DeleteDraft, "delete_draft", &["d"]).panes(&[Pane::ThreadRow]).counts(ON_A_THREAD),
     listed(Act::ClosePane, "close_pane", &["esc", "x"])
         .help(&[line(Group::Move, "esc x", "close the pane, back to the queue")])
-        .panes(&[Pane::Diff, Pane::Threads, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Prose])
+        .panes(&[Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Prose])
         .counts(&[Place::Pane]),
     listed(Act::NextInLine, "next_in_line", &["J"])
         .help(&[line(Group::Thread, "J K", "next, previous thread")])

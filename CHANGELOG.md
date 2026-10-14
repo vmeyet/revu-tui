@@ -26,6 +26,8 @@ Each entry says what changed, then where, then how to use it.
 - **A letter pressed with ctrl no longer does what the letter alone does.**
   Everywhere outside a text box: `^t` no longer closes the file tree, `^r` no longer replies, `^j` no longer moves.
   Only the ctrl keys the help lists act: `^d` `^u` `^f` `^b` `^k` `^v` and `^c`.
+- **The file tree, the outline and the pipeline page like the other panes.**
+  In the right pane: `^f` and `^b` move a full page there too, and `x` closes the file tree.
 - **A second host that misses one refresh keeps its MRs.**
   In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
   Once it answers again, no notification comes for an MR you already had.
