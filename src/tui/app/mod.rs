@@ -426,6 +426,13 @@ pub enum Incoming {
         review: Box<Review>,
         cached: Option<Duration>,
     },
+    /// Opening found the painted head still current: the MR, its threads and drafts are fresh, the diff stays.
+    Threads {
+        key: MrKey,
+        mr: Box<crate::forge::Mr>,
+        discussions: Vec<Discussion>,
+        drafts: Vec<Draft>,
+    },
     /// The MR read again at the head already shown: title, state, approvals and the like, the diff unchanged.
     Mr {
         key: MrKey,

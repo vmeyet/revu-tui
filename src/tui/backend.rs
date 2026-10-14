@@ -467,6 +467,24 @@ impl Backend {
         self.reviewed(key, (mr, diffs, discussions, drafts)).await
     }
 
+    /// Opening over a painted cache: the MR, its threads and drafts read at once. While the head is still the painted
+    /// `head`, no diff is read and the painted one stays; once it moved, the review is built again.
+    pub(super) async fn reopen(&self, key: MrKey, head: &Sha) -> Result<Incoming> {
+        let forge = self.forge_of(&key);
+        let (mr, discussions, drafts) = tokio::try_join!(forge.mr(&key), forge.discussions(&key), forge.drafts(&key))?;
+        if &mr.refs.head != head {
+            let diffs = self.diffs_at(&key, &mr.refs.head).await?;
+            return self.reviewed(key, (mr, diffs, discussions, drafts)).await;
+        }
+        self.off(move |b| {
+            b.keep_threads(&key, &mr, &discussions, &drafts);
+            b.mark_opened(&key);
+            let drafts = drafts.iter().map(Draft::held).collect();
+            Incoming::Threads { key, mr: Box::new(mr), discussions, drafts }
+        })
+        .await
+    }
+
     /// The diffs of `head`, which never change once pushed: from the cache when it holds them.
     async fn diffs_at(&self, key: &MrKey, head: &Sha) -> Result<Vec<DiffFile>> {
         let (wanted, at) = (key.clone(), head.clone());
@@ -497,9 +515,14 @@ impl Backend {
 
     /// Writes what a fetch brought where opening reads it; a failed write only costs a later fetch.
     fn keep(&self, key: &MrKey, (mr, diffs, discussions, drafts): &Fetched) {
+        let _ = self.cache_of(key).write(&keys::diffs(key, &mr.refs.head), diffs);
+        self.keep_threads(key, mr, discussions, drafts);
+    }
+
+    /// Writes what changes at a head the cache already holds the diffs of.
+    fn keep_threads(&self, key: &MrKey, mr: &Mr, discussions: &[Discussion], drafts: &[HeldDraft]) {
         let cache = self.cache_of(key);
         let _ = cache.write_entry(&keys::mr(key), mr);
-        let _ = cache.write(&keys::diffs(key, &mr.refs.head), diffs);
         let _ = cache.write(&keys::discussions(key), discussions);
         let _ = cache.write(&keys::drafts(key), drafts);
     }
@@ -1013,6 +1036,22 @@ mod tests {
         assert!(backend.state(&key()).opened_at.is_some());
         backend.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
         let Ok(Incoming::Review { review, cached: None, .. }) = backend.poll_review(key(), &"aaaa".into()).await else {
+            panic!("the head moved")
+        };
+        assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");
+    }
+
+    #[tokio::test]
+    async fn reopening_at_the_painted_head_reads_no_diff_and_a_moved_head_builds_the_review_again() {
+        let server = wiremock::MockServer::start().await;
+        mount_mr(&server, "2026-09-22T09:00:00Z", [2, 2, 0, 2, 2]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
+        let Ok(Incoming::Threads { mr, .. }) = backend.reopen(key(), &"bbbb".into()).await else { panic!("the head did not move") };
+        assert_eq!(mr.refs.head.as_str(), "bbbb");
+        assert!(backend.state(&key()).opened_at.is_some());
+        backend.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
+        let Ok(Incoming::Review { review, cached: None, .. }) = backend.reopen(key(), &"aaaa".into()).await else {
             panic!("the head moved")
         };
         assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");

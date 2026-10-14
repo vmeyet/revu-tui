@@ -1,5 +1,6 @@
 use super::{App, Failure, Incoming, Open};
-use crate::review::{Review, draft};
+use crate::forge::Discussion;
+use crate::review::{Draft, Review, draft};
 
 impl App {
     pub fn apply(&mut self, incoming: Incoming) {
@@ -46,6 +47,7 @@ impl App {
                 self.prefetch();
             }
             Incoming::Review { key, review, cached } => self.apply_review(key, *review, cached),
+            Incoming::Threads { key, mr, discussions, drafts } => self.apply_threads(key, *mr, discussions, drafts),
             Incoming::Mr { key, mr } => self.apply_mr(&key, *mr),
             Incoming::Resume { key, spot } => self.resume(&key, &spot),
             Incoming::Progress(counts) => {
@@ -169,6 +171,14 @@ impl App {
         }
     }
 
+    /// The painted review with the fresh MR, threads and drafts, arriving as a fresh review would: the files stay the
+    /// same shared slice, so their colours and every layout built on them are kept.
+    fn apply_threads(&mut self, key: super::MrKey, mr: crate::forge::Mr, discussions: Vec<Discussion>, drafts: Vec<Draft>) {
+        let Some(open) = self.open.as_ref().filter(|o| o.key == key && o.review.mr.refs.head == mr.refs.head) else { return };
+        let review = open.review.clone().with_mr(mr).with_discussions(discussions).with_drafts(drafts);
+        self.apply_review(key, review, None);
+    }
+
     /// A poll found the head unchanged: the MR's own fields change, the diff and the reader's place stay.
     fn apply_mr(&mut self, key: &super::MrKey, mr: crate::forge::Mr) {
         let Some(open) = self.open.take_if(|o| o.key == *key) else { return };
@@ -268,6 +278,22 @@ mod tests {
         app.apply(Incoming::Discussions { key: mr_key(), discussions: more });
         assert!(!std::sync::Arc::ptr_eq(&threads(&app), &before), "a new thread replaces them");
         assert_eq!(app.open.as_ref().unwrap().review.threads.len(), before.len() + 1);
+    }
+
+    #[test]
+    fn opening_over_a_current_cache_keeps_the_painted_diff_and_takes_the_fresh_threads() {
+        let mut app = with_queue();
+        app.handle_key(code(KeyCode::Enter));
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: Some(Duration::from_secs(120)) });
+        let painted = std::sync::Arc::clone(&app.open.as_ref().unwrap().review.files);
+        let more: Vec<Discussion> = discussions().into_iter().chain([thread_on_line_13("new", 1)]).collect();
+        app.apply(Incoming::Threads { key: mr_key(), mr: Box::new(mr()), discussions: more, drafts: vec![] });
+        let open = app.open.as_ref().unwrap();
+        assert!(std::sync::Arc::ptr_eq(&open.review.files, &painted), "the diff is the one painted");
+        assert_eq!(open.review.threads.len(), review().threads.len() + 1);
+        assert_eq!(open.staleness(app.now), None);
+        assert_eq!(app.opening, None);
+        assert!(app.poll.mr_due.is_some() && app.poll.discussions_due.is_some());
     }
 
     #[test]

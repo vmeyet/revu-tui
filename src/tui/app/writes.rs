@@ -103,6 +103,18 @@ mod tests {
     }
 
     #[test]
+    fn a_reopen_at_the_same_head_keeps_a_draft_put_back_and_counts_as_reading_the_drafts_again() {
+        let mut app = with_saved_draft();
+        press(&mut app, "l");
+        let delete = press(&mut app, "d");
+        app.apply(deleted(&delete));
+        let held = app.open.as_ref().unwrap().review.drafts.clone();
+        app.apply(Incoming::Threads { key: mr_key(), mr: Box::new(mr()), discussions: discussions(), drafts: held.clone() });
+        assert_eq!(app.open.as_ref().unwrap().review.drafts, held, "the draft the forge still holds stays");
+        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), approve: false, count: 1 }]);
+    }
+
+    #[test]
     fn publishing_waits_while_a_delete_is_on_its_way() {
         let mut app = with_saved_draft();
         press(&mut app, "jjc");

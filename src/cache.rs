@@ -132,7 +132,7 @@ impl Cache {
         parsed
     }
 
-    pub fn write<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
+    pub fn write<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
         self.write_bytes(key, &serde_json::to_vec(value)?)
     }
 

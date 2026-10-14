@@ -69,15 +69,18 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let _opening = Opening::start(&backend.opening);
                 let wanted = key.clone();
                 let cached = backend.off(move |b| b.open_cached(&wanted)).await.ok().flatten();
-                let painted = cached.is_some();
+                let painted = cached.as_ref().and_then(painted_head);
                 if let Some(cached) = cached {
                     send(cached);
                     backend.resume(&key, &send).await;
                 }
-                let fresh = backend.fetch_review(key.clone()).await;
+                let fresh = match &painted {
+                    Some(head) => backend.reopen(key.clone(), head).await,
+                    None => backend.fetch_review(key.clone()).await,
+                };
                 let arrived = fresh.is_ok();
                 send(fresh.unwrap_or_else(|e| failed(Failure::Open, &e)));
-                if arrived && !painted {
+                if arrived && painted.is_none() {
                     backend.resume(&key, &send).await;
                 }
             }
@@ -225,6 +228,14 @@ fn save_theme(name: &str) -> Result<()> {
     let mut config = crate::config::Config::load()?;
     config.tui.theme = Some(name.to_owned());
     config.save()
+}
+
+/// The head commit of a review painted from the cache.
+fn painted_head(cached: &Incoming) -> Option<crate::forge::Sha> {
+    match cached {
+        Incoming::Review { review, .. } => Some(review.mr.refs.head.clone()),
+        _ => None,
+    }
 }
 
 /// Runs `load` over `plan`, at most `cap` at a time.
