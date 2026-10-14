@@ -272,8 +272,6 @@ impl App {
             Act::FullPageUp => self.pane_move(-2 * HALF_PAGE as isize),
             Act::Top => self.pane_move(isize::MIN / 2),
             Act::Bottom => self.pane_move(isize::MAX / 2),
-            Act::NextInLine => self.pane_jump(true),
-            Act::PrevInLine => self.pane_jump(false),
             Act::Open if lists_every_thread => {
                 self.unfold_focused();
                 return self.jump_to_focused();
@@ -339,24 +337,6 @@ impl App {
         let Some(pane) = &open.pane else { return };
         let last = entries.len().saturating_sub(1) as isize;
         let note = (pane.note as isize).saturating_add(delta).clamp(0, last) as usize;
-        let pane = Pane { note, ..pane.clone() };
-        self.update_open(|open| open.with_pane(Some(pane)));
-    }
-
-    fn pane_jump(&mut self, forward: bool) {
-        let Some(open) = &self.open else { return };
-        let Some((_, entries, Some(focused))) = self.kept.pane_view(open) else { return };
-        let Some(pane) = &open.pane else { return };
-        let target = if forward {
-            entries.iter().position(|e| e.conversation > focused.conversation)
-        } else {
-            let previous = focused.conversation.checked_sub(1);
-            previous.and_then(|c| entries.iter().position(|e| e.conversation == c))
-        };
-        let Some(note) = target else {
-            self.toast(if forward { "last thread on this line" } else { "first thread on this line" });
-            return;
-        };
         let pane = Pane { note, ..pane.clone() };
         self.update_open(|open| open.with_pane(Some(pane)));
     }
@@ -726,15 +706,17 @@ mod tests {
     }
 
     #[test]
-    fn capital_j_k_walk_every_thread_and_r_and_capital_r_act_on_the_one_under_the_cursor() {
+    fn walking_every_thread_r_and_capital_r_act_on_the_one_under_the_cursor() {
         let mut app = with_review();
-        press(&mut app, "TJ");
+        press(&mut app, "T");
+        walk_to_thread(&mut app, true);
         assert_eq!(focused_thread(&app).as_deref(), Some("9f2c0aa1d4e5b6c7"), "the outdated thread, still open");
-        press(&mut app, "J");
+        walk_to_thread(&mut app, true);
         assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "the resolved one last");
-        press(&mut app, "K");
+        walk_to_thread(&mut app, false);
         assert_eq!(press(&mut app, "R"), vec![Action::Resolve { key: mr_key(), thread: "9f2c0aa1d4e5b6c7".into(), resolved: true }]);
-        press(&mut app, "gJ");
+        press(&mut app, "g");
+        walk_to_thread(&mut app, true);
         let mut actions = press(&mut app, "r");
         actions.extend(type_text(&mut app, "agreed"));
         let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
@@ -745,7 +727,9 @@ mod tests {
     #[test]
     fn e_and_d_in_every_thread_act_on_my_draft_and_keep_the_list() {
         let mut app = with_saved_draft();
-        press(&mut app, "TJJ");
+        press(&mut app, "T");
+        walk_to_thread(&mut app, true);
+        walk_to_thread(&mut app, true);
         assert_eq!(app.draft_here(), Some(0));
         press(&mut app, "e");
         assert_eq!((app.input_label(), listed_place(&app)), ("edit draft".to_owned(), Some(Place::All)));
@@ -757,7 +741,9 @@ mod tests {
     fn enter_in_every_thread_takes_the_diff_to_the_line_and_opens_its_fold() {
         let mut app = with_review();
         fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
-        press(&mut app, "TJJ");
+        press(&mut app, "T");
+        walk_to_thread(&mut app, true);
+        walk_to_thread(&mut app, true);
         assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
         app.handle_key(code(KeyCode::Enter));
         let open = app.open.as_ref().unwrap();
@@ -765,7 +751,7 @@ mod tests {
         assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
         assert!(open.pane.as_ref().unwrap().unfolded.contains("c0ffee00c0ffee00"), "a resolved thread unfolds as well");
         assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
-        press(&mut app, "K");
+        walk_to_thread(&mut app, false);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::File { index: 0, open: true }), "an outdated thread goes to its file");
         press(&mut app, "g");
@@ -790,7 +776,8 @@ mod tests {
         press(&mut app, "zzT");
         let list = render(&mut app, 138, 40);
         assert!(list.contains("the whole MR · 3 threads") && list.contains("@@ -12,4"), "the diff over the list:\n{list}");
-        press(&mut app, "JJ");
+        walk_to_thread(&mut app, true);
+        walk_to_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         let open = app.open.as_ref().unwrap();
         assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
@@ -805,7 +792,7 @@ mod tests {
         let mut app = with_review();
         press(&mut app, "Tm");
         assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "nina started the resolved thread only");
-        press(&mut app, "J");
+        walk_to_thread(&mut app, true);
         assert_eq!(focused_thread(&app).as_deref(), Some("c0ffee00c0ffee00"), "nothing after it");
         assert_eq!(press(&mut app, "R"), vec![Action::Resolve { key: mr_key(), thread: "c0ffee00c0ffee00".into(), resolved: false }]);
         app.handle_key(code(KeyCode::Enter));

@@ -55,6 +55,8 @@ Each entry says what changed, then where, then how to use it.
   In the queue: `s` still sorts by author, which keeps one author's MRs together.
 - **Folding the MR header with `zh`, and every file with `zM` and `zR`.**
   In the diff: `za`, `zo` and `zc` still fold one file; in the prose view `zR` and `zM` still show and fold the unchanged blocks.
+- **Jumping thread by thread with `J` and `K`.**
+  In the thread pane and the list of every thread: `j` and `k` walk the notes.
 
 ## 0.8.0 - 2026-10-14
 

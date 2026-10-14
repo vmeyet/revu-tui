@@ -657,7 +657,8 @@ fn in_a_short_zen_column_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_t
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
     let list = render(&mut app, 138, 24);
     assert!(list.contains("the whole MR · 3 threads") && !list.contains("@@ -12,4"), "the list takes the diff's column:\n{list}");
-    press(&mut app, "JJ");
+    walk_to_thread(&mut app, true);
+    walk_to_thread(&mut app, true);
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_ref().unwrap();
     assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));

@@ -83,7 +83,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 |---|---|
 | `r` `c` | reply, as a draft |
 | `R` | resolve, unresolve |
-| `J` `K` | next, previous thread |
 | `T` | every thread; enter goes to it |
 | `m` | every thread: only mine, or all |
 | `e` `d` | edit, delete my draft |

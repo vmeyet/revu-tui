@@ -605,3 +605,14 @@ pub(super) fn fold_every_file(app: &mut App, fold: crate::diff::fold::Fold) {
         app.set_file_fold(&path, fold);
     }
 }
+
+/// The pane's cursor moved note by note onto the next thread, or the one before, as `j` and `k` walk it.
+pub(super) fn walk_to_thread(app: &mut App, forward: bool) {
+    let from = focused_thread(app);
+    for _ in 0..50 {
+        press(app, if forward { "j" } else { "k" });
+        if focused_thread(app) != from {
+            return;
+        }
+    }
+}

@@ -106,9 +106,9 @@ The anchor column is always drawn, even when empty, so gutters never shift when 
 
 - Order: unresolved threads, then my drafts that start a thread, then resolved threads, folded as elsewhere; inside a group, the MR's own conversations first, then files in diff order, lines in order, a file's outdated threads after its lines.
 - Title: `the whole MR · 5 threads`; no footer, nothing else exists.
-- `m` keeps only the conversations I take part in: I wrote one of its notes, started it, or have a draft or a draft reply in it; `m` again lists them all. The title says so, `the whole MR · mine · 3 of 12 threads`, and an empty result reads `you take part in no thread · m shows them all`. The choice lasts while the list is open; `J` `K` `r` `R` `enter` work on what it shows.
+- `m` keeps only the conversations I take part in: I wrote one of its notes, started it, or have a draft or a draft reply in it; `m` again lists them all. The title says so, `the whole MR · mine · 3 of 12 threads`, and an empty result reads `you take part in no thread · m shows them all`. The choice lasts while the list is open; `j` `k` `r` `R` `enter` work on what it shows.
 - Each conversation opens on where it hangs, in `muted`: `src/pay/charge.rs:57` (`:-13` for the old side), `src/pay/charge.rs:57 · outdated`, or `on the MR`; under a line in the diff, its code, trimmed, in `faded`, so the reader keeps the context.
-- `J` `K` move between conversations; `r`, `R`, `+`, `e`, `d`, `S` act on the one under the cursor as in the pane of one line, and the list stays.
+- `j` `k` move through the conversations note by note; `r`, `R`, `+`, `e`, `d`, `S` act on the one under the cursor as in the pane of one line, and the list stays.
 - `enter` takes the diff's cursor to the conversation's line, opening its file and hunk as `]n` does, and folds or unfolds a resolved thread; the MR's own conversations go to the header, outdated ones to their file row. The list stays and keeps the focus; where the list takes the diff's place (a short zen column), the diff shows at the line instead. Under 120 columns, `h` shows the diff there.
 - From the diff, `l` goes back to the list, on the conversation it left, even on a marked line; `enter` on a marked line swaps the list for that line's threads.
 - It does not follow the cursor: moving in the diff keeps the list.
@@ -143,13 +143,13 @@ Side by side (`D`) has no single column to hang them in, so it keeps the pane.
 - The cursor goes to that row, so the diff scrolls to keep the row and the whole box on screen as the box grows; `esc` takes it back to the row it left, and a saved draft takes it.
 - Written from the pane (the list of every thread, the MR's own threads), or side by side, the box stays in the pane. A draft whose line the diff does not show (a folded hunk, the other side of a peek) is edited in a box at the foot of the diff.
 - Rows are laid out once per line and kept while the review, the unfolded set, the width and the theme stay the same, so code in a note is not highlighted on each frame.
-- Not built: a picture is its `[image: alt]` line, not a thumbnail, and does not click through; a drag copies code only, not the text of a note; `J` `K` do not jump between thread rows.
+- Not built: a picture is its `[image: alt]` line, not a thumbnail, and does not click through; a drag copies code only, not the text of a note.
 - A pane open on a line closes when the layout starts reading that line's threads in the diff (a resize under the narrow width, `zz`, `D` back to inline).
 
 ### Moving inside it
 
 - `h` / `l` move focus between the diff and the pane, as between slack-tui's channel and thread.
-- `j` / `k` move the cursor bar note by note; `J` / `K` jump to the next or previous thread; `ctrl-d` / `ctrl-u` (`space` down) scroll half a page, `ctrl-f` / `ctrl-b` (`PgDn` / `PgUp`) a full one; `g` / `G` first and last note.
+- `j` / `k` move the cursor bar note by note; `ctrl-d` / `ctrl-u` (`space` down) scroll half a page, `ctrl-f` / `ctrl-b` (`PgDn` / `PgUp`) a full one; `g` / `G` first and last note.
 - The focused thread is the one under the cursor bar; `r`, `R`, `e`, `d`, `o`, `y` act on it.
 
 ## Composing
@@ -178,7 +178,6 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `R` | pane, or diff on a marked line | resolve, unresolve the focused thread | pane only |
 | `e` | pane | edit my draft (or my note, M3) | `enter` on a draft row |
 | `d` | pane | delete my draft | `d` on a draft row |
-| `J` `K` | pane | next, previous thread | none |
 | `T` | diff or pane | every thread of the MR in the pane, or close it | none |
 | `enter` | pane, every thread | go to the conversation's line in the diff | none |
 | `m` | pane, every thread | only the conversations I take part in, or all | none |

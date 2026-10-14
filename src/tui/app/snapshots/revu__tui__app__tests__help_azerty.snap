@@ -25,24 +25,24 @@ expression: "render(&mut app, 160, 45)"
 │            │                                                                       THREAD PANE                                                 │             │
 │            │  QUEUE                                                                      r c  reply, as a draft                                │             │
 │            │          /  filter: words @author !42 ~label                                  R  resolve, unresolve                               │             │
-│            │      ' 1-9  a saved view, by letter or rank                                 J K  next, previous thread                            │             │
-│            │          *  this repo, or every project                                       T  every thread; enter goes to it                   │             │
-│            │          s  next sort order                                                   m  every thread: only mine, or all                  │             │
-│            │          b  pin on top of the queue, or unpin                               e d  edit, delete my draft                            │             │
-│            │      zo zc  open, fold the section or stack                                 S +  apply the suggestion, react                      │             │
-│            │                                                                             u U  open, copy the first link                        │             │
-│            │  VIEW                                                                                                                             │             │
-│            │      / n N  find text in the MR, next, previous                       OUTLINE PANE                                                │             │
-│            │          i  the MR cover page                                                 t  call tree, or the flat list                      │             │
-│            │          D  inline or side by side, diff and prose                            u  calls, or called by                              │             │
-│            │        > <  the code after, before, alone                                     s  the whole stack, unchanged calls too             │             │
-│            │          t  file tree                                                         a  public symbols only, or all                      │             │
-│            │          T  every thread of the MR                                     zo zc za  open, close, toggle the branch                   │             │
-│            │          p  pipeline                                                      enter  the call in the diff, the definition, a section  │             │
-│            │          O  outline: the symbols the MR changes                                                                                   │             │
-│            │          v  prose: the Markdown file rendered, its blocks marked      ASK CLAUDE                                                  │             │
+│            │      ' 1-9  a saved view, by letter or rank                                   T  every thread; enter goes to it                   │             │
+│            │          *  this repo, or every project                                       m  every thread: only mine, or all                  │             │
+│            │          s  next sort order                                                 e d  edit, delete my draft                            │             │
+│            │          b  pin on top of the queue, or unpin                               S +  apply the suggestion, react                      │             │
+│            │      zo zc  open, fold the section or stack                                 u U  open, copy the first link                        │             │
 │            │                                                                                                                                   │             │
-│            ╰────────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 48 · j k scroll · esc close ╯             │
+│            │  VIEW                                                                 OUTLINE PANE                                                │             │
+│            │      / n N  find text in the MR, next, previous                               t  call tree, or the flat list                      │             │
+│            │          i  the MR cover page                                                 u  calls, or called by                              │             │
+│            │          D  inline or side by side, diff and prose                            s  the whole stack, unchanged calls too             │             │
+│            │        > <  the code after, before, alone                                     a  public symbols only, or all                      │             │
+│            │          t  file tree                                                  zo zc za  open, close, toggle the branch                   │             │
+│            │          T  every thread of the MR                                        enter  the call in the diff, the definition, a section  │             │
+│            │          p  pipeline                                                                                                              │             │
+│            │          O  outline: the symbols the MR changes                       ASK CLAUDE                                                  │             │
+│            │          v  prose: the Markdown file rendered, its blocks marked        a e r s  explain, risks, summary                          │             │
+│            │                                                                                                                                   │             │
+│            ╰────────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 47 · j k scroll · esc close ╯             │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

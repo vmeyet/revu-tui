@@ -371,7 +371,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 
 | Key | Action |
 |---|---|
-| `j` `k`, `J` `K` | note by note, thread by thread |
+| `j` `k` | note by note |
 | `enter` | unfold, fold a resolved thread; in every thread, also go to its line in the diff |
 | `T` | every thread of the MR, or close it |
 | `r` `c` | reply, in the compose box |

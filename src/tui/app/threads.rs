@@ -516,7 +516,9 @@ mod tests {
     #[test]
     fn written_from_the_pane_or_side_by_side_the_box_stays_in_the_pane() {
         let mut list = zen_with_threads(vec![thread_on_line_13("aaa", 2)]);
-        press(&mut list, "TJr");
+        press(&mut list, "T");
+        walk_to_thread(&mut list, true);
+        press(&mut list, "r");
         assert_eq!((list.input_label().as_str(), list.focus, list.compose_row()), ("reply to lea", Focus::Side, None));
         let screen = render(&mut list, 138, 40);
         let rule = screen.lines().position(|line| line.contains("─ the whole MR")).unwrap();

@@ -82,8 +82,6 @@ pub enum Act {
     EditDraft,
     DeleteDraft,
     ClosePane,
-    NextInLine,
-    PrevInLine,
     OpenLink,
     CopyFirstLink,
     AskExplain,
@@ -532,11 +530,6 @@ pub const ROWS: &[Row] = &[
         .help(&[line(Group::Move, "esc x", "close the pane, back to the queue")])
         .panes(&[Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Prose])
         .section(Section::Thread),
-    listed(Act::NextInLine, "next_in_line", &["J"])
-        .help(&[line(Group::Thread, "J K", "next, previous thread")])
-        .panes(&[Pane::Threads])
-        .section(Section::Thread),
-    listed(Act::PrevInLine, "prev_in_line", &["K"]).panes(&[Pane::Threads]).section(Section::Thread),
     listed(Act::OpenLink, "open_link", &["u"])
         .help(&[line(Group::Thread, "u U", "open, copy the first link")])
         .panes(&[Pane::ThreadRow])
@@ -665,16 +658,7 @@ impl Group {
                 Act::Ready,
                 Act::Share,
             ],
-            Self::Thread => &[
-                Act::Reply,
-                Act::Resolve,
-                Act::NextInLine,
-                Act::EveryThread,
-                Act::Mine,
-                Act::EditDraft,
-                Act::ApplySuggestion,
-                Act::OpenLink,
-            ],
+            Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
             Self::Outline => &[Act::OutlineTree, Act::OutlineCalls, Act::OutlineStack, Act::OutlinePublic, Act::FoldOpen, Act::Open],
             Self::Ask => &[Act::AskExplain, Act::AskThread, Act::AskAnswers, Act::AnswerDraft],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
