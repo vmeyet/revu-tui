@@ -135,7 +135,7 @@ Say no, and the session takes the terminal instead, with the reason in the toast
 |---|---|
 | Go back to revu | `cmd-[` |
 | Go to the session again | `cmd-]`, or `a g` on the same MR |
-| Close the session's split | `ctrl-z` in the session: it keeps running, and revu takes the full width back |
+| Close the session's split | `ctrl-z` in the session: it keeps running, the split closes at once, and revu takes the full width back |
 
 revu splits the terminal that is in front when you press `a g`, which is revu's own.
 Ghostty needs `macos-applescript` left on, as it is by default.
