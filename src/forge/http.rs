@@ -12,6 +12,8 @@ use url::Url;
 
 const PAGE_SIZE: &str = "100";
 const MAX_WAIT: Duration = Duration::from_secs(60);
+/// The most one request may take, its answer read whole: a slow page of diffs still fits.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// How one forge speaks HTTP where the two differ.
 #[derive(Debug)]
@@ -59,7 +61,11 @@ pub struct Transport {
 impl Transport {
     /// `headers` carry the token: every request goes to `base`'s scheme, host and port or not at all.
     pub fn new(base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
-        let client = crate::http::client()
+        Self::over(crate::http::client().timeout(REQUEST_TIMEOUT), base, headers, flavor)
+    }
+
+    fn over(client: reqwest::ClientBuilder, base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
+        let client = client
             .default_headers(headers)
             .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
@@ -214,9 +220,10 @@ fn next_link(header: &str) -> Option<&str> {
 }
 
 /// reqwest errors carry the URL, never the header, but the chain is cut here anyway so nothing
-/// above the transport can leak a request.
+/// above the transport can leak a request. A timeout says so, which the cut chain would hide.
 pub fn scrub(err: reqwest::Error) -> anyhow::Error {
-    anyhow::anyhow!("{}", err.without_url())
+    let timed_out = if err.is_timeout() { ": timed out" } else { "" };
+    anyhow::anyhow!("{}{timed_out}", err.without_url())
 }
 
 #[cfg(test)]
@@ -304,6 +311,16 @@ mod tests {
             .await;
         let err = transport(&format!("{}/api/", server.uri())).get_all::<u8>("items").await.unwrap_err().to_string();
         assert!(err.starts_with("refusing to send the token to https://"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_forge_that_never_answers_fails_the_request_instead_of_holding_it() {
+        let base = crate::http::tests::silent_server().await;
+        let quick = crate::http::client().read_timeout(Duration::from_millis(200));
+        let transport = Transport::over(quick, &base, HeaderMap::new(), &PLAIN).unwrap();
+        let answer = tokio::time::timeout(Duration::from_secs(5), transport.get_text("user")).await.expect("the request ended");
+        let err = answer.unwrap_err().to_string();
+        assert!(err.contains("timed out"), "{err}");
     }
 
     #[test]

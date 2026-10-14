@@ -10,7 +10,8 @@ const API_URL: &str = "https://api.anthropic.com";
 const VERSION: &str = "2023-06-01";
 const FALLBACK_BETA: &str = "server-side-fallback-2026-07-01";
 const MAX_TOKENS: u32 = 16_000;
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// The longest silence a streamed answer may keep between two events; it has no total limit, a long answer is fine.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(90);
 const RETRYABLE: [u16; 5] = [429, 500, 502, 503, 529];
 const LONGEST_WAIT: Duration = Duration::from_secs(30);
 
@@ -112,7 +113,7 @@ impl Claude {
 
     /// Pointed at another server: a mock in tests.
     pub(crate) fn with_base(base: &str, key: Secret, model: &str) -> Self {
-        let http = crate::http::client().connect_timeout(CONNECT_TIMEOUT).build().unwrap_or_default();
+        let http = crate::http::client().read_timeout(STREAM_IDLE_TIMEOUT).build().unwrap_or_default();
         Self { http, base: base.trim_end_matches('/').to_owned(), key, model: model.to_owned() }
     }
 

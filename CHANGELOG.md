@@ -58,6 +58,8 @@ Each entry says what changed, then where, then how to use it.
 - **A config written for a newer revu no longer stops this one.**
   In every command and the TUI: a setting revu does not know is ignored, and a warning names it once at start.
   An old `[ai] enabled` or `provider` now warns and points at `[ai.anthropic]` and `[ai.typesafe]`.
+- **Refreshing comes back after a sleep or a dropped VPN.**
+  In the queue and an open MR: a request that gets no answer gives up, the status line says offline, and polling tries again.
 
 ## 0.7.0 - 2026-10-12
 
