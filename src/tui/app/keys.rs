@@ -56,7 +56,7 @@ impl App {
             return self.through_keymap(key, Self::handle_brief_key);
         }
         if self.news_page.is_some() {
-            return self.handle_news_page_key(paged(key));
+            return self.through_keymap(key, Self::handle_news_page_key);
         }
         if self.filtering {
             return self.handle_filter_key(key);
@@ -388,6 +388,9 @@ impl App {
     /// questions, the outline's and the prose's folds, then the diff's.
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return vec![];
+        }
         if prefix == '\'' {
             self.did(Act::Views);
             self.apply_view(c);
@@ -558,6 +561,15 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
     use ratatui::layout::Rect;
+
+    #[test]
+    fn the_second_key_of_two_with_ctrl_does_nothing() {
+        let mut app = with_review();
+        press(&mut app, "z");
+        assert_eq!(app.handle_key(ctrl('a')), vec![], "`z` then `^a` is not `za`");
+        assert!(app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
+        assert_eq!(app.pending, None, "the prefix is spent");
+    }
 
     #[test]
     fn r_refreshes_once_and_o_y_take_the_mr_url() {

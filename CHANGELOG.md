@@ -40,6 +40,10 @@ Each entry says what changed, then where, then how to use it.
   Actions follow the order of the keys reference, and commands the order of the palette.
 - **Your own keys work on the cover page.**
   On the MR cover page, `i`: a key from `[keys.bind]` does what its action does there, as in every other pane.
+- **Your own keys work on the news page too.**
+  On the page `:news` opens: a key from `[keys.bind]` closes or scrolls it like its default key.
+- **A second key pressed with ctrl no longer finishes a two-key sequence.**
+  After `z`, `[`, `]`, `a` or `'`: `z` then `^a` does nothing, as `^a` alone does.
 - **A second host that misses one refresh keeps its MRs.**
   In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
   Once it answers again, no notification comes for an MR you already had.

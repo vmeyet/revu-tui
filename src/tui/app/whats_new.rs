@@ -107,6 +107,15 @@ mod tests {
     }
 
     #[test]
+    fn a_bound_key_works_on_the_news_page() {
+        let mut app = updated_from("0.5.0");
+        app.keymap = keymap("bind = { quit = \"Q\" }");
+        open_page(&mut app);
+        press(&mut app, "Q");
+        assert_eq!(app.news_page, None, "`Q` closes the page as `q` does");
+    }
+
+    #[test]
     fn the_page_marks_the_versions_the_reader_has_not_seen() {
         let whats_new = WhatsNew { changelog: sample(), seen: "0.6.0".parse().unwrap() };
         let marked: Vec<(String, bool)> = whats_new.sections().into_iter().map(|(section, new)| (section.title(), new)).collect();
