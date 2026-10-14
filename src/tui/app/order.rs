@@ -40,14 +40,11 @@ impl Order {
     }
 }
 
-/// What `s` and `S` chose for one scope, which stacks are unfolded and which sections folded.
+/// What `s` chose for one scope, which stacks are unfolded and which sections folded.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueView {
     #[serde(default)]
     pub order: Order,
-    /// Open and Drafts get one sub-header per author.
-    #[serde(default)]
-    pub by_author: bool,
     /// Stacks shown MR by MR, by their base MR's key; every other stack is one folded row.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
     pub open_stacks: std::collections::BTreeSet<String>,
@@ -58,12 +55,7 @@ pub struct QueueView {
 
 impl Default for QueueView {
     fn default() -> Self {
-        Self {
-            order: Order::default(),
-            by_author: false,
-            open_stacks: std::collections::BTreeSet::new(),
-            closed_sections: folded_at_first(),
-        }
+        Self { order: Order::default(), open_stacks: std::collections::BTreeSet::new(), closed_sections: folded_at_first() }
     }
 }
 
@@ -71,7 +63,6 @@ impl Default for QueueView {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ViewChange {
     Order(Order),
-    ByAuthor(bool),
     Section { name: String, closed: bool },
     Stack { id: String, open: bool },
 }
@@ -81,7 +72,6 @@ impl ViewChange {
     pub fn target(&self) -> String {
         match self {
             ViewChange::Order(_) => "order".into(),
-            ViewChange::ByAuthor(_) => "by_author".into(),
             ViewChange::Section { name, .. } => format!("section {name}"),
             ViewChange::Stack { id, .. } => format!("stack {id}"),
         }
@@ -90,7 +80,6 @@ impl ViewChange {
     pub fn apply(self, view: QueueView) -> QueueView {
         match self {
             ViewChange::Order(order) => QueueView { order, ..view },
-            ViewChange::ByAuthor(by_author) => QueueView { by_author, ..view },
             ViewChange::Section { name, closed } => QueueView { closed_sections: with(view.closed_sections, name, closed), ..view },
             ViewChange::Stack { id, open } => QueueView { open_stacks: with(view.open_stacks, id, open), ..view },
         }
@@ -123,19 +112,6 @@ pub fn sorted(mut rows: Vec<&QueueMr>, order: Order, urgency: impl Fn(&QueueMr) 
         Order::Urgency => rows.sort_by(|a, b| urgency(b).total_cmp(&urgency(a))),
     }
     rows
-}
-
-/// `rows` in runs of one author each, authors by name, the order kept inside each run.
-pub fn by_author(mut rows: Vec<&QueueMr>) -> Vec<(&str, Vec<&QueueMr>)> {
-    rows.sort_by_key(|mr| mr.author.to_lowercase());
-    let mut groups: Vec<(&str, Vec<&QueueMr>)> = vec![];
-    for mr in rows {
-        match groups.last_mut() {
-            Some((author, group)) if author.eq_ignore_ascii_case(&mr.author) => group.push(mr),
-            _ => groups.push((mr.author.as_str(), vec![mr])),
-        }
-    }
-    groups
 }
 
 #[cfg(test)]
@@ -184,11 +160,11 @@ mod tests {
 
     #[test]
     fn a_change_sets_one_choice_and_leaves_the_others() {
-        let view = ViewChange::ByAuthor(true).apply(QueueView::default());
+        let view = ViewChange::Order(Order::Author).apply(QueueView::default());
         let view = ViewChange::Section { name: "DONE".into(), closed: false }.apply(view);
         let view = ViewChange::Stack { id: "acme/widgets!61".into(), open: true }.apply(view);
         let view = ViewChange::Section { name: "OPEN".into(), closed: true }.apply(view);
-        assert!(view.by_author && view.order == Order::Updated);
+        assert_eq!(view.order, Order::Author);
         assert_eq!(view.closed_sections, ["DRAFTS", "OPEN", "OTHER"].map(str::to_owned).into());
         assert_eq!(view.open_stacks, ["acme/widgets!61".to_owned()].into());
         let closed_again = ViewChange::Stack { id: "acme/widgets!61".into(), open: false }.apply(view.clone());
@@ -232,15 +208,6 @@ mod tests {
     }
 
     #[test]
-    fn grouping_makes_one_run_per_author_in_name_order_keeping_the_sort_inside() {
-        let (a, b, c, d) = (mr(1, "zoe", 0, 0), mr(2, "ana", 0, 0), mr(3, "zoe", 0, 0), mr(4, "Ana", 0, 0));
-        let groups = by_author(vec![&a, &b, &c, &d]);
-        let shape: Vec<(&str, Vec<u64>)> = groups.iter().map(|(name, rows)| (*name, numbers(rows))).collect();
-        assert_eq!(shape, [("ana", vec![2, 4]), ("zoe", vec![1, 3])]);
-        assert_eq!(by_author(vec![]), [] as [(&str, Vec<&QueueMr>); 0]);
-    }
-
-    #[test]
     fn s_cycles_the_order_saves_it_for_the_scope_and_titles_the_pane() {
         let mut app = scoped_app();
         app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
@@ -258,29 +225,9 @@ mod tests {
     }
 
     #[test]
-    fn capital_s_groups_open_and_drafts_by_author_only() {
-        let mut app = scoped_app();
-        app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
-        press(&mut app, "Gkzo");
-        press(&mut app, "S");
-        let authors: Vec<&str> =
-            app.queue_rows().iter().filter_map(|r| if let QueueRow::Author { name, .. } = r { Some(*name) } else { None }).collect();
-        assert_eq!(authors, ["lea", "omar"], "one header per author in Open, then in Drafts");
-        let before_mine = app
-            .queue_rows()
-            .iter()
-            .take_while(|r| !matches!(r, QueueRow::Section { name: "MINE", .. }))
-            .any(|r| matches!(r, QueueRow::Author { .. }));
-        assert!(!before_mine, "To review is never grouped");
-        assert!(app.selected_mr().is_some(), "author headers are never where the cursor rests");
-        press(&mut app, "S");
-        assert!(!app.queue_rows().iter().any(|r| matches!(r, QueueRow::Author { .. })));
-    }
-
-    #[test]
     fn a_saved_view_for_this_scope_applies_and_one_for_another_is_dropped() {
         let mut app = scoped_app();
-        let grouped = QueueView { order: order::Order::Author, by_author: true, ..QueueView::default() };
+        let grouped = QueueView { order: order::Order::Author, ..QueueView::default() };
         app.apply(Incoming::QueueView { scope: None, view: grouped.clone() });
         assert_eq!(app.queue_view, QueueView::default());
         app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view: grouped.clone() });

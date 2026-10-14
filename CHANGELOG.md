@@ -49,6 +49,11 @@ Each entry says what changed, then where, then how to use it.
   On GitHub, when it asks revu to slow down while requests are left.
   A short wait passes on its own; a long one says `rate limited until 14:05`, and refreshing comes back then.
 
+### Removed
+
+- **Grouping the queue by author, `S`.**
+  In the queue: `s` still sorts by author, which keeps one author's MRs together.
+
 ## 0.8.0 - 2026-10-14
 
 ### New

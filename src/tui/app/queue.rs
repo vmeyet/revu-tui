@@ -19,11 +19,6 @@ pub enum QueueRow<'a> {
         count: usize,
         open: bool,
     },
-    /// One author's MRs follow, when `S` groups Open and Drafts.
-    Author {
-        name: &'a str,
-        count: usize,
-    },
     Mr(&'a QueueMr),
     /// A chain of one author's MRs, each built on the one below; folded, it is this one row.
     Stack {
@@ -41,9 +36,6 @@ impl QueueRow<'_> {
         matches!(self, Self::Mr(_) | Self::Stack { .. } | Self::Stacked(_) | Self::Section { open: false, .. })
     }
 }
-
-/// The sections `S` splits by author: the ones that pile up other people's MRs.
-const GROUPED: [&str; 2] = ["OPEN", "DRAFTS"];
 
 impl App {
     /// Sections and their rows after the filter, in the chosen order; a section with no match
@@ -75,14 +67,7 @@ impl App {
             if !open {
                 continue;
             }
-            if self.queue_view.by_author && GROUPED.contains(&name) {
-                for (author, group) in order::by_author(matching) {
-                    rows.push(QueueRow::Author { name: author, count: group.len() });
-                    rows.extend(self.stacked(&group));
-                }
-            } else {
-                rows.extend(self.stacked(&matching));
-            }
+            rows.extend(self.stacked(&matching));
         }
         rows
     }
@@ -129,14 +114,10 @@ impl App {
         self.selected_mr()?.reason.as_ref().map(ToString::to_string)
     }
 
-    /// `s`: the next order; `S`: grouping by author on or off. Both are remembered for this scope.
+    /// `s`: the next order, remembered for this scope.
     pub(super) fn sort_queue(&mut self) -> Vec<Action> {
         let order = self.queue_view.order.next(self.triaged());
         self.change_view(ViewChange::Order(order))
-    }
-
-    pub(super) fn group_queue(&mut self) -> Vec<Action> {
-        self.change_view(ViewChange::ByAuthor(!self.queue_view.by_author))
     }
 
     fn change_view(&mut self, change: ViewChange) -> Vec<Action> {
@@ -146,13 +127,11 @@ impl App {
         vec![Action::ChangeQueueView { scope: self.scope(), change, order: self.next_save }]
     }
 
-    /// What the queue title says after the scope: the filter (or the view that set it), the
-    /// order, and grouping.
+    /// What the queue title says after the scope: the filter (or the view that set it) and the order.
     pub fn queue_view_label(&self) -> Option<String> {
         let filter = if self.filter.is_empty() { None } else { Some(self.view.clone().unwrap_or_else(|| self.filter.clone())) };
         let order = self.queue_view.order.label().map(str::to_owned);
-        let grouped = self.queue_view.by_author.then(|| "grouped by author".to_owned());
-        let words: Vec<String> = filter.into_iter().chain(order).chain(grouped).collect();
+        let words: Vec<String> = filter.into_iter().chain(order).collect();
         (!words.is_empty()).then(|| words.join(", "))
     }
 
@@ -261,7 +240,7 @@ impl App {
     fn section_here(&self) -> Option<&'static str> {
         self.queue_rows().into_iter().take(self.queue_selected + 1).rev().find_map(|row| match row {
             QueueRow::Section { name, .. } => Some(name),
-            QueueRow::Author { .. } | QueueRow::Mr(_) | QueueRow::Stack { .. } | QueueRow::Stacked(_) => None,
+            QueueRow::Mr(_) | QueueRow::Stack { .. } | QueueRow::Stacked(_) => None,
         })
     }
 

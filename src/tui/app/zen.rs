@@ -72,7 +72,7 @@ impl App {
             let mrs = match row {
                 QueueRow::Mr(mr) | QueueRow::Stacked(mr) => vec![mr],
                 QueueRow::Stack { mrs, open: false, .. } => mrs,
-                QueueRow::Stack { open: true, .. } | QueueRow::Section { .. } | QueueRow::Author { .. } => vec![],
+                QueueRow::Stack { open: true, .. } | QueueRow::Section { .. } => vec![],
             };
             for mr in mrs {
                 let key = mr.key();

@@ -241,7 +241,6 @@ impl App {
                     self.did_nothing();
                 }
             }
-            Act::GroupByAuthor => return self.group_queue(),
             Act::Pin => return self.toggle_pin(),
             Act::Description => self.open_brief_from_queue(),
             Act::Open => return self.open_selected(),

@@ -108,7 +108,6 @@ fn row_lines(app: &App, row: &QueueRow<'_>, selected: bool, first: bool, width: 
             lines.push(rule(theme, name, *count, *open, selected, width));
             (lines, None)
         }
-        QueueRow::Author { name, count } => (vec![author_header(theme, name, *count)], None),
         QueueRow::Mr(mr) => mr_lines(app, mr, selected, 0, width),
         QueueRow::Stacked(mr) => mr_lines(app, mr, selected, INDENT, width),
         QueueRow::Stack { mrs, open, .. } => (stack_lines(app, mrs, *open, selected, width), None),
@@ -137,11 +136,6 @@ pub(super) fn rule(theme: Theme, name: &str, count: usize, open: bool, selected:
         Span::styled(label, label_style),
         Span::styled("─".repeat(tail), faded),
     ])
-}
-
-/// One author's sub-header when `S` groups: quieter than a section, no rule.
-fn author_header(theme: Theme, name: &str, count: usize) -> Line<'static> {
-    Line::from(Span::styled(format!("{}{} · {count}", " ".repeat(BAR_W + 1), short_name(name)), Style::default().fg(theme.faded)))
 }
 
 fn bar(theme: Theme, selected: bool) -> Span<'static> {

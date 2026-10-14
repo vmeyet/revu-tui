@@ -135,7 +135,7 @@ mod tests {
         assert_eq!(app.mark(&last), Some(Mark::Urgent));
         let first_row = app.queue_rows().into_iter().find_map(|r| match r {
             QueueRow::Mr(mr) | QueueRow::Stacked(mr) => Some(mr.key()),
-            QueueRow::Section { .. } | QueueRow::Author { .. } | QueueRow::Stack { .. } => None,
+            QueueRow::Section { .. } | QueueRow::Stack { .. } => None,
         });
         assert_eq!(first_row, Some(last.key()), "the urgent MR leads To review");
         let moved = crate::forge::QueueMr { updated_at: last.updated_at + chrono::TimeDelta::hours(1), ..last.clone() };

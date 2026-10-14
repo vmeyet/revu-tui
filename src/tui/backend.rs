@@ -1266,10 +1266,10 @@ mod tests {
         assert_eq!(desktop.pins(None), [infra.clone(), widgets.clone()].into());
         desktop.change_pin(None, &infra, false, 2).unwrap();
         assert_eq!(phone.pins(None), [widgets].into());
-        desktop.change_queue_view(None, app::ViewChange::ByAuthor(true), 3).unwrap();
+        desktop.change_queue_view(None, app::ViewChange::Section { name: "OPEN".into(), closed: true }, 3).unwrap();
         phone.change_queue_view(None, app::ViewChange::Section { name: "DONE".into(), closed: false }, 2).unwrap();
         let view: app::QueueView = desktop.cache.read(&keys::queue_view(None)).unwrap();
-        assert!(view.by_author);
+        assert!(view.closed_sections.contains("OPEN"));
         assert!(!view.closed_sections.contains("DONE") && view.closed_sections.contains("DRAFTS"), "{view:?}");
     }
 

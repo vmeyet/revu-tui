@@ -62,12 +62,11 @@ Press `'` then the first letter of a view to apply it.
 `1` to `9` apply views in name order.
 Two views may not start with the same letter.
 
-## Sort and group
+## Sort
 
 | Key in the queue | Does |
 |---|---|
 | `s` | Next order: updated, oldest, author, size |
-| `S` | Group OPEN and DRAFTS by author |
 | `*` | This project, or every project |
 
 ## See also

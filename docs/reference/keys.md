@@ -33,7 +33,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `'` `1-9` | a saved view, by letter or rank |
 | `*` | this repo, or every project |
 | `s` | next sort order |
-| `S` | group by author |
 | `b` | pin on top of the queue, or unpin |
 | `zo` `zc` | open, fold the section or stack |
 
@@ -197,7 +196,6 @@ A bound key adds to the default key, it does not replace it.
 | `copy_link` | `y` |
 | `scope` | `*` |
 | `sort_queue` | `s` |
-| `group_by_author` | `S` |
 | `filter` | `/` |
 | `palette` | `:` |
 | `views` | `'` |

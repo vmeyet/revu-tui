@@ -59,7 +59,6 @@ pub enum Act {
     CopyLink,
     Scope,
     SortQueue,
-    GroupByAuthor,
     Filter,
     Palette,
     Views,
@@ -459,10 +458,6 @@ pub const ROWS: &[Row] = &[
         .help(&[line(Group::Queue, "s", "next sort order")])
         .panes(&[Pane::Queue])
         .section(Section::Queue),
-    bound(Act::GroupByAuthor, "group_by_author", &["S"])
-        .help(&[line(Group::Queue, "S", "group by author")])
-        .panes(&[Pane::Queue])
-        .section(Section::Queue),
     bound(Act::Filter, "filter", &["/"])
         .help(&[line(Group::Queue, "/", "filter: words @author !42 ~label")])
         .panes(&[Pane::Queue])
@@ -634,7 +629,7 @@ impl Group {
                 Act::NextReview,
                 Act::NextMr,
             ],
-            Self::Queue => &[Act::Filter, Act::Views, Act::Scope, Act::SortQueue, Act::GroupByAuthor, Act::Pin, Act::FoldOpen],
+            Self::Queue => &[Act::Filter, Act::Views, Act::Scope, Act::SortQueue, Act::Pin, Act::FoldOpen],
             Self::View => &[
                 Act::Search,
                 Act::Description,

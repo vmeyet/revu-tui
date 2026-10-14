@@ -444,15 +444,6 @@ fn snapshot_queue_compact() {
 }
 
 #[test]
-fn snapshot_queue_drafts_open_and_grouped_by_author() {
-    let mut app = scoped_app();
-    app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
-    press(&mut app, "Gkzo");
-    press(&mut app, "S");
-    insta::assert_snapshot!("queue_drafts_grouped", render(&mut app, 120, 24));
-}
-
-#[test]
 fn snapshot_queue_with_a_stack_at_120_and_170_columns() {
     let mut app = stacked_app();
     insta::assert_snapshot!("queue_stack_120", render(&mut app, 120, 26));
