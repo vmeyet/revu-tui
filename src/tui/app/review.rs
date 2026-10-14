@@ -472,7 +472,10 @@ impl App {
             return vec![];
         }
         match self.open.as_ref().and_then(|o| o.row().cloned()) {
-            Some(Row::File { .. } | Row::Hunk { .. }) => self.fold_at_cursor(None),
+            Some(Row::File { .. } | Row::Hunk { .. }) => {
+                self.key_did = Some("fold_toggle");
+                self.fold_at_cursor(None)
+            }
             _ => vec![],
         }
     }

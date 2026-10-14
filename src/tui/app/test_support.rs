@@ -61,7 +61,7 @@ pub(super) fn settings() -> Settings {
         ascii: false,
         reactions: crate::reactions::History::default(),
         quit_confirm: true,
-        usage: false,
+        usage: None,
         whats_new: WhatsNew::default(),
         agent: false,
     }

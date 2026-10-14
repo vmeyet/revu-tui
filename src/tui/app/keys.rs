@@ -12,6 +12,7 @@ const KEPT_ROWS: u16 = 2;
 impl App {
     /// Any key but the one finishing a quit calls the pending quit off, then does its own job.
     pub fn handle_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        self.count_input();
         self.drag = None;
         let pending = self.quitting;
         let actions = self.route_key(key);
@@ -79,11 +80,11 @@ impl App {
 
     /// A key after the user's bindings turned it into revu's own, counted when `[usage]` is on.
     fn dispatch(&mut self, key: KeyEvent) -> Vec<Action> {
-        let named = self.usage_name(key);
+        let before = self.usage_before(key);
         self.repeat = Some(super::repeat::Repeat::after(self.repeat, key.code, self.now));
-        let was_zen = self.zen;
+        self.key_did = None;
         let actions = self.dispatch_key(key);
-        self.count_key(named, was_zen);
+        self.count_key(before);
         actions
     }
 
@@ -100,6 +101,7 @@ impl App {
             KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
             KeyCode::Char(',') => self.open_palette(crate::tui::palette::Mode::Mrs),
             KeyCode::Char('q') if self.focus != Focus::Queue && self.open.as_ref().is_some_and(super::Open::side_open) => {
+                self.key_did = Some("close_pane");
                 return self.handle_side_key(KeyEvent::from(KeyCode::Esc));
             }
             KeyCode::Char('q') => return self.quit_key(super::quit::QuitKey::Q),
@@ -284,8 +286,14 @@ impl App {
             KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),
-            KeyCode::Esc | KeyCode::Char('x') if self.answer_open() => self.close_answer(),
-            KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => self.close_pane(),
+            KeyCode::Esc | KeyCode::Char('x') if self.answer_open() => {
+                self.key_did = Some("close_pane");
+                self.close_answer();
+            }
+            KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => {
+                self.key_did = Some("close_pane");
+                self.close_pane();
+            }
             KeyCode::Esc if self.zen => return self.leave_zen(),
             KeyCode::Esc => self.focus = Focus::Queue,
             KeyCode::Char('r') => return self.refresh_open(),

@@ -54,8 +54,8 @@ pub struct Settings {
     pub reactions: crate::reactions::History,
     /// `[keys] quit_confirm`: `q` and `ctrl-c` need a second press.
     pub quit_confirm: bool,
-    /// `[usage] enabled`: count the actions used and the time per screen.
-    pub usage: bool,
+    /// `[usage] enabled`: count the actions used and the time per screen, from this tally on.
+    pub usage: Option<crate::usage::Tally>,
     /// revu's own changelog, and how far the reader had got in it.
     pub whats_new: super::WhatsNew,
     /// `[agent] enabled`: `a g` opens an agent session on an MR.
@@ -171,12 +171,14 @@ pub struct App {
     pub quit_confirm: bool,
     /// What this session counted since the last flush; `None` when `[usage]` is off.
     pub usage: Option<crate::usage::Tally>,
-    /// The last time screen time was counted.
-    pub usage_at: Instant,
-    /// How many j or k in a row moved through a diff that has hunks or threads to jump to.
-    pub walk: u32,
-    /// Zen was on at some point this session.
-    pub zen_seen: bool,
+    /// Up to when screen time is counted, and what stops it.
+    pub usage_clock: super::usage::Clock,
+    /// The j or k in a row moving through the diff.
+    pub walk: super::usage::Walk,
+    /// When zen was left with a key, and on which MR.
+    pub left_zen: Option<(Instant, MrKey)>,
+    /// What the key in flight did, named by its handler where the same key does something else elsewhere.
+    pub key_did: Option<&'static str>,
     pub keymap: crate::keymap::Keymap,
     pub pending: Option<char>,
     /// The input row is open for this; `buffer` holds what is typed.
@@ -322,10 +324,11 @@ impl App {
             repeat: None,
             quitting: None,
             quit_confirm: settings.quit_confirm,
-            usage: settings.usage.then(crate::usage::Tally::default),
-            usage_at: now,
-            walk: 0,
-            zen_seen: false,
+            usage: settings.usage,
+            usage_clock: super::usage::Clock::starting(now),
+            walk: super::usage::Walk::default(),
+            left_zen: None,
+            key_did: None,
             keymap: settings.keymap,
             pending: None,
             input: None,

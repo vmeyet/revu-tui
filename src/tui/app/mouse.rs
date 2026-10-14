@@ -52,6 +52,7 @@ pub struct ListRow {
 impl App {
     /// The wheel, a left drag, a click on a link or on a list row; over an overlay only its links answer, over a prompt nothing.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
+        self.count_input();
         let at = Position::new(mouse.column, mouse.row);
         if self.confirm.is_some() || self.react.is_some() {
             return vec![];

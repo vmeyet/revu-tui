@@ -440,6 +440,15 @@ A toast is one line in the status area, `accent` for success, `danger` for failu
 Failure toasts end with the key that retries (`r`) or the command that fixes it (`revu login`).
 A network failure while browsing does not clear the screen: the stale view stays, the status line says `offline · last refresh 3m ago`.
 
+## Usage counts (`[usage]`)
+
+- A key counts as the action its handler ran: the handler names it where one key does different things by place (`q` closing a pane is `close_pane`, `enter` on a file row `fold_toggle`); elsewhere the key table in `src/usage.rs` names it.
+- Screen time runs up to `IDLE_AFTER` (60 s) after the last key, click or wheel, and stops while the terminal reports it lost focus (`?1004`); focus back starts it again.
+- `long_walk`: 15 `j`/`k` in a row in the diff, counted on the step that reaches or passes a hunk header or a marked line, once per walk.
+- `queue_after_zen`: leaving zen with a key, then opening another MR from the queue within `ZEN_TO_QUEUE` (30 s).
+- A hint toasts its first `HINT_TOASTS` (3) times over every session; the day lines keep that count as `shown`.
+- Each day line carries `version`, the oldest way of counting that went into it; TIME and HINTS sum only the days at `COUNTING` (2) or above, actions every day.
+
 ## Performance budgets
 
 | Measure | Budget |

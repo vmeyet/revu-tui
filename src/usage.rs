@@ -167,8 +167,8 @@ const GROUPS: &[(&str, &[&str])] = &[
 
 /// A habit a faster key replaces, with what to try instead.
 pub const HINTS: &[(&str, &str)] = &[
-    ("long_walk", "walked 15 lines or more with j or k where ]n (next thread) or ]c (next hunk) jumps there"),
-    ("queue_after_zen", "went back to the queue to change MR after using zen; [m and ]m change MR, in zen too"),
+    ("long_walk", "walked 15 lines or more with j or k to a hunk or a thread; ]c (next hunk) or ]n (next thread) jumps there"),
+    ("queue_after_zen", "left zen to open another MR from the queue; [m and ]m change MR, in zen too"),
     ("palette_number", "typed a bare number in the search; !42 (or #42 on GitHub) finds that MR directly"),
 ];
 
@@ -312,7 +312,6 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('i') => "description",
         KeyCode::Char('o') => "open_browser",
         KeyCode::Char('y') => "copy_link",
-        KeyCode::Char('x') => "close_pane",
         KeyCode::Esc => "back",
         _ => return None,
     })
@@ -348,12 +347,21 @@ pub fn thread_key(code: KeyCode) -> Option<&'static str> {
     })
 }
 
+/// How often a hint shows as a toast, over every session; after that only the report counts it.
+const HINT_TOASTS: u64 = 3;
+
+/// How time and hints are counted now: time stops a minute after the last input and while the terminal is in the
+/// background, and a hint fires only where a jump would have helped. Days counted before it keep only their actions.
+const COUNTING: u32 = 2;
+
 /// What one session counted since the last flush: kept in memory, never written by the App itself.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Tally {
     actions: BTreeMap<&'static str, u64>,
     screens_ms: BTreeMap<&'static str, u64>,
     hints: BTreeMap<&'static str, u64>,
+    shown: BTreeMap<&'static str, u64>,
+    shown_ever: BTreeMap<String, u64>,
 }
 
 /// What a flush writes: whole seconds only; the milliseconds below a second wait for the next one.
@@ -362,15 +370,33 @@ pub struct Counts {
     pub actions: BTreeMap<String, u64>,
     pub screens: BTreeMap<String, u64>,
     pub hints: BTreeMap<String, u64>,
+    pub shown: BTreeMap<String, u64>,
 }
 
 impl Tally {
+    /// A session's tally, knowing how often each hint was shown in the sessions before.
+    pub fn after(days: &[Day]) -> Self {
+        let mut shown_ever = BTreeMap::new();
+        for day in days {
+            add(&mut shown_ever, &day.shown);
+        }
+        Self { shown_ever, ..Self::default() }
+    }
+
     pub fn act(&mut self, name: &'static str) {
         *self.actions.entry(name).or_default() += 1;
     }
 
-    pub fn hint(&mut self, name: &'static str) {
+    /// Counts a hint, and says whether to show it: yes for its first `HINT_TOASTS` times, every session counted.
+    pub fn hint(&mut self, name: &'static str) -> bool {
         *self.hints.entry(name).or_default() += 1;
+        let shown = self.shown_ever.entry(name.to_owned()).or_default();
+        let is_shown = *shown < HINT_TOASTS;
+        if is_shown {
+            *shown += 1;
+            *self.shown.entry(name).or_default() += 1;
+        }
+        is_shown
     }
 
     pub fn spend(&mut self, screen: &'static str, time: Duration) {
@@ -384,20 +410,23 @@ impl Tally {
         for ms in self.screens_ms.values_mut() {
             *ms %= 1000;
         }
-        let counts = Counts {
-            actions: std::mem::take(&mut self.actions).into_iter().map(|(k, v)| (k.to_owned(), v)).collect(),
-            screens,
-            hints: std::mem::take(&mut self.hints).into_iter().map(|(k, v)| (k.to_owned(), v)).collect(),
-        };
+        let counts = Counts { actions: owned(&mut self.actions), screens, hints: owned(&mut self.hints), shown: owned(&mut self.shown) };
         let empty = counts.actions.is_empty() && counts.screens.is_empty() && counts.hints.is_empty();
         (!empty).then_some(counts)
     }
 }
 
+fn owned(counts: &mut BTreeMap<&'static str, u64>) -> BTreeMap<String, u64> {
+    std::mem::take(counts).into_iter().map(|(k, v)| (k.to_owned(), v)).collect()
+}
+
 /// One line of the file: everything one local day counted.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Day {
     pub date: NaiveDate,
+    /// The oldest `COUNTING` that went into the day; lines from before it have none.
+    #[serde(default = "first_counting")]
+    pub version: u32,
     #[serde(default)]
     pub actions: BTreeMap<String, u64>,
     /// Seconds per screen.
@@ -405,6 +434,24 @@ pub struct Day {
     pub screens: BTreeMap<String, u64>,
     #[serde(default)]
     pub hints: BTreeMap<String, u64>,
+    /// How many hints showed as a toast.
+    #[serde(default)]
+    pub shown: BTreeMap<String, u64>,
+}
+
+impl Day {
+    fn new(date: NaiveDate) -> Self {
+        Self { date, version: COUNTING, actions: BTreeMap::new(), screens: BTreeMap::new(), hints: BTreeMap::new(), shown: BTreeMap::new() }
+    }
+
+    /// Its time and hints were counted the way revu counts them now.
+    fn counts_time_and_hints(&self) -> bool {
+        self.version >= COUNTING
+    }
+}
+
+fn first_counting() -> u32 {
+    1
 }
 
 /// The file's days, oldest first; a line that does not parse is skipped rather than failing.
@@ -420,13 +467,14 @@ pub fn merge(text: &str, date: NaiveDate, counts: &Counts) -> Result<String> {
     let index = if let Some(index) = days.iter().position(|day| day.date == date) {
         index
     } else {
-        days.push(Day { date, ..Day::default() });
+        days.push(Day::new(date));
         days.len() - 1
     };
     let day = &mut days[index];
     add(&mut day.actions, &counts.actions);
     add(&mut day.screens, &counts.screens);
     add(&mut day.hints, &counts.hints);
+    add(&mut day.shown, &counts.shown);
     days.sort_by_key(|day| day.date);
     let mut out = String::new();
     for day in &days {
@@ -472,6 +520,8 @@ pub fn since(text: &str) -> Result<Option<u32>> {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Report {
     pub days: usize,
+    /// Days counted before `COUNTING`: their time and hints are left out.
+    pub old_days: usize,
     pub never: Vec<(String, Vec<String>)>,
     pub rarely: Vec<(String, u64)>,
     pub most: Vec<(String, u64)>,
@@ -490,6 +540,9 @@ pub fn report(days: &[Day], today: NaiveDate, window: Option<u32>) -> Report {
     let mut hints = BTreeMap::<String, u64>::new();
     for day in &kept {
         add(&mut actions, &day.actions);
+    }
+    let (counted, old): (Vec<&Day>, Vec<&Day>) = kept.iter().partition(|day| day.counts_time_and_hints());
+    for day in &counted {
         add(&mut screens, &day.screens);
         add(&mut hints, &day.hints);
     }
@@ -502,6 +555,7 @@ pub fn report(days: &[Day], today: NaiveDate, window: Option<u32>) -> Report {
     screens.sort_by_key(|(_, seconds)| std::cmp::Reverse(*seconds));
     Report {
         days: kept.len(),
+        old_days: old.len(),
         never: grouped(known.iter().copied().filter(|name| count(name) == 0)),
         rarely: known.iter().filter(|name| (1..=RARELY).contains(&count(name))).map(|name| ((*name).to_owned(), count(name))).collect(),
         most,
@@ -645,7 +699,7 @@ mod tests {
     fn fixture() -> Vec<Day> {
         parse(
             "{\"date\":\"2026-08-01\",\"actions\":{\"merge\":9}}\n\
-             {\"date\":\"2026-09-20\",\"actions\":{\"next_thread\":40,\"zen\":2,\"move_down\":120},\"screens\":{\"diff\":3600,\"queue\":120},\"hints\":{\"long_walk\":3}}\n\
+             {\"date\":\"2026-09-20\",\"version\":2,\"actions\":{\"next_thread\":40,\"zen\":2,\"move_down\":120},\"screens\":{\"diff\":3600,\"queue\":120},\"hints\":{\"long_walk\":3}}\n\
              {\"date\":\"2026-09-24\",\"actions\":{\"next_thread\":2,\"react\":1}}\n",
         )
     }
@@ -671,8 +725,31 @@ mod tests {
     }
 
     #[test]
+    fn a_day_counted_the_old_way_keeps_its_actions_and_leaves_out_its_time_and_hints() {
+        let old = "{\"date\":\"2026-09-23\",\"actions\":{\"zen\":5},\"screens\":{\"diff\":36000},\"hints\":{\"queue_after_zen\":40}}\n";
+        let counts = Counts { screens: BTreeMap::from([("diff".to_owned(), 60)]), ..Counts::default() };
+        let text = merge(&merge(old, date("2026-09-24"), &counts).unwrap(), date("2026-09-23"), &counts).unwrap();
+        let report = report(&parse(&text), date("2026-09-24"), None);
+        assert_eq!((report.days, report.old_days), (2, 1));
+        assert!(report.rarely.is_empty() && report.most[0] == ("zen".to_owned(), 5), "{:?}", report.most);
+        assert_eq!(report.screens, [("diff".to_owned(), 60)], "only the new day's minute, even with new time merged into the old day");
+        assert_eq!(report.hints, vec![], "the old day's hints are left out");
+    }
+
+    #[test]
+    fn a_hint_shows_its_first_times_over_every_session_then_only_counts() {
+        let mut first = Tally::default();
+        assert_eq!([first.hint("long_walk"), first.hint("long_walk")], [true, true]);
+        let text = merge("", date("2026-09-23"), &first.take().unwrap()).unwrap();
+        let mut next = Tally::after(&parse(&text));
+        assert_eq!([next.hint("long_walk"), next.hint("long_walk"), next.hint("palette_number")], [true, false, true]);
+        let counts = next.take().unwrap();
+        assert_eq!((counts.hints["long_walk"], counts.shown["long_walk"]), (2, 1));
+    }
+
+    #[test]
     fn a_renamed_action_counts_under_its_new_name() {
-        let day = |name: &str| Day { date: date("2026-09-24"), actions: BTreeMap::from([(name.to_owned(), 1)]), ..Day::default() };
+        let day = |name: &str| Day { actions: BTreeMap::from([(name.to_owned(), 1)]), ..Day::new(date("2026-09-24")) };
         let report = report(&[day("split"), day("side_by_side")], date("2026-09-24"), None);
         assert!(report.rarely.contains(&("side_by_side".to_owned(), 2)), "{:?}", report.rarely);
         assert!(!report.most.iter().any(|(name, _)| name == "split"));

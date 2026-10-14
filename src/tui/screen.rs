@@ -1,7 +1,9 @@
-//! The terminal as revu holds it: raw mode on the alternate screen, the mouse wheel and drags, and ⌘
+//! The terminal as revu holds it: raw mode on the alternate screen, the mouse wheel and drags, focus changes, and ⌘
 //! reported where the terminal speaks the kitty keyboard protocol (Ghostty, Kitty, `WezTerm`,
 //! iTerm2 with the option on), so ⌘K reaches the palette like ctrl-k does.
-use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
+use crossterm::event::{
+    DisableFocusChange, EnableFocusChange, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use crossterm::terminal::{EnterAlternateScreen, enable_raw_mode};
 use ratatui::DefaultTerminal;
 use std::io::Write;
@@ -17,14 +19,14 @@ pub struct Screen {
 }
 
 impl Screen {
-    /// Takes the terminal. `ratatui::init` installs the panic hook that gives it back; the mouse
-    /// and the modifier report are undone first on a panic too, or the shell would read escape codes.
+    /// Takes the terminal. `ratatui::init` installs the panic hook that gives it back; the mouse,
+    /// focus changes and the modifier report are undone first on a panic too, or the shell would read escape codes.
     pub fn enter() -> (DefaultTerminal, Self) {
         let terminal = ratatui::init();
         let modifiers = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false) && report_modifiers();
         let screen = Self { modifiers };
         screen.take_extras_back_on_panic();
-        write(MOUSE_ON);
+        take_mouse_and_focus();
         (terminal, screen)
     }
 
@@ -54,15 +56,22 @@ impl Screen {
         if self.modifiers {
             report_modifiers();
         }
-        write(MOUSE_ON);
+        take_mouse_and_focus();
         let _ = terminal.clear();
         outcome
     }
 }
 
-/// What revu asked on top of ratatui: the mouse, and the modifier report when it was on.
+/// Focus changes stop the usage clock while the terminal is in the background.
+fn take_mouse_and_focus() {
+    write(MOUSE_ON);
+    let _ = crossterm::execute!(std::io::stdout(), EnableFocusChange);
+}
+
+/// What revu asked on top of ratatui: the mouse, focus changes, and the modifier report when it was on.
 fn give_extras_back(modifiers: bool) {
     write(MOUSE_OFF);
+    let _ = crossterm::execute!(std::io::stdout(), DisableFocusChange);
     if modifiers {
         stop_modifiers();
     }

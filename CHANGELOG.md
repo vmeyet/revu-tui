@@ -47,6 +47,14 @@ Each entry says what changed, then where, then how to use it.
 
 - **A screen at rest sends nothing to a slow link.**
   In the compact layout: the queue marks stay lit, and a spinner turns four steps a second.
+- **Usage time counts reading, not a screen left open.**
+  In the TIME of `revu usage`: a screen stops counting a minute after your last key, click or wheel, or when the terminal loses focus.
+  Days counted before keep their actions, and the report leaves out their time and hints.
+- **Usage hints fire only where a faster key would have helped.**
+  In the diff and the queue, with `[usage] enabled = true`.
+  The first three times a hint fires, a toast names the key to try.
+- **Usage counts a key by what it did.**
+  In `revu usage`: `q`, `esc` or `x` closing a pane counts as `close_pane`, and `enter` on a file or hunk as `fold_toggle`.
 
 ## 0.7.0 - 2026-10-12
 

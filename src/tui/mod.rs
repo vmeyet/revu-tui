@@ -103,7 +103,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         ascii: ctx.config.tui.ascii,
         reactions: crate::reactions::read(&Cache::shared()),
         quit_confirm: ctx.config.keys.quit_confirm,
-        usage: ctx.config.usage.enabled,
+        usage: ctx.config.usage.enabled.then(|| crate::usage::Tally::after(&crate::usage::read(&Cache::shared()))),
         whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
         agent: backend.agent.is_some(),
     };
@@ -154,6 +154,8 @@ async fn event_loop(
             Some(event) = keys.next() => match event? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => { wake(app); app.handle_key(key) }
                 Event::Mouse(mouse) => { wake(app); app.handle_mouse(mouse) }
+                Event::FocusGained => { wake(app); app.terminal_focus(true); vec![] }
+                Event::FocusLost => { wake(app); app.terminal_focus(false); vec![] }
                 _ => vec![],
             },
             Some(incoming) = rx.recv() => { wake(app); app.apply_all(std::iter::once(incoming).chain(std::iter::from_fn(|| rx.try_recv().ok()))) }
