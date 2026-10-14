@@ -15,5 +15,5 @@ jobs:
           fetch-tags: true
       - run: |
           tag="v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
-          git rev-parse -q --verify "refs/tags/$tag" && exit 0
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" && exit 0
           git tag "$tag" && git push origin "$tag"
