@@ -38,6 +38,8 @@ mod test_support;
 #[cfg(test)]
 mod tests;
 mod threads;
+#[cfg(test)]
+mod timing;
 mod tree;
 mod triage;
 mod usage;
