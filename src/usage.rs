@@ -1,11 +1,9 @@
 //! What revu is used for, counted on this machine only: which actions, how long on each screen,
 //! and a few habits a faster key would replace. Opt-in with `[usage] enabled = true`.
 //! Nothing about the MRs is kept: no titles, paths, text, hosts or projects, only action names.
-use crate::act::{self, Act, Place, Row};
 use crate::cache::Cache;
 use anyhow::{Result, bail};
 use chrono::NaiveDate;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -120,53 +118,7 @@ pub const HINTS: &[(&str, &str)] = &[
 pub fn known() -> Vec<&'static str> {
     crate::act::listed_names().collect()
 }
-/// The key that opens the saved views; any letter after it picks one.
-const VIEWS_PREFIX: char = '\'';
 
-/// Moves held with ctrl are not counted.
-const NOT_WITH_CTRL: &[Act] = &[Act::MoveDown, Act::MoveUp, Act::Top, Act::Bottom, Act::Open];
-
-/// The action a key stands for, after the user's bindings turned it into revu's own.
-/// `prefix` is the first key of a two-key sequence already typed (`z`, `[`, `]`, `a`, `'`).
-pub fn action(prefix: Option<char>, key: KeyEvent, place: Place) -> Option<&'static str> {
-    let act = match prefix {
-        Some(prefix) => prefixed(prefix, key),
-        None => single(key, place),
-    };
-    act?.row().name.counted()
-}
-
-fn prefixed(prefix: char, key: KeyEvent) -> Option<Act> {
-    let KeyCode::Char(c) = key.code else { return None };
-    if prefix == VIEWS_PREFIX {
-        return Some(Act::Views);
-    }
-    act::act_after(prefix, c)
-}
-
-/// A key alone: ctrl keys first, then the key whatever its modifiers, among the actions counted in `place`.
-fn single(key: KeyEvent, place: Place) -> Option<Act> {
-    if is_palette_chord(key) {
-        return Some(Act::Jump);
-    }
-    let counted_here = |row: &Row| row.counts.contains(&place);
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if ctrl && let Some(act) = act::with_key(key.code, KeyModifiers::CONTROL, counted_here) {
-        return Some(act);
-    }
-    if let KeyCode::Char(c) = key.code
-        && (c == VIEWS_PREFIX || act::is_prefix(c))
-    {
-        return None;
-    }
-    act::with_key(key.code, KeyModifiers::NONE, counted_here).filter(|act| !(ctrl && NOT_WITH_CTRL.contains(act)))
-}
-
-/// `ctrl-k` or `⌘k`, either case.
-fn is_palette_chord(key: KeyEvent) -> bool {
-    let is_k = matches!(key.code, KeyCode::Char('k' | 'K'));
-    is_k && key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER)
-}
 /// How often a hint shows as a toast, over every session; after that only the report counts it.
 const HINT_TOASTS: u64 = 3;
 
@@ -416,45 +368,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    fn key(c: char) -> KeyEvent {
-        KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
-    }
-
     fn date(text: &str) -> NaiveDate {
         text.parse().unwrap()
-    }
-
-    #[test]
-    fn keys_name_their_action_by_where_they_land() {
-        assert_eq!(action(None, key('s'), Place::Queue), Some("sort_queue"));
-        assert_eq!(action(None, key('s'), Place::Diff), Some("suggest"));
-        assert_eq!(action(None, key('S'), Place::Pane), Some("apply_suggestion"));
-        assert_eq!(action(None, key('+'), Place::Pane), Some("react"));
-        assert_eq!(action(None, key('+'), Place::Diff), Some("react"));
-        assert_eq!(action(None, key('='), Place::Diff), Some("more_context"));
-        assert_eq!(action(Some(']'), key('m'), Place::Diff), Some("next_mr"));
-        assert_eq!(action(None, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), Place::Diff), Some("focus_right"));
-        assert_eq!(action(Some(']'), key('n'), Place::Diff), Some("next_thread"));
-        assert_eq!(action(Some('['), key('N'), Place::Diff), Some("prev_any_thread"));
-        assert_eq!(action(Some('a'), key('r'), Place::Diff), Some("ask_risks"));
-        assert_eq!(action(None, key('z'), Place::Diff), None, "a prefix alone is no action");
-        assert_eq!(action(None, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL), Place::Queue), Some("jump"));
-    }
-
-    #[test]
-    fn every_bindable_action_can_be_counted() {
-        let places = [Place::Queue, Place::Diff, Place::Pane];
-        for (name, keys) in crate::act::bindable() {
-            let events = crate::keymap::parse(keys).unwrap();
-            let (prefix, last) = match events.as_slice() {
-                [only] if only.plain_char() == Some('\'') => (Some('\''), key('m')),
-                [only] => (None, only.event()),
-                [first, second] => (first.plain_char(), second.event()),
-                _ => panic!("{name}"),
-            };
-            let found = places.iter().any(|place| action(prefix, last, *place) == Some(name));
-            assert!(found, "`{name}` ({keys}) is never counted");
-        }
     }
 
     #[test]

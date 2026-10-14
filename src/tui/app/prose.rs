@@ -1,6 +1,6 @@
 //! The prose view (`v`): the Markdown file under the cursor drawn rendered in the diff area (`specs/11-prose-diff.md`).
 use super::{Action, App, MrKey, Open};
-use crate::act::{self, Act, Pane};
+use crate::act::{Act, Pane};
 use crate::outline::Sides;
 use crate::review::FileKind;
 use crossterm::event::KeyEvent;
@@ -78,10 +78,11 @@ impl App {
     pub(super) fn handle_prose_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(prose) = self.open.as_ref().and_then(|o| o.prose.clone()) else { return vec![] };
         if let Some(scroll) = super::keys::scroll_key(prose.scroll, usize::MAX, key) {
+            self.act_here(Pane::Page, key);
             self.update_prose(|prose| Prose { scroll, ..prose });
             return vec![];
         }
-        match act::act_in(Pane::Prose, key) {
+        match self.act_here(Pane::Prose, key) {
             Some(Act::Refresh) => self.read_prose(prose),
             Some(Act::SideBySide) => self.toggle_side_by_side(),
             Some(Act::Prose | Act::ClosePane | Act::Back) => {
@@ -89,18 +90,24 @@ impl App {
                 self.update_open(|open| open.with_prose(None));
                 vec![]
             }
-            _ => vec![],
+            _ => {
+                self.did_nothing();
+                vec![]
+            }
         }
     }
 
     /// `zR` shows every unchanged run and `zM` folds them again; `zz` and `zh` act as anywhere; the diff's other
     /// prefixed keys would move a cursor out of sight, so they do nothing.
     pub(super) fn prose_prefixed(&mut self, act: Option<Act>) -> Vec<Action> {
+        if let Some(act) = act {
+            self.did(act);
+        }
         match act {
             Some(Act::UnfoldAll | Act::FoldAll) => self.update_prose(|prose| Prose { unfolded: act == Some(Act::UnfoldAll), ..prose }),
             Some(Act::Zen) => return self.toggle_zen(),
             Some(Act::FoldHeader) => self.header_folded = !self.header_folded,
-            _ => {}
+            _ => self.did_nothing(),
         }
         vec![]
     }
@@ -210,6 +217,24 @@ mod tests {
         assert!(render(&mut app, 120, 20).contains("HTTP 500"));
         assert!(matches!(press(&mut app, "r").as_slice(), [Action::LoadProse { .. }]));
         assert_eq!(prose(&app).unwrap().texts, Texts::Waiting);
+    }
+
+    #[test]
+    fn keys_that_do_nothing_in_the_prose_view_are_not_counted() {
+        let mut app = with_markdown(FileKind::Modified);
+        app.usage = Some(crate::usage::Tally::default());
+        press(&mut app, "v");
+        read(&mut app);
+        app.take_usage();
+        press(&mut app, "tcAo]n");
+        assert_eq!(app.take_usage(), None, "the diff's keys do nothing here");
+        press(&mut app, "jG");
+        let counts = app.take_usage().unwrap().actions;
+        assert_eq!((counts.get("move_down"), counts.get("bottom")), (Some(&1), Some(&1)));
+        let mut end = with_markdown(FileKind::Modified);
+        press(&mut end, "vG");
+        end.handle_key(ctrl('f'));
+        assert_eq!(prose(&end).unwrap().scroll, usize::MAX, "a page past the end stays at the end");
     }
 
     #[test]

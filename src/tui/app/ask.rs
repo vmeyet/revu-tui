@@ -1,6 +1,6 @@
 //! `a`: questions to Claude about what is under the cursor, answered in the right pane.
 use super::{Action, App, Focus, Input, MrKey, Open};
-use crate::act::{self, Act, Pane};
+use crate::act::{Act, Pane};
 use crate::ai::anthropic::{self, Ask, Outcome, Role, Turn};
 use crate::ai::context::{self, Prompt, Scope};
 use crate::forge::Position;
@@ -234,8 +234,9 @@ impl App {
     }
 
     pub(super) fn handle_answer_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        let act = self.act_here(Pane::Answer, key);
         let Some(answer) = self.open.as_ref().and_then(|o| o.answer.as_ref()) else { return vec![] };
-        match act::act_in(Pane::Answer, key) {
+        match act {
             Some(Act::MoveDown) => self.scroll_answer(1),
             Some(Act::MoveUp) => self.scroll_answer(-1),
             Some(Act::PageDown) => self.scroll_answer(HALF_PAGE as isize),
@@ -252,7 +253,7 @@ impl App {
                 return self.start_answer(label, request, target, true);
             }
             Some(Act::Back | Act::ClosePane) => self.close_answer(),
-            _ => {}
+            _ => self.did_nothing(),
         }
         vec![]
     }

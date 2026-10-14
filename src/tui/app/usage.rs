@@ -1,7 +1,7 @@
 //! The App's side of `[usage]`: it names what each key did and keeps the counts in memory.
 //! Writing them is the runtime's job, so nothing here touches the disk.
 use super::{App, Focus};
-use crate::act::Place;
+use crate::act::{Act, Pane};
 use crate::review::Row;
 use crate::tui::palette::Command;
 use crate::usage::Counts;
@@ -54,35 +54,49 @@ impl Walk {
 
 /// What counting a key needs to know from before the key changed anything.
 pub(super) struct Before {
-    name: Option<&'static str>,
-    place: Place,
+    focus: Focus,
     row: Option<usize>,
     zen: bool,
 }
 
 impl App {
-    /// What the key stands for and where it lands, read before the key changes anything; `None` when off.
-    pub(super) fn usage_before(&self, key: KeyEvent) -> Option<Before> {
+    /// Where the key lands, read before it changes anything; `None` when off.
+    pub(super) fn usage_before(&self) -> Option<Before> {
         self.usage.as_ref()?;
-        let place = self.usage_place();
-        let on_thread = self.pending.is_none() && key.modifiers.is_empty() && self.on_thread_row();
-        let thread_action = if on_thread { crate::usage::action(None, key, Place::ThreadRow) } else { None };
-        let name = thread_action.or_else(|| crate::usage::action(self.pending, key, place));
-        Some(Before { name, place, row: self.open.as_ref().map(|open| open.selected), zen: self.zen })
+        Some(Before { focus: self.focus, row: self.open.as_ref().map(|open| open.selected), zen: self.zen })
     }
 
-    /// Counts what a key did, named by its handler or else by the key, and the habits a faster key would replace.
+    /// Names what the key in flight did, unless its handler already named something closer.
+    pub(super) fn did(&mut self, act: Act) {
+        self.key_did.get_or_insert(act);
+    }
+
+    /// What `key` does in `pane`, named as what the key in flight did until its handler says it did nothing.
+    pub(super) fn act_here(&mut self, pane: Pane, key: KeyEvent) -> Option<Act> {
+        let act = crate::act::act_in(pane, key)?;
+        self.did(act);
+        Some(act)
+    }
+
+    /// The key in flight did nothing after all: no action is counted for it.
+    pub(super) fn did_nothing(&mut self) {
+        self.key_did = None;
+    }
+
+    /// Counts what a key did, as its handler named it, and the habits a faster key would replace.
     pub(super) fn count_key(&mut self, before: Option<Before>) {
-        let did = self.key_did.take().and_then(|act| act.row().name.counted());
+        let did = self.key_did.take();
         let Some(before) = before else { return };
-        let Some(name) = did.or(before.name) else { return };
-        self.count_walk(name, &before);
-        self.count_zen_return(name, &before);
-        self.count(name);
+        let Some(act) = did else { return };
+        self.count_walk(act, &before);
+        self.count_zen_return(act, &before);
+        if let Some(name) = act.row().name.counted() {
+            self.count(name);
+        }
     }
 
-    fn count_walk(&mut self, name: &'static str, before: &Before) {
-        let is_step = matches!(name, "move_down" | "move_up") && before.place == Place::Diff;
+    fn count_walk(&mut self, act: Act, before: &Before) {
+        let is_step = matches!(act, Act::MoveDown | Act::MoveUp) && before.focus == Focus::Review;
         if !is_step {
             self.walk = Walk::default();
             return;
@@ -103,12 +117,12 @@ impl App {
         open.rows.get(passed).is_some_and(|rows| rows.iter().any(stops))
     }
 
-    fn count_zen_return(&mut self, name: &'static str, before: &Before) {
+    fn count_zen_return(&mut self, act: Act, before: &Before) {
         if before.zen && !self.zen {
             self.left_zen = self.open.as_ref().map(|open| (self.now, open.key.clone()));
             return;
         }
-        let is_queue_open = matches!(name, "open" | "focus_right") && before.place == Place::Queue;
+        let is_queue_open = matches!(act, Act::Open | Act::FocusRight) && before.focus == Focus::Queue;
         if !is_queue_open {
             return;
         }
@@ -175,14 +189,6 @@ impl App {
     /// What the counts gathered since the last call add up to, for the runtime to write.
     pub fn take_usage(&mut self) -> Option<Counts> {
         self.usage.as_mut()?.take()
-    }
-
-    fn usage_place(&self) -> Place {
-        match self.focus {
-            Focus::Queue => Place::Queue,
-            Focus::Review => Place::Diff,
-            Focus::Side => Place::Pane,
-        }
     }
 
     fn screen(&self) -> &'static str {
@@ -398,6 +404,66 @@ mod tests {
         assert_eq!((counts.actions.get("close_pane"), counts.actions.get("quit")), (Some(&2), None));
         press(&mut app, "x");
         assert_eq!(app.take_usage(), None, "x with nothing to close does nothing");
+    }
+
+    /// What one key counted, on top of what was counted before.
+    fn counted_by(app: &mut App, event: KeyEvent) -> Vec<String> {
+        app.take_usage();
+        app.handle_key(event);
+        app.take_usage().map(|counts| counts.actions.into_keys().collect()).unwrap_or_default()
+    }
+
+    fn counted_by_keys(app: &mut App, keys: &str) -> Vec<String> {
+        app.take_usage();
+        press(app, keys);
+        app.take_usage().map(|counts| counts.actions.into_keys().collect()).unwrap_or_default()
+    }
+
+    fn with_usage(mut app: App) -> App {
+        app.usage = Some(crate::usage::Tally::default());
+        app
+    }
+
+    #[test]
+    fn a_key_counts_as_what_it_did_where_it_landed() {
+        let mut queue = with_usage(with_queue());
+        assert_eq!(counted_by_keys(&mut queue, "s"), ["sort_queue"]);
+        let mut diff = with_usage(with_review());
+        assert_eq!(counted_by_keys(&mut diff, "]m"), ["next_mr"]);
+        let mut diff = with_usage(with_review());
+        assert_eq!(counted_by_keys(&mut diff, "]n"), ["next_thread"]);
+        assert_eq!(counted_by_keys(&mut diff, "[N"), ["prev_any_thread"]);
+        assert_eq!(counted_by_keys(&mut diff, "="), ["more_context"]);
+        assert_eq!(counted_by_keys(&mut diff, "ar"), ["ask_risks"]);
+        assert_eq!(counted_by(&mut diff, code(KeyCode::Right)), ["focus_right"]);
+        assert_eq!(counted_by_keys(&mut diff, "z"), Vec::<String>::new(), "a prefix alone is no action");
+        let mut suggest = with_usage(with_review());
+        on_line(&mut suggest);
+        assert_eq!(counted_by_keys(&mut suggest, "s"), ["suggest"]);
+        let mut jump = with_usage(with_queue());
+        assert_eq!(counted_by(&mut jump, ctrl('k')), ["jump"]);
+    }
+
+    #[test]
+    fn enter_in_the_thread_pane_counts_as_what_it_did() {
+        let mut app = with_usage(with_review());
+        press(&mut app, "]N");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!(app.focus, Focus::Side);
+        assert_eq!(counted_by(&mut app, code(KeyCode::Enter)), ["fold_toggle"], "it folds the resolved thread");
+        assert_eq!(counted_by_keys(&mut app, "S"), ["apply_suggestion"]);
+        press(&mut app, "T");
+        assert_eq!(counted_by(&mut app, code(KeyCode::Enter)), ["open"], "in every thread it goes to the thread");
+    }
+
+    #[test]
+    fn a_ctrl_letter_counts_only_what_it_did() {
+        let mut app = with_usage(with_queue());
+        let before = app.queue_selected;
+        assert_eq!(counted_by(&mut app, ctrl('j')), Vec::<String>::new());
+        assert_eq!(app.queue_selected, before, "`^j` is no move");
+        assert_eq!(counted_by(&mut app, ctrl('d')), ["page_down"]);
+        assert_eq!(counted_by(&mut app, code(KeyCode::Esc)), Vec::<String>::new(), "esc with no filter to clear does nothing");
     }
 
     #[test]

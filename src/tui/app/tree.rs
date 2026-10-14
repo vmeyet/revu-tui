@@ -1,6 +1,6 @@
 //! The file tree in the right pane (`t`) and viewed files (`zv`, `m`).
 use super::{Action, App, Focus, Open};
-use crate::act::{self, Act, Pane};
+use crate::act::{Act, Pane};
 use crate::diff::LineKind;
 use crate::diff::fold::Fold;
 use crate::review::tree::{self, TreeFolds, TreeRow};
@@ -51,7 +51,7 @@ impl App {
         let (last, here) = (rows.len().saturating_sub(1), rows.get(tree.selected).cloned());
         let moved = |selected: usize| Some(Tree { selected: selected.min(last), ..tree.clone() });
         let page = super::keys::full_page(self.areas.side).unsigned_abs();
-        let next = match act::act_in(Pane::Tree, key) {
+        let next = match self.act_here(Pane::Tree, key) {
             Some(Act::MoveDown) => moved(tree.selected + 1),
             Some(Act::MoveUp) => moved(tree.selected.saturating_sub(1)),
             Some(Act::PageDown) => moved(tree.selected + 10),
@@ -61,16 +61,22 @@ impl App {
             Some(Act::Top) => moved(0),
             Some(Act::Bottom) => moved(last),
             Some(Act::Back | Act::Tree | Act::ClosePane) => None,
-            Some(Act::ViewFile) => match here {
-                Some(TreeRow::File { index, .. }) => return self.view_file(index),
-                _ => Some(tree.clone()),
-            },
+            Some(Act::ViewFile) => {
+                if let Some(TreeRow::File { index, .. }) = here {
+                    return self.view_file(index);
+                }
+                self.did_nothing();
+                Some(tree.clone())
+            }
             Some(Act::Open) => match here {
                 Some(TreeRow::Folder { path, .. }) => Some(Tree { folds: tree.folds.toggled(&path), ..tree.clone() }),
                 Some(TreeRow::File { index, .. }) => return self.show_file(index),
                 None => Some(tree.clone()),
             },
-            _ => Some(tree.clone()),
+            _ => {
+                self.did_nothing();
+                Some(tree.clone())
+            }
         };
         if next.is_none() {
             self.focus = Focus::Review;

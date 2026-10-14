@@ -17,7 +17,9 @@ pub struct Publish {
 impl App {
     pub(super) fn handle_write_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
         let selecting = self.open.as_ref().is_some_and(|o| o.select_from.is_some());
-        let actions = match act::act_in(Pane::Diff, key)? {
+        let act = act::act_in(Pane::Diff, key)?;
+        self.did(act);
+        let actions = match act {
             Act::Comment => self.comment_here(),
             Act::CommentOld => self.comment_old_side(),
             Act::Select => {
@@ -43,7 +45,10 @@ impl App {
                 self.drop_select();
                 vec![Action::Copy { text, done: "copied".into() }]
             }
-            _ => return None,
+            _ => {
+                self.did_nothing();
+                return None;
+            }
         };
         Some(actions)
     }

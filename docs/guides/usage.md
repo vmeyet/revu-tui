@@ -34,6 +34,7 @@ revu usage --json       # for a script
 | HINTS | Habits a faster key replaces |
 
 A key counts as what it did where you pressed it: `q` that closes a pane counts as `close_pane`, not `quit`.
+A key that does nothing where you pressed it is not counted.
 
 ## Time
 

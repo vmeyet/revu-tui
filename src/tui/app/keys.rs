@@ -86,7 +86,7 @@ impl App {
 
     /// A key after the user's bindings turned it into revu's own, counted when `[usage]` is on.
     fn dispatch(&mut self, key: KeyEvent) -> Vec<Action> {
-        let before = self.usage_before(key);
+        let before = self.usage_before();
         self.repeat = Some(super::repeat::Repeat::after(self.repeat, key.code, self.now));
         self.key_did = None;
         let actions = self.dispatch_key(key);
@@ -100,6 +100,7 @@ impl App {
             return self.handle_prefixed(prefix, key);
         }
         if let Some(mode) = palette_key(key) {
+            self.did(if mode == crate::tui::palette::Mode::Commands { Act::Palette } else { Act::Jump });
             self.open_palette(mode);
             return vec![];
         }
@@ -120,7 +121,9 @@ impl App {
     /// The keys every pane shares; `q` closes a right pane first.
     fn handle_anywhere(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
         let closes_a_pane = self.focus != Focus::Queue && self.open.as_ref().is_some_and(super::Open::side_open);
-        let actions = match act::act_in(Pane::Anywhere, key)? {
+        let act = act::act_in(Pane::Anywhere, key)?;
+        self.did(act);
+        let actions = match act {
             Act::Palette => self.palette_on(crate::tui::palette::Mode::Commands),
             Act::Jump => self.palette_on(crate::tui::palette::Mode::Mrs),
             Act::Quit if closes_a_pane => {
@@ -138,7 +141,10 @@ impl App {
             }
             Act::FocusLeft => self.focus_left(),
             Act::FocusRight => self.focus_right(),
-            _ => return None,
+            _ => {
+                self.did_nothing();
+                return None;
+            }
         };
         Some(actions)
     }
@@ -214,6 +220,7 @@ impl App {
 
     pub(super) fn handle_queue_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(act) = act::act_in(Pane::Queue, key) else { return vec![] };
+        self.did(act);
         match act {
             Act::MoveDown => self.queue_move(self.step()),
             Act::MoveUp => self.queue_move(-self.step()),
@@ -226,10 +233,14 @@ impl App {
             Act::Filter => self.filtering = true,
             Act::Scope => return self.toggle_scope(),
             Act::SortQueue => return self.sort_queue(),
-            Act::Views => match key.code {
-                KeyCode::Char(rank @ '1'..='9') => self.apply_view(rank),
-                _ => self.pending = Some('\''),
-            },
+            Act::Views => {
+                if let KeyCode::Char(rank @ '1'..='9') = key.code {
+                    self.apply_view(rank);
+                } else {
+                    self.pending = Some('\'');
+                    self.did_nothing();
+                }
+            }
             Act::GroupByAuthor => return self.group_queue(),
             Act::Pin => return self.toggle_pin(),
             Act::Description => self.open_brief_from_queue(),
@@ -242,7 +253,7 @@ impl App {
                 self.view = None;
                 self.queue_settle();
             }
-            _ => {}
+            _ => self.did_nothing(),
         }
         vec![]
     }
@@ -274,6 +285,7 @@ impl App {
     pub(super) fn handle_review_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if self.open.is_none() {
             if act::act_in(Pane::Diff, key) == Some(Act::Back) {
+                self.did(Act::Back);
                 self.focus = Focus::Queue;
             }
             return vec![];
@@ -296,6 +308,7 @@ impl App {
 
     fn move_in_review(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(act) = act::act_in(Pane::Diff, key) else { return vec![] };
+        self.did(act);
         let has_pane = self.open.as_ref().is_some_and(|o| o.pane.is_some());
         match act {
             Act::MoveDown => self.review_move(self.step()),
@@ -303,8 +316,10 @@ impl App {
             Act::Top => self.review_first(),
             Act::Bottom => self.review_last(),
             Act::Search => self.start_search(),
-            Act::NextThread if self.search.is_some() => self.search_step(true),
-            Act::PrevThread if self.search.is_some() => self.search_step(false),
+            Act::NextThread | Act::PrevThread if self.search.is_some() => {
+                self.key_did = Some(Act::Search);
+                self.search_step(act == Act::NextThread);
+            }
             Act::NextThread => return self.jump_to_thread(true),
             Act::PrevThread => return self.jump_to_thread(false),
             Act::ViewedNext => return self.view_and_move_on(),
@@ -352,7 +367,7 @@ impl App {
             Act::CopyLink => {
                 return self.open.as_ref().map(|o| vec![Action::copy_link(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }
-            _ => {}
+            _ => self.did_nothing(),
         }
         vec![]
     }
@@ -376,17 +391,22 @@ impl App {
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
         if prefix == '\'' {
+            self.did(Act::Views);
             self.apply_view(c);
             return vec![];
         }
         let act = act::act_after(prefix, c);
         if act == Some(Act::Session) {
+            self.did(Act::Session);
             return self.open_session();
         }
         if self.focus == Focus::Queue {
             return act.map(|act| self.queue_prefixed(act)).unwrap_or_default();
         }
         if prefix == 'a' {
+            if let Some(act) = act {
+                self.did(act);
+            }
             return self.ask_key(c);
         }
         if prefix == 'z' && self.outline_keys() {
@@ -400,6 +420,7 @@ impl App {
     }
 
     fn queue_prefixed(&mut self, act: Act) -> Vec<Action> {
+        self.did(act);
         let open = match act {
             Act::NextReview | Act::PrevReview => return self.walk_reviews(act == Act::NextReview),
             Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
@@ -407,7 +428,10 @@ impl App {
             Act::FoldClose => Some(false),
             Act::FoldToggle => None,
             Act::Zen => return self.toggle_zen(),
-            _ => return vec![],
+            _ => {
+                self.did_nothing();
+                return vec![];
+            }
         };
         if let Some(actions) = self.fold_stack(open) {
             return actions;
@@ -416,6 +440,7 @@ impl App {
     }
 
     fn diff_prefixed(&mut self, act: Act) -> Vec<Action> {
+        self.did(act);
         match act {
             Act::FoldToggle => return self.fold_at_cursor(None),
             Act::FoldOpen => return self.fold_at_cursor(Some(true)),
@@ -434,7 +459,7 @@ impl App {
                 let wanted = self.files_with_unresolved();
                 self.review_jump(act == Act::NextFileUnresolved, move |r| matches!(r, Row::File { index, .. } if wanted.contains(index)));
             }
-            _ => {}
+            _ => self.did_nothing(),
         }
         vec![]
     }

@@ -1,6 +1,6 @@
 //! The pipeline pane (`p`): the jobs of the head commit's CI run, failed ones first in each stage.
 use super::{Action, App, Focus, Open};
-use crate::act::{self, Act, Pane};
+use crate::act::{Act, Pane};
 use crate::forge::checks::{Checks, Job, JobState};
 use crossterm::event::KeyEvent;
 use std::time::{Duration, Instant};
@@ -75,6 +75,7 @@ impl App {
     }
 
     pub(super) fn handle_pipeline_key(&mut self, key: KeyEvent) -> Vec<Action> {
+        let act = self.act_here(Pane::Pipeline, key);
         let Some(open) = &self.open else { return vec![] };
         let Some(pipeline) = &open.pipeline else { return vec![] };
         let jobs = pipeline.jobs();
@@ -84,7 +85,7 @@ impl App {
             _ => open.review.mr.pipeline.as_ref().and_then(|p| p.web_url.clone()),
         });
         let page = super::keys::full_page(self.areas.side).unsigned_abs();
-        let selected = match act::act_in(Pane::Pipeline, key) {
+        let selected = match act {
             Some(Act::MoveDown) => pipeline.selected + 1,
             Some(Act::MoveUp) => pipeline.selected.saturating_sub(1),
             Some(Act::PageDown) => pipeline.selected + 10,
@@ -105,7 +106,10 @@ impl App {
                 self.update_open(|open| open.with_pipeline(None));
                 return vec![];
             }
-            _ => return vec![],
+            _ => {
+                self.did_nothing();
+                return vec![];
+            }
         };
         self.update_open(|open| Open { pipeline: open.pipeline.map(|p| Pipeline { selected: selected.min(last), ..p }), ..open });
         vec![]

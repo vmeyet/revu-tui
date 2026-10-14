@@ -261,34 +261,44 @@ impl App {
 
     pub(super) fn handle_pane_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let lists_every_thread = self.open.as_ref().is_some_and(Open::lists_every_thread);
-        match act::act_in(act::Pane::Threads, key) {
-            Some(Act::MoveDown) => self.pane_move(1),
-            Some(Act::MoveUp) => self.pane_move(-1),
-            Some(Act::PageDown) => self.pane_move(HALF_PAGE as isize),
-            Some(Act::PageUp) => self.pane_move(-(HALF_PAGE as isize)),
-            Some(Act::FullPageDown) => self.pane_move(2 * HALF_PAGE as isize),
-            Some(Act::FullPageUp) => self.pane_move(-2 * HALF_PAGE as isize),
-            Some(Act::Top) => self.pane_move(isize::MIN / 2),
-            Some(Act::Bottom) => self.pane_move(isize::MAX / 2),
-            Some(Act::NextInLine) => self.pane_jump(true),
-            Some(Act::PrevInLine) => self.pane_jump(false),
-            Some(Act::Open) if lists_every_thread => {
+        let Some(act) = act::act_in(act::Pane::Threads, key) else { return self.handle_thread_key(key).unwrap_or_default() };
+        self.did(act);
+        match act {
+            Act::MoveDown => self.pane_move(1),
+            Act::MoveUp => self.pane_move(-1),
+            Act::PageDown => self.pane_move(HALF_PAGE as isize),
+            Act::PageUp => self.pane_move(-(HALF_PAGE as isize)),
+            Act::FullPageDown => self.pane_move(2 * HALF_PAGE as isize),
+            Act::FullPageUp => self.pane_move(-2 * HALF_PAGE as isize),
+            Act::Top => self.pane_move(isize::MIN / 2),
+            Act::Bottom => self.pane_move(isize::MAX / 2),
+            Act::NextInLine => self.pane_jump(true),
+            Act::PrevInLine => self.pane_jump(false),
+            Act::Open if lists_every_thread => {
                 self.unfold_focused();
                 return self.jump_to_focused();
             }
-            Some(Act::Open) => self.unfold_focused(),
-            Some(Act::EveryThread) => self.toggle_every_thread(),
-            Some(Act::Mine) if lists_every_thread => self.toggle_mine(),
-            Some(Act::Publish) => self.open_publish(),
-            Some(Act::ClosePane) => self.close_pane(),
-            _ => return self.handle_thread_key(key).unwrap_or_default(),
+            Act::Open => {
+                let is_folded = self.unfold_focused();
+                self.key_did = is_folded.then_some(Act::FoldToggle);
+            }
+            Act::EveryThread => self.toggle_every_thread(),
+            Act::Mine if lists_every_thread => self.toggle_mine(),
+            Act::Publish => self.open_publish(),
+            Act::ClosePane => self.close_pane(),
+            _ => {
+                self.did_nothing();
+                return self.handle_thread_key(key).unwrap_or_default();
+            }
         }
         vec![]
     }
 
     /// The keys that act on the thread, note or draft under the cursor, in the pane or on a thread row of the diff.
     pub(super) fn handle_thread_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
-        let actions = match act::act_in(act::Pane::ThreadRow, key)? {
+        let act = act::act_in(act::Pane::ThreadRow, key)?;
+        self.did(act);
+        let actions = match act {
             Act::OpenLink => self.link_or_toast().map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default(),
             Act::CopyFirstLink => self.link_or_toast().map(|url| vec![Action::copy_link(url)]).unwrap_or_default(),
             Act::OpenBrowser => self.thread_url().map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
@@ -315,7 +325,10 @@ impl App {
                 }
                 vec![]
             }
-            _ => return None,
+            _ => {
+                self.did_nothing();
+                return None;
+            }
         };
         Some(actions)
     }
@@ -348,12 +361,12 @@ impl App {
         self.update_open(|open| open.with_pane(Some(pane)));
     }
 
-    /// `enter` on a folded resolved thread shows all its notes, and folds it again.
-    fn unfold_focused(&mut self) {
-        let Some(open) = &self.open else { return };
-        let (Some(id), Some(pane)) = (open.focused_thread(), &open.pane) else { return };
+    /// `enter` on a folded resolved thread shows all its notes, and folds it again; `false` on any other thread.
+    fn unfold_focused(&mut self) -> bool {
+        let Some(open) = &self.open else { return false };
+        let (Some(id), Some(pane)) = (open.focused_thread(), &open.pane) else { return false };
         if !open.review.thread(&id).is_some_and(|t| t.resolved) {
-            return;
+            return false;
         }
         let mut unfolded = pane.unfolded.clone();
         if !unfolded.remove(&id) {
@@ -361,6 +374,7 @@ impl App {
         }
         let pane = Pane { unfolded, ..pane.clone() };
         self.update_open(|open| open.with_pane(Some(pane)));
+        true
     }
 
     /// The link `u` opens and `U` copies, or a toast that the focused thread has none.
