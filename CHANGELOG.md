@@ -68,6 +68,9 @@ Each entry says what changed, then where, then how to use it.
 - **A refused approval no longer reads as a failed publish.**
   On GitLab, when you publish and approve with `P`, `a`, `enter`.
   The comments are published and leave the list, and the warning says why the approval was refused.
+- **Notes saved together on a GitHub PR all reach it.**
+  On GitHub, when several drafts save at once, as `r` does after you were offline.
+  Each draft now waits for the one before it, so none overwrites another.
 
 ## 0.7.0 - 2026-10-12
 

@@ -112,12 +112,12 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
             Action::SaveDraft { key, draft } => send(backend.save_draft(key, draft).await.unwrap_or_else(|e| failed(Failure::Draft, &e))),
             Action::UpdateDraft { key, id, draft } => {
-                if let Err(e) = backend.forge_of(&key).update_draft(&key, id, &draft.payload()).await {
+                if let Err(e) = backend.update_draft(&key, id, &draft).await {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::DeleteDraft { key, id } => {
-                if let Err(e) = backend.forge_of(&key).delete_draft(&key, id).await {
+                if let Err(e) = backend.delete_draft(&key, id).await {
                     send(failed(Failure::Local, &e));
                 }
             }

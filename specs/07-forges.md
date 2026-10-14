@@ -136,6 +136,7 @@ Cache paths moved from `mr/<project_id>/<iid>/` to `mr/<group+project>/<number>/
 ## What differs on GitHub (phase 2)
 
 - **Drafts on the PR itself** live in the pending review's body: several of them read back as one draft, their texts joined; saving one folds it into that draft, so an edit or a delete covers them all.
+- **One draft write at a time.** Saving reads the pending review, then writes it: two at once would each drop the other's note, or both open a review and GitHub refuses the second. The TUI backend runs the draft saves, edits, deletes and the publish of one MR one after the other (`tui::lanes`), on both forges so they behave the same.
 - **Resolve on publish** does not exist on GitHub: a draft's `resolve` flag is ignored.
 - **Moving a draft** is impossible on GitHub: an edit changes the text, the comment stays on its line (verified live).
 - **Unapprove** is refused with the way out; approving one's own PR is refused by GitHub, and the message says so.

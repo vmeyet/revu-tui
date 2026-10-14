@@ -1,4 +1,5 @@
 //! The service behind the loop: the forge, the cache and the AI, answering actions off the event loop.
+use super::lanes::Lanes;
 use super::{app, blocking, images};
 use crate::ai::anthropic::{self, Ask, Claude, Outcome, Stop, Usage};
 use crate::ai::triage::{self, Verdict};
@@ -65,6 +66,8 @@ pub(super) struct Backend {
     pub(super) opening: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     /// The order of the last state save written per MR; also the one lock every write of `state.json` takes.
     pub(super) saved: std::sync::Arc<std::sync::Mutex<HashMap<MrKey, u64>>>,
+    /// Draft writes and publishing of one MR wait for each other: on GitHub each reads the pending review, then writes it.
+    pub(super) draft_lanes: Lanes,
 }
 
 /// What opening an MR fetches: the MR, its diffs, its discussions and my drafts.
@@ -526,6 +529,7 @@ impl Backend {
 
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
     pub(super) async fn save_draft(&self, key: MrKey, draft: Box<Draft>) -> Result<Incoming> {
+        let _lane = self.draft_lanes.enter(&key).await;
         let held = self.forge_of(&key).drafts(&key).await?;
         let saved = match held.into_iter().find(|note| draft.same_as(&Draft::held(note))) {
             Some(note) => note,
@@ -534,7 +538,18 @@ impl Backend {
         Ok(Incoming::DraftSaved { key, draft, id: saved.id, body: saved.body })
     }
 
+    pub(super) async fn update_draft(&self, key: &MrKey, id: u64, draft: &Draft) -> Result<()> {
+        let _lane = self.draft_lanes.enter(key).await;
+        self.forge_of(key).update_draft(key, id, &draft.payload()).await.map(|_| ())
+    }
+
+    pub(super) async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
+        let _lane = self.draft_lanes.enter(key).await;
+        self.forge_of(key).delete_draft(key, id).await
+    }
+
     pub(super) async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
+        let _lane = self.draft_lanes.enter(&key).await;
         let approval = self.forge_of(&key).publish(&key, approve).await?;
         let wanted = key.clone();
         let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())).await;
@@ -807,6 +822,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            draft_lanes: Lanes::default(),
         };
         let spot = app::Spot { path: "a.rs".into(), old: None, new: Some(3) };
         let viewed = BTreeMap::from([("a.rs".to_owned(), "f1".to_owned())]);
@@ -850,6 +866,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            draft_lanes: Lanes::default(),
         };
         let mr = queue().review_requested[0].clone();
         let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
@@ -898,6 +915,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            draft_lanes: Lanes::default(),
         };
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
@@ -1051,6 +1069,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            draft_lanes: Lanes::default(),
         }
     }
 
@@ -1153,6 +1172,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            draft_lanes: Lanes::default(),
         }
     }
 
@@ -1188,6 +1208,49 @@ mod tests {
         }
         let refused = backend.view(key(), "../../etc/passwd", &"bbbb".into(), 1, None).await.unwrap_err();
         assert!(refused.to_string().contains("does not trust"), "{refused}");
+    }
+
+    /// A GitHub whose pending review text is read slowly and written whole, as `create_draft` does for a note on the PR.
+    struct PendingReview(std::sync::Arc<std::sync::Mutex<String>>);
+
+    impl wiremock::Respond for PendingReview {
+        fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+            let asked: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+            let mut text = self.0.lock().unwrap();
+            if let Some(body) = asked["variables"]["body"].as_str() {
+                body.clone_into(&mut text);
+                let review = serde_json::json!({"id": "PRR_9", "fullDatabaseId": "209", "body": *text, "createdAt": "2026-09-22T10:00:00Z",
+                    "updatedAt": "2026-09-22T10:00:00Z", "state": "PENDING", "author": {"login": "nina"}});
+                return wiremock::ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"data": {"updatePullRequestReview": {"pullRequestReview": review}}}));
+            }
+            let mut threads: serde_json::Value = serde_json::from_str(include_str!("../forge/github/fixtures/threads.json")).unwrap();
+            let reviews = threads["data"]["repository"]["pullRequest"]["reviews"]["nodes"].as_array_mut().unwrap();
+            reviews.iter_mut().filter(|r| r["state"] == "PENDING").for_each(|r| r["body"] = serde_json::json!(*text));
+            wiremock::ResponseTemplate::new(200).set_body_json(threads).set_delay(Duration::from_millis(30))
+        }
+    }
+
+    #[tokio::test]
+    async fn two_notes_on_a_github_pr_saved_at_once_both_land() {
+        let server = wiremock::MockServer::start().await;
+        let text = std::sync::Arc::new(std::sync::Mutex::new("Two nits.".to_owned()));
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/graphql"))
+            .respond_with(PendingReview(text.clone()))
+            .mount(&server)
+            .await;
+        let creds = crate::auth::Credentials { host: "github.com".into(), token: "ghp_xxxx".into() };
+        let forge = Forge::GitHub(crate::forge::github::Client::with_base(&creds, &server.uri()).unwrap());
+        let backend = Backend { forge, ..backend_on_nothing() };
+        let pr = MrKey::new("acme/widgets", 42);
+        let (one, two) = tokio::join!(
+            backend.save_draft(pr.clone(), Box::new(Draft::new(None, "Also: docs"))),
+            backend.save_draft(pr.clone(), Box::new(Draft::new(None, "And tests")))
+        );
+        assert!(one.is_ok() && two.is_ok(), "{one:?} {two:?}");
+        let text = text.lock().unwrap().clone();
+        assert!(text.contains("Also: docs") && text.contains("And tests"), "one note overwrote the other: {text:?}");
     }
 
     #[tokio::test]

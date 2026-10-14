@@ -13,6 +13,7 @@ mod field;
 mod ground;
 pub(crate) mod help;
 mod images;
+mod lanes;
 mod motion;
 mod outline_view;
 mod palette;
@@ -80,6 +81,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         claude: claude(&ctx.config.ai),
         opening: std::sync::Arc::default(),
         saved: std::sync::Arc::default(),
+        draft_lanes: lanes::Lanes::default(),
     };
     let settings = Settings {
         theme,
