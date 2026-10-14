@@ -135,10 +135,13 @@ Say no, and the session takes the terminal instead, with the reason in the toast
 |---|---|
 | Go back to revu | `cmd-[` |
 | Go to the session again | `cmd-]`, or `a g` on the same MR |
-| Close the session's split | `ctrl-z` in the session: it keeps running, the split closes at once, and revu takes the full width back |
+| Close the session's split | `ctrl-z` in the session: it keeps running, the split closes, and revu takes the full width back |
 
 revu splits the terminal that is in front when you press `a g`, which is revu's own.
 Ghostty needs `macos-applescript` left on, as it is by default.
+The split starts your own shell, which types ` exec <the session>` and becomes it, so it closes when the session ends.
+Your shell's start-up runs first, which adds a moment.
+The leading space keeps that line out of zsh's history only with `setopt HIST_IGNORE_SPACE`; bash needs `HISTCONTROL=ignorespace`.
 
 ## In iTerm2
 

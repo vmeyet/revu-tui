@@ -9,14 +9,14 @@ use std::path::Path;
 const GHOSTTY_FRONT: &str = r#"tell application "Ghostty" to return id of focused terminal of selected tab of front window"#;
 
 /// Arguments: the terminal to split, the command, its folder. Prints the new terminal's id. The split
-/// closes once the session's program exits, whatever the reader's own `wait-after-command` says.
+/// starts the reader's shell, which `exec`s the command: given as `command`, Ghostty would keep the split
+/// open after the session exits, until one more key.
 const GHOSTTY_SPLIT: &str = r#"on run argv
   tell application "Ghostty"
     set revu to first terminal whose id is (item 1 of argv)
     set settings to new surface configuration
-    set command of settings to (item 2 of argv)
+    set initial input of settings to " exec " & (item 2 of argv) & linefeed
     set initial working directory of settings to (item 3 of argv)
-    set wait after command of settings to false
     set made to split revu direction right with configuration settings
     focus made
     return id of made
@@ -221,7 +221,9 @@ mod tests {
         let command = r#"aider --message 'it'\''s "quoted" $HOME'"#;
         assert_eq!(calls[1].argv, ["osascript", "-e", GHOSTTY_SPLIT, "A1-FRONT", command, "/code/my widgets"]);
         assert!(!GHOSTTY_SPLIT.contains("aider") && GHOSTTY_SPLIT.contains("split revu direction right with configuration settings"));
-        assert!(GHOSTTY_SPLIT.contains("\n    set wait after command of settings to false\n"), "the split closes with the session");
+        let typed = "\n    set initial input of settings to \" exec \" & (item 2 of argv) & linefeed\n";
+        assert!(GHOSTTY_SPLIT.contains(typed), "the shell of the split becomes the session, so the split closes with it");
+        assert!(!GHOSTTY_SPLIT.contains("set command") && !GHOSTTY_SPLIT.contains("wait after command"));
     }
 
     #[test]
