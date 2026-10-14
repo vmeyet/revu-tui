@@ -54,7 +54,7 @@ impl App {
             return self.handle_publish_key(key);
         }
         if self.brief.is_some() {
-            return self.handle_brief_key(paged(key));
+            return self.through_keymap(key, Self::handle_brief_key);
         }
         if self.news_page.is_some() {
             return self.handle_news_page_key(paged(key));
@@ -70,12 +70,17 @@ impl App {
             self.clear_search();
             return vec![];
         }
+        self.through_keymap(key, Self::dispatch)
+    }
+
+    /// A key after the user's bindings turned it into revu's own: the first of two is held, the rest handled.
+    fn through_keymap(&mut self, key: KeyEvent, handle: fn(&mut Self, KeyEvent) -> Vec<Action>) -> Vec<Action> {
         match self.keymap.feed(self.held.take(), key) {
             crate::keymap::Feed::Hold(first) => {
                 self.held = Some(first);
                 vec![]
             }
-            crate::keymap::Feed::Keys(keys) => keys.into_iter().flat_map(|key| self.dispatch(paged(key))).collect(),
+            crate::keymap::Feed::Keys(keys) => keys.into_iter().flat_map(|key| handle(self, paged(key))).collect(),
         }
     }
 

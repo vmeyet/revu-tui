@@ -323,6 +323,17 @@ mod tests {
     }
 
     #[test]
+    fn a_bound_key_does_on_the_cover_what_its_action_does() {
+        let mut app = with_review();
+        app.keymap = keymap("bind = { copy_link = \"F\", open_browser = \"fx\" }");
+        press(&mut app, "i");
+        let url = app.brief.as_ref().unwrap().web_url.clone();
+        assert_eq!(press(&mut app, "F"), vec![Action::copy_link(url.clone())]);
+        assert_eq!(press(&mut app, "f"), vec![], "`f` waits for the second key of `fx`");
+        assert_eq!(press(&mut app, "x"), vec![Action::OpenUrl(url)]);
+    }
+
+    #[test]
     fn the_cover_scrolls_its_text_and_keeps_the_cursor_row_in_sight() {
         let mut app = with_review();
         let long: String = (1..=80).map(|n| format!("line {n}\n")).collect();

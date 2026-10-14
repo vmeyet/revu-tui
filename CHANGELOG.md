@@ -30,6 +30,8 @@ Each entry says what changed, then where, then how to use it.
   In the right pane: `^f` and `^b` move a full page there too, and `x` closes the file tree.
 - **`[keys.bind]` no longer takes `a c` or the arrow keys from revu.**
   In `config.toml`: revu stops at start and names the key, as it does for any key already taken.
+- **Your own keys work on the cover page.**
+  On the MR cover page, `i`: a key from `[keys.bind]` does what its action does there, as in every other pane.
 - **A second host that misses one refresh keeps its MRs.**
   In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
   Once it answers again, no notification comes for an MR you already had.
