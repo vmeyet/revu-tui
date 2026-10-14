@@ -72,7 +72,7 @@ fn shown(app: &App, every_key: bool) -> Vec<(&'static str, Vec<(String, &'static
         let page = app.page();
         return vec![(page.name(), page.taps().iter().map(|tap| (keymap.label(tap.keys), tap.does)).collect())];
     }
-    groups(every_key, app.focus).map(|g| (g.title(), g.lines().iter().map(|line| (keymap.label(line.keys), line.does)).collect())).collect()
+    groups(every_key, app.focus).map(|g| (g.title(), g.lines().map(|line| (keymap.label(line.keys), line.does)).collect())).collect()
 }
 
 /// A column of groups as lines: faded uppercase headers, keys right-aligned in the accent.
@@ -193,7 +193,7 @@ mod tests {
         assert_eq!(split(&[3, 3]), 1);
         assert_eq!(split(&[20, 1, 1, 1]), 1, "one tall group stays alone on the left");
         assert_eq!(split(&[1, 1, 1, 1, 10]), 4);
-        let sizes: Vec<usize> = GROUPS.iter().map(|g| g.lines().len()).collect();
+        let sizes: Vec<usize> = GROUPS.iter().map(|g| g.lines().count()).collect();
         let at = split(&sizes);
         let (left, right) = (column_height(&sizes[..at]), column_height(&sizes[at..]));
         assert!(left.abs_diff(right) <= 8, "left {left} rows, right {right}");

@@ -163,44 +163,61 @@ pub struct Verb {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Row {
     pub act: Act,
-    /// What `[keys.bind]` and the usage counts call it; `None` when pressing it is not counted.
-    pub name: Option<&'static str>,
-    /// `[keys.bind]` can give it more keys.
-    pub bind: bool,
-    /// `revu usage` lists it, used or not.
-    pub listed: bool,
+    pub name: Name,
     /// The keys revu reads for it outside a text box, as `[keys.bind]` writes them; a binding stands for the first.
     pub keys: &'static [&'static str],
     pub help: &'static [Line],
     pub verb: Option<Verb>,
 }
 
-const fn row(act: Act) -> Row {
-    Row { act, name: None, bind: false, listed: false, keys: &[], help: &[], verb: None }
+/// What an action is called, and who uses the name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Name {
+    /// `[keys.bind]` can give it more keys; the usage counts and `revu usage` use the name too.
+    Bind(&'static str),
+    /// Counted, and listed by `revu usage` even when never used.
+    Listed(&'static str),
+    /// Counted, but `revu usage` names it only once used.
+    Counted(&'static str),
+    /// Pressing it is not counted.
+    None,
+}
+
+impl Name {
+    /// The name its usage is counted under.
+    pub fn counted(self) -> Option<&'static str> {
+        match self {
+            Self::Bind(name) | Self::Listed(name) | Self::Counted(name) => Some(name),
+            Self::None => None,
+        }
+    }
+}
+
+const fn row(act: Act, name: Name, keys: &'static [&'static str]) -> Row {
+    Row { act, name, keys, help: &[], verb: None }
 }
 
 const fn bound(act: Act, name: &'static str, keys: &'static [&'static str]) -> Row {
-    Row { name: Some(name), bind: true, listed: true, keys, ..row(act) }
+    row(act, Name::Bind(name), keys)
 }
 
 const fn listed(act: Act, name: &'static str, keys: &'static [&'static str]) -> Row {
-    Row { name: Some(name), listed: true, keys, ..row(act) }
+    row(act, Name::Listed(name), keys)
 }
 
 const fn counted(act: Act, name: &'static str, keys: &'static [&'static str]) -> Row {
-    Row { name: Some(name), keys, ..row(act) }
-}
-
-const fn command(act: Act, name: &'static str, word: &'static str, does: &'static str) -> Row {
-    Row { verb: Some(Verb { word, does }), ..counted(act, name, &[]) }
-}
-
-const fn listed_command(act: Act, name: &'static str, word: &'static str, does: &'static str) -> Row {
-    Row { listed: true, ..command(act, name, word, does) }
+    row(act, Name::Counted(name), keys)
 }
 
 const fn unnamed(act: Act, keys: &'static [&'static str]) -> Row {
-    Row { keys, ..row(act) }
+    row(act, Name::None, keys)
+}
+
+/// A palette command, counted as its word after a colon: `:go`.
+macro_rules! command {
+    ($kind:ident, $act:expr, $word:literal, $does:literal) => {
+        Row { verb: Some(Verb { word: $word, does: $does }), ..row($act, Name::$kind(concat!(":", $word)), &[]) }
+    };
 }
 
 const fn line(group: Group, keys: &'static str, does: &'static str) -> Line {
@@ -325,27 +342,27 @@ pub const ROWS: &[Row] = &[
     listed(Act::AskFree, "ask_free", &["aa"]),
     listed(Act::PaletteMr, "palette_mr", &[]),
     listed(Act::PaletteFile, "palette_file", &[]),
-    listed_command(Act::GoCommand, ":go", "go", "open an MR: :go !42 · :go acme/widgets!42"),
-    listed_command(Act::OpenCommand, ":open", "open", "open the MR, or the line, in the browser"),
-    listed_command(Act::CopyCommand, ":copy", "copy", "copy the link of the MR, or of the line"),
-    listed_command(Act::ApproveCommand, ":approve", "approve", "approve the open MR, or take the approval back"),
-    listed_command(Act::MergeCommand, ":merge", "merge", "merge my approved MR, after a yes"),
-    listed_command(Act::PublishCommand, ":publish", "publish", "publish every draft, in the publish modal"),
-    listed_command(Act::ThreadsCommand, ":threads", "threads", "every thread of the MR in the right pane"),
-    listed_command(Act::AllCommand, ":all", "all", "the queue: this repo only, or every project"),
-    listed_command(Act::SetCommand, ":set", "set", "change and save a setting: :set theme=nord"),
-    listed_command(Act::ViewCommand, ":view", "view", "the file in your program: :view · :view old · :view src/a.rs:42"),
-    listed_command(Act::AiCommand, ":ai", "ai", "switch AI off or back on for this session: :ai off, :ai on"),
-    listed_command(Act::AskCommand, ":ask", "ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
-    listed_command(Act::ShareCommand, ":share", "share", "post the MR through a [share] command: :share · :share review"),
-    listed_command(Act::HelpCommand, ":help", "help", "show the keys"),
-    listed_command(Act::QuitCommand, ":quit", "quit", "leave"),
-    command(Act::ReadyCommand, ":ready", "ready", "mark my MR ready for review, or a draft again"),
-    command(Act::PinCommand, ":pin", "pin", "pin the MR on top of the queue"),
-    command(Act::UnpinCommand, ":unpin", "unpin", "take the MR's pin off"),
-    command(Act::OutlineCommand, ":outline", "outline", "the functions and classes the MR changes, in the right pane"),
-    command(Act::SessionCommand, ":session", "session", "open the agent session of the MR, or start one"),
-    command(Act::NewsCommand, ":news", "news", "what changed in revu, the newest version first"),
+    command!(Listed, Act::GoCommand, "go", "open an MR: :go !42 · :go acme/widgets!42"),
+    command!(Listed, Act::OpenCommand, "open", "open the MR, or the line, in the browser"),
+    command!(Listed, Act::CopyCommand, "copy", "copy the link of the MR, or of the line"),
+    command!(Listed, Act::ApproveCommand, "approve", "approve the open MR, or take the approval back"),
+    command!(Listed, Act::MergeCommand, "merge", "merge my approved MR, after a yes"),
+    command!(Listed, Act::PublishCommand, "publish", "publish every draft, in the publish modal"),
+    command!(Listed, Act::ThreadsCommand, "threads", "every thread of the MR in the right pane"),
+    command!(Listed, Act::AllCommand, "all", "the queue: this repo only, or every project"),
+    command!(Listed, Act::SetCommand, "set", "change and save a setting: :set theme=nord"),
+    command!(Listed, Act::ViewCommand, "view", "the file in your program: :view · :view old · :view src/a.rs:42"),
+    command!(Listed, Act::AiCommand, "ai", "switch AI off or back on for this session: :ai off, :ai on"),
+    command!(Listed, Act::AskCommand, "ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
+    command!(Listed, Act::ShareCommand, "share", "post the MR through a [share] command: :share · :share review"),
+    command!(Listed, Act::HelpCommand, "help", "show the keys"),
+    command!(Listed, Act::QuitCommand, "quit", "leave"),
+    command!(Counted, Act::ReadyCommand, "ready", "mark my MR ready for review, or a draft again"),
+    command!(Counted, Act::PinCommand, "pin", "pin the MR on top of the queue"),
+    command!(Counted, Act::UnpinCommand, "unpin", "take the MR's pin off"),
+    command!(Counted, Act::OutlineCommand, "outline", "the functions and classes the MR changes, in the right pane"),
+    command!(Counted, Act::SessionCommand, "session", "open the agent session of the MR, or start one"),
+    command!(Counted, Act::NewsCommand, "news", "what changed in revu, the newest version first"),
     counted(Act::Pin, "pin", &["b"]).help(&[line(Group::Queue, "b", "pin on top of the queue, or unpin")]),
     counted(Act::ViewedNext, "viewed", &["m"]).help(&[line(Group::View, "m", "file viewed, on to the next one")]),
     unnamed(Act::Search, &["/"]).help(&[line(Group::View, "/ n N", "find text in the MR, next, previous")]),
@@ -449,8 +466,8 @@ impl Group {
     }
 
     /// Its lines, in the order the help shows them.
-    pub fn lines(self) -> Vec<&'static Line> {
-        self.acts().iter().flat_map(|act| act.row().help.iter().filter(move |line| line.group == self)).collect()
+    pub fn lines(self) -> impl Iterator<Item = &'static Line> {
+        self.acts().iter().flat_map(move |act| act.row().help.iter().filter(move |line| line.group == self))
     }
 }
 
@@ -492,18 +509,25 @@ impl Act {
 
 /// Every action `[keys.bind]` can name, with the default key a binding stands for.
 pub fn bindable() -> impl Iterator<Item = (&'static str, &'static str)> {
-    ROWS.iter().filter(|row| row.bind).filter_map(|row| Some((row.name?, *row.keys.first()?)))
+    ROWS.iter().filter_map(|row| match row.name {
+        Name::Bind(name) => Some((name, *row.keys.first()?)),
+        _ => None,
+    })
 }
 
 /// Every action name `revu usage` lists, bindable ones first.
 pub fn listed_names() -> impl Iterator<Item = &'static str> {
-    ROWS.iter().filter(|row| row.listed).filter_map(|row| row.name)
+    ROWS.iter().filter_map(|row| match row.name {
+        Name::Bind(name) | Name::Listed(name) => Some(name),
+        _ => None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::tui::help::GROUPS;
 
     #[test]
     fn every_act_has_its_row_in_its_place() {
@@ -514,26 +538,18 @@ mod tests {
     }
 
     #[test]
-    fn every_key_parses() {
+    fn every_key_parses_and_a_bindable_action_has_one() {
         for row in ROWS {
             for key in row.keys {
                 assert!(crate::keymap::parse(key).is_ok(), "{:?}: `{key}`", row.act);
             }
         }
+        assert_eq!(bindable().count(), ROWS.iter().filter(|row| matches!(row.name, Name::Bind(_))).count());
     }
-
-    #[test]
-    fn a_bindable_action_has_a_name_a_key_and_is_listed() {
-        for row in ROWS.iter().filter(|row| row.bind) {
-            assert!(row.name.is_some() && !row.keys.is_empty() && row.listed, "{:?}", row.act);
-        }
-    }
-
-    use crate::tui::help::GROUPS;
 
     #[test]
     fn every_help_line_shows_once_and_a_group_lists_only_acts_with_a_line_in_it() {
-        let shown: usize = GROUPS.iter().map(|group| group.lines().len()).sum();
+        let shown: usize = GROUPS.iter().map(|group| group.lines().count()).sum();
         assert_eq!(shown, ROWS.iter().map(|row| row.help.len()).sum::<usize>(), "a help line no group lists, or one listed twice");
         for group in GROUPS {
             for act in group.acts() {
@@ -545,14 +561,5 @@ mod tests {
     #[test]
     fn every_command_is_in_the_palette() {
         assert_eq!(verbs().count(), ROWS.iter().filter(|row| row.verb.is_some()).count());
-    }
-
-    #[test]
-    fn a_command_is_counted_as_its_word_after_a_colon() {
-        for row in ROWS {
-            if let Some(verb) = row.verb {
-                assert_eq!(row.name, Some(format!(":{}", verb.word)).as_deref(), "{:?}", row.act);
-            }
-        }
     }
 }

@@ -144,7 +144,7 @@ impl App {
     }
 
     pub(super) fn count_command(&mut self, command: &Command) {
-        if let Some(name) = command.act().row().name {
+        if let Some(name) = command.act().row().name.counted() {
             self.count(name);
         }
     }

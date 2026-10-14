@@ -410,7 +410,7 @@ fn keys_page() -> Result<String> {
             "| Keys | Does |".into(),
             "|---|---|".into(),
         ]);
-        page.extend(group.lines().iter().map(|line| format!("| {} | {} |", code_words(line.keys), line.does)));
+        page.extend(group.lines().map(|line| format!("| {} | {} |", code_words(line.keys), line.does)));
     }
     page.extend([
         String::new(),
