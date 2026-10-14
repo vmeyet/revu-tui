@@ -79,15 +79,19 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     None => backend.fetch_review(key.clone()).await,
                 };
                 let arrived = fresh.is_ok();
-                send(fresh.unwrap_or_else(|e| failed(Failure::Open, &e)));
+                send(fresh.unwrap_or_else(|e| failed(Failure::Open { key: key.clone() }, &e)));
                 if arrived && painted.is_none() {
                     backend.resume(&key, &send).await;
                 }
             }
             Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
-            Action::RefreshMr(key) => send(backend.fetch_review(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::PollMr { key, head } => send(backend.poll_review(key, &head).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
-            Action::RefreshDiscussions(key) => send(backend.fetch_discussions(key).await.unwrap_or_else(|e| failed(Failure::Poll, &e))),
+            Action::RefreshMr(key) => send(backend.fetch_review(key.clone()).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e))),
+            Action::PollMr { key, head } => {
+                send(backend.poll_review(key.clone(), &head).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
+            }
+            Action::RefreshDiscussions(key) => {
+                send(backend.fetch_discussions(key.clone()).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
+            }
             Action::SaveState { key, order, fold, viewed, auto_folded, side_by_side, spot } => {
                 let chosen =
                     MrState { fold, viewed_files: viewed, auto_folded: (*auto_folded).clone(), side_by_side, spot, opened_at: None };

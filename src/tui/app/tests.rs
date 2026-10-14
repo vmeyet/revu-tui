@@ -83,7 +83,7 @@ fn snapshot_help_scrolls_on_a_small_terminal() {
 #[test]
 fn snapshot_offline_and_filter() {
     let mut app = with_review();
-    app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
+    app.apply(Incoming::Failed { what: Failure::Poll { key: mr_key() }, message: "offline".into() });
     app.open.as_mut().unwrap().cached = Some((app.now.checked_sub(Duration::from_secs(60)).unwrap(), Duration::from_secs(120)));
     press(&mut app, "h/pay");
     insta::assert_snapshot!("offline_filter", render(&mut app, 100, 12));

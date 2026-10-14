@@ -352,8 +352,14 @@ pub enum Failure {
     Queue,
     /// Another host did not answer the queue; its rows are the ones it last answered.
     Host,
-    Open,
-    Poll,
+    /// Opening `key` failed; it matters only while `key` is the MR being opened.
+    Open {
+        key: MrKey,
+    },
+    /// Reading the open MR `key` again failed; it matters only while `key` is still open.
+    Poll {
+        key: MrKey,
+    },
     Local,
     /// The draft is not saved; `r` posts it again.
     Draft {

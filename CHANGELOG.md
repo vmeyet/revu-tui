@@ -27,6 +27,8 @@ Each entry says what changed, then where, then how to use it.
 - **Pins and the queue layout are never lost.**
   In the queue, when you press `b` twice quickly, or run revu on a desktop and a phone at once.
   Each revu keeps the other's pins, sort order and folded sections.
+- **A slow MR you left no longer spoils the next one.**
+  When an MR is slow to open and you open another: its late error no longer shows, marks you offline or blocks the new one.
 
 ## 0.8.0 - 2026-10-14
 

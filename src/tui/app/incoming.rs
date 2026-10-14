@@ -190,13 +190,15 @@ impl App {
 
     fn apply_failure(&mut self, what: Failure, message: String) {
         match what {
+            Failure::Open { key } if self.opening.as_ref() != Some(&key) => {}
+            Failure::Poll { key } if self.open.as_ref().is_none_or(|o| o.key != key) => {}
             Failure::Queue => {
                 self.queue_loading = false;
                 self.queue_failed = true;
                 self.warn(format!("{message} · r to retry"));
                 self.back_off();
             }
-            Failure::Open => {
+            Failure::Open { .. } => {
                 self.opening = None;
                 if self.open.is_some() {
                     self.offline = self.offline.or(Some(self.now));
@@ -208,7 +210,7 @@ impl App {
                 }
                 self.back_off();
             }
-            Failure::Poll => {
+            Failure::Poll { .. } => {
                 self.offline = self.offline.or(Some(self.now));
                 self.back_off();
             }
@@ -304,11 +306,38 @@ mod tests {
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: Some(Duration::from_secs(120)) });
         assert!(app.opening.is_some(), "still fetching");
         assert_eq!(app.open.as_ref().unwrap().staleness(app.now), Some(Duration::from_secs(120)));
-        app.apply(Incoming::Failed { what: Failure::Open, message: "offline".into() });
+        app.apply(Incoming::Failed { what: Failure::Open { key: mr_key() }, message: "offline".into() });
         assert!(app.offline.is_some() && app.open.is_some(), "the cached view stays");
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
         assert_eq!(app.open.as_ref().unwrap().staleness(app.now), None);
         assert_eq!(app.offline, None);
+    }
+
+    #[test]
+    fn a_late_open_failure_of_the_mr_left_behind_spares_the_one_opening() {
+        let mut app = with_queue();
+        let left = app.selected_mr().unwrap().key();
+        app.handle_key(code(KeyCode::Enter));
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "j");
+        app.handle_key(code(KeyCode::Enter));
+        let wanted = app.selected_mr().unwrap().key();
+        assert_eq!(app.opening.as_ref(), Some(&wanted), "the keys leave a pending open for another");
+        app.apply(Incoming::Failed { what: Failure::Open { key: left }, message: "HTTP 502".into() });
+        assert_eq!((app.opening.as_ref(), app.focus, app.offline), (Some(&wanted), Focus::Review, None));
+        assert!(app.live_toast().is_none());
+        app.apply(Incoming::Review { key: wanted.clone(), review: Box::new(review()), cached: None });
+        assert_eq!(app.open.as_ref().map(|open| &open.key), Some(&wanted));
+    }
+
+    #[test]
+    fn a_late_poll_failure_of_another_mr_leaves_the_open_one_online() {
+        let mut app = with_review();
+        let poll = app.poll.clone();
+        app.apply(Incoming::Failed { what: Failure::Poll { key: MrKey::new("acme/widgets", 99) }, message: "offline".into() });
+        assert_eq!((app.offline, &app.poll), (None, &poll));
+        app.apply(Incoming::Failed { what: Failure::Poll { key: mr_key() }, message: "offline".into() });
+        assert!(app.offline.is_some());
     }
 
     #[test]

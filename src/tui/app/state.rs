@@ -505,7 +505,7 @@ mod tests {
                 && actions.contains(&Action::PollMr { key: mr_key(), head: "bbbb".into() }),
             "{actions:?}"
         );
-        app.apply(Incoming::Failed { what: Failure::Poll, message: "offline".into() });
+        app.apply(Incoming::Failed { what: Failure::Poll { key: mr_key() }, message: "offline".into() });
         assert!(app.offline.is_some());
         app.now += Duration::from_secs(120);
         assert_eq!(app.tick(), vec![], "backed off for five minutes");

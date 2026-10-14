@@ -244,7 +244,7 @@ mod tests {
     fn starting_on_an_mr_that_fails_to_open_leaves_zen_for_the_queue() {
         let mut app = app();
         app.start_on(mr_key());
-        app.apply(Incoming::Failed { what: Failure::Open, message: "404 Not Found".into() });
+        app.apply(Incoming::Failed { what: Failure::Open { key: mr_key() }, message: "404 Not Found".into() });
         assert!(!app.zen, "zen hides the queue, the only place left to go");
         assert_eq!(app.focus, Focus::Queue);
     }
