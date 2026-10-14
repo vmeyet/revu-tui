@@ -74,7 +74,7 @@ async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>>
 async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft>
 async fn update_draft(&self, key: &MrKey, id: u64, draft: &NewDraft) -> Result<Draft>
 async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()>
-async fn publish(&self, key: &MrKey, approve: bool) -> Result<()>
+async fn publish(&self, key: &MrKey, approve: bool) -> Result<Approval>   // NotAsked, Given or Refused(reason): an Err means nothing went public
 async fn resolve(&self, key: &MrKey, discussion: &str, resolved: bool) -> Result<()>
 async fn approve(&self, key: &MrKey, approve: bool) -> Result<()>
 async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()>
@@ -94,7 +94,7 @@ async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) ->
 | Threads | `GET …/discussions`, notes carry `position` | One GraphQL query: `reviewThreads` (side, line, range, resolved; outdated ones fall back to `originalLine`), review summaries and PR comments as unanchored threads. Thread ids are node ids (`PRRT_…`). |
 | Position out | `base_sha`, `start_sha`, `head_sha`, `old_line`/`new_line`, `line_range` with `line_code = sha1(path)_old_new` | `commit_id = refs.head`, `path`, `side = RIGHT` when `line.new` exists else `LEFT`, `line = line.number()`, `start_line`/`start_side` from `start` |
 | Drafts | `…/draft_notes` CRUD, per user, survive sessions | My pending review: `addPullRequestReview` opens it on the first draft; `addPullRequestReviewThread` (line drafts), `addPullRequestReviewThreadReply` (replies), the review body (drafts on the PR itself, appended); read back from the same `reviewThreads` query, paged to the end, where pending comments carry `state: PENDING`. Edits and deletes go by node id, looked up from the draft's database id. |
-| Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked | `submitPullRequestReview` with `COMMENT` or `APPROVE`, in one call |
+| Publish | `POST …/draft_notes/bulk_publish`, then `/approve` when asked; a refused approval comes back as `Approval::Refused`, the drafts being out already | `submitPullRequestReview` with `COMMENT` or `APPROVE`, in one call |
 | Resolve | `PUT …/discussions/:id resolved=` | GraphQL `resolveReviewThread` / `unresolveReviewThread` |
 | Approve | `POST …/approve`, `…/unapprove` | `POST pulls/:n/reviews` with `APPROVE`; there is no unapprove for the reviewer, the error says to request changes or dismiss from the web |
 | Review apps | `GET projects/:path/environments?states=available&search=<CI_COMMIT_REF_SLUG>` (the deployments list ignores `ref`), then each environment's `last_deployment`: kept when a success from the branch or `refs/merge-requests/:iid/`, current when from the MR's newest pipeline | `GET repos/…/deployments?ref=<branch>`, the first of each environment, then its newest status: kept when `success` with an `environment_url` |

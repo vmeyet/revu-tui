@@ -68,7 +68,7 @@ impl App {
                 let follow = self.apply_draft_saved(&key, &draft, id, &body);
                 self.composed.extend(follow);
             }
-            Incoming::Published { key, approved, count } => self.apply_published(&key, approved, count),
+            Incoming::Published { key, approval, count } => self.apply_published(&key, &approval, count),
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
             Incoming::Checks { key, checks } => self.apply_checks(&key, checks),
@@ -284,7 +284,7 @@ mod tests {
         app.apply(Incoming::Checks { key: other.clone(), checks: None });
         app.apply(Incoming::Resolved { key: other.clone(), thread: "c0ffee00c0ffee00".into(), resolved: true });
         app.apply(Incoming::Approved { key: other.clone(), approve: true });
-        app.apply(Incoming::Published { key: other, approved: false, count: 1 });
+        app.apply(Incoming::Published { key: other, approval: Approval::NotAsked, count: 1 });
         assert_eq!(app.open, before);
     }
 

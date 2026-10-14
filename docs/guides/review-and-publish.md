@@ -98,6 +98,10 @@ Set `[tui] ascii = true` when your terminal draws emoji at the wrong width.
 
 `A` approves or unapproves without publishing.
 
+On GitLab the approval is a second step.
+When GitLab publishes the comments but refuses the approval, the warning says `published 2 comments, not approved:` and why.
+The comments are out: press `A` to approve again once the cause is fixed.
+
 ## Draft or ready
 
 `H` marks your own MR ready for review when it is a draft, and a draft when it is ready.

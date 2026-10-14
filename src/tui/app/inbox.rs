@@ -253,18 +253,18 @@ mod tests {
     fn a_publish_offers_the_next_mr_and_enter_opens_it_while_esc_stays() {
         let mut app = with_inbox();
         opened_at(&mut app, 42);
-        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 2 });
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approval: Approval::NotAsked, count: 2 });
         assert_eq!(app.offer.as_ref().map(|k| k.number), Some(44));
         assert!(render(&mut app, 120, 20).contains("enter next MR · esc stay"));
         assert_eq!(numbers(&app.handle_key(code(KeyCode::Enter))), [44]);
         let mut app = with_inbox();
         opened_at(&mut app, 42);
-        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 1 });
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approval: Approval::NotAsked, count: 1 });
         assert_eq!(app.handle_key(code(KeyCode::Esc)), [] as [Action; 0]);
         assert_eq!(app.offer, None);
         let mut app = with_inbox();
         opened_at(&mut app, 44);
-        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 44), approved: false, count: 1 });
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 44), approval: Approval::NotAsked, count: 1 });
         assert_eq!(app.offer, None, "no offer when nothing comes next");
     }
 
@@ -272,7 +272,7 @@ mod tests {
     fn another_key_declines_the_offer_and_still_does_its_job() {
         let mut app = with_inbox();
         opened_at(&mut app, 42);
-        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approved: false, count: 1 });
+        app.apply(Incoming::Published { key: MrKey::new("acme/widgets", 42), approval: Approval::NotAsked, count: 1 });
         let before = app.open.as_ref().unwrap().selected;
         press(&mut app, "j");
         assert_eq!(app.offer, None);

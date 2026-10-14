@@ -240,12 +240,12 @@ impl Client {
     }
 
     /// Every draft of mine on the MR becomes public at once, as one review; then the approval, when asked.
-    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<()> {
+    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<forge::Approval> {
         self.http.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(key)), None).await?;
-        if approve {
-            self.approve(key, true).await?;
+        if !approve {
+            return Ok(forge::Approval::NotAsked);
         }
-        Ok(())
+        Ok(self.approve(key, true).await.map_or_else(|e| forge::Approval::Refused(e.to_string()), |()| forge::Approval::Given))
     }
 
     pub async fn resolve(&self, key: &MrKey, discussion: &str, resolved: bool) -> Result<()> {
@@ -539,6 +539,21 @@ mod tests {
         client.delete_draft(&key(), 2).await.unwrap();
         client.publish(&key(), false).await.unwrap();
         assert_eq!(server.received_requests().await.unwrap().len(), 5);
+    }
+
+    #[tokio::test]
+    async fn a_refused_approval_after_the_publish_is_told_apart_from_a_failed_publish() {
+        let server = MockServer::start().await;
+        let base = "/api/v4/projects/acme%2Fwidgets/merge_requests/42";
+        Mock::given(method("POST"))
+            .and(path(format!("{base}/draft_notes/bulk_publish")))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST")).and(path(format!("{base}/approve"))).respond_with(ResponseTemplate::new(401)).mount(&server).await;
+        let approval = client(&server).publish(&key(), true).await.unwrap();
+        assert_eq!(approval, forge::Approval::Refused("you cannot approve this MR (own MR or approval rules)".into()));
     }
 
     #[tokio::test]

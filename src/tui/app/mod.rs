@@ -442,7 +442,7 @@ pub enum Incoming {
     },
     Published {
         key: MrKey,
-        approved: bool,
+        approval: crate::forge::Approval,
         count: usize,
     },
     Posted {

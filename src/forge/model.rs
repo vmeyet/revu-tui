@@ -279,6 +279,15 @@ impl Deployment {
     }
 }
 
+/// What became of the approval asked with a publish; the drafts went public whatever it says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Approval {
+    NotAsked,
+    Given,
+    /// The forge refused it, in words the reader can act on.
+    Refused(String),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Approvals {
     pub approved: bool,

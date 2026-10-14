@@ -535,10 +535,10 @@ impl Backend {
     }
 
     pub(super) async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
-        self.forge_of(&key).publish(&key, approve).await?;
+        let approval = self.forge_of(&key).publish(&key, approve).await?;
         let wanted = key.clone();
         let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())).await;
-        Ok(Incoming::Published { key, approved: approve, count })
+        Ok(Incoming::Published { key, approval, count })
     }
 
     pub(super) async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
@@ -1188,6 +1188,28 @@ mod tests {
         }
         let refused = backend.view(key(), "../../etc/passwd", &"bbbb".into(), 1, None).await.unwrap_err();
         assert!(refused.to_string().contains("does not trust"), "{refused}");
+    }
+
+    #[tokio::test]
+    async fn a_publish_whose_approval_is_refused_still_forgets_the_published_drafts() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let base = "/api/v4/projects/acme%2Fwidgets/merge_requests/42";
+        Mock::given(method("POST"))
+            .and(path(format!("{base}/draft_notes/bulk_publish")))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST")).and(path(format!("{base}/approve"))).respond_with(ResponseTemplate::new(401)).mount(&server).await;
+        let backend = backend_on(&server);
+        let held = vec![HeldDraft { id: 5, body: "nit".into(), position: None, reply_to: None, resolve: false }];
+        backend.cache.write(&keys::drafts(&key()), &held).unwrap();
+        let Incoming::Published { approval, count: 1, .. } = backend.publish(key(), true, 1).await.unwrap() else {
+            panic!("not published")
+        };
+        assert!(matches!(approval, crate::forge::Approval::Refused(_)), "{approval:?}");
+        assert_eq!(backend.cache.read::<Vec<HeldDraft>>(&keys::drafts(&key())), Some(vec![]));
     }
 
     #[tokio::test]

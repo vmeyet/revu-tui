@@ -1,6 +1,6 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
 use super::{Action, App, EntryKind, Failure, Input, MrKey, Open};
-use crate::forge::Position;
+use crate::forge::{Approval, Position};
 use crate::review::{Draft, Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -340,17 +340,21 @@ impl App {
         update.into_iter().collect()
     }
 
-    pub(super) fn apply_published(&mut self, key: &MrKey, approved: bool, count: usize) {
+    pub(super) fn apply_published(&mut self, key: &MrKey, approval: &Approval, count: usize) {
         if self.open.as_ref().is_none_or(|o| &o.key != key) {
             return;
         }
         self.update_open(|open| open.with_drafts_changed(|_| vec![]));
         self.publish = None;
         self.poll.discussions_due = Some(self.now);
-        let tail = if approved { " and approved" } else { "" };
-        self.toast(format!("published {count} comment{}{tail}", if count == 1 { "" } else { "s" }));
-        if approved {
-            self.set_approved(key, true);
+        let published = format!("published {count} comment{}", if count == 1 { "" } else { "s" });
+        match approval {
+            Approval::NotAsked => self.toast(published),
+            Approval::Given => {
+                self.toast(format!("{published} and approved"));
+                self.set_approved(key, true);
+            }
+            Approval::Refused(why) => self.warn(format!("{published}, not approved: {why}")),
         }
         self.offer_next();
         let follow = self.reread(key);
@@ -654,12 +658,26 @@ mod tests {
         assert_eq!(actions, vec![Action::Publish { key: mr_key(), approve: true, count: 2 }]);
         assert!(app.publish.as_ref().unwrap().busy);
         assert_eq!(press(&mut app, "a"), vec![], "keys wait for the answer");
-        app.apply(Incoming::Published { key: mr_key(), approved: true, count: 2 });
+        app.apply(Incoming::Published { key: mr_key(), approval: Approval::Given, count: 2 });
         assert_eq!(app.publish, None);
         assert_eq!(app.draft_count(), 0);
         assert!(app.open.as_ref().unwrap().review.mr.approvals.user_has_approved);
         assert_eq!(app.poll.discussions_due, Some(app.now), "threads refresh at once");
         assert_eq!(app.live_toast().unwrap().text, "published 2 comments and approved");
+    }
+
+    #[test]
+    fn a_publish_whose_approval_is_refused_clears_the_drafts_and_says_why_it_is_not_approved() {
+        let mut app = with_saved_draft();
+        press(&mut app, "Pa");
+        app.handle_key(code(KeyCode::Enter));
+        let refused = Approval::Refused("you cannot approve this MR (own MR or approval rules)".into());
+        app.apply(Incoming::Published { key: mr_key(), approval: refused, count: 1 });
+        assert_eq!((app.publish.as_ref(), app.draft_count()), (None, 0), "the forge published them");
+        assert!(!app.open.as_ref().unwrap().review.mr.approvals.user_has_approved);
+        let toast = app.live_toast().unwrap();
+        assert!(toast.danger, "{toast:?}");
+        assert_eq!(toast.text, "published 1 comment, not approved: you cannot approve this MR (own MR or approval rules)");
     }
 
     #[test]

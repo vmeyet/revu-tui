@@ -12,8 +12,8 @@ pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{
-    Applicable, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod, MergePlan, Mr, MrKey, MrState,
-    NewDraft, Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Sha, Side, Suggestion, User, tally, toggled,
+    Applicable, Approval, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod, MergePlan, Mr, MrKey,
+    MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Sha, Side, Suggestion, User, tally, toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -261,8 +261,8 @@ impl Forge {
         }
     }
 
-    /// Every draft of mine goes public as one review, approving the MR with it when asked.
-    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<()> {
+    /// Every draft of mine goes public as one review, approving the MR with it when asked; an error means nothing went public.
+    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<Approval> {
         match self {
             Forge::GitLab(client) => client.publish(key, approve).await,
             Forge::GitHub(client) => client.publish(key, approve).await,

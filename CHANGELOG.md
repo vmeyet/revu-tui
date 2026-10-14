@@ -65,6 +65,9 @@ Each entry says what changed, then where, then how to use it.
 - **A comment survives an editor that exits with an error.**
   When you write in `$EDITOR` with `E` or `ctrl-o`, and vim quits with `:cq` or after an error.
   The text waits in the comment box, and `enter` saves it.
+- **A refused approval no longer reads as a failed publish.**
+  On GitLab, when you publish and approve with `P`, `a`, `enter`.
+  The comments are published and leave the list, and the warning says why the approval was refused.
 
 ## 0.7.0 - 2026-10-12
 
