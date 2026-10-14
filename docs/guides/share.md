@@ -47,6 +47,8 @@ A typo like `{titel}` stops revu at start, with the file and the target named.
 
 Name each place under `[share.targets]`.
 `Y` then asks which one; `:share team` or `--target team` picks it directly.
+The list opens on the place you last shared to on that host, so `Y` then `enter` shares there again.
+In the list, `1` to `9` pick a place directly.
 
 ```toml
 [share.targets.review]

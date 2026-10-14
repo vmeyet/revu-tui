@@ -112,6 +112,11 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::Share { target, message, done } => {
                 send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
+            Action::RememberShare { host, target } => {
+                if let Err(e) = blocking(move || crate::share::remember(&Cache::shared(), &host, target.as_deref())).await {
+                    tracing::warn!("remembering the share target failed: {e:#}");
+                }
+            }
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
             Action::SaveDraft { key, draft } => send(match backend.save_draft(key.clone(), draft).await {
                 Ok(saved) => saved,

@@ -15,6 +15,9 @@ Each entry says what changed, then where, then how to use it.
 - **Jump between threads with `n` and `N`.**
   In the diff and zen, while no search is on.
   `n` and `N` do what `]n` and `[n` do; with a search on, they still step through its matches.
+- **Share to the same place again.**
+  In the list `Y` opens when you have several places to share to, on each host apart.
+  It opens on the place you last shared to, so `Y` then `enter` repeats it; `1` to `9` pick one directly.
 
 ## 0.8.0 - 2026-10-14
 

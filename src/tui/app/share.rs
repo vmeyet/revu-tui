@@ -5,9 +5,10 @@ use crate::share::{Fields, Target, render};
 use crate::tui::field::Field;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-/// A post being prepared for one MR.
+/// A post being prepared for one MR, on the host it lives on.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sharing {
+    pub host: String,
     pub fields: Fields,
     pub stage: Stage,
 }
@@ -42,7 +43,7 @@ impl App {
             self.toast("nothing to share to: add `[share] command` to the config (docs/guides/share.md)");
             return;
         }
-        let Some(fields) = self.share_fields() else {
+        let Some((host, fields)) = self.share_fields() else {
             self.toast("select an MR first");
             return;
         };
@@ -56,16 +57,21 @@ impl App {
         } else if targets.len() == 1 {
             note_stage(targets[0].clone())
         } else {
-            Stage::Pick { targets, selected: 0 }
+            let selected = self.last_share.index_in(&host, &targets);
+            Stage::Pick { targets, selected }
         };
-        self.sharing = Some(Sharing { fields, stage });
+        self.sharing = Some(Sharing { host, fields, stage });
     }
 
-    fn share_fields(&self) -> Option<Fields> {
-        match (self.focus, &self.open) {
-            (Focus::Queue, _) | (_, None) => self.selected_mr().map(|mr| Fields::from_queue(mr, self.hosts.kind_of(&mr.key()))),
-            (_, Some(open)) => Some(Fields::from_mr(&open.review.mr, self.hosts.kind_of(&open.key))),
-        }
+    fn share_fields(&self) -> Option<(String, Fields)> {
+        let (key, fields) = match (self.focus, &self.open) {
+            (Focus::Queue, _) | (_, None) => {
+                let mr = self.selected_mr()?;
+                (mr.key(), Fields::from_queue(mr, self.hosts.kind_of(&mr.key())))
+            }
+            (_, Some(open)) => (open.key.clone(), Fields::from_mr(&open.review.mr, self.hosts.kind_of(&open.key))),
+        };
+        Some((self.host_of(&key).to_owned(), fields))
     }
 
     pub(super) fn handle_share_key(&mut self, key: KeyEvent) -> Vec<Action> {
@@ -74,21 +80,25 @@ impl App {
             self.toast("not shared");
             return vec![];
         }
-        let Sharing { fields, stage } = sharing;
+        let Sharing { host, fields, stage } = sharing;
         let stage = match stage {
             Stage::Pick { targets, selected } => pick_key(targets, selected, key),
             Stage::Note { target, note } => note_key(&fields, target, note, key),
             Stage::Preview { target, note, message } => match key.code {
-                KeyCode::Char('y') => {
-                    let done = target.done(&fields.reference);
-                    return vec![Action::Share { target: Box::new(target), message, done }];
-                }
+                KeyCode::Char('y') => return self.send_share(host, &fields, target, message),
                 KeyCode::Char('e') => Stage::Note { target, note: Field::new(note) },
                 _ => Stage::Preview { target, note, message },
             },
         };
-        self.sharing = Some(Sharing { fields, stage });
+        self.sharing = Some(Sharing { host, fields, stage });
         vec![]
+    }
+
+    fn send_share(&mut self, host: String, fields: &Fields, target: Target, message: String) -> Vec<Action> {
+        self.last_share = self.last_share.with(&host, target.name.as_deref());
+        let remember = Action::RememberShare { host, target: target.name.clone() };
+        let done = target.done(&fields.reference);
+        vec![Action::Share { target: Box::new(target), message, done }, remember]
     }
 }
 
@@ -167,7 +177,7 @@ mod tests {
         assert!(message.starts_with(&format!("[{reference} ")) && message.ends_with("\n_needs a second pair of eyes_"), "{message}");
         let message = message.clone();
         let actions = press(&mut app, "y");
-        assert_eq!(actions.len(), 1);
+        assert_eq!(actions.iter().filter(|a| matches!(a, Action::Share { .. })).count(), 1);
         let Action::Share { target, message: sent, done } = &actions[0] else { panic!("{actions:?}") };
         assert_eq!((target.as_ref(), sent, done.as_str()), (&share_target(None), &message, format!("shared {reference}").as_str()));
         assert!(app.sharing.is_none());
@@ -214,6 +224,31 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         assert!(matches!(&app.sharing.as_ref().unwrap().stage, ShareStage::Note { target, .. } if target.name.as_deref() == Some("team")));
         assert_eq!(app.sharing.as_ref().unwrap().title(), format!("share {} to team", app.sharing.as_ref().unwrap().fields.reference));
+    }
+
+    fn picked(app: &App) -> Option<usize> {
+        match app.sharing.as_ref().map(|s| &s.stage) {
+            Some(ShareStage::Pick { selected, .. }) => Some(*selected),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn y_offers_the_target_last_shared_to_on_the_host_and_sending_remembers_it() {
+        let two = vec![share_target(None), share_target(Some("team"))];
+        let mut app = sharing_queue(two.clone());
+        app.last_share = crate::share::LastShare::default().with("gitlab.com", Some("team"));
+        press(&mut app, "Y");
+        assert_eq!(picked(&app), Some(1), "the last target, as read from the cache at start");
+        app.handle_key(code(KeyCode::Esc));
+        let mut app = sharing_queue(two);
+        press(&mut app, "Y2");
+        app.handle_key(code(KeyCode::Enter));
+        let sent = press(&mut app, "y");
+        let remembered = Action::RememberShare { host: "gitlab.com".into(), target: Some("team".into()) };
+        assert!(matches!(sent.as_slice(), [Action::Share { .. }, last] if *last == remembered), "{sent:?}");
+        press(&mut app, "Y");
+        assert_eq!(picked(&app), Some(1), "`Y` then `enter` repeats the last share");
     }
 
     #[test]

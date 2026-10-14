@@ -101,6 +101,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         tap_bar: ctx.config.tui.tap_bar,
         views: ctx.config.queue.views.clone().into_iter().collect(),
         share: crate::share::targets(&ctx.config.share),
+        last_share: crate::share::last_share(&Cache::shared()),
         prefetch: ctx.config.queue.prefetch,
         ascii: ctx.config.tui.ascii,
         reactions: crate::reactions::read(&Cache::shared()),

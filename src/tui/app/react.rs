@@ -82,7 +82,7 @@ impl App {
         Pick { thread, note, selected: 0, row: row(&self.most_used()), search: None }
     }
 
-    fn host_of<'a>(&'a self, key: &'a MrKey) -> &'a str {
+    pub(super) fn host_of<'a>(&'a self, key: &'a MrKey) -> &'a str {
         key.host.as_deref().unwrap_or(&self.host)
     }
 

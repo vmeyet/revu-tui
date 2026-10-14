@@ -148,6 +148,11 @@ pub enum Action {
         message: String,
         done: String,
     },
+    /// Keep `target` as the one last shared to on `host`, so `Y` there offers it first.
+    RememberShare {
+        host: String,
+        target: Option<String>,
+    },
     /// Post a draft of the open review; the answer carries it back with the id the forge gave it.
     SaveDraft {
         key: MrKey,

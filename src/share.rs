@@ -1,8 +1,11 @@
 //! `Y`: post an MR somewhere by piping a message to a command of the user's choosing.
 //! revu fills a template and hands the text to the command's stdin; it knows no chat tool.
+use crate::cache::{Cache, keys};
 use crate::config;
 use crate::forge::{Kind, Mr, QueueMr};
 use anyhow::{Result, bail};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// A link titled with the MR's ref, then the note in italics when there is one.
@@ -67,6 +70,36 @@ impl Target {
             None => format!("shared {reference}"),
         }
     }
+}
+
+/// The target I last shared to, by host: its name, `None` for the bare `[share]` one.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct LastShare(BTreeMap<String, Option<String>>);
+
+impl LastShare {
+    #[must_use]
+    pub fn with(&self, host: &str, target: Option<&str>) -> Self {
+        let mut hosts = self.0.clone();
+        hosts.insert(host.to_owned(), target.map(str::to_owned));
+        Self(hosts)
+    }
+
+    /// Where the last target of `host` sits in `targets`; the first one when it is unknown or gone.
+    pub fn index_in(&self, host: &str, targets: &[Target]) -> usize {
+        let Some(last) = self.0.get(host) else { return 0 };
+        targets.iter().position(|target| target.name == *last).unwrap_or(0)
+    }
+}
+
+/// The last targets kept in the cache; none when the file is missing or broken.
+pub fn last_share(cache: &Cache) -> LastShare {
+    cache.read(&keys::last_share()).unwrap_or_default()
+}
+
+/// Keeps `target` as the last one shared to on `host`, whatever other revu processes wrote meanwhile.
+pub fn remember(cache: &Cache, host: &str, target: Option<&str>) -> Result<LastShare> {
+    cache.update(&keys::last_share(), |last: LastShare| last.with(host, target))
 }
 
 /// The targets the config names, the bare one first, then named ones in name order.
@@ -141,7 +174,6 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::config::ShareTarget;
-    use std::collections::BTreeMap;
 
     fn fields() -> Fields {
         Fields {
@@ -197,6 +229,33 @@ mod tests {
         assert_eq!(targets[0].done("!42"), "shared !42");
         assert_eq!(targets[2].done("!42"), "shared !42 to team");
         assert_eq!(super::targets(&config::Share::default()), [] as [Target; 0]);
+    }
+
+    fn two() -> Vec<Target> {
+        let target =
+            |name: Option<&str>| Target { name: name.map(str::to_owned), command: "cat".into(), template: DEFAULT_TEMPLATE.into() };
+        vec![target(None), target(Some("team"))]
+    }
+
+    #[test]
+    fn the_last_target_is_kept_per_host_and_picks_the_first_when_unknown() {
+        let last = LastShare::default().with("gitlab.com", Some("team")).with("github.com", None);
+        assert_eq!(last.index_in("gitlab.com", &two()), 1);
+        assert_eq!(last.index_in("github.com", &two()), 0);
+        assert_eq!(last.index_in("gitlab.example.org", &two()), 0, "a host with nothing shared yet");
+        assert_eq!(LastShare::default().with("gitlab.com", Some("gone")).index_in("gitlab.com", &two()), 0, "a target since removed");
+    }
+
+    #[test]
+    fn the_cache_keeps_the_last_target_and_a_missing_or_broken_file_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path());
+        assert_eq!(last_share(&cache), LastShare::default());
+        remember(&cache, "gitlab.com", Some("team")).unwrap();
+        assert_eq!(remember(&cache, "gitlab.com", Some("team")).unwrap(), last_share(&cache), "twice is once");
+        assert_eq!(last_share(&cache).index_in("gitlab.com", &two()), 1);
+        std::fs::write(dir.path().join(keys::last_share()), b"[not json").unwrap();
+        assert_eq!(last_share(&cache), LastShare::default());
     }
 
     #[tokio::test]

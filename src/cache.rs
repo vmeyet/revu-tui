@@ -289,6 +289,11 @@ pub mod keys {
         "reactions.json".to_owned()
     }
 
+    /// The target I last shared to, per host, in the shared cache.
+    pub fn last_share() -> String {
+        "share.json".to_owned()
+    }
+
     fn slug(project: &str) -> String {
         project.replace('/', "+")
     }

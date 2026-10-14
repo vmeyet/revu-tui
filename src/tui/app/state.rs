@@ -45,6 +45,8 @@ pub struct Settings {
     /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
     /// `[share]`: where `Y` can post an MR, the bare target first.
     pub share: Vec<crate::share::Target>,
+    /// The target I last shared to on each host, read once at start: `Y` offers it first.
+    pub last_share: crate::share::LastShare,
     pub views: Vec<(String, String)>,
     /// `[queue] prefetch`: how many MRs that need me are loaded ahead; 0 turns it off.
     pub prefetch: usize,
@@ -91,6 +93,8 @@ pub struct App {
     pub view: Option<String>,
     /// Where `Y` can post an MR.
     pub share_targets: Vec<crate::share::Target>,
+    /// The target I last shared to on each host, kept as I share.
+    pub last_share: crate::share::LastShare,
     /// The post being prepared; nothing is sent before its preview gets a `y`.
     pub sharing: Option<super::Sharing>,
     pub views: Vec<(String, String)>,
@@ -294,6 +298,7 @@ impl App {
             filter: String::new(),
             view: None,
             share_targets: settings.share,
+            last_share: settings.last_share,
             sharing: None,
             views: settings.views,
             filtering: false,

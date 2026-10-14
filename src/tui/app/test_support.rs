@@ -58,6 +58,7 @@ pub(super) fn settings() -> Settings {
         tap_bar: true,
         views: vec![],
         share: vec![],
+        last_share: crate::share::LastShare::default(),
         prefetch: 0,
         ascii: false,
         reactions: crate::reactions::History::default(),
