@@ -101,8 +101,6 @@ pub struct App {
     /// The filter row is taking keys.
     pub filtering: bool,
     /// Queue sections folded to their header; Done starts folded.
-    /// The review header on one row instead of two.
-    pub header_folded: bool,
     /// Long diff lines wrap under their text instead of ending in `…`, once `w` chose; until then the layout does.
     pub wrap: Option<bool>,
     /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.
@@ -302,7 +300,6 @@ impl App {
             sharing: None,
             views: settings.views,
             filtering: false,
-            header_folded: false,
             wrap: None,
             zen: false,
             narrow: false,

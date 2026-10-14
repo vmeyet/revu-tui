@@ -597,3 +597,11 @@ pub(super) fn spot(app: &mut App, text: &str, width: u16, height: u16) -> (u16, 
     let (x, y) = found.unwrap_or_else(|| panic!("{text} is on screen:\n{screen}"));
     (x as u16, y as u16)
 }
+
+/// Every file of the open MR folded, or every one open, as a reader would leave them one by one.
+pub(super) fn fold_every_file(app: &mut App, fold: crate::diff::fold::Fold) {
+    let paths: Vec<String> = app.open.as_ref().unwrap().review.files.iter().map(|f| f.new_path.clone()).collect();
+    for path in paths {
+        app.set_file_fold(&path, fold);
+    }
+}

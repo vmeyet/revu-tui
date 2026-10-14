@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn a_match_inside_a_folded_file_or_hunk_opens_it() {
         let mut app = with_review();
-        press(&mut app, "zM");
+        fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
         press(&mut app, "/line 43");
         assert!(text_here(&app).contains("line 43 is new"), "{}", text_here(&app));
         app.handle_key(code(KeyCode::Enter));

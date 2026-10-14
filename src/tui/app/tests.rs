@@ -706,9 +706,7 @@ fn a_peek_badges_the_first_header_row_in_every_layout_and_leaves_the_pipeline_li
     assert!(cell.modifier.contains(ratatui::style::Modifier::BOLD));
     press(&mut app, ">>");
     assert!(first_row(&mut app).contains(" AFTER "), "{}", first_row(&mut app));
-    press(&mut app, "zh");
-    assert!(first_row(&mut app).contains(" AFTER "), "folded: {}", first_row(&mut app));
-    press(&mut app, "zhzz");
+    press(&mut app, "zz");
     assert!(first_row(&mut app).contains(" AFTER "), "zen: {}", first_row(&mut app));
 }
 

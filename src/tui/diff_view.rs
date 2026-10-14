@@ -124,7 +124,6 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
         return draw_empty(f, theme, inner, lines);
     }
     let today = app.today;
-    let folded = app.header_folded;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
     let wrap = app.wraps();
     let short = app.short;
@@ -134,15 +133,14 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     let compose_label = app.input_label();
     let composes_at_foot = app.composes_outside_the_diff() && app.areas.side.is_empty();
     let Some(open) = app.open.as_mut() else { return };
-    let header = match (zen, folded) {
-        (true, _) => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
-        (false, _) if short => vec![],
-        (false, true) => vec![folded_header(open, theme)],
-        (false, false) => header_lines(open, theme, today, inner.width as usize),
+    let header = match () {
+        () if zen => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
+        () if short => vec![],
+        () => header_lines(open, theme, today, inner.width as usize),
     };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
-    let pipeline = if folded || zen { None } else { pipeline_link(&open.review, &header, inner) };
-    let deployment = if folded || zen { None } else { deployment_link(open, &header, inner) };
+    let pipeline = if zen { None } else { pipeline_link(&open.review, &header, inner) };
+    let deployment = if zen { None } else { deployment_link(open, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
     app.links.extend(pipeline.into_iter().chain(deployment));
     if open.prose.is_some() {
@@ -535,31 +533,6 @@ fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<
     let room = width.saturating_sub(badge.iter().map(Span::width).sum::<usize>() + head.width() + tail.width());
     let title = truncate(&mr.title, room);
     Line::from([badge, vec![Span::styled(format!("{head}{title}{tail}"), Style::default().fg(theme.faded))]].concat())
-}
-
-/// `zh`: the header on one row, the author, the size, the pipeline and what is still open.
-fn folded_header<'a>(open: &Open, theme: Theme) -> Line<'a> {
-    let mr = &open.review.mr;
-    let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
-    let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
-    let pipeline = mr.pipeline.as_ref().map(|p| pipeline_glyph(p.status, theme));
-    let mut spans = peek_badge(open.review.peek, theme);
-    spans.extend([
-        Span::styled("▸ ", Style::default().fg(theme.faded)),
-        Span::styled(mr.author.username.clone(), Style::default().fg(theme.user(&mr.author.username))),
-        dot(),
-        Span::styled(format!("+{adds}"), Style::default().fg(theme.success)),
-        Span::raw(" "),
-        Span::styled(format!("−{dels}"), Style::default().fg(theme.danger)),
-    ]);
-    if let Some((glyph, colour)) = pipeline {
-        spans.extend([dot(), Span::styled(glyph, Style::default().fg(colour))]);
-    }
-    let unresolved = open.review.unresolved();
-    if unresolved > 0 {
-        spans.extend([dot(), Span::styled(format!("{unresolved} unresolved"), Style::default().fg(theme.warn))]);
-    }
-    Line::from(spans)
 }
 
 /// The side a peek reads, loud at the head of the header, then a gap; nothing while the diff shows.

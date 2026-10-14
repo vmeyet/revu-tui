@@ -444,11 +444,8 @@ impl App {
             Act::FoldToggle => return self.fold_at_cursor(None),
             Act::FoldOpen => return self.fold_at_cursor(Some(true)),
             Act::FoldClose => return self.fold_at_cursor(Some(false)),
-            Act::FoldHeader => self.header_folded = !self.header_folded,
             Act::Zen => return self.toggle_zen(),
             Act::Viewed => return self.toggle_viewed(),
-            Act::FoldAll => return self.fold_all(true),
-            Act::UnfoldAll => return self.fold_all(false),
             Act::NextReview | Act::PrevReview => return self.walk_reviews(act == Act::NextReview),
             Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
             Act::NextHunk | Act::PrevHunk => self.review_jump(act == Act::NextHunk, |r| matches!(r, Row::Hunk { .. })),
@@ -569,17 +566,6 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
     use ratatui::layout::Rect;
-
-    #[test]
-    fn zh_folds_the_review_header_to_one_row() {
-        let mut app = with_review();
-        press(&mut app, "zh");
-        assert!(app.header_folded);
-        let screen = render(&mut app, 120, 24);
-        assert!(screen.contains("▸ "), "{screen}");
-        press(&mut app, "zh");
-        assert!(!app.header_folded);
-    }
 
     #[test]
     fn r_refreshes_once_and_o_y_take_the_mr_url() {

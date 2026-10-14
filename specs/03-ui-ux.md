@@ -148,7 +148,7 @@ Loading: the sections render with three skeleton rows of `▁▁▁▁▁` in `f
 
 ## The review pane
 
-### Header (2 rows, `zh` folds it to 1)
+### Header (2 rows)
 
 Row 1: author, `source → target`, age, `+adds −dels`, file count, pipeline glyph and word.
 Row 2: approvals `n of m`, thread counts, drafts count. Anything at zero is omitted.
@@ -344,7 +344,6 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `]f` `[f` | next, previous file with unresolved threads | M1 |
 | `za` | toggle fold under the cursor | M1 |
 | `zc` `zo` | close, open | M1 |
-| `zM` `zR` | fold, unfold every file | M1 |
 | `zv` | mark viewed (folds) | M3 |
 | `m` | mark viewed, on to the first change of the next file not viewed | post-M5 |
 | `t` | file tree | M3 |

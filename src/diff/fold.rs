@@ -70,11 +70,6 @@ impl FoldState {
         }
         Self { files: self.files.clone(), hunks }
     }
-
-    pub fn fold_all(&self, paths: &[String]) -> Self {
-        let files = paths.iter().map(|p| (p.clone(), Fold::Closed)).collect();
-        Self { files, hunks: self.hunks.clone() }
-    }
 }
 
 fn set_or_forget<K: Ord>(map: &mut BTreeMap<K, Fold>, key: K, fold: Fold) {
@@ -135,15 +130,6 @@ mod tests {
         assert!(!hunk_closed.hunk_is_open("a", 2));
         assert!(hunk_closed.hunk_is_open("a", 1));
         assert_eq!(hunk_closed.toggle_hunk("a", 2), state);
-    }
-
-    #[test]
-    fn fold_all_and_unfold_all() {
-        let paths = ["a".to_owned(), "b".to_owned()];
-        let folded = FoldState::default().toggle_hunk("a", 0).fold_all(&paths);
-        assert!(!folded.file_is_open("a") && !folded.file_is_open("b"));
-        assert!(!folded.hunk_is_open("a", 0), "hunk folds survive fold_all");
-        assert_ne!(folded, FoldState::default());
     }
 
     #[test]

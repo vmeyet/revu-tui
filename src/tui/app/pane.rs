@@ -637,7 +637,7 @@ mod tests {
     #[test]
     fn bracket_n_opens_a_folded_file_and_lands_on_its_thread() {
         let mut app = with_open_thread();
-        press(&mut app, "zM");
+        fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
         assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
         press(&mut app, "g");
         let actions = press(&mut app, "]n");
@@ -650,7 +650,8 @@ mod tests {
     #[test]
     fn bracket_big_n_opens_a_folded_file_on_the_way_to_a_resolved_thread() {
         let mut app = with_review();
-        press(&mut app, "zMg");
+        fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
+        press(&mut app, "g");
         let actions = press(&mut app, "]N");
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&LINE_13));
         assert!(is_saved_fold(&actions));
@@ -670,10 +671,12 @@ mod tests {
     #[test]
     fn bracket_n_order_is_unchanged_when_nothing_is_folded() {
         let mut open_app = with_open_thread();
-        press(&mut open_app, "zRg");
+        fold_every_file(&mut open_app, crate::diff::fold::Fold::Open);
+        press(&mut open_app, "g");
         let stops = thread_stops(&mut open_app, "]n", 4);
         let mut folded = with_open_thread();
-        press(&mut folded, "zMg");
+        fold_every_file(&mut folded, crate::diff::fold::Fold::Closed);
+        press(&mut folded, "g");
         assert_eq!(thread_stops(&mut folded, "]n", 4), stops, "folds change nothing about where ]n stops");
         assert_eq!(stops[..2], stops[2..], "it wraps around in the same order");
     }
@@ -681,7 +684,8 @@ mod tests {
     #[test]
     fn bracket_n_backwards_opens_a_fold_too() {
         let mut app = with_open_thread();
-        press(&mut app, "zMG");
+        fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
+        press(&mut app, "G");
         let actions = press(&mut app, "[n");
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&LINE_13));
         assert!(is_saved_fold(&actions));
@@ -752,7 +756,8 @@ mod tests {
     #[test]
     fn enter_in_every_thread_takes_the_diff_to_the_line_and_opens_its_fold() {
         let mut app = with_review();
-        press(&mut app, "zMTJJ");
+        fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
+        press(&mut app, "TJJ");
         assert!(!app.open.as_ref().unwrap().review.fold.file_is_open("src/pay/charge.rs"));
         app.handle_key(code(KeyCode::Enter));
         let open = app.open.as_ref().unwrap();

@@ -24,7 +24,6 @@ pub enum Act {
     FoldClose,
     FoldAll,
     UnfoldAll,
-    FoldHeader,
     Viewed,
     Zen,
     PrevMr,
@@ -353,9 +352,10 @@ pub const ROWS: &[Row] = &[
         ])
         .section(Section::View),
     bound(Act::FoldClose, "fold_close", &["zc"]).section(Section::View),
-    bound(Act::FoldAll, "fold_all", &["zM"]).help(&[line(Group::View, "zM zR", "fold, unfold every file")]).section(Section::View),
+    bound(Act::FoldAll, "fold_all", &["zM"])
+        .help(&[line(Group::View, "zR zM", "in prose: show, fold the unchanged blocks")])
+        .section(Section::View),
     bound(Act::UnfoldAll, "unfold_all", &["zR"]).section(Section::View),
-    bound(Act::FoldHeader, "fold_header", &["zh"]).help(&[line(Group::View, "zh", "fold the MR header")]).section(Section::View),
     bound(Act::Viewed, "viewed", &["zv"]).help(&[line(Group::View, "zv", "file viewed: it folds away")]).section(Section::View),
     bound(Act::Zen, "zen", &["zz"]).help(&[line(Group::View, "zz", "zen: the diff alone, quiet")]).section(Section::View),
     bound(Act::PrevMr, "prev_mr", &["[m"]).section(Section::Jump),
@@ -646,7 +646,6 @@ impl Group {
                 Act::ViewFile,
                 Act::FoldToggle,
                 Act::FoldAll,
-                Act::FoldHeader,
                 Act::Viewed,
                 Act::ViewedNext,
             ],

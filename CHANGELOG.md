@@ -53,6 +53,8 @@ Each entry says what changed, then where, then how to use it.
 
 - **Grouping the queue by author, `S`.**
   In the queue: `s` still sorts by author, which keeps one author's MRs together.
+- **Folding the MR header with `zh`, and every file with `zM` and `zR`.**
+  In the diff: `za`, `zo` and `zc` still fold one file; in the prose view `zR` and `zM` still show and fold the unchanged blocks.
 
 ## 0.8.0 - 2026-10-14
 

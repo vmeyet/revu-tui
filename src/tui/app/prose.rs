@@ -97,7 +97,7 @@ impl App {
         }
     }
 
-    /// `zR` shows every unchanged run and `zM` folds them again; `zz` and `zh` act as anywhere; the diff's other
+    /// `zR` shows every unchanged run and `zM` folds them again; `zz` acts as anywhere; the diff's other
     /// prefixed keys would move a cursor out of sight, so they do nothing.
     pub(super) fn prose_prefixed(&mut self, act: Option<Act>) -> Vec<Action> {
         if let Some(act) = act {
@@ -106,7 +106,6 @@ impl App {
         match act {
             Some(Act::UnfoldAll | Act::FoldAll) => self.update_prose(|prose| Prose { unfolded: act == Some(Act::UnfoldAll), ..prose }),
             Some(Act::Zen) => return self.toggle_zen(),
-            Some(Act::FoldHeader) => self.header_folded = !self.header_folded,
             _ => self.did_nothing(),
         }
         vec![]

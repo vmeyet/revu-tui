@@ -28,7 +28,7 @@ expression: "render(&mut app, 100, 30)"
 │              │          D  inline or side by side, diff and prose                │               │
 │              │        > <  the code after, before, alone                         │               │
 │              │                                                                   │               │
-│              ╰──────────────── 1–22 of 67 · j k scroll · ? every key · esc close ╯               │
+│              ╰──────────────── 1–22 of 66 · j k scroll · ? every key · esc close ╯               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

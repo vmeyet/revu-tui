@@ -54,8 +54,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `=` `+` | more lines, react on a thread |
 | `^v` | the file in your own program |
 | `za` `zc` `zo` | toggle, close, open the fold |
-| `zM` `zR` | fold, unfold every file |
-| `zh` | fold the MR header |
+| `zR` `zM` | in prose: show, fold the unchanged blocks |
 | `zv` | file viewed: it folds away |
 | `m` | file viewed, on to the next one |
 
@@ -161,7 +160,6 @@ A bound key adds to the default key, it does not replace it.
 | `fold_close` | `zc` |
 | `fold_all` | `zM` |
 | `unfold_all` | `zR` |
-| `fold_header` | `zh` |
 | `viewed` | `zv` |
 | `zen` | `zz` |
 | `prev_mr` | `[m` |

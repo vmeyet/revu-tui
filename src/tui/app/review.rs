@@ -341,13 +341,6 @@ impl App {
         Some(actions)
     }
 
-    pub(super) fn fold_all(&mut self, closed: bool) -> Vec<Action> {
-        let Some(open) = &self.open else { return vec![] };
-        let paths: Vec<String> = open.review.files.iter().map(|f| f.new_path.clone()).collect();
-        let next = if closed { open.review.fold.fold_all(&paths) } else { FoldState::default() };
-        self.apply_fold(next)
-    }
-
     /// One file open or folded, whatever it was, and saved.
     pub(super) fn set_file_fold(&mut self, path: &str, fold: crate::diff::fold::Fold) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
@@ -524,10 +517,6 @@ mod tests {
         assert_eq!(press(&mut app, "zc"), vec![], "already closed");
         press(&mut app, "zo");
         assert!(app.open.as_ref().unwrap().rows.len() > 5);
-        press(&mut app, "zM");
-        assert_eq!(app.open.as_ref().unwrap().rows.len(), 5);
-        press(&mut app, "zR");
-        assert!(app.open.as_ref().unwrap().review.fold.file_is_open("Cargo.lock"));
     }
 
     #[test]

@@ -847,14 +847,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn folding_every_file_leaves_one_row_each() {
-        let review = review();
-        let paths: Vec<String> = review.files.iter().map(|f| f.new_path.clone()).collect();
-        let rows = review.clone().with_fold(review.fold.fold_all(&paths)).rows();
-        assert_eq!(rows, [Row::Header, Row::Gap, Row::File { index: 0, open: false }, Row::Gap, Row::File { index: 1, open: false }]);
-    }
-
-    #[test]
     fn a_viewed_file_stays_viewed_until_its_change_moves() {
         let review = review();
         let path = review.files[0].new_path.clone();
