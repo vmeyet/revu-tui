@@ -661,8 +661,9 @@ impl Config {
             return Ok(Loaded::default());
         }
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let (config, warnings) = ignored::parse(&text).with_context(|| format!("parsing {}", path.display()))?;
+        let (config, mut warnings) = ignored::parse(&text).with_context(|| format!("parsing {}", path.display()))?;
         config.check().with_context(|| format!("in {}", path.display()))?;
+        warnings.extend(crate::keymap::ignored(&config.keys));
         Ok(Loaded { config, warnings })
     }
 
@@ -972,6 +973,18 @@ mod tests {
         let config = Config { host: Some("gitlab.com".into()), ..Config::default() };
         config.save_to(&path).unwrap();
         assert_eq!(Config::load_from(&path).unwrap(), config);
+    }
+
+    #[test]
+    fn a_binding_on_an_action_revu_removed_is_ignored_with_a_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[keys.bind]\nnext_review = \"F\"\nnext_thread = \"f\"\n").unwrap();
+        let loaded = Config::read(&path).unwrap();
+        assert_eq!(loaded.warnings, ["`next_review` is not an action this revu knows; it is ignored"]);
+        assert!(crate::keymap::Keymap::new(&loaded.config.keys).is_ok(), "the rest of the bindings load");
+        std::fs::write(&path, "[keys.bind]\nnext_reviw = \"F\"\n").unwrap();
+        assert!(Config::read(&path).is_err(), "a typo still stops revu, naming the real actions");
     }
 
     #[test]

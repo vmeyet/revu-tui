@@ -193,7 +193,7 @@ impl Keymap {
             map.aliases.insert(vec![Key::char('(')], vec![Key::char('[')]);
             map.aliases.insert(vec![Key::char(')')], vec![Key::char(']')]);
         }
-        for (action, texts) in &keys.bind {
+        for (action, texts) in keys.bind.iter().filter(|(action, _)| !is_gone(action)) {
             let Some((_, default)) = act::bindable().find(|(name, _)| *name == current(action)) else {
                 bail!("`[keys.bind] {action}` is not an action; the actions are {}", names());
             };
@@ -308,6 +308,28 @@ fn label(keys: &[Key]) -> String {
 
 /// Actions renamed since a config or a usage file could name them, old name first.
 const RENAMED: &[(&str, &str)] = &[("split", "side_by_side")];
+
+/// Actions an older revu let `[keys.bind]` name and this one no longer has.
+const GONE: &[&str] = &[
+    "group_by_author",
+    "fold_header",
+    "next_any_thread",
+    "prev_any_thread",
+    "next_file_unresolved",
+    "prev_file_unresolved",
+    "next_review",
+    "prev_review",
+];
+
+fn is_gone(action: &str) -> bool {
+    GONE.contains(&current(action))
+}
+
+/// One warning per `[keys.bind]` entry on an action this revu no longer has: the binding is left out, the rest loads.
+pub fn ignored(keys: &Keys) -> Vec<String> {
+    let gone = keys.bind.keys().filter(|action| is_gone(action));
+    gone.map(|action| format!("`{action}` is not an action this revu knows; it is ignored")).collect()
+}
 
 /// The name `action` goes by today: an old name reads as its new one.
 pub fn current(action: &str) -> &str {

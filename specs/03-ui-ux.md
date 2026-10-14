@@ -389,6 +389,7 @@ A user key never replaces a default: it stands for the default key of its action
 Keys are translated after text boxes, modals and the help had their turn, so typing `(` in a comment is still `(`.
 A two-key binding holds its first key; a second key that matches nothing hands both over as they are, so `z` then `a` stays `za`.
 The config fails to load, naming the file, on an unknown action, a key that does not parse, a key revu already reads (named with its action), and two actions on one key or on keys where one starts the other.
+An action revu once had and removed (`GONE` in `src/keymap.rs`) is not unknown: its binding is skipped with a warning, like an unknown setting, and the rest loads.
 `?` shows the keys in effect: with the preset, `]n [n` reads `)n (n`, and a bound key comes first (`F )n (n`).
 
 ### Search: `ctrl-k`, `⌘k`, `,`, `:`
