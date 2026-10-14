@@ -139,9 +139,11 @@ Say no, and the session takes the terminal instead, with the reason in the toast
 
 revu splits the terminal that is in front when you press `a g`, which is revu's own.
 Ghostty needs `macos-applescript` left on, as it is by default.
-The split starts your own shell, which types ` exec <the session>` and becomes it, so it closes when the session ends.
-Your shell's start-up runs first, which adds a moment.
+The split starts your own shell, which becomes the session, so it closes when the session ends.
+For the moment your shell takes to start, the split shows it and one short line it types: ` printf …; exec /full/path/claude attach <id>`.
+That line wipes the screen and the scrollback right before the session starts, so nothing is left when you scroll up.
 The leading space keeps that line out of zsh's history only with `setopt HIST_IGNORE_SPACE`; bash needs `HISTCONTROL=ignorespace`.
+The session gets the `PATH` your shell sets, not revu's.
 
 ## In iTerm2
 

@@ -73,7 +73,8 @@ fn opening(ready: &Ready, beside: bool) -> Call {
     let place: &[&str] = if beside { &["split-window", "-h"] } else { &["new-window", "-n", ready.kept.name.as_str()] };
     let folder = ready.call.dir.as_ref().map(|dir| dir.to_string_lossy().into_owned());
     let in_folder: Vec<&str> = folder.iter().flat_map(|dir| ["-c", dir.as_str()]).collect();
-    let program: Vec<&str> = ready.call.argv.iter().map(String::as_str).collect();
+    let words = ready.call.words();
+    let program: Vec<&str> = words.iter().map(String::as_str).collect();
     Call::new(&[&["tmux"], place, &["-P", "-F", NEW_PANE], in_folder.as_slice(), program.as_slice()].concat())
 }
 

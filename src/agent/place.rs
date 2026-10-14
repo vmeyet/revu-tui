@@ -7,8 +7,6 @@ use crate::config::AgentShow;
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
-/// Runs a program with one more variable set; a pane starts whatever words it is given, this one included.
-const ENV: &str = "/usr/bin/env";
 /// The word of `[agent] split` that becomes the session's program, word by word.
 const COMMAND: &str = "{command}";
 const PLACEHOLDERS: [&str; 2] = ["command", "dir"];
@@ -131,26 +129,26 @@ impl Place {
 }
 
 /// The program as a pane runs it. A pane starts with the terminal's own environment, not revu's: the
-/// program is named by its full path, and it gets revu's `PATH` so what it starts in turn is found too.
+/// program is named by its full path, and it carries revu's `PATH` so what it starts in turn is found too.
 fn pane_call(run: &dyn Run, call: &Call) -> Result<Call> {
     let program = call.program();
     let located = run.locate(program).with_context(|| format!("no session shown: `{program}` is not on revu's PATH"))?;
-    let with_path = run.search_path().map(|search_path| vec![ENV.to_owned(), format!("PATH={search_path}")]).unwrap_or_default();
-    let argv = with_path.into_iter().chain([located]).chain(call.argv.iter().skip(1).cloned()).collect();
-    Ok(Call { argv, dir: call.dir.clone() })
+    let argv = std::iter::once(located).chain(call.argv.iter().skip(1).cloned()).collect();
+    Ok(Call { argv, dir: call.dir.clone(), path: run.search_path() })
 }
 
 /// The split command's words, `{command}` replaced by the program's own words and `{dir}` by its folder.
 fn split_call(command: &str, program: &Call, dir: &Path) -> Result<Call> {
     let words = shell_words::split(command).with_context(|| format!("`{command}` does not split into words"))?;
     let folder = dir.to_string_lossy();
-    let filled = |word: &String| if word == COMMAND { program.argv.clone() } else { vec![word.replace("{dir}", &folder)] };
-    Ok(Call { argv: words.iter().flat_map(filled).collect(), dir: None })
+    let filled = |word: &String| if word == COMMAND { program.words() } else { vec![word.replace("{dir}", &folder)] };
+    Ok(Call { argv: words.iter().flat_map(filled).collect(), dir: None, path: None })
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::super::terminal::CLEAR;
     use super::super::tests::Script;
     use super::super::{Case, Kept};
     use super::*;
@@ -213,7 +211,8 @@ mod tests {
         assert_eq!(origin.as_deref(), Some("A1"));
         let placed = place.put(&script, origin.as_deref(), &ready(), None, "!42").unwrap();
         assert_eq!(placed, Placed { outcome: Outcome::Shown(format!("{SAID} · in a pane beside revu")), pane: Some("B2".into()) });
-        assert_eq!(script.calls()[1].argv[3..], ["A1", "claude attach ab12cd34", "/code/my widgets"]);
+        let typed = format!(" {CLEAR}; exec claude attach ab12cd34");
+        assert_eq!(script.calls()[1].argv[3..], ["A1", typed.as_str(), "/code/my widgets"]);
     }
 
     #[test]
@@ -294,13 +293,15 @@ mod tests {
     fn a_pane_gets_the_program_by_its_full_path_and_revus_own_path() {
         let script = Script::default().with_path(PATH);
         let call = pane_call(&script, &Call::new(&["claude", "attach", "ab12cd34"]).in_dir(Path::new("/code/widgets"))).unwrap();
+        assert_eq!(call.argv, ["/Users/nina/.local/bin/claude", "attach", "ab12cd34"]);
+        assert_eq!(call.path.as_deref(), Some(PATH));
         assert_eq!(
-            call.argv,
+            call.words(),
             ["/usr/bin/env", "PATH=/Users/nina/.local/bin:/usr/bin", "/Users/nina/.local/bin/claude", "attach", "ab12cd34"]
         );
         assert_eq!(call.dir.as_deref(), Some(Path::new("/code/widgets")));
         let no_path = pane_call(&Script::default(), &Call::new(&["/opt/bin/aider", "--restore"])).unwrap();
-        assert_eq!(no_path.argv, ["/opt/bin/aider", "--restore"]);
+        assert_eq!(no_path.words(), ["/opt/bin/aider", "--restore"]);
     }
 
     #[test]
@@ -312,7 +313,8 @@ mod tests {
         assert_eq!(tmux.calls()[1].argv[6..], program);
         let ghostty = Script::default().with_path(PATH).says("osascript", "B2\n");
         self::ghostty(AgentShow::Split).put(&ghostty, Some("A1"), &ready(), None, "!42").unwrap();
-        assert_eq!(ghostty.calls()[0].argv[3..], ["A1", quoted, "/code/my widgets"]);
+        let typed = format!(" {CLEAR}; exec /Users/nina/.local/bin/claude attach ab12cd34");
+        assert_eq!(ghostty.calls()[0].argv[3..], ["A1", typed.as_str(), "/code/my widgets"], "the shell of the split has its own PATH");
         let iterm = Script::default().with_path(PATH).says("osascript", "9F\n");
         place(Screen::Terminal(Terminal::ITerm { session: "5A".into() }), AgentShow::Split)
             .put(&iterm, None, &ready(), None, "!42")

@@ -8,14 +8,14 @@ use std::path::Path;
 /// The terminal Ghostty has in front: revu's own at the moment `a g` is pressed.
 const GHOSTTY_FRONT: &str = r#"tell application "Ghostty" to return id of focused terminal of selected tab of front window"#;
 
-/// Arguments: the terminal to split, the command, its folder. Prints the new terminal's id. The split
-/// starts the reader's shell, which `exec`s the command: given as `command`, Ghostty would keep the split
-/// open after the session exits, until one more key.
+/// Arguments: the terminal to split, the line its shell types, its folder. Prints the new terminal's id.
+/// The split starts the reader's shell, which becomes the session: given as `command`, Ghostty would
+/// keep the split open after the session exits, until one more key.
 const GHOSTTY_SPLIT: &str = r#"on run argv
   tell application "Ghostty"
     set revu to first terminal whose id is (item 1 of argv)
     set settings to new surface configuration
-    set initial input of settings to " exec " & (item 2 of argv) & linefeed
+    set initial input of settings to (item 2 of argv) & linefeed
     set initial working directory of settings to (item 3 of argv)
     set made to split revu direction right with configuration settings
     focus made
@@ -70,6 +70,10 @@ end run"#;
 
 const FOCUSED: &str = "focused";
 
+/// Wipes the screen, then the scrollback, so the line typed into the split and its echoes leave nothing
+/// behind. In that order: some terminals push a cleared screen into the scrollback.
+pub(super) const CLEAR: &str = r"printf '\033[H\033[2J\033[3J'";
+
 /// A terminal revu knows how to split, with what it needs to find revu's own pane in it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Terminal {
@@ -120,15 +124,15 @@ impl Terminal {
     /// Runs `call` in a new pane on the right of revu's, in `dir`, and gives the pane's id.
     pub(super) fn split(&self, run: &dyn Run, origin: Option<&str>, call: &Call, dir: &Path) -> Result<String> {
         let folder = dir.to_string_lossy();
-        let command = shell_words::join(&call.argv);
+        let words = call.words();
         let made = match self {
             Terminal::Ghostty => {
                 let revu = origin.context("Ghostty did not say which terminal revu runs in")?;
-                run.output(&osascript(GHOSTTY_SPLIT, &[revu, &command, &folder]))?
+                run.output(&osascript(GHOSTTY_SPLIT, &[revu, &typed_line(call), &folder]))?
             }
-            Terminal::ITerm { session } => run.output(&osascript(ITERM_SPLIT, &[session, &in_folder(call, &command)]))?,
+            Terminal::ITerm { session } => run.output(&osascript(ITERM_SPLIT, &[session, &in_folder(call, &shell_words::join(&words))]))?,
             Terminal::WezTerm { program } => {
-                let words: Vec<&str> = call.argv.iter().map(String::as_str).collect();
+                let words: Vec<&str> = words.iter().map(String::as_str).collect();
                 run.output(&Call::new(
                     &[&[program.as_str(), "cli", "split-pane", "--right", "--cwd", &folder, "--"], words.as_slice()].concat(),
                 ))?
@@ -156,6 +160,13 @@ impl Terminal {
 
 fn osascript(script: &str, arguments: &[&str]) -> Call {
     Call::new(&[&["osascript", "-e", script], arguments].concat())
+}
+
+/// What the shell of a Ghostty split types: a leading space, kept out of the history by a shell that
+/// ignores such lines, then the screen wiped and the shell replaced by the program. The shell is the
+/// reader's own login shell, which sets its own `PATH`; the program keeps its full path.
+fn typed_line(call: &Call) -> String {
+    format!(" {CLEAR}; exec {}", shell_words::join(&call.argv))
 }
 
 /// iTerm2 has no folder to give a split: a program that needs one is started from a shell that goes there first.
@@ -218,12 +229,22 @@ mod tests {
         assert_eq!(pane, "B2-NEW");
         let calls = script.calls();
         assert_eq!(calls[0].argv, ["osascript", "-e", GHOSTTY_FRONT]);
-        let command = r#"aider --message 'it'\''s "quoted" $HOME'"#;
-        assert_eq!(calls[1].argv, ["osascript", "-e", GHOSTTY_SPLIT, "A1-FRONT", command, "/code/my widgets"]);
+        let typed = r#" printf '\033[H\033[2J\033[3J'; exec aider --message 'it'\''s "quoted" $HOME'"#;
+        assert_eq!(calls[1].argv, ["osascript", "-e", GHOSTTY_SPLIT, "A1-FRONT", typed, "/code/my widgets"]);
         assert!(!GHOSTTY_SPLIT.contains("aider") && GHOSTTY_SPLIT.contains("split revu direction right with configuration settings"));
-        let typed = "\n    set initial input of settings to \" exec \" & (item 2 of argv) & linefeed\n";
-        assert!(GHOSTTY_SPLIT.contains(typed), "the shell of the split becomes the session, so the split closes with it");
+        assert!(
+            GHOSTTY_SPLIT.contains("\n    set initial input of settings to (item 2 of argv) & linefeed\n"),
+            "the shell becomes the session"
+        );
         assert!(!GHOSTTY_SPLIT.contains("set command") && !GHOSTTY_SPLIT.contains("wait after command"));
+        let with_path =
+            Call { path: Some("/a very/long:/path".into()), ..Call::new(&["/Users/nina/.local/bin/claude", "attach", "ab12cd34"]) };
+        Terminal::Ghostty.split(&script, Some(&origin), &with_path, Path::new("/code")).unwrap();
+        assert_eq!(
+            script.calls()[2].argv[4],
+            r" printf '\033[H\033[2J\033[3J'; exec /Users/nina/.local/bin/claude attach ab12cd34",
+            "no PATH typed"
+        );
     }
 
     #[test]

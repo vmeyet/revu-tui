@@ -54,11 +54,19 @@ impl Mr {
 pub struct Call {
     pub argv: Vec<String>,
     pub dir: Option<PathBuf>,
+    /// revu's `PATH`, for a program a terminal starts with an environment of its own.
+    pub path: Option<String>,
 }
 
 impl Call {
     fn new<S: AsRef<str>>(argv: &[S]) -> Self {
-        Self { argv: argv.iter().map(|word| word.as_ref().to_owned()).collect(), dir: None }
+        Self { argv: argv.iter().map(|word| word.as_ref().to_owned()).collect(), dir: None, path: None }
+    }
+
+    /// The words that run the program as it is meant to run: behind `env PATH=…` when it carries a `PATH`.
+    fn words(&self) -> Vec<String> {
+        let with_path = self.path.iter().flat_map(|path| ["/usr/bin/env".to_owned(), format!("PATH={path}")]);
+        with_path.chain(self.argv.iter().cloned()).collect()
     }
 
     fn in_dir(self, dir: &Path) -> Self {
@@ -74,6 +82,9 @@ impl Call {
         command.args(self.argv.iter().skip(1));
         if let Some(dir) = &self.dir {
             command.current_dir(dir);
+        }
+        if let Some(path) = &self.path {
+            command.env("PATH", path);
         }
         command
     }

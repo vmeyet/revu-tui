@@ -234,7 +234,7 @@ mod tests {
     fn outside_tmux_the_loop_takes_the_session_once_and_the_way_back_is_said() {
         let mut app = with_agent(with_queue());
         let handoff = Handoff {
-            call: Call { argv: vec!["claude".into(), "attach".into(), "ab12cd34".into()], dir: None },
+            call: Call { argv: vec!["claude".into(), "attach".into(), "ab12cd34".into()], dir: None, path: None },
             said: "a new session for !42".into(),
         };
         app.apply(Incoming::SessionReady(handoff.clone()));
