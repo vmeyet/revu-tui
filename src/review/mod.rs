@@ -18,7 +18,7 @@ pub use crate::forge::FileKind;
 use crate::forge::{DiffFile, Discussion, Mr};
 use crate::syntax::{self, Spans};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// Above this many lines a file starts folded, whatever the forge says.
 const TOO_LARGE_LINES: usize = 2000;
@@ -52,8 +52,39 @@ pub struct File {
     pub hunks: Vec<Hunk>,
     pub additions: usize,
     pub deletions: usize,
-    /// Syntax colours per hunk, per line, parallel to `hunks`; empty for a language revu does not colour.
-    pub syntax: Vec<Vec<Spans>>,
+    colours: Colours,
+}
+
+/// The syntax colours of a file, per hunk and per line, each hunk highlighted the first time one of its lines is
+/// read: a folded file costs nothing until it is opened and drawn.
+#[derive(Clone, Default)]
+struct Colours {
+    language: Option<&'static syntax::Language>,
+    hunks: Vec<OnceLock<Vec<Spans>>>,
+}
+
+impl Colours {
+    fn coloured(&self) -> usize {
+        self.hunks.iter().filter(|hunk| hunk.get().is_some()).count()
+    }
+}
+
+/// Colours follow from the hunks and the path, so files equal in those have equal colours, highlighted yet or not.
+impl PartialEq for Colours {
+    fn eq(&self, other: &Self) -> bool {
+        self.language.map(|l| l.name) == other.language.map(|l| l.name)
+    }
+}
+
+impl Eq for Colours {}
+
+impl std::fmt::Debug for Colours {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Colours")
+            .field("language", &self.language.map(|l| l.name))
+            .field("coloured", &self.coloured())
+            .finish_non_exhaustive()
+    }
 }
 
 impl File {
@@ -64,26 +95,33 @@ impl File {
         let kind = diff.change;
         let too_large = diff.too_large || lines > TOO_LARGE_LINES;
         let path = if kind == FileKind::Deleted { &diff.old_path } else { &diff.new_path };
-        let syntax = match syntax::language_for(path, &syntax::LANGUAGES) {
-            Some(language) if !too_large => hunks.iter().map(|hunk| colour(language, hunk)).collect(),
-            _ => Vec::new(),
-        };
+        let language = syntax::language_for(path, &syntax::LANGUAGES).filter(|_| !too_large);
+        let colours = Colours { language, hunks: hunks.iter().map(|_| OnceLock::new()).collect() };
         Self {
             old_path: diff.old_path.clone(),
             new_path: diff.new_path.clone(),
             kind,
             binary: diff.diff.is_empty() && !matches!(kind, FileKind::Mode | FileKind::Renamed),
             too_large,
-            syntax,
+            colours,
             additions: count(LineKind::Added),
             deletions: count(LineKind::Removed),
             hunks,
         }
     }
 
-    /// The syntax colours of one diff line; empty when the file is not coloured.
+    /// The syntax colours of one diff line, its hunk highlighted on the first ask; empty when the file is not coloured.
     pub fn spans(&self, hunk: usize, line: usize) -> &[(std::ops::Range<usize>, syntax::Token)] {
-        self.syntax.get(hunk).and_then(|lines| lines.get(line)).map_or(&[], Vec::as_slice)
+        let (Some(language), Some(cell), Some(lines)) = (self.colours.language, self.colours.hunks.get(hunk), self.hunks.get(hunk)) else {
+            return &[];
+        };
+        cell.get_or_init(|| colour(language, lines)).get(line).map_or(&[], Vec::as_slice)
+    }
+
+    /// How many hunks were highlighted so far.
+    #[cfg(test)]
+    pub fn coloured_hunks(&self) -> usize {
+        self.colours.coloured()
     }
 
     /// Names this file's change: equal fingerprints mean nothing was pushed to it since.
@@ -366,6 +404,16 @@ impl Review {
         Self { drafts, ..self }
     }
 
+    /// The colours already highlighted in `old` for every file that did not change, so a refresh highlights only what moved.
+    pub fn with_colours_kept(self, old: &Arc<[File]>) -> Self {
+        if Arc::ptr_eq(&self.files, old) {
+            return self;
+        }
+        let by_path: BTreeMap<&str, &File> = old.iter().map(|file| (file.new_path.as_str(), file)).collect();
+        let kept = |file: &File| by_path.get(file.new_path.as_str()).copied().filter(|old| *old == file).unwrap_or(file).clone();
+        Self { files: self.files.iter().map(kept).collect(), ..self }
+    }
+
     /// The same diff with fresh threads, for the cheap discussions poll.
     pub fn with_discussions(self, discussions: Vec<Discussion>) -> Self {
         let threads = threads_of(discussions, &self.files).into();
@@ -596,17 +644,39 @@ pub(crate) mod tests {
         }
     }
 
+    fn has_span(file: &File, line: usize, text: &str, token: crate::syntax::Token) -> bool {
+        let written = &file.hunks[0].lines[line].text;
+        file.spans(0, line).iter().any(|(r, t)| &written[r.clone()] == text && *t == token)
+    }
+
     #[test]
     fn typescript_files_carry_syntax_per_line_and_other_files_none() {
         let file = File::from_diff(&cart());
-        assert_eq!(file.syntax.len(), file.hunks.len());
-        assert_eq!(file.syntax[0].len(), file.hunks[0].lines.len());
-        let removed = &file.hunks[0].lines[1];
-        assert!(file.spans(0, 1).iter().any(|(r, t)| &removed.text[r.clone()] == "const" && *t == crate::syntax::Token::Keyword));
-        let added = &file.hunks[0].lines[4];
-        assert!(file.spans(0, 4).iter().any(|(r, t)| &added.text[r.clone()] == "\"total\"" && *t == crate::syntax::Token::String));
-        assert!(File::from_diff(&charge()).syntax.is_empty(), "no grammar for .rs yet");
-        assert!(File::from_diff(&DiffFile { too_large: true, ..cart() }).syntax.is_empty(), "too large files stay plain");
+        assert!(has_span(&file, 1, "const", crate::syntax::Token::Keyword));
+        assert!(has_span(&file, 4, "\"total\"", crate::syntax::Token::String));
+        assert!(File::from_diff(&charge()).spans(0, 1).is_empty(), "no grammar for .rs yet");
+        assert!(File::from_diff(&DiffFile { too_large: true, ..cart() }).spans(0, 1).is_empty(), "too large files stay plain");
+    }
+
+    #[test]
+    fn a_hunk_is_highlighted_the_first_time_one_of_its_lines_is_read() {
+        let file = File::from_diff(&cart());
+        assert_eq!(file.coloured_hunks(), 0, "parsing a diff highlights nothing");
+        assert!(has_span(&file, 4, "\"total\"", crate::syntax::Token::String));
+        assert_eq!(file.coloured_hunks(), 1);
+    }
+
+    #[test]
+    fn a_refresh_keeps_the_colours_of_unchanged_files_and_colours_changed_ones_afresh() {
+        let edited = DiffFile { diff: cart().diff.replace("\"total\"", "total + 1"), ..cart() };
+        let other = DiffFile { old_path: "src/other.ts".into(), new_path: "src/other.ts".into(), ..cart() };
+        let old = Review::new(mr(), &[cart(), other.clone()], vec![], &[]);
+        old.files.iter().for_each(|file| assert_ne!(file.spans(0, 1), []));
+        let fresh = Review::new(mr(), &[edited.clone(), other], vec![], &[]).with_colours_kept(&old.files);
+        assert_eq!(fresh.files[1].coloured_hunks(), 1, "the unchanged file keeps its colours");
+        assert_eq!(fresh.files[0].coloured_hunks(), 0, "the changed file is highlighted again when read");
+        assert!(!has_span(&fresh.files[0], 4, "\"total\"", crate::syntax::Token::String), "no colour of the old text survives");
+        assert_eq!(fresh.files[0].spans(0, 4), File::from_diff(&edited).spans(0, 4));
     }
 
     fn lock() -> DiffFile {

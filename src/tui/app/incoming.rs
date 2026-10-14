@@ -235,7 +235,7 @@ fn carry_over(old: &Review, fresh: Review) -> Review {
     }
     let viewed = fresh.still_viewed(&old.viewed_fingerprints());
     let drafts = draft::carry(&fresh.drafts, &old.drafts);
-    fresh.with_fold(fold).with_viewed(viewed).with_drafts(drafts)
+    fresh.with_fold(fold).with_viewed(viewed).with_drafts(drafts).with_colours_kept(&old.files)
 }
 
 #[cfg(test)]

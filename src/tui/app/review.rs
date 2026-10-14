@@ -706,4 +706,34 @@ mod tests {
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(pushed, &diffs(), discussions(), &[])), cached: None });
         assert_eq!(contexts(&app), 0, "after a push the lines around hunks are read again");
     }
+
+    fn json_file(path: &str) -> DiffFile {
+        DiffFile {
+            diff: "@@ -1 +1 @@\n-{\"a\": 1}\n+{\"a\": 2}\n".into(),
+            old_path: path.into(),
+            new_path: path.into(),
+            ..DiffFile::default()
+        }
+    }
+
+    #[test]
+    fn a_folded_file_is_highlighted_only_once_unfolded_and_drawn() {
+        let mut app = with_review();
+        let review = Review::new(mr(), &[json_file("package-lock.json"), json_file("config.json")], vec![], &["package-lock.json".into()]);
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
+        render(&mut app, 120, 40);
+        let coloured =
+            |app: &App| app.open.as_ref().unwrap().review.files.iter().map(crate::review::File::coloured_hunks).collect::<Vec<_>>();
+        assert_eq!(coloured(&app), [0, 1], "the folded lock file waits, the open file is coloured as drawn");
+        walk_to(&mut app, |row| matches!(row, Row::File { index: 0, .. }));
+        press(&mut app, "zo");
+        assert_eq!(coloured(&app), [0, 1], "unfolding alone highlights nothing");
+        let screen = cells(&mut app, 120, 40);
+        assert_eq!(coloured(&app), [1, 1]);
+        assert_eq!(
+            cell_of(&screen, "\"a\"").fg,
+            Theme::default().syntax.colour(crate::syntax::Token::String),
+            "drawn in its syntax colour"
+        );
+    }
 }
