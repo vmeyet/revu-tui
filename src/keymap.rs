@@ -414,8 +414,8 @@ mod tests {
     }
 
     #[test]
-    fn a_comment_question_and_the_arrows_are_taken_like_every_other_key() {
-        for (key, shown) in [("ac", "`ac`"), ("left", "`←`"), ("right", "`→`"), ("up", "`↑`"), ("down", "`↓`")] {
+    fn the_arrows_are_taken_like_every_other_key() {
+        for (key, shown) in [("left", "`←`"), ("right", "`→`"), ("up", "`↑`"), ("down", "`↓`")] {
             let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &[key])])).unwrap_err().to_string();
             assert!(err.contains(&format!("is already revu's {shown}")), "{key}: {err}");
         }

@@ -337,10 +337,9 @@ pub enum Input {
     EditDraft {
         draft: crate::review::DraftId,
     },
-    /// A question to Claude about `scope`; `concern` makes it the subject of a drafted comment.
+    /// A question to Claude about `scope`.
     Ask {
         scope: Box<crate::ai::context::Scope>,
-        concern: bool,
         target: Box<ask::Target>,
     },
     /// The next question on the conversation of the open answer.

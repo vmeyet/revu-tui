@@ -83,7 +83,6 @@ impl Open {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Lines(Box<Position>),
-    Thread(String),
     Nowhere,
 }
 
@@ -102,7 +101,7 @@ pub enum Part {
 }
 
 impl App {
-    /// `a` then a letter: the question, about the hunk, file, thread or lines under the cursor.
+    /// `a` then a letter: `a` asks anything about the hunk, file or lines under the cursor, `h` lists the answers kept.
     pub(super) fn ask_key(&mut self, c: char) -> Vec<Action> {
         if c == 'h' {
             return self.open.as_ref().map(|o| vec![Action::LoadAnswers(o.key.clone())]).unwrap_or_default();
@@ -112,31 +111,12 @@ impl App {
             return vec![];
         }
         let Some(open) = &self.open else { return vec![] };
-        let (scope, target) = match c {
-            'e' | 'a' => (here(open), self.lines_target()),
-            'r' => (file_here(open).map_or(Scope::Mr, Scope::File), Target::Nowhere),
-            's' => (Scope::Mr, Target::Nowhere),
-            't' => {
-                let Some(id) = self.stop_here().and_then(|stop| stop.thread).or_else(|| thread_on_line(open)) else {
-                    self.toast("no thread here · a t works on a line with ◆");
-                    return vec![];
-                };
-                (Scope::Thread(id.clone()), Target::Thread(id))
-            }
-            'c' => (lines_here(open, self.position_here().as_ref()), self.lines_target()),
-            _ => {
-                self.toast("a then e explain · r risks · s summary · t thread · c comment · a ask · g agent session");
-                return vec![];
-            }
-        };
-        match c {
-            'e' => self.ask(&scope, &Prompt::Explain, target),
-            'r' => self.ask(&scope, &Prompt::Risks, target),
-            's' => self.ask(&scope, &Prompt::Summary, target),
-            't' => self.ask(&scope, &Prompt::Thread, target),
-            'c' => self.question_box(Input::Ask { scope: Box::new(scope), concern: true, target: Box::new(target) }),
-            _ => self.question_box(Input::Ask { scope: Box::new(scope), concern: false, target: Box::new(target) }),
+        if c != 'a' {
+            self.toast("a then a asks anything · h answers kept · g agent session");
+            return vec![];
         }
+        let scope = here(open);
+        self.question_box(Input::Ask { scope: Box::new(scope), target: Box::new(self.lines_target()) })
     }
 
     /// The first question of a conversation, built from the review as it is now.
@@ -281,8 +261,7 @@ impl App {
         }
         match &answer.target {
             Target::Lines(position) => self.open_input(Input::Comment { position: position.clone() }, &answer.text),
-            Target::Thread(id) => self.open_input(Input::Reply { thread: id.clone() }, &answer.text),
-            Target::Nowhere => self.toast("a comment needs a line: ask with a e or a c on one, or a t on a thread"),
+            Target::Nowhere => self.toast("a comment needs a line: ask with a a on one"),
         }
     }
 
@@ -312,7 +291,6 @@ impl App {
     /// The typed text of a question box: a concern for a comment, a free question, or a follow-up.
     pub(super) fn submit_question(&mut self, input: Input, text: String) -> Vec<Action> {
         match input {
-            Input::Ask { scope, concern: true, target } => self.ask(&scope, &Prompt::Comment(text), *target),
             Input::Ask { scope, target, .. } => self.ask(&scope, &Prompt::Free(text), *target),
             Input::FollowUp => self.follow_up(text),
             _ => vec![],
@@ -356,31 +334,10 @@ fn here(open: &Open) -> Scope {
     }
 }
 
-fn file_here(open: &Open) -> Option<String> {
-    open.row().and_then(Row::file).map(|i| open.review.files[i].new_path.clone())
-}
-
-/// The new-side lines of the position, when it has some; else the hunk around the cursor.
-fn lines_here(open: &Open, position: Option<&Position>) -> Scope {
-    let numbers = position.and_then(|p| Some((p.start.and_then(|s| s.new).or(p.line.new)?, p.line.new?, p.new_path.clone())));
-    match numbers {
-        Some((from, to, path)) => Scope::Lines(path, from.min(to)..=from.max(to)),
-        None => here(open),
-    }
-}
-
-fn thread_on_line(open: &Open) -> Option<String> {
-    let place = open.review.place_of(open.row()?)?;
-    open.review.conversations(&place).into_iter().find_map(|c| c.thread)
-}
-
 fn label_of(prompt: &Prompt) -> &'static str {
     match prompt {
         Prompt::Explain => "explain",
-        Prompt::Risks => "risks",
         Prompt::Summary => "summary",
-        Prompt::Thread => "thread",
-        Prompt::Comment(_) => "comment",
         Prompt::Free(_) => "ask",
     }
 }
@@ -391,7 +348,6 @@ fn scope_label(scope: &Scope) -> String {
         Scope::Mr => "the MR".into(),
         Scope::File(path) => name(path),
         Scope::Hunk(path, index) => format!("{} hunk {}", name(path), index + 1),
-        Scope::Thread(_) => "thread".into(),
         Scope::Lines(path, lines) if lines.start() == lines.end() => format!("{}:{}", name(path), lines.start()),
         Scope::Lines(path, lines) => format!("{}:{}–{}", name(path), lines.start(), lines.end()),
     }
@@ -406,23 +362,29 @@ mod tests {
         app.open.as_ref().unwrap().answer.clone().expect("an answer holds the pane")
     }
 
+    /// `a a`, then the question typed and sent.
+    fn ask_here(app: &mut App, question: &str) -> Vec<Action> {
+        press(app, "aa");
+        type_text(app, question)
+    }
+
     #[test]
     fn a_says_claude_is_off_until_the_config_and_a_key_switch_it_on() {
         let mut app = with_review();
         on_line(&mut app);
-        assert_eq!(press(&mut app, "ae"), [] as [Action; 0]);
+        assert_eq!(press(&mut app, "aa"), [] as [Action; 0]);
         assert!(app.live_toast().is_some_and(|t| t.text.contains("[ai.anthropic] enabled = true")));
     }
 
     #[test]
-    fn a_e_explains_the_hunk_under_the_cursor_and_streams_into_the_pane() {
+    fn a_a_asks_about_the_hunk_under_the_cursor_and_streams_into_the_pane() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, request, fresh) = the_ask(&press(&mut app, "ae"));
+        let (id, request, fresh) = the_ask(&ask_here(&mut app, "what does it do?"));
         assert!(!fresh);
         assert_eq!(request.system.len(), 3, "rules, the MR, the hunk");
         assert!(request.system[2].text.contains("@@"));
-        assert_eq!(request.turns.last().unwrap().text, crate::ai::context::Prompt::Explain.question());
+        assert_eq!(request.turns.last().unwrap().text, "what does it do?");
         assert_eq!(app.focus, Focus::Side);
         assert!(
             app.live_toast().is_some_and(|t| t.text.contains("claude-opus-5") && t.text.contains("Anthropic")),
@@ -436,14 +398,14 @@ mod tests {
         app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done { outcome: done("claude-opus-5"), cached_text: None } });
         assert_eq!(answer(&app).state, AnswerState::Done(done("claude-opus-5")));
         let screen = render(&mut app, 150, 24);
-        assert!(screen.contains("Claude · explain") && screen.contains("a retry.") && screen.contains("1.2k cached"), "{screen}");
+        assert!(screen.contains("Claude · ask") && screen.contains("a retry.") && screen.contains("1.2k cached"), "{screen}");
     }
 
     #[test]
     fn pieces_waiting_together_apply_in_order_before_the_next_draw() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, _, _) = the_ask(&press(&mut app, "ae"));
+        let (id, _, _) = the_ask(&ask_here(&mut app, "why?"));
         app.take_actions();
         let piece = |text: &str| Incoming::Answer { key: mr_key(), id, part: Part::Text(text.into()) };
         let actions = app.apply_all([piece("one "), piece("two "), piece("three")]);
@@ -455,7 +417,7 @@ mod tests {
     fn an_answer_becomes_a_draft_on_the_lines_asked_about() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, ..) = the_ask(&press(&mut app, "ae"));
+        let (id, ..) = the_ask(&ask_here(&mut app, "why?"));
         app.apply(Incoming::Answer {
             key: mr_key(),
             id,
@@ -473,7 +435,7 @@ mod tests {
     fn a_follow_up_carries_the_conversation_and_r_asks_again_fresh() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, ..) = the_ask(&press(&mut app, "ae"));
+        let (id, ..) = the_ask(&ask_here(&mut app, "why?"));
         app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Text("First answer.".into()) });
         app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done { outcome: done("claude-opus-5"), cached_text: None } });
         app.handle_key(code(KeyCode::Enter));
@@ -487,35 +449,6 @@ mod tests {
         );
         let (_, again, fresh) = the_ask(&press(&mut app, "R"));
         assert!(fresh && again == request, "R asks the same thing past the cache");
-    }
-
-    #[test]
-    fn a_c_asks_for_the_concern_then_drafts_a_comment_about_it() {
-        let mut app = asking();
-        on_line(&mut app);
-        assert_eq!(press(&mut app, "ac"), [] as [Action; 0]);
-        assert_eq!(app.input_label(), "comment about");
-        let (_, request, _) = the_ask(&type_text(&mut app, "naming"));
-        assert!(request.turns[0].text.contains("about: naming."));
-        assert!(matches!(answer(&app).target, ask::Target::Lines(_)));
-    }
-
-    #[test]
-    fn a_t_summarises_the_thread_and_its_answer_becomes_a_reply() {
-        let mut app = asking();
-        press(&mut app, "]c");
-        app.handle_key(code(KeyCode::Enter));
-        app.handle_key(code(KeyCode::Enter));
-        press(&mut app, "]N");
-        let (id, request, _) = the_ask(&press(&mut app, "at"));
-        assert!(request.system[2].text.contains("## Thread"));
-        app.apply(Incoming::Answer {
-            key: mr_key(),
-            id,
-            part: Part::Done { outcome: done("claude-opus-5"), cached_text: Some("Waits on nina.".into()) },
-        });
-        press(&mut app, "c");
-        assert!(matches!(app.input, Some(Input::Reply { .. })), "{:?}", app.input);
     }
 
     #[test]
@@ -548,7 +481,7 @@ mod tests {
         press(&mut app, ":ai off");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!((app.ask_model.as_deref(), app.triage), (None, false));
-        assert_eq!(press(&mut app, "ae"), [] as [Action; 0]);
+        assert_eq!(press(&mut app, "aa"), [] as [Action; 0]);
         press(&mut app, ":ask why");
         assert_eq!(app.handle_key(code(KeyCode::Enter)), [] as [Action; 0]);
     }

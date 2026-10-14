@@ -315,7 +315,8 @@ fn snapshot_narrow_pane_and_a_three_line_box() {
 fn snapshot_answer_pane() {
     let mut app = asking();
     on_line(&mut app);
-    let (id, ..) = the_ask(&press(&mut app, "ae"));
+    press(&mut app, "aa");
+    let (id, ..) = the_ask(&type_text(&mut app, "what does it do?"));
     let text = "It swaps the client for one keyed by the card, so a retry **reuses** the idempotency key.\n\n- `charge` now takes the key\n- nothing else moves";
     app.apply(Incoming::Answer {
         key: mr_key(),

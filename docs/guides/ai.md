@@ -41,12 +41,7 @@ Press `a`, then a letter.
 
 | Keys | Asks about | You get |
 |---|---|---|
-| `a e` | The change under the cursor | What it does and why, in 2 or 3 sentences |
-| `a r` | The file | At most 5 risks, worst first |
-| `a s` | The MR | At most 5 bullets and a reading order |
-| `a t` | The thread | What is agreed, what is open, who acts next |
-| `a c` | The selected lines | A review comment, ready to edit |
-| `a a` | Anything | Your own question |
+| `a a` | The change under the cursor | Your own question |
 | `a h` | Nothing new | The answers you got before on this MR |
 
 The answer streams into the right pane.

@@ -40,9 +40,9 @@ expression: "render(&mut app, 160, 45)"
 │            │          T  every thread of the MR                                        enter  the call in the diff, the definition, a section  │             │
 │            │          p  pipeline                                                                                                              │             │
 │            │          O  outline: the symbols the MR changes                       ASK CLAUDE                                                  │             │
-│            │          v  prose: the Markdown file rendered, its blocks marked        a e r s  explain, risks, summary                          │             │
+│            │          v  prose: the Markdown file rendered, its blocks marked            a a  ask anything about the cursor                    │             │
 │            │                                                                                                                                   │             │
-│            ╰────────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 47 · j k scroll · esc close ╯             │
+│            ╰────────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 46 · j k scroll · esc close ╯             │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

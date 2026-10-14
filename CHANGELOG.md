@@ -28,7 +28,7 @@ Each entry says what changed, then where, then how to use it.
   Only the ctrl keys the help lists act: `^d` `^u` `^f` `^b` `^k` `^v` and `^c`.
 - **The file tree, the outline and the pipeline page like the other panes.**
   In the right pane: `^f` and `^b` move a full page there too, and `x` closes the file tree.
-- **`[keys.bind]` no longer takes `a c` or the arrow keys from revu.**
+- **`[keys.bind]` no longer takes the arrow keys from revu.**
   In `config.toml`: revu stops at start and names the key, as it does for any key already taken.
 - **`revu usage` counts what each key did.**
   In `revu usage`: a key that does nothing, like `c` in prose, no longer counts; `enter` in the thread pane counts as what it did.
@@ -57,6 +57,8 @@ Each entry says what changed, then where, then how to use it.
   In the diff: `za`, `zo` and `zc` still fold one file; in the prose view `zR` and `zM` still show and fold the unchanged blocks.
 - **Jumping thread by thread with `J` and `K`.**
   In the thread pane and the list of every thread: `j` and `k` walk the notes.
+- **The ready-made questions to Claude: `a e`, `a r`, `a s`, `a t` and `a c`.**
+  In the diff and the thread pane: `a a` or `:ask` asks the same in your own words.
 
 ## 0.8.0 - 2026-10-14
 

@@ -257,7 +257,7 @@ mod tests {
         press(&mut app, "?");
         assert!(render(&mut app, 120, 40).contains("the agent session of the MR"));
         let mut app = with_agent(with_review());
-        press(&mut app, "ae");
-        assert!(app.live_toast().unwrap().text.contains("Claude is off"), "a e still asks Claude");
+        press(&mut app, "aa");
+        assert!(app.live_toast().unwrap().text.contains("Claude is off"), "a a still asks Claude");
     }
 }

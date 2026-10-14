@@ -229,7 +229,6 @@ impl App {
                 format!("reply to {}", author.unwrap_or_else(|| "the thread".into()))
             }
             Some(Input::EditDraft { .. }) => "edit draft".to_owned(),
-            Some(Input::Ask { concern: true, .. }) => "comment about".to_owned(),
             Some(Input::Ask { .. }) => "ask Claude".to_owned(),
             Some(Input::FollowUp) => "follow-up".to_owned(),
             None => String::new(),
@@ -280,7 +279,7 @@ fn target_key(input: &Input) -> String {
         }
         Input::Reply { thread } => format!("reply {thread}"),
         Input::EditDraft { draft } => format!("draft {draft:?}"),
-        Input::Ask { scope, concern, .. } => format!("ask {concern} {scope:?}"),
+        Input::Ask { scope, .. } => format!("ask {scope:?}"),
         Input::FollowUp => "follow-up".to_owned(),
     }
 }
