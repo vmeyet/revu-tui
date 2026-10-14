@@ -1,5 +1,6 @@
 use super::pane::Threads;
 use super::{Action, App, Focus};
+use crate::act::Act;
 use crate::review::Row;
 use crate::tui::help::{self, Help};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -101,7 +102,7 @@ impl App {
             KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
             KeyCode::Char(',') => self.open_palette(crate::tui::palette::Mode::Mrs),
             KeyCode::Char('q') if self.focus != Focus::Queue && self.open.as_ref().is_some_and(super::Open::side_open) => {
-                self.key_did = Some("close_pane");
+                self.key_did = Some(Act::ClosePane);
                 return self.handle_side_key(KeyEvent::from(KeyCode::Esc));
             }
             KeyCode::Char('q') => return self.quit_key(super::quit::QuitKey::Q),
@@ -290,11 +291,11 @@ impl App {
             KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
             KeyCode::Enter => return self.enter_review_row(),
             KeyCode::Esc | KeyCode::Char('x') if self.answer_open() => {
-                self.key_did = Some("close_pane");
+                self.key_did = Some(Act::ClosePane);
                 self.close_answer();
             }
             KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => {
-                self.key_did = Some("close_pane");
+                self.key_did = Some(Act::ClosePane);
                 self.close_pane();
             }
             KeyCode::Esc if self.zen => return self.leave_zen(),
@@ -316,7 +317,7 @@ impl App {
 
     /// `n` and `N` with no search live: `]n` and `[n`, counted as them.
     fn jump_to_thread(&mut self, forward: bool) -> Vec<Action> {
-        self.key_did = Some(if forward { "next_thread" } else { "prev_thread" });
+        self.key_did = Some(if forward { Act::NextThread } else { Act::PrevThread });
         self.jump_to_marked(forward, Threads::Open)
     }
 

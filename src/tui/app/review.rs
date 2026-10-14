@@ -473,7 +473,7 @@ impl App {
         }
         match self.open.as_ref().and_then(|o| o.row().cloned()) {
             Some(Row::File { .. } | Row::Hunk { .. }) => {
-                self.key_did = Some("fold_toggle");
+                self.key_did = Some(crate::act::Act::FoldToggle);
                 self.fold_at_cursor(None)
             }
             _ => vec![],

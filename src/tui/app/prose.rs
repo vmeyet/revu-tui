@@ -84,7 +84,7 @@ impl App {
             KeyCode::Char('r') => self.read_prose(prose),
             KeyCode::Char('D') => self.toggle_side_by_side(),
             KeyCode::Char('v' | 'x') | KeyCode::Esc => {
-                self.key_did = Some("prose");
+                self.key_did = Some(crate::act::Act::Prose);
                 self.update_open(|open| open.with_prose(None));
                 vec![]
             }

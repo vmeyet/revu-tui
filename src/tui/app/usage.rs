@@ -1,9 +1,10 @@
 //! The App's side of `[usage]`: it names what each key did and keeps the counts in memory.
 //! Writing them is the runtime's job, so nothing here touches the disk.
 use super::{App, Focus};
+use crate::act::Place;
 use crate::review::Row;
 use crate::tui::palette::Command;
-use crate::usage::{Counts, Place};
+use crate::usage::Counts;
 use crossterm::event::KeyEvent;
 use std::time::{Duration, Instant};
 
@@ -65,14 +66,14 @@ impl App {
         self.usage.as_ref()?;
         let place = self.usage_place();
         let on_thread = self.pending.is_none() && key.modifiers.is_empty() && self.on_thread_row();
-        let thread_action = if on_thread { crate::usage::thread_key(key.code) } else { None };
+        let thread_action = if on_thread { crate::usage::action(None, key, Place::ThreadRow) } else { None };
         let name = thread_action.or_else(|| crate::usage::action(self.pending, key, place));
         Some(Before { name, place, row: self.open.as_ref().map(|open| open.selected), zen: self.zen })
     }
 
     /// Counts what a key did, named by its handler or else by the key, and the habits a faster key would replace.
     pub(super) fn count_key(&mut self, before: Option<Before>) {
-        let did = self.key_did.take();
+        let did = self.key_did.take().and_then(|act| act.row().name.counted());
         let Some(before) = before else { return };
         let Some(name) = did.or(before.name) else { return };
         self.count_walk(name, &before);

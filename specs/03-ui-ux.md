@@ -448,7 +448,7 @@ A network failure while browsing does not clear the screen: the stale view stays
 
 ## Usage counts (`[usage]`)
 
-- A key counts as the action its handler ran: the handler names it where one key does different things by place (`q` closing a pane is `close_pane`, `enter` on a file row `fold_toggle`); elsewhere the key table in `src/usage.rs` names it.
+- A key counts as the action its handler ran: the handler names it where one key does different things by place (`q` closing a pane is `close_pane`, `enter` on a file row `fold_toggle`); elsewhere the row in `src/act.rs` whose key it is, among those counted where the key landed, names it.
 - Screen time runs up to `IDLE_AFTER` (60 s) after the last key, click or wheel, and stops while the terminal reports it lost focus (`?1004`); focus back starts it again.
 - `long_walk`: 15 `j`/`k` in a row in the diff, counted on the step that reaches or passes a hunk header or a marked line, once per walk.
 - `queue_after_zen`: leaving zen with a key, then opening another MR from the queue within `ZEN_TO_QUEUE` (30 s).

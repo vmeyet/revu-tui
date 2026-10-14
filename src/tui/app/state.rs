@@ -184,7 +184,7 @@ pub struct App {
     /// When zen was left with a key, and on which MR.
     pub left_zen: Option<(Instant, MrKey)>,
     /// What the key in flight did, named by its handler where the same key does something else elsewhere.
-    pub key_did: Option<&'static str>,
+    pub key_did: Option<crate::act::Act>,
     pub keymap: crate::keymap::Keymap,
     pub pending: Option<char>,
     /// The input row is open for this; `buffer` holds what is typed.
