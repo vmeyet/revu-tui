@@ -616,3 +616,20 @@ pub(super) fn walk_to_thread(app: &mut App, forward: bool) {
         }
     }
 }
+
+/// The diff's cursor moved row by row onto the next line with a thread, resolved ones too, or the one before;
+/// past the last row it goes on from the first, so the MR's own thread on the header comes next.
+pub(super) fn walk_to_any_thread(app: &mut App, forward: bool) {
+    let rows = app.open.as_ref().unwrap().rows.len();
+    for _ in 0..rows {
+        let before = app.open.as_ref().unwrap().selected;
+        press(app, if forward { "j" } else { "k" });
+        if app.open.as_ref().unwrap().selected == before {
+            press(app, if forward { "g" } else { "G" });
+        }
+        let open = app.open.as_ref().unwrap();
+        if open.row().is_some_and(|row| !matches!(row, Row::Thread { .. }) && open.is_marked(row)) {
+            return;
+        }
+    }
+}

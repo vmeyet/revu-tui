@@ -59,6 +59,8 @@ Each entry says what changed, then where, then how to use it.
   In the thread pane and the list of every thread: `j` and `k` walk the notes.
 - **The ready-made questions to Claude: `a e`, `a r`, `a s`, `a t` and `a c`.**
   In the diff and the thread pane: `a a` or `:ask` asks the same in your own words.
+- **The jumps `]N` `[N`, `]f` `[f` and `]r` `[r`.**
+  In the diff and the queue: `]n` `[n` still jump between open threads, `T` lists every thread, and `]m` `[m` change MR.
 
 ## 0.8.0 - 2026-10-14
 

@@ -71,21 +71,6 @@ impl App {
         }
     }
 
-    /// `]r` / `[r`: the next or previous MR that needs me, opened in place.
-    pub(super) fn walk_reviews(&mut self, forward: bool) -> Vec<Action> {
-        match self.review_neighbour(forward) {
-            Some(key) => self.switch_to(key),
-            None if self.review_order().is_empty() => {
-                self.toast("nothing needs you now");
-                vec![]
-            }
-            None => {
-                self.toast(if forward { "that was the last MR that needs you" } else { "that was the first MR that needs you" });
-                vec![]
-            }
-        }
-    }
-
     /// Opens `key` after saving where the reader stood in the MR they leave.
     pub(super) fn switch_to(&mut self, key: MrKey) -> Vec<Action> {
         let mut actions: Vec<Action> = self.save_spot_now().into_iter().collect();
@@ -227,29 +212,6 @@ mod tests {
     }
 
     #[test]
-    fn bracket_r_opens_the_next_and_previous_mr_that_needs_me_in_place() {
-        let mut app = with_inbox();
-        opened_at(&mut app, 42);
-        assert_eq!(numbers(&press(&mut app, "]r")), [44]);
-        assert_eq!(app.focus, Focus::Review, "no trip back to the queue");
-        let mut app = with_inbox();
-        opened_at(&mut app, 42);
-        assert_eq!(numbers(&press(&mut app, "[r")), [50]);
-        let mut app = with_inbox();
-        opened_at(&mut app, 44);
-        assert_eq!(numbers(&press(&mut app, "]r")), [] as [u64; 0]);
-        assert!(app.live_toast().unwrap().text.contains("last MR"));
-    }
-
-    #[test]
-    fn bracket_r_from_the_queue_starts_with_the_first_mr_that_needs_me() {
-        let mut app = with_inbox();
-        app.focus = Focus::Queue;
-        app.queue_selected = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.number == 41)).unwrap();
-        assert_eq!(numbers(&press(&mut app, "]r")), [50], "from an MR outside the list, the first one");
-    }
-
-    #[test]
     fn a_publish_offers_the_next_mr_and_enter_opens_it_while_esc_stays() {
         let mut app = with_inbox();
         opened_at(&mut app, 42);
@@ -315,18 +277,6 @@ mod tests {
         assert_eq!(saved.len(), 1);
         app.now += std::time::Duration::from_secs(2);
         assert!(!app.tick().iter().any(|a| matches!(a, Action::SaveState { .. })), "saved once");
-    }
-
-    #[test]
-    fn switching_mr_saves_where_i_stood_first() {
-        let mut app = with_inbox();
-        opened_at(&mut app, 42);
-        press(&mut app, "]cj");
-        let actions = press(&mut app, "]r");
-        assert!(
-            matches!(actions.as_slice(), [Action::SaveState { key, spot: Some(_), .. }, Action::Open(_)] if key.number == 42),
-            "{actions:?}"
-        );
     }
 
     #[test]

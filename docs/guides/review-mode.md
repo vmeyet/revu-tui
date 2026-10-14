@@ -6,13 +6,11 @@ Review mode walks the MRs that need you like an inbox.
 
 | Key | Does |
 |---|---|
-| `]r` | Open the next MR that needs you |
-| `[r` | Open the previous one |
-| `enter` after `P` | Open the next one; `esc` stays |
+| `enter` after `P` | Open the next MR that needs you; `esc` stays |
+| `]m` `[m` | Open the next or previous MR of the queue, from the diff too |
 
 The order is READY first, then TO REVIEW, as the queue sorts them.
 MRs you already approved are skipped.
-`]r` works from the queue and from the diff, so you never go back to the queue.
 
 ## See how far you got
 

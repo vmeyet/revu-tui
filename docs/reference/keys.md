@@ -20,9 +20,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `]c` `[c` | next, previous hunk |
 | `]n` `[n` | next, previous open conversation |
 | `n` `N` | the same, while no search is on |
-| `]N` `[N` | next, previous conversation, resolved too |
-| `]f` `[f` | next, previous file with a thread |
-| `]r` `[r` | next, previous MR that needs you |
 | `]m` `[m` | next, previous MR in the queue |
 
 ## Queue
@@ -129,9 +126,6 @@ The old ones keep working.
 |---|---|
 | `]c` `[c` | `)c` `(c` |
 | `]n` `[n` | `)n` `(n` |
-| `]N` `[N` | `)N` `(N` |
-| `]f` `[f` | `)f` `(f` |
-| `]r` `[r` | `)r` `(r` |
 | `]m` `[m` | `)m` `(m` |
 
 ## Actions you can bind
@@ -143,14 +137,8 @@ A bound key adds to the default key, it does not replace it.
 |---|---|
 | `next_thread` | `]n` |
 | `prev_thread` | `[n` |
-| `next_any_thread` | `]N` |
-| `prev_any_thread` | `[N` |
 | `next_hunk` | `]c` |
 | `prev_hunk` | `[c` |
-| `next_file_unresolved` | `]f` |
-| `prev_file_unresolved` | `[f` |
-| `next_review` | `]r` |
-| `prev_review` | `[r` |
 | `next_file` | `tab` |
 | `prev_file` | `backtab` |
 | `fold_toggle` | `za` |

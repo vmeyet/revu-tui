@@ -9,14 +9,8 @@ use std::sync::LazyLock;
 pub enum Act {
     NextThread,
     PrevThread,
-    NextAnyThread,
-    PrevAnyThread,
     NextHunk,
     PrevHunk,
-    NextFileUnresolved,
-    PrevFileUnresolved,
-    NextReview,
-    PrevReview,
     NextFile,
     PrevFile,
     FoldToggle,
@@ -316,20 +310,8 @@ pub const ROWS: &[Row] = &[
         .panes(&[Pane::Diff])
         .section(Section::Jump),
     bound(Act::PrevThread, "prev_thread", &["[n", "N"]).panes(&[Pane::Diff]).section(Section::Jump),
-    bound(Act::NextAnyThread, "next_any_thread", &["]N"])
-        .help(&[line(Group::Move, "]N [N", "next, previous conversation, resolved too")])
-        .section(Section::Jump),
-    bound(Act::PrevAnyThread, "prev_any_thread", &["[N"]).section(Section::Jump),
     bound(Act::NextHunk, "next_hunk", &["]c"]).help(&[line(Group::Move, "]c [c", "next, previous hunk")]).section(Section::Jump),
     bound(Act::PrevHunk, "prev_hunk", &["[c"]).section(Section::Jump),
-    bound(Act::NextFileUnresolved, "next_file_unresolved", &["]f"])
-        .help(&[line(Group::Move, "]f [f", "next, previous file with a thread")])
-        .section(Section::Jump),
-    bound(Act::PrevFileUnresolved, "prev_file_unresolved", &["[f"]).section(Section::Jump),
-    bound(Act::NextReview, "next_review", &["]r"])
-        .help(&[line(Group::Move, "]r [r", "next, previous MR that needs you")])
-        .section(Section::Jump),
-    bound(Act::PrevReview, "prev_review", &["[r"]).section(Section::Jump),
     bound(Act::NextFile, "next_file", &["tab"])
         .help(&[line(Group::Move, "tab S-tab", "next, previous file")])
         .panes(&[Pane::Diff])
@@ -607,9 +589,6 @@ impl Group {
                 Act::NextFile,
                 Act::NextHunk,
                 Act::NextThread,
-                Act::NextAnyThread,
-                Act::NextFileUnresolved,
-                Act::NextReview,
                 Act::NextMr,
             ],
             Self::Queue => &[Act::Filter, Act::Views, Act::Scope, Act::SortQueue, Act::Pin, Act::FoldOpen],

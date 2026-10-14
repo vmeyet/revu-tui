@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
         let mut app = with_review();
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         press(&mut app, "r");
         assert_eq!(app.input_label(), "reply to nina");
@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
         let mut app = with_review();
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         let id = "c0ffee00c0ffee00".to_owned();
         assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);

@@ -46,7 +46,7 @@ Your own draft of a new thread shows whole.
 | `u` `o` `y` on a thread | Open its first link, open it in the browser, copy its link |
 | `U` on a thread | Copy its first link, or its first picture when it has no link |
 
-`]n` and `]N` stop on the marked lines, not on the rows under them.
+`]n` stops on the marked lines, not on the rows under them.
 A folded hunk or file hides its threads with its lines.
 The comment box opens in the diff, where the text will land.
 A reply is written under the last note of its thread, which unfolds for it.

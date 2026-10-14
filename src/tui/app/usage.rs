@@ -227,10 +227,10 @@ mod tests {
     #[test]
     fn keys_are_counted_by_action_in_memory_only() {
         let mut app = counting();
-        press(&mut app, "]n[Nzajj");
+        press(&mut app, "]n[nzajj");
         let counts = app.take_usage().unwrap();
         assert_eq!(counts.actions.get("next_thread"), Some(&1));
-        assert_eq!(counts.actions.get("prev_any_thread"), Some(&1));
+        assert_eq!(counts.actions.get("prev_thread"), Some(&1));
         assert_eq!(counts.actions.get("fold_toggle"), Some(&1));
         assert_eq!(counts.actions.get("move_down"), Some(&2));
         assert_eq!(app.take_usage(), None, "taken once, gone");
@@ -271,7 +271,8 @@ mod tests {
     #[test]
     fn usage_off_counts_nothing() {
         let mut app = with_long_review();
-        press(&mut app, "]Njjj");
+        walk_to_any_thread(&mut app, true);
+        press(&mut app, "jjj");
         app.now += Duration::from_secs(5);
         app.tick();
         assert_eq!(app.take_usage(), None);
@@ -393,7 +394,7 @@ mod tests {
     fn q_and_esc_that_close_the_pane_count_as_closing_it() {
         let mut app = with_review();
         app.usage = Some(crate::usage::Tally::default());
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
         press(&mut app, "q");
@@ -432,7 +433,6 @@ mod tests {
         assert_eq!(counted_by_keys(&mut diff, "]m"), ["next_mr"]);
         let mut diff = with_usage(with_review());
         assert_eq!(counted_by_keys(&mut diff, "]n"), ["next_thread"]);
-        assert_eq!(counted_by_keys(&mut diff, "[N"), ["prev_any_thread"]);
         assert_eq!(counted_by_keys(&mut diff, "="), ["more_context"]);
         assert_eq!(counted_by_keys(&mut diff, "aa"), ["ask_free"]);
         assert_eq!(counted_by(&mut diff, code(KeyCode::Right)), ["focus_right"]);
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn enter_in_the_thread_pane_counts_as_what_it_did() {
         let mut app = with_usage(with_review());
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
         assert_eq!(counted_by(&mut app, code(KeyCode::Enter)), ["fold_toggle"], "it folds the resolved thread");

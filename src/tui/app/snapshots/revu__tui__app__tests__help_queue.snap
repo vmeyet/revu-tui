@@ -14,26 +14,26 @@ expression: "render(&mut app, 160, 45)"
 │   ── WATCHING · 1 ────────────────────── ││                                                                                                                  │
 │   infra: new runner                    ⠋ ││                                                                                                                  │
 │   omar · !35 · +0 −0                  2d ││                                                                                                                  │
-│                        ╭ keys ─────────────────────────────────────────────────────────────────────────────────────────────────────╮                         │
-│   ── ▸ DONE · 1 ───────│                                                                                                           │                         │
-│                        │  MOVE                                                      QUEUE                                          │                         │
-│                        │        j k  move                                               /  filter: words @author !42 ~label        │                         │
-│                        │        g G  first, last                                    ' 1-9  a saved view, by letter or rank         │                         │
-│                        │      ^d ^u  half a page; space too                             *  this repo, or every project             │                         │
-│                        │      ^f ^b  a full page; PgDn PgUp too                         s  next sort order                         │                         │
-│                        │        h l  pane to the left, to the right                     b  pin on top of the queue, or unpin       │                         │
-│                        │      enter  open, or toggle the fold or the thread         zo zc  open, fold the section or stack         │                         │
-│                        │      esc x  close the pane, back to the queue                                                             │                         │
-│                        │  tab S-tab  next, previous file                            SEARCH & APP                                   │                         │
-│                        │      ]c [c  next, previous hunk                             ^k ,  MRs · / files · > commands              │                         │
-│                        │      ]n [n  next, previous open conversation                   :  commands: :go !42, :set theme=nord      │                         │
-│                        │        n N  the same, while no search is on                  o y  open in the browser, copy the link      │                         │
-│                        │      ]N [N  next, previous conversation, resolved too         ag  the agent session of the MR: a, then g  │                         │
-│                        │      ]f [f  next, previous file with a thread                  r  refresh                                 │                         │
-│                        │      ]r [r  next, previous MR that needs you                   ?  this help                               │                         │
-│                        │      ]m [m  next, previous MR in the queue                  q ^c  quit: twice; q closes a pane first      │                         │
-│                        │                                                                                                           │                         │
-│                        ╰────────────────────────────────────────────────────────────────────────────────── ? every key · esc close ╯                         │
+│                          ╭ keys ──────────────────────────────────────────────────────────────────────────────────────────────────╮                          │
+│   ── ▸ DONE · 1 ─────────│                                                                                                        │                          │
+│                          │  MOVE                                                   QUEUE                                          │                          │
+│                          │        j k  move                                            /  filter: words @author !42 ~label        │                          │
+│                          │        g G  first, last                                 ' 1-9  a saved view, by letter or rank         │                          │
+│                          │      ^d ^u  half a page; space too                          *  this repo, or every project             │                          │
+│                          │      ^f ^b  a full page; PgDn PgUp too                      s  next sort order                         │                          │
+│                          │        h l  pane to the left, to the right                  b  pin on top of the queue, or unpin       │                          │
+│                          │      enter  open, or toggle the fold or the thread      zo zc  open, fold the section or stack         │                          │
+│                          │      esc x  close the pane, back to the queue                                                          │                          │
+│                          │  tab S-tab  next, previous file                         SEARCH & APP                                   │                          │
+│                          │      ]c [c  next, previous hunk                          ^k ,  MRs · / files · > commands              │                          │
+│                          │      ]n [n  next, previous open conversation                :  commands: :go !42, :set theme=nord      │                          │
+│                          │        n N  the same, while no search is on               o y  open in the browser, copy the link      │                          │
+│                          │      ]m [m  next, previous MR in the queue                 ag  the agent session of the MR: a, then g  │                          │
+│                          │                                                             r  refresh                                 │                          │
+│                          │                                                             ?  this help                               │                          │
+│                          │                                                          q ^c  quit: twice; q closes a pane first      │                          │
+│                          │                                                                                                        │                          │
+│                          ╰─────────────────────────────────────────────────────────────────────────────── ? every key · esc close ╯                          │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │

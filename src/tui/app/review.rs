@@ -289,15 +289,6 @@ impl App {
         });
     }
 
-    /// Indexes of the files carrying an unresolved thread, for `]f` and `[f`.
-    pub(super) fn files_with_unresolved(&self) -> Vec<usize> {
-        let Some(open) = &self.open else { return vec![] };
-        let anchored = |path: &str| open.review.threads.iter().any(|t| t.unresolved() && t.anchor.as_ref().is_some_and(|a| a.path == path));
-        (0..open.review.files.len())
-            .filter(|&i| anchored(&open.review.files[i].new_path) || anchored(&open.review.files[i].old_path))
-            .collect()
-    }
-
     /// `za`: the file or hunk under the cursor; `zo` and `zc` only move in one direction.
     /// While a file header is pinned above the diff, `za` and `zc` fold that file instead.
     pub(super) fn fold_at_cursor(&mut self, want_open: Option<bool>) -> Vec<Action> {
@@ -486,24 +477,10 @@ mod tests {
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
         press(&mut app, "]c");
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 1, .. })));
-        press(&mut app, "]N");
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "wraps to the thread on the MR");
-        press(&mut app, "]N");
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "then the marked removed line");
         app.handle_key(code(KeyCode::Tab));
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 1, .. })));
         app.handle_key(code(KeyCode::BackTab));
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
-    }
-
-    #[test]
-    fn bracket_f_finds_files_with_unresolved_threads() {
-        let mut app = with_review();
-        press(&mut app, "G");
-        press(&mut app, "]f");
-        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
-        press(&mut app, "]f");
-        assert!(app.live_toast().is_some(), "only one such file: nothing to jump to");
     }
 
     #[test]

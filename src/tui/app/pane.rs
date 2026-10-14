@@ -8,20 +8,6 @@ use std::collections::BTreeSet;
 
 const HALF_PAGE: usize = 5;
 
-/// Which conversations `]n` stops on: open ones, or every one, resolved included (`]N`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Threads {
-    Open,
-    Every,
-}
-
-impl Threads {
-    /// A line whose threads are all resolved is not open; one of my drafts keeps it open.
-    fn stops_at(self, mark: Mark) -> bool {
-        self == Self::Every || mark > Mark::Resolved
-    }
-}
-
 /// What the pane shows and where the reader is in it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pane {
@@ -210,16 +196,12 @@ impl App {
         self.update_open(|open| open.with_pane(Some(Pane::at(place))));
     }
 
-    /// `]n` `[n`, `]N` `[N`: the next conversation in file then line order, folded or not; a folded
+    /// `]n` `[n`: the next open conversation in file then line order, folded or not; a folded
     /// file or hunk on the way opens, and stays open like one opened by hand. The pane follows when open.
-    pub(super) fn jump_to_marked(&mut self, forward: bool, threads: Threads) -> Vec<Action> {
+    pub(super) fn jump_to_marked(&mut self, forward: bool) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let Some(target) = next_marked(open, forward, threads) else {
-            let text = match threads {
-                Threads::Open => format!("no open thread · {} for every thread", self.keymap.label("]N")),
-                Threads::Every => "nothing to jump to".to_owned(),
-            };
-            self.toast(text);
+        let Some(target) = next_marked(open, forward) else {
+            self.toast(format!("no open thread · {} lists every thread", self.keymap.label("T")));
             return vec![];
         };
         self.jump_to_row(&target)
@@ -398,7 +380,8 @@ fn first_link(text: &str) -> Option<String> {
 }
 
 /// The next row `threads` stops on after the cursor, wrapping, among the rows the review shows with every fold open.
-fn next_marked(open: &Open, forward: bool, threads: Threads) -> Option<Row> {
+/// A line whose threads are all resolved is not open; one of my drafts keeps it open.
+fn next_marked(open: &Open, forward: bool) -> Option<Row> {
     let every = open.review.clone().with_fold(crate::diff::fold::FoldState::default()).rows();
     let markers = open.review.markers();
     let here = open.row().and_then(|row| every.iter().position(|r| super::review::same_place(r, row))).unwrap_or(0);
@@ -406,7 +389,7 @@ fn next_marked(open: &Open, forward: bool, threads: Threads) -> Option<Row> {
     (1..=len)
         .map(|k| if forward { (here + k) % len } else { (here + len - k % len) % len })
         .filter(|&i| i != here && !matches!(every[i], Row::Thread { .. }))
-        .find(|&i| open.mark_in(&markers, &every[i]).is_some_and(|mark| threads.stops_at(mark)))
+        .find(|&i| open.mark_in(&markers, &every[i]).is_some_and(|mark| mark > Mark::Resolved))
         .map(|i| every[i].clone())
 }
 
@@ -489,7 +472,7 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { open: false, .. })));
         app.handle_key(code(KeyCode::Enter));
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
         let open = app.open.as_ref().unwrap();
@@ -522,7 +505,7 @@ mod tests {
     #[test]
     fn the_pane_follows_the_cursor_onto_marked_lines_only() {
         let mut app = with_review();
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         press(&mut app, "l");
         press(&mut app, "h");
         press(&mut app, "k");
@@ -591,9 +574,7 @@ mod tests {
     fn bracket_n_skips_resolved_threads_and_says_how_to_reach_them() {
         let mut app = with_review();
         assert_eq!(thread_stops(&mut app, "]n", 2), [Row::Header, Row::Header], "the resolved line 13 is skipped");
-        assert_eq!(app.live_toast().unwrap().text, "no open thread · ]N for every thread");
-        assert_eq!(thread_stops(&mut app, "]N", 2), [LINE_13, Row::Header], "]N stops on it and wraps");
-        assert_eq!(thread_stops(&mut app, "[N", 1), [LINE_13]);
+        assert_eq!(app.live_toast().unwrap().text, "no open thread · T lists every thread");
     }
 
     #[test]
@@ -611,7 +592,6 @@ mod tests {
         let open = app.open.clone().unwrap();
         app.open = Some(open.relaid(|review| review.with_resolved("6a9c1750b2d6e4f0", true)));
         assert_eq!(thread_stops(&mut app, "]n", 1), [LINE_13]);
-        assert_eq!(thread_stops(&mut app, "]N", 1), [Row::Header], "]N still stops there");
     }
 
     #[test]
@@ -625,16 +605,6 @@ mod tests {
         assert!(open.review.fold.file_is_open("src/pay/charge.rs"), "the file opened on the way");
         assert_eq!(open.row(), Some(&LINE_13));
         assert!(is_saved_fold(&actions), "the unfold is kept like one done by hand");
-    }
-
-    #[test]
-    fn bracket_big_n_opens_a_folded_file_on_the_way_to_a_resolved_thread() {
-        let mut app = with_review();
-        fold_every_file(&mut app, crate::diff::fold::Fold::Closed);
-        press(&mut app, "g");
-        let actions = press(&mut app, "]N");
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&LINE_13));
-        assert!(is_saved_fold(&actions));
     }
 
     #[test]
@@ -674,7 +644,8 @@ mod tests {
     #[test]
     fn the_pane_keeps_its_thread_while_a_reply_is_written() {
         let mut app = with_review();
-        press(&mut app, "]Nlr");
+        walk_to_any_thread(&mut app, true);
+        press(&mut app, "lr");
         assert!(app.input.is_some());
         let open = app.open.clone().unwrap();
         let shown = open.pane.clone().unwrap().place;
@@ -762,7 +733,8 @@ mod tests {
     #[test]
     fn moving_in_the_diff_leaves_every_thread_in_the_pane() {
         let mut app = with_review();
-        press(&mut app, "Th]N");
+        press(&mut app, "Th");
+        walk_to_any_thread(&mut app, true);
         assert_eq!(app.focus, Focus::Review);
         let open = app.open.as_ref().unwrap();
         assert!(open.is_marked(open.row().unwrap()), "on a marked line");

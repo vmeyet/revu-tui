@@ -137,7 +137,7 @@ Side by side (`D`) has no single column to hang them in, so it keeps the pane.
 - My draft of a new thread shows whole: `◇ draft`, `you · draft ◇`, its body.
 - `enter` on the line unfolds every thread on it, or folds them once none is folded; `enter` on a thread row unfolds or folds that thread and leaves the cursor on its first row. `Review::unfolded` holds the unfolded ids, kept through a refresh.
 - An unfolded thread is a row per note, then per draft reply of mine, drawn as the pane draws them and wrapped to the text column: its rows start where the code does, behind a `│` in `border` one column before the sign, whichever gutter the diff shows (one number under the narrow width, both above).
-- `j` `k` stop on each of those rows, so a thread longer than the screen scrolls note by note; `]n` `]N` stop on marked lines only; a folded hunk or file hides its thread rows.
+- `j` `k` stop on each of those rows, so a thread longer than the screen scrolls note by note; `]n` stops on marked lines only; a folded hunk or file hides its thread rows.
 - On a thread row `r`, `c`, `R`, `S`, `+`, `e`, `d`, `E`, `u`, `o`, `y` and `ctrl-v` act as in the pane on the thread, note or draft under the cursor; elsewhere in the diff they keep their own meaning.
 - Written from the diff, the compose box opens in it, under the row the text will land after: the last row of the thread a reply answers, which unfolds for it; the last row under the line of a new thread, after the threads already there; the row of an edited draft. It is the pane's box, as wide as the thread rows, its text starting where theirs does.
 - The cursor goes to that row, so the diff scrolls to keep the row and the whole box on screen as the box grows; `esc` takes it back to the row it left, and a saved draft takes it.
@@ -182,7 +182,6 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 | `enter` | pane, every thread | go to the conversation's line in the diff | none |
 | `m` | pane, every thread | only the conversations I take part in, or all | none |
 | `]n` `[n` | diff | next, previous line with an unresolved thread or my draft, across files; the pane follows when open | next thread row |
-| `]N` `[N` | diff | the same, resolved-only lines too | next thread row |
 | `x`, `esc`, `q` | diff or pane | close the pane | `esc` |
 | `u`, `o`, `y` | pane | open the first link, open the thread in the browser, copy its link | `u` only |
 | `U` | pane | copy the first link; a thread with no link gives its first picture, as the page the forge serves | none |

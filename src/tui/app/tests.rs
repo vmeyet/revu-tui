@@ -40,7 +40,7 @@ fn snapshot_review_open() {
 #[test]
 fn snapshot_thread_open() {
     let mut app = with_review();
-    press(&mut app, "]N");
+    walk_to_any_thread(&mut app, true);
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("thread_open", render(&mut app, 120, 24));
 }
@@ -110,7 +110,7 @@ fn snapshot_publish_modal() {
 #[test]
 fn snapshot_thread_with_a_draft_reply() {
     let mut app = with_review();
-    press(&mut app, "]N");
+    walk_to_any_thread(&mut app, true);
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
     let save = type_text(&mut app, "agreed, keys are per card");
@@ -301,7 +301,7 @@ fn snapshot_narrow_pane_and_a_three_line_box() {
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("pane_narrow", render(&mut app, 100, 20));
     let mut app = with_review();
-    press(&mut app, "]N");
+    walk_to_any_thread(&mut app, true);
     press(&mut app, "lr");
     press(&mut app, "agreed");
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
@@ -634,7 +634,7 @@ fn a_drag_in_the_diff_copies_only_the_code_text_and_lights_it() {
 #[test]
 fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
     let mut app = with_review();
-    press(&mut app, "]N");
+    walk_to_any_thread(&mut app, true);
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_mut().unwrap();
     let mut threads = open.review.threads.to_vec();

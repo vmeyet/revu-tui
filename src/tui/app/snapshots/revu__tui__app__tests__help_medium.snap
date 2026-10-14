@@ -17,18 +17,18 @@ expression: "render(&mut app, 100, 30)"
 │      15      │      ]c [c  next, previous hunk                                   │               │
 │      16      │      ]n [n  next, previous open conversation                      │               │
 │     ▾ @@ -40,│        n N  the same, while no search is on                       │               │
-│      41  fn i│      ]N [N  next, previous conversation, resolved too             │               │
-│      41 -    │      ]f [f  next, previous file with a thread                     │               │
-│      42 +    │      ]r [r  next, previous MR that needs you                      │               │
-│      43 +    │      ]m [m  next, previous MR in the queue                        │               │
-│      44  }   │                                                                   │               │
-│              │  QUEUE                                                            │               │
-│  ▸ Cargo.lock│          /  filter: words @author !42 ~label                      │ +1 −1  folded │
-│              │      ' 1-9  a saved view, by letter or rank                       │               │
+│      41  fn i│      ]m [m  next, previous MR in the queue                        │               │
+│      41 -    │                                                                   │               │
+│      42 +    │  QUEUE                                                            │               │
+│      43 +    │          /  filter: words @author !42 ~label                      │               │
+│      44  }   │      ' 1-9  a saved view, by letter or rank                       │               │
 │              │          *  this repo, or every project                           │               │
-│              │          s  next sort order                                       │               │
+│  ▸ Cargo.lock│          s  next sort order                                       │ +1 −1  folded │
+│              │          b  pin on top of the queue, or unpin                     │               │
+│              │      zo zc  open, fold the section or stack                       │               │
 │              │                                                                   │               │
-│              ╰────────────────────────────── 1–22 of 90 · j k scroll · esc close ╯               │
+│              │                                                                   │               │
+│              ╰────────────────────────────── 1–22 of 87 · j k scroll · esc close ╯               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

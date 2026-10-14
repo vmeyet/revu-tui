@@ -154,7 +154,8 @@ mod tests {
     fn on_a_thread_row() -> App {
         let mut app = with_review();
         phone(&mut app);
-        press(&mut app, "]Nj");
+        walk_to_any_thread(&mut app, true);
+        press(&mut app, "j");
         assert!(app.on_thread_row());
         app
     }

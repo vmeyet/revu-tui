@@ -378,7 +378,7 @@ mod tests {
         assert_eq!((key, position.line.new, body.as_str()), (&mr_key(), Some(12), "nit"));
         assert!(app.input.is_none(), "the box closes while the forge answers");
         assert!(app.open.as_ref().unwrap().review.drafts.is_empty(), "no draft on the way");
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
         press(&mut app, "r");
         press(&mut app, "agreed");

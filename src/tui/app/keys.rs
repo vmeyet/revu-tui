@@ -1,4 +1,3 @@
-use super::pane::Threads;
 use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::review::Row;
@@ -374,7 +373,7 @@ impl App {
     /// `n` and `N` with no search live: `]n` and `[n`, counted as them.
     fn jump_to_thread(&mut self, forward: bool) -> Vec<Action> {
         self.key_did = Some(if forward { Act::NextThread } else { Act::PrevThread });
-        self.jump_to_marked(forward, Threads::Open)
+        self.jump_to_marked(forward)
     }
 
     /// A refresh also posts again every draft GitLab does not hold yet.
@@ -421,7 +420,6 @@ impl App {
     fn queue_prefixed(&mut self, act: Act) -> Vec<Action> {
         self.did(act);
         let open = match act {
-            Act::NextReview | Act::PrevReview => return self.walk_reviews(act == Act::NextReview),
             Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
             Act::FoldOpen => Some(true),
             Act::FoldClose => Some(false),
@@ -446,15 +444,9 @@ impl App {
             Act::FoldClose => return self.fold_at_cursor(Some(false)),
             Act::Zen => return self.toggle_zen(),
             Act::Viewed => return self.toggle_viewed(),
-            Act::NextReview | Act::PrevReview => return self.walk_reviews(act == Act::NextReview),
             Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
             Act::NextHunk | Act::PrevHunk => self.review_jump(act == Act::NextHunk, |r| matches!(r, Row::Hunk { .. })),
-            Act::NextThread | Act::PrevThread => return self.jump_to_marked(act == Act::NextThread, Threads::Open),
-            Act::NextAnyThread | Act::PrevAnyThread => return self.jump_to_marked(act == Act::NextAnyThread, Threads::Every),
-            Act::NextFileUnresolved | Act::PrevFileUnresolved => {
-                let wanted = self.files_with_unresolved();
-                self.review_jump(act == Act::NextFileUnresolved, move |r| matches!(r, Row::File { index, .. } if wanted.contains(index)));
-            }
+            Act::NextThread | Act::PrevThread => return self.jump_to_marked(act == Act::NextThread),
             _ => self.did_nothing(),
         }
         vec![]
@@ -631,7 +623,7 @@ mod tests {
         press(&mut diff, "?");
         assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "ask claude", "search & app"]);
         let mut thread = with_review();
-        press(&mut thread, "]N");
+        walk_to_any_thread(&mut thread, true);
         thread.handle_key(code(KeyCode::Enter));
         assert_eq!(thread.focus, Focus::Side);
         press(&mut thread, "?");
@@ -670,12 +662,8 @@ mod tests {
         let mut app = with_keys(r#"layout = "azerty""#);
         press(&mut app, ")c)c)n");
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`)c` twice then `)n`, as `]c]c]n` would");
-        press(&mut app, ")N");
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "`)N` stops on the resolved thread");
-        press(&mut app, "(N");
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`(N` goes back");
-        press(&mut app, "]N");
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "brackets keep working");
+        press(&mut app, "]c");
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })), "brackets keep working");
     }
 
     #[test]
@@ -717,20 +705,20 @@ mod tests {
 
     #[test]
     fn a_bound_key_does_what_its_action_does_and_a_two_key_one_waits() {
-        let mut app = with_keys(r#"bind = { next_hunk = "F", next_any_thread = ["ft", "ctrl-e"] }"#);
+        let mut app = with_keys(r#"bind = { next_hunk = "F", next_file = ["ft", "ctrl-e"] }"#);
+        let mut tabbed = with_review();
         press(&mut app, "F");
+        press(&mut tabbed, "]c");
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { index: 0, .. })));
         press(&mut app, "f");
         assert!(app.held.is_some(), "`f` waits for its second key");
         press(&mut app, "t");
         assert!(app.held.is_none());
-        assert_eq!(
-            app.open.as_ref().unwrap().row(),
-            Some(&Row::Line { file: 0, hunk: 0, index: 1 }),
-            "`ft` is `]N`: the marked line after the hunk"
-        );
+        tabbed.handle_key(code(KeyCode::Tab));
+        assert_eq!(app.open.as_ref().unwrap().row(), tabbed.open.as_ref().unwrap().row(), "`ft` is `tab`");
         app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
-        assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`ctrl-e` is `]N` too, and wraps to the MR's thread");
+        tabbed.handle_key(code(KeyCode::Tab));
+        assert_eq!(app.open.as_ref().unwrap().row(), tabbed.open.as_ref().unwrap().row(), "`ctrl-e` is `tab` too");
     }
 
     #[test]

@@ -227,7 +227,8 @@ mod tests {
     #[test]
     fn in_zen_a_thread_is_one_row_under_its_line_and_enter_unfolds_it_in_place() {
         let mut app = with_review();
-        press(&mut app, "zz]N");
+        press(&mut app, "zz");
+        walk_to_any_thread(&mut app, true);
         assert_eq!(row_of(&app), REMOVED_LINE_13);
         let folded = render(&mut app, 138, 40);
         assert_eq!(under(&folded, "-    let client = Client::new();", 1), [RESOLVED]);
@@ -380,7 +381,7 @@ mod tests {
     #[test]
     fn c_replies_in_the_pane_as_r_does_and_big_c_writes_nothing_there() {
         let mut app = with_review();
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         enter(&mut app);
         assert_eq!(app.focus, Focus::Side);
         let nina = "c0ffee00c0ffee00";
@@ -536,7 +537,7 @@ mod tests {
     #[test]
     fn in_a_narrow_window_threads_read_in_the_diff_and_a_wide_one_gives_them_back_to_the_pane() {
         let mut app = with_review();
-        press(&mut app, "]N");
+        walk_to_any_thread(&mut app, true);
         assert!(render(&mut app, 100, 30).contains(RESOLVED));
         enter(&mut app);
         assert_eq!((listed_place(&app), app.focus), (None, Focus::Review), "no page takes the diff's place");
@@ -562,7 +563,8 @@ mod tests {
     #[test]
     fn thread_rows_start_where_the_code_does_under_both_gutters_and_under_one() {
         let mut app = with_review();
-        press(&mut app, "zz]N");
+        press(&mut app, "zz");
+        walk_to_any_thread(&mut app, true);
         enter(&mut app);
         for (width, numbers) in [(138, "13      -"), (100, "13 -")] {
             let screen = render(&mut app, width, 40);
@@ -576,7 +578,8 @@ mod tests {
     #[test]
     fn side_by_side_keeps_its_threads_in_the_pane_in_zen_too() {
         let mut app = with_review();
-        press(&mut app, "zzD]N");
+        press(&mut app, "zzD");
+        walk_to_any_thread(&mut app, true);
         let screen = render(&mut app, 200, 30);
         assert!(app.open.as_ref().unwrap().review.shows_side_by_side() && thread_rows(&app) == 0, "{screen}");
         enter(&mut app);
@@ -590,13 +593,13 @@ mod tests {
         let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 2)]);
         enter(&mut app);
         press(&mut app, "g");
-        let stops: Vec<Row> = (0..3)
+        let stops: Vec<Row> = (0..2)
             .map(|_| {
-                press(&mut app, "]N");
+                press(&mut app, "]n");
                 row_of(&app)
             })
             .collect();
-        assert_eq!(stops, [REMOVED_LINE_13, ADDED_LINE_13, Row::Header]);
+        assert_eq!(stops, [ADDED_LINE_13, Row::Header]);
         app.review_jump_to(|row| matches!(row, Row::Thread { stop: 1, .. }));
         press(&mut app, "]c");
         assert!(matches!(row_of(&app), Row::Hunk { index: 1, .. }), "]c leaves the thread for the next hunk");
@@ -626,7 +629,8 @@ mod tests {
     #[test]
     fn the_wheel_walks_thread_rows_and_a_drag_across_one_copies_code_alone() {
         let mut app = with_review();
-        press(&mut app, "zz]N");
+        press(&mut app, "zz");
+        walk_to_any_thread(&mut app, true);
         let from = spot(&mut app, "let client = Client::new()", 138, 40);
         let to = spot(&mut app, "let client = Client::with_key", 138, 40);
         assert_eq!(to.1, from.1 + 2, "the thread's row sits between the two lines");
