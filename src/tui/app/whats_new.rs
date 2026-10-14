@@ -72,6 +72,16 @@ mod tests {
     }
 
     #[test]
+    fn a_config_this_revu_partly_ignores_is_toasted_at_start_before_the_news() {
+        let ignored = vec!["`agent` is not a setting this revu knows".to_owned(), "`tui.sparkles` is not one either".to_owned()];
+        let whats_new = WhatsNew { changelog: sample(), seen: "0.5.0".parse().unwrap() };
+        let app = App::new(Settings { whats_new, ignored_settings: ignored, ..settings() });
+        let toast = app.live_toast().unwrap();
+        assert_eq!(toast.text, "`agent` is not a setting this revu knows · `tui.sparkles` is not one either");
+        assert!(toast.danger);
+    }
+
+    #[test]
     fn a_start_with_nothing_new_says_nothing() {
         assert_eq!(updated_from("0.6.0+1").live_toast(), None);
         assert_eq!(app().live_toast(), None);

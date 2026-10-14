@@ -6,8 +6,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
+mod ignored;
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
@@ -43,7 +44,6 @@ pub struct Config {
 
 /// `[keys]`: keys the user adds on top of revu's own.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Keys {
     /// `azerty`: `(` and `)` do what `[` and `]` do, which a Mac French keyboard types with ⌥⇧.
     #[serde(default, skip_serializing_if = "Layout::is_default")]
@@ -102,7 +102,6 @@ impl Bind {
 
 /// `[hosts."git.acme.dev"] forge = "github"`: a GitHub Enterprise host, which the name alone cannot tell.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Host {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forge: Option<Kind>,
@@ -113,7 +112,6 @@ pub struct Host {
 
 /// Which MRs the queue shows beyond the ones GitLab lists for me.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Queue {
     /// MRs carrying one of these labels land in Watching.
     #[serde(default)]
@@ -157,7 +155,6 @@ fn is_default_prefetch(n: &usize) -> bool {
 
 /// `[queue.ready]`: a command whose output names the MRs ready for review.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Ready {
     /// Run as words, never through a shell; every MR link it prints counts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -195,7 +192,6 @@ impl Queue {
 
 /// How a diff opens.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Review {
     /// Glob patterns of files that open folded: lockfiles, snapshots, generated code.
     #[serde(default)]
@@ -234,7 +230,6 @@ impl Review {
 
 /// `[notify]`: a macOS notification when an MR lands in To review while the TUI runs. On by default.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Notify {
     #[serde(default = "on")]
     pub enabled: bool,
@@ -254,7 +249,6 @@ impl Notify {
 
 /// `[usage]`: count the actions used and the time per screen, into the cache, for `revu usage`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Usage {
     /// Off by default: nothing is counted until this is true.
     #[serde(default)]
@@ -272,7 +266,6 @@ fn on() -> bool {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Tui {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
@@ -420,40 +413,21 @@ impl Tui {
 /// `[ai]`: each provider is switched on by itself, and both are off until then, because enabling
 /// one sends MR content to it. Keys are never here: they live in the keychain (`revu ai login`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Ai {
     #[serde(default, skip_serializing_if = "Typesafe::is_default")]
     pub typesafe: Typesafe,
     #[serde(default, skip_serializing_if = "Anthropic::is_default")]
     pub anthropic: Anthropic,
-    /// The single `[ai] enabled/provider/model` switch this table replaced; read only to point at the new keys.
-    #[serde(default, skip_serializing)]
-    enabled: Option<toml::Value>,
-    #[serde(default, skip_serializing)]
-    provider: Option<toml::Value>,
-    #[serde(default, skip_serializing)]
-    model: Option<toml::Value>,
 }
 
 impl Ai {
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
-
-    fn check(&self) -> Result<()> {
-        if self.enabled.is_some() || self.provider.is_some() || self.model.is_some() {
-            anyhow::bail!(
-                "`[ai] enabled`, `provider` and `model` moved to one table per provider: \
-                 `[ai.anthropic] enabled = true` (with `model`), `[ai.typesafe] enabled = true`"
-            );
-        }
-        Ok(())
-    }
 }
 
 /// `[ai.typesafe]`: Jev ranks the queue and the files of an MR.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Typesafe {
     #[serde(default)]
     pub enabled: bool,
@@ -467,7 +441,6 @@ impl Typesafe {
 
 /// `[ai.anthropic]`: Claude answers questions about the MR.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Anthropic {
     #[serde(default)]
     pub enabled: bool,
@@ -491,7 +464,6 @@ impl Anthropic {
 /// `[share]`: `Y` posts an MR by piping a message to a command, so revu knows no chat tool.
 /// A bare `command` is the one target; `[share.targets.<name>]` adds named ones, and `Y` asks which.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Share {
     /// Run as words, never through a shell; the message arrives on its stdin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -506,7 +478,6 @@ pub struct Share {
 
 /// `[share.targets.<name>]`: one more place `Y` can post to.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ShareTarget {
     /// Run as words, never through a shell; the message arrives on its stdin.
     pub command: String,
@@ -541,7 +512,6 @@ impl Share {
 /// `[agent]`: `a g` opens a coding-agent session that belongs to the MR, in a worktree on its branch.
 /// Claude Code is the agent unless `start` names another program.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Agent {
     /// Off by default: nothing runs until this is true.
     #[serde(default)]
@@ -615,7 +585,6 @@ impl Agent {
 
 /// `^v`: which program opens a file, by glob on its path, as in `"*.md" = "glow -p"`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Open {
     /// For every file no glob in `files` matches; `$VISUAL`, `$EDITOR`, then `less` without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -641,6 +610,19 @@ impl Open {
         }
         Ok(())
     }
+}
+
+/// A config as read from its file.
+#[derive(Debug, Default)]
+pub struct Loaded {
+    pub config: Config,
+    /// One line for each key the file holds that this revu ignores.
+    pub warnings: Vec<String>,
+}
+
+/// What the config file holds that this revu ignores; nothing when it does not load, since the command then says why.
+pub fn warnings() -> Vec<String> {
+    Config::read(&Config::path()).map(|loaded| loaded.warnings).unwrap_or_default()
 }
 
 /// `$XDG_CONFIG_HOME/revu`, else `~/.config/revu`: where terminal tools keep their config on
@@ -670,19 +652,27 @@ impl Config {
     }
 
     pub fn load_from(path: &Path) -> Result<Self> {
+        Self::read(path).map(|loaded| loaded.config)
+    }
+
+    /// The config at `path`, with a warning for each key in it this revu ignores.
+    pub fn read(path: &Path) -> Result<Loaded> {
         if !path.exists() {
-            return Ok(Self::default());
+            return Ok(Loaded::default());
         }
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let config: Self = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-        config.open.check().with_context(|| format!("in {}", path.display()))?;
-        config.queue.check().with_context(|| format!("in {}", path.display()))?;
-        config.ai.check().with_context(|| format!("in {}", path.display()))?;
-        config.share.check().with_context(|| format!("in {}", path.display()))?;
-        config.agent.check().with_context(|| format!("in {}", path.display()))?;
-        config.tui.check().with_context(|| format!("in {}", path.display()))?;
-        crate::keymap::Keymap::new(&config.keys).with_context(|| format!("in {}", path.display()))?;
-        Ok(config)
+        let (config, warnings) = ignored::parse(&text).with_context(|| format!("parsing {}", path.display()))?;
+        config.check().with_context(|| format!("in {}", path.display()))?;
+        Ok(Loaded { config, warnings })
+    }
+
+    fn check(&self) -> Result<()> {
+        self.open.check()?;
+        self.queue.check()?;
+        self.share.check()?;
+        self.agent.check()?;
+        self.tui.check()?;
+        crate::keymap::Keymap::new(&self.keys).map(drop)
     }
 
     pub fn save(&self) -> Result<()> {
@@ -814,12 +804,6 @@ mod tests {
         let config: Config = toml::from_str("[ai.anthropic]\nenabled = true\n\n[ai.typesafe]\nenabled = true\n").unwrap();
         assert!(config.ai.anthropic.enabled && config.ai.typesafe.enabled);
         assert_eq!(config.ai.anthropic.model(), "claude-opus-5");
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.toml");
-        std::fs::write(&path, "[ai]\nenabled = true\nprovider = \"anthropic\"\n").unwrap();
-        let err = format!("{:#}", Config::load_from(&path).unwrap_err());
-        assert!(err.contains("[ai.anthropic] enabled = true"), "{err}");
-        assert!(toml::from_str::<Config>("[ai.anthropic]\nkey = \"sk-ant\"\n").is_err(), "a key in the config is refused");
     }
 
     #[test]
@@ -916,8 +900,10 @@ mod tests {
         assert!(!load("[queue.rules]\nenabled = false\n").unwrap().queue.rules.enabled);
         let zero = load("[queue.rules]\nstale_days = 0\n").unwrap_err();
         assert!(zero.contains("stale_days") && zero.contains("config.toml"), "{zero}");
-        let typo = load("[queue.rules]\nstale = 3\n").unwrap_err();
-        assert!(typo.contains("stale"), "{typo}");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[queue.rules]\nstale = 3\n").unwrap();
+        assert!(Config::read(&path).unwrap().warnings[0].contains("`queue.rules.stale`"), "a typo is named");
     }
 
     #[test]
@@ -989,9 +975,30 @@ mod tests {
     }
 
     #[test]
-    fn unknown_keys_fail_loudly() {
-        let err = toml::from_str::<Config>("token = \"glpat-x\"").unwrap_err();
-        assert!(err.to_string().contains("token"), "{err}");
+    fn a_config_written_for_a_newer_revu_loads_with_a_warning_for_each_key_it_ignores() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[tui]\ntheme = \"nord\"\nsparkles = true\n\n[sync]\nevery = 5\n").unwrap();
+        let loaded = Config::read(&path).unwrap();
+        assert_eq!(loaded.config.tui.theme.as_deref(), Some("nord"));
+        assert_eq!(loaded.warnings.len(), 2, "{:?}", loaded.warnings);
+        std::fs::write(&path, "[ai]\nenabled = true\n").unwrap();
+        assert!(Config::read(&path).unwrap().warnings[0].contains("[ai.anthropic] enabled = true"), "the moved switch says where it went");
+        std::fs::write(&path, "[ai.anthropic]\nkey = \"sk-ant\"\n").unwrap();
+        let err = format!("{:#}", Config::load_from(&path).unwrap_err());
+        assert!(err.contains("config.toml") && err.contains("keychain"), "a key in the config is refused: {err}");
+    }
+
+    #[test]
+    fn saving_keeps_the_keys_this_revu_ignores() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[tui]\ntheme = \"nord\"\nsparkles = true\n\n[sync]\nevery = 5\n").unwrap();
+        let mut config = Config::load_from(&path).unwrap();
+        config.tui.theme = Some("dracula".into());
+        config.save_to(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text, "[tui]\ntheme = \"dracula\"\nsparkles = true\n\n[sync]\nevery = 5\n");
     }
 
     #[test]

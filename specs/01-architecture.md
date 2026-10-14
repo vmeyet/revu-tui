@@ -281,7 +281,10 @@ model = "claude-opus-5"
 enabled = false              # Jev triage of the queue and files; off until true
 ```
 
-Unknown keys fail loudly with the file path and key, as in slack-tui.
+A key or table revu does not know, at any depth, is ignored with a warning naming it: a config written for a newer revu still runs an older one.
+The warning shows once per start, on stderr for a command and as a toast in the TUI; a key revu moved says where it went instead.
+A known key with a wrong value or type still fails, with the file path and key.
+Saving keeps the keys revu ignores.
 Saving (login, logout, `:set theme=`) rewrites only the keys that changed, comments and layout kept, through a temp file and a rename.
 
 ## Errors

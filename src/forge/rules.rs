@@ -9,7 +9,7 @@ use std::fmt;
 
 /// `[queue.rules]`: every threshold the rules use.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+#[serde(default)]
 pub struct Rules {
     /// `false` leaves every section as the forge sorted it.
     pub enabled: bool,

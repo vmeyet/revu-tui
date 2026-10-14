@@ -105,6 +105,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         quit_confirm: ctx.config.keys.quit_confirm,
         usage: ctx.config.usage.enabled.then(|| crate::usage::Tally::after(&crate::usage::read(&Cache::shared()))),
         whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
+        ignored_settings: crate::config::warnings(),
         agent: backend.agent.is_some(),
     };
     let mut app = App::new(settings);

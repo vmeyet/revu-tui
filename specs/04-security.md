@@ -59,7 +59,7 @@ TLS via rustls on ring (`src/http.rs` installs it) with webpki roots; no `danger
 - Each provider is off until its own table switches it on: `[ai.anthropic] enabled = true`, `[ai.typesafe] enabled = true`.
 - Keys are secrets, never config: the keychain holds them under service `revu`, accounts `anthropic` and `typesafe`, set with `revu ai login <provider>` (hidden prompt or `--token -`, never argv). `ANTHROPIC_API_KEY` and `TYPESAFE_API_KEY` override the keychain.
 - `revu ai login typesafe` offers to copy the key slack-tui keeps (service `typesafe`); `revu ai login anthropic` checks the key against `GET /v1/models` before storing it.
-- A config holding a key field fails to load: the `[ai.*]` tables only know `enabled` and `model`.
+- A config holding a key field fails to load: any key revu does not know whose name is `key`, `token`, `secret` or `password`, or ends in `_` and one of them, as `[ai.anthropic] key`.
 - What is sent to Claude: the MR title, description, file list, the selected file or hunk with context, the selected thread, and the question. Never a forge token, never other MRs.
 - What is sent to Jev: for each queue MR its title, description, age, pipeline, labels and counts; for an opened MR each file's path and its first hunks. Never a forge token.
 - The first AI call in a session shows a toast naming the provider and the model; `:ai off` stops it for the session, `:ai on` brings it back.

@@ -55,6 +55,9 @@ Each entry says what changed, then where, then how to use it.
   The first three times a hint fires, a toast names the key to try.
 - **Usage counts a key by what it did.**
   In `revu usage`: `q`, `esc` or `x` closing a pane counts as `close_pane`, and `enter` on a file or hunk as `fold_toggle`.
+- **A config written for a newer revu no longer stops this one.**
+  In every command and the TUI: a setting revu does not know is ignored, and a warning names it once at start.
+  An old `[ai] enabled` or `provider` now warns and points at `[ai.anthropic]` and `[ai.typesafe]`.
 
 ## 0.7.0 - 2026-10-12
 

@@ -63,6 +63,7 @@ pub(super) fn settings() -> Settings {
         quit_confirm: true,
         usage: None,
         whats_new: WhatsNew::default(),
+        ignored_settings: vec![],
         agent: false,
     }
 }

@@ -184,3 +184,15 @@ fn completions_know_the_news_command() {
         .success()
         .stdout(predicate::str::contains("news").and(predicate::str::contains("--since")));
 }
+
+#[test]
+fn a_config_written_for_a_newer_revu_warns_once_and_the_command_runs() {
+    let config = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(config.path().join("revu")).unwrap();
+    std::fs::write(config.path().join("revu/config.toml"), "[tui]\nsparkles = true\n\n[sync.later]\nevery = 5\n").unwrap();
+    let warned = predicate::str::contains("`tui.sparkles` is not a setting this revu knows; it is ignored — written for a newer revu?")
+        .and(predicate::str::contains("`sync` is not a setting"))
+        .and(predicate::str::contains("config.toml"));
+    revu().env("XDG_CONFIG_HOME", config.path()).arg("usage").assert().success().stderr(warned);
+    revu().env("XDG_CONFIG_HOME", config.path()).arg("--version").assert().success().stderr("");
+}

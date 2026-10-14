@@ -34,3 +34,18 @@ pub mod update;
 pub mod usage;
 /// `revu whoami`.
 pub mod whoami;
+
+use crate::render::{Style, Theme};
+
+/// Each key of the config this revu ignores, on stderr; the TUI toasts them instead.
+pub fn warn_of_ignored_settings() {
+    let warnings = crate::config::warnings();
+    if warnings.is_empty() {
+        return;
+    }
+    let theme = Theme::detect();
+    for warning in &warnings {
+        eprintln!("{} {warning}", theme.paint("!", Style::Warn));
+    }
+    eprintln!("  {}", theme.paint(&format!("in {}", crate::config::Config::path().display()), Style::Dim));
+}

@@ -58,6 +58,8 @@ pub struct Settings {
     pub usage: Option<crate::usage::Tally>,
     /// revu's own changelog, and how far the reader had got in it.
     pub whats_new: super::WhatsNew,
+    /// The keys of the config this revu ignores, toasted at start.
+    pub ignored_settings: Vec<String>,
     /// `[agent] enabled`: `a g` opens an agent session on an MR.
     pub agent: bool,
 }
@@ -264,9 +266,18 @@ pub struct App {
     pub today: DateTime<Utc>,
 }
 
+/// A config this revu partly ignores says so before what is new in revu, which shows again on `:news`.
+fn first_toast(settings: &Settings, now: Instant) -> Option<Toast> {
+    if !settings.ignored_settings.is_empty() {
+        return Some(Toast::starting(settings.ignored_settings.join(" · "), true, now));
+    }
+    settings.whats_new.announcement().map(|text| Toast::starting(text, false, now))
+}
+
 impl App {
     pub fn new(settings: Settings) -> Self {
         let now = Instant::now();
+        let toast = first_toast(&settings, now);
         Self {
             theme: settings.theme,
             host: settings.host,
@@ -338,7 +349,7 @@ impl App {
             compose_left: None,
             publish: None,
             brief: None,
-            toast: settings.whats_new.announcement().map(|text| Toast::starting(text, false, now)),
+            toast,
             whats_new: settings.whats_new,
             news_page: None,
             links: vec![],

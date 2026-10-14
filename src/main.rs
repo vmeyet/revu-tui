@@ -9,6 +9,10 @@ use revu::ctx::Ctx;
 async fn main() {
     let cli = Cli::parse();
     revu::log::start();
+    let opens_tui = matches!(cli.command, None | Some(Command::Tui(_)));
+    if !opens_tui {
+        commands::warn_of_ignored_settings();
+    }
     if let Err(err) = run(cli).await {
         eprintln!("\x1b[31m✗\x1b[0m {err}");
         for cause in err.chain().skip(1) {
