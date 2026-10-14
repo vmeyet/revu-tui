@@ -26,9 +26,9 @@ It is written for users: no commit words, no internal names, only what they can 
 ```
 
 - `## Unreleased` comes first and holds what is on `main` after the last release; then one `## <version> - <date>` per release, newest first.
-- Two groups per section, `### New` and `### Fixed`; either may be missing.
+- Three groups per section, in this order: `### New`, `### Fixed` and `### Removed`; any may be missing.
 - An entry is three lines, one sentence each: **what** in bold after `- `, then **where** it applies, then **how** to use it, both indented by two spaces.
-- A fix may stop at where, when there is nothing to press.
+- A fix or a removal may stop at where, when there is nothing to press; a removal's how says what to use instead.
 - Text before the first section is the page's introduction on the forge; the binary skips it.
 - Anything else is refused: the parser fails with the entry or heading it stopped on, and a test parses the shipped page.
 
@@ -49,7 +49,7 @@ A released binary carries an empty `Unreleased`, so its position is its version 
 
 ## Where it shows
 
-- `revu news` prints every section; `--since <version>` only what came after it, or `Nothing new since <version>.`; `--json` prints the sections with `version`, `date`, `new` and `fixed`, each entry as `what`, `where`, `how`.
+- `revu news` prints every section; `--since <version>` only what came after it, or `Nothing new since <version>.`; `--json` prints the sections with `version`, `date`, `new`, `fixed` and `removed`, each entry as `what`, `where`, `how`.
 - `revu update` ends with `New since <version>`, the new sections and a line on how to read them again; nothing more than before when nothing is new.
   The running process is the old binary, so it runs the installed one (`current_exe`, which brew and cargo both replaced in place) with the hidden `--after-update` and its own position as `--since`.
   A failure to show it only warns: the update itself worked.

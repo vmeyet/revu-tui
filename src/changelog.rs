@@ -85,6 +85,7 @@ pub struct Section {
     pub date: Option<String>,
     pub new: Vec<Entry>,
     pub fixed: Vec<Entry>,
+    pub removed: Vec<Entry>,
 }
 
 impl Section {
@@ -93,12 +94,13 @@ impl Section {
     }
 
     pub fn count(&self) -> usize {
-        self.new.len() + self.fixed.len()
+        self.new.len() + self.fixed.len() + self.removed.len()
     }
 
-    /// The groups that hold something, in the order they read: New, then Fixed.
+    /// The groups that hold something, in the order they read: New, Fixed, then Removed.
     pub fn groups(&self) -> impl Iterator<Item = (&'static str, &[Entry])> {
-        [("New", self.new.as_slice()), ("Fixed", self.fixed.as_slice())].into_iter().filter(|(_, entries)| !entries.is_empty())
+        let groups = [("New", self.new.as_slice()), ("Fixed", self.fixed.as_slice()), ("Removed", self.removed.as_slice())];
+        groups.into_iter().filter(|(_, entries)| !entries.is_empty())
     }
 }
 
@@ -115,6 +117,7 @@ fn title_of<S: Serializer>(version: &Option<Version>, serializer: S) -> Result<S
 enum Group {
     New,
     Fixed,
+    Removed,
 }
 
 /// Every section, newest first, as the binary running `running` carries them.
@@ -194,9 +197,8 @@ fn section(lines: &[&str]) -> Result<Section> {
     let heading = lines.first().and_then(|line| line.strip_prefix(SECTION)).unwrap_or_default().trim();
     let (version, date) = heading_of(heading)?;
     let groups = groups(&lines[1..]).with_context(|| format!("under `{heading}`"))?;
-    let (new, fixed): (Vec<_>, Vec<_>) = groups.into_iter().partition(|(group, _)| *group == Group::New);
-    let entries = |groups: Vec<(Group, Vec<Entry>)>| groups.into_iter().flat_map(|(_, entries)| entries).collect();
-    Ok(Section { version, date, new: entries(new), fixed: entries(fixed) })
+    let entries = |wanted: Group| groups.iter().filter(|(group, _)| *group == wanted).flat_map(|(_, entries)| entries.clone()).collect();
+    Ok(Section { version, date, new: entries(Group::New), fixed: entries(Group::Fixed), removed: entries(Group::Removed) })
 }
 
 fn groups(lines: &[&str]) -> Result<Vec<(Group, Vec<Entry>)>> {
@@ -219,7 +221,8 @@ fn entries(lines: &[&str]) -> Result<(Group, Vec<Entry>)> {
     let group = match lines.first().and_then(|line| line.strip_prefix(GROUP)).map(str::trim) {
         Some("New") => Group::New,
         Some("Fixed") => Group::Fixed,
-        other => bail!("`{}` is not a group: use `New` or `Fixed`", other.unwrap_or_default()),
+        Some("Removed") => Group::Removed,
+        other => bail!("`{}` is not a group: use `New`, `Fixed` or `Removed`", other.unwrap_or_default()),
     };
     let written = parts(&lines[1..], ENTRY);
     ensure_blank(&written[0])?;
@@ -231,7 +234,7 @@ fn entry(lines: &[&str], group: Group) -> Result<Entry> {
     let written: Vec<&str> = lines.iter().copied().filter(|line| !line.trim().is_empty()).collect();
     let shape = || format!("not `- **What.**`, then where, then how, one sentence per line: {}", written.join(" / "));
     let (what, place, how) = match written.as_slice() {
-        [what, place] if group == Group::Fixed => (what, place, None),
+        [what, place] if group != Group::New => (what, place, None),
         [what, place, how] => (what, place, Some(how)),
         _ => bail!(shape()),
     };
@@ -352,6 +355,16 @@ Words before the first section are for the page on the forge.
         assert_eq!(prose.place, "In the diff, on a Markdown file.");
         assert_eq!(prose.how.as_deref(), Some("`v` opens the page, and `v` again goes back."));
         assert_eq!(log.sections[1].fixed[0].how, None, "a fix may have nothing to press");
+    }
+
+    #[test]
+    fn a_removal_reads_after_the_fixes_and_may_say_what_to_use_instead() {
+        let text = "## Unreleased\n\n### Fixed\n\n- **A fix.**\n  In zen.\n\n### Removed\n\n- **`S` in the queue.**\n  In the queue.\n\n- **`J` and `K`.**\n  In the thread pane.\n  `j` and `k` walk the notes.\n";
+        let log = Changelog::parse(text, version("0.6.0")).unwrap();
+        let unreleased = &log.sections[0];
+        assert_eq!((unreleased.removed.len(), unreleased.count()), (2, 3));
+        assert_eq!(unreleased.removed[1].how.as_deref(), Some("`j` and `k` walk the notes."));
+        assert_eq!(unreleased.groups().map(|(name, _)| name).collect::<Vec<_>>(), ["Fixed", "Removed"]);
     }
 
     #[test]
