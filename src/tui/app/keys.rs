@@ -563,6 +563,26 @@ mod tests {
     use ratatui::layout::Rect;
 
     #[test]
+    fn the_removed_keys_do_nothing() {
+        let mut queue = with_queue();
+        let rows = queue.queue_rows().len();
+        assert_eq!(press(&mut queue, "S"), vec![]);
+        assert_eq!((queue.queue_rows().len(), queue.queue_view_label()), (rows, None), "no grouping by author");
+        for keys in ["zh", "zM", "zR", "]N", "[N", "]f", "[f", "]r", "[r", "ae", "ar", "as", "at", "ac"] {
+            let mut app = with_review();
+            let before = (app.open.as_ref().unwrap().selected, app.open.as_ref().unwrap().review.fold.clone());
+            assert_eq!(press(&mut app, keys), vec![], "{keys}");
+            let after = (app.open.as_ref().unwrap().selected, app.open.as_ref().unwrap().review.fold.clone());
+            assert_eq!(after, before, "{keys} leaves the diff as it was");
+        }
+        let mut pane = with_review();
+        press(&mut pane, "T");
+        let note = pane.open.as_ref().unwrap().pane.as_ref().unwrap().note;
+        press(&mut pane, "JK");
+        assert_eq!(pane.open.as_ref().unwrap().pane.as_ref().unwrap().note, note, "no thread jumps in the pane");
+    }
+
+    #[test]
     fn the_second_key_of_two_with_ctrl_does_nothing() {
         let mut app = with_review();
         press(&mut app, "z");
