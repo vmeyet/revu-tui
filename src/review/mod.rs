@@ -414,10 +414,14 @@ impl Review {
         Self { files: self.files.iter().map(kept).collect(), ..self }
     }
 
-    /// The same diff with fresh threads, for the cheap discussions poll.
+    /// The same diff with fresh threads, for the cheap discussions poll; threads equal to the current ones stay the same
+    /// shared slice, so nothing built on them is built again.
     pub fn with_discussions(self, discussions: Vec<Discussion>) -> Self {
-        let threads = threads_of(discussions, &self.files).into();
-        Self { threads, ..self }
+        let threads = threads_of(discussions, &self.files);
+        if *self.threads == *threads {
+            return self;
+        }
+        Self { threads: threads.into(), ..self }
     }
 
     /// Every note in every thread, to notice new ones between two polls.

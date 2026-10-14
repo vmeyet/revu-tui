@@ -56,8 +56,9 @@ impl App {
             Incoming::Discussions { key, discussions } => {
                 if let Some(open) = self.open.take_if(|o| o.key == key) {
                     let fresh = open.review.clone().with_discussions(discussions);
+                    let moved = !std::sync::Arc::ptr_eq(&fresh.threads, &open.review.threads);
                     self.news = news(&open.review, &fresh).or(self.news.take());
-                    self.open = Some(open.with_review(fresh));
+                    self.open = Some(if moved { open.with_review(fresh) } else { open });
                     self.offline = None;
                     self.schedule_discussions();
                 }
@@ -253,6 +254,20 @@ mod tests {
         assert_eq!(open.row(), Some(&Row::File { index: 0, open: true }), "the cursor starts on the first file");
         assert_eq!(app.opened.get(&mr_key()), Some(&today()));
         assert!(app.poll.mr_due.is_some() && app.poll.discussions_due.is_some());
+    }
+
+    #[test]
+    fn a_poll_that_brings_nothing_new_keeps_the_threads_so_nothing_is_laid_out_again() {
+        let mut app = with_review();
+        let threads = |app: &App| std::sync::Arc::clone(&app.open.as_ref().unwrap().review.threads);
+        let before = threads(&app);
+        app.apply(Incoming::Discussions { key: mr_key(), discussions: discussions() });
+        assert!(std::sync::Arc::ptr_eq(&threads(&app), &before), "the same threads, kept by identity");
+        assert!(app.poll.discussions_due.is_some(), "the next poll is set");
+        let more: Vec<Discussion> = discussions().into_iter().chain([thread_on_line_13("new", 1)]).collect();
+        app.apply(Incoming::Discussions { key: mr_key(), discussions: more });
+        assert!(!std::sync::Arc::ptr_eq(&threads(&app), &before), "a new thread replaces them");
+        assert_eq!(app.open.as_ref().unwrap().review.threads.len(), before.len() + 1);
     }
 
     #[test]
