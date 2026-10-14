@@ -61,6 +61,8 @@ Each entry says what changed, then where, then how to use it.
   In the diff and the thread pane: `a a` or `:ask` asks the same in your own words.
 - **The jumps `]N` `[N`, `]f` `[f` and `]r` `[r`.**
   In the diff and the queue: `]n` `[n` still jump between open threads, `T` lists every thread, and `]m` `[m` change MR.
+- **Finding a file of the open MR with `^k` then `/`.**
+  In the search box: `t` opens the file tree, and `/` in the diff finds a path too.
 
 ## 0.8.0 - 2026-10-14
 

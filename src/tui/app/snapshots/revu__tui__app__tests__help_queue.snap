@@ -25,7 +25,7 @@ expression: "render(&mut app, 160, 45)"
 │                          │      enter  open, or toggle the fold or the thread      zo zc  open, fold the section or stack         │                          │
 │                          │      esc x  close the pane, back to the queue                                                          │                          │
 │                          │  tab S-tab  next, previous file                         SEARCH & APP                                   │                          │
-│                          │      ]c [c  next, previous hunk                          ^k ,  MRs · / files · > commands              │                          │
+│                          │      ]c [c  next, previous hunk                          ^k ,  MRs · > commands                        │                          │
 │                          │      ]n [n  next, previous open conversation                :  commands: :go !42, :set theme=nord      │                          │
 │                          │        n N  the same, while no search is on               o y  open in the browser, copy the link      │                          │
 │                          │      ]m [m  next, previous MR in the queue                 ag  the agent session of the MR: a, then g  │                          │

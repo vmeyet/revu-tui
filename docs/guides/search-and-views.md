@@ -1,6 +1,6 @@
 # Search and saved views
 
-`⌘K` finds any MR, file or command, and `/` filters the queue with the same words.
+`⌘K` finds any MR or command, and `/` filters the queue with the same words.
 
 ## Search with ⌘K
 
@@ -11,7 +11,6 @@ The first character picks what you search.
 | You type | Finds |
 |---|---|
 | `charge` | MRs whose title, author, project or branch hold the word |
-| `/charge.rs` | Files of the open MR |
 | `>publish` | Commands |
 
 `:` opens the search on commands directly.

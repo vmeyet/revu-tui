@@ -1,7 +1,7 @@
-//! The palette, `ctrl-k` or `⌘k`: one box that finds MRs, the open MR's files, or runs commands,
-//! picked by the first character as VS Code does. Nothing typed finds MRs (`@author`, `!42`,
-//! `~label` narrow them, see `query`), `/` finds files, `>` runs commands. `:` opens it on
-//! commands, with fuzzy tab completion, a ghost suggestion and history.
+//! The palette, `ctrl-k` or `⌘k`: one box that finds MRs or runs commands, picked by the first
+//! character as VS Code does. Nothing typed finds MRs (`@author`, `!42`, `~label` narrow them, see
+//! `query`), `>` runs commands. `:` opens it on commands, with fuzzy tab completion, a ghost
+//! suggestion and history.
 use super::complete::{self, Cycle};
 use crate::act::{self, Act};
 use crate::forge::MrKey;
@@ -12,7 +12,6 @@ use crate::fuzzy;
 pub enum Mode {
     #[default]
     Mrs,
-    Files,
     Commands,
     /// The answers Claude gave before on the open MR, `a h`.
     Answers,
@@ -25,7 +24,6 @@ impl Mode {
     pub fn prompt(self) -> (&'static str, &'static str) {
         match self {
             Mode::Mrs => ("", "MRs · @author !42 ~label draft:no"),
-            Mode::Files => ("/", "files of the open MR"),
             Mode::Commands => (">", "commands"),
             Mode::Answers => ("", "answers kept for this MR"),
             Mode::Sessions => ("", "sessions of this checkout"),
@@ -36,8 +34,6 @@ impl Mode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Mr(MrKey),
-    /// A file of the open MR, by its index in the review.
-    File(usize),
     /// A kept answer, by its index in the list `a h` found.
     Answer(usize),
     /// An agent session, by its index in the list `a g` found; `None` for a new one.
@@ -239,11 +235,10 @@ impl Palette {
         Self { mode, history, ..Self::default() }
     }
 
-    /// `>` or `/` as the very first character switches the mode instead of being typed.
+    /// `>` as the very first character switches the mode instead of being typed.
     pub fn type_char(&mut self, c: char) {
         match (self.mode, self.input.is_empty(), c) {
             (Mode::Mrs, true, '>') => self.mode = Mode::Commands,
-            (Mode::Mrs, true, '/') => self.mode = Mode::Files,
             _ => self.input.push(c),
         }
         self.selected = 0;
@@ -430,7 +425,7 @@ mod tests {
         assert_eq!(p.mode, Mode::Mrs, "an empty line steps back to MRs");
         assert!(!p.backspace(), "nothing left: the palette closes");
         p.type_char('/');
-        assert_eq!(p.mode, Mode::Files);
+        assert_eq!((p.mode, p.input.as_str()), (Mode::Mrs, "/"), "a slash is typed like any letter");
         let mut p = Palette::default();
         p.type_char('@');
         assert_eq!((p.mode, p.input.as_str()), (Mode::Mrs, "@"), "@ ! # ~ narrow MRs, they are no modes");

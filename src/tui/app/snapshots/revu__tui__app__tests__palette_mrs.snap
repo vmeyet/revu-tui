@@ -9,7 +9,7 @@ expression: "render(&mut app, 100, 24)"
 │                   │                                                          │                   │
 │ ▎▾ src/pay/charge.│ ▎◆ !42 feat: charge cards at checkout  omar              │2  ✓1 · 1 outdated │
 │     ▾ @@ -12,4 +12│  ◆ !35 infra: new runner  omar                           │                   │
-│      12  pub async│   ↑↓ pick · enter opens · > commands · / files · esc     │                   │
+│      12  pub async│   ↑↓ pick · enter opens · > commands · esc               │                   │
 │  ✓   13 -    let c│                                                          │                   │
 │        │ ✓ resolve│                                                          │                   │
 │      13 +    let c│                                                          │                   │

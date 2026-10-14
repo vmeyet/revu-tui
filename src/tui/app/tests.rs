@@ -274,10 +274,6 @@ fn snapshot_palette_in_each_mode() {
     app.handle_key(ctrl_k());
     press(&mut app, "@omar");
     insta::assert_snapshot!("palette_mrs", render(&mut app, 100, 24));
-    app.handle_key(code(KeyCode::Esc));
-    app.handle_key(ctrl_k());
-    press(&mut app, "/ch");
-    insta::assert_snapshot!("palette_files", render(&mut app, 100, 24));
 }
 
 #[test]

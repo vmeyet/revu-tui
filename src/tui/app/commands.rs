@@ -3,7 +3,6 @@ use super::{Action, App, Focus};
 use crate::forge::MrKey;
 use crate::fuzzy;
 use crate::query::Query;
-use crate::review::Row;
 use crate::tui::help::Help;
 use crate::tui::palette::{self, Candidate, Command, MAX_SHOWN, Mode, Palette, Slot, Target};
 use crate::tui::theme::Theme;
@@ -85,12 +84,6 @@ impl App {
                 self.count("palette_mr");
                 self.open_key(key)
             }
-            Some(Target::File(index)) => {
-                self.count("palette_file");
-                self.focus = Focus::Review;
-                self.review_jump_to(|row| matches!(row, Row::File { index: i, .. } if *i == index));
-                vec![]
-            }
             Some(Target::Answer(index)) => {
                 self.show_past_answer(index);
                 vec![]
@@ -101,11 +94,10 @@ impl App {
     }
 
     /// The rows the palette lists for what is typed: MRs the query keeps, ranked by its free
-    /// words; the open MR's files by fuzzy path; nothing for commands, which complete in place.
+    /// words; nothing for commands, which complete in place.
     pub fn palette_candidates(&self, palette: &Palette) -> Vec<Candidate> {
         match palette.mode {
             Mode::Mrs => self.mr_candidates(&palette.input),
-            Mode::Files => self.file_candidates(&palette.input),
             Mode::Answers => self.answer_candidates(&palette.input),
             Mode::Sessions => self.session_candidates(&palette.input),
             Mode::Commands => vec![],
@@ -124,15 +116,6 @@ impl App {
         let ranked: Vec<Candidate> =
             if words.is_empty() { kept.map(|(_, c)| c).collect() } else { fuzzy::rank(&words, kept).into_iter().map(|(_, c)| c).collect() };
         ranked.into_iter().take(MAX_SHOWN).collect()
-    }
-
-    fn file_candidates(&self, typed: &str) -> Vec<Candidate> {
-        let files = self.open.iter().flat_map(|open| {
-            open.review.files.iter().enumerate().map(|(i, file)| {
-                (file.new_path.clone(), Candidate { label: file.new_path.clone(), detail: String::new(), target: Target::File(i) })
-            })
-        });
-        fuzzy::rank(typed, files).into_iter().map(|(_, c)| c).take(MAX_SHOWN).collect()
     }
 
     /// The kept answers, newest first, each with its age and a word when the MR moved on since.
@@ -344,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_k_finds_mrs_and_a_slash_finds_the_open_mrs_files() {
+    fn ctrl_k_finds_mrs() {
         let mut app = with_review();
         app.handle_key(ctrl_k());
         assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
@@ -352,13 +335,6 @@ mod tests {
         assert_eq!(palette_labels(&app), ["!41 fix: flaky cache test"]);
         let actions = app.handle_key(code(KeyCode::Enter));
         assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41));
-        let mut app = with_review();
-        app.handle_key(ctrl_k());
-        press(&mut app, "/");
-        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Files);
-        assert!(matches!(app.palette_candidates(app.palette.as_ref().unwrap())[0].target, crate::tui::palette::Target::File(0)));
-        app.handle_key(code(KeyCode::Enter));
-        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::File { index: 0, .. })));
     }
 
     #[test]

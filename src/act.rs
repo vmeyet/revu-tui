@@ -80,7 +80,6 @@ pub enum Act {
     CopyFirstLink,
     AskFree,
     PaletteMr,
-    PaletteFile,
     GoCommand,
     OpenCommand,
     CopyCommand,
@@ -446,7 +445,7 @@ pub const ROWS: &[Row] = &[
         .panes(&[Pane::Queue])
         .section(Section::Queue),
     bound(Act::Jump, "jump", &["ctrl-k", ","])
-        .help(&[line(Group::App, "^k ,", "MRs · / files · > commands")])
+        .help(&[line(Group::App, "^k ,", "MRs · > commands")])
         .panes(&[Pane::Anywhere])
         .section(Section::App),
     bound(Act::Help, "help", &["?"]).help(&[line(Group::App, "?", "this help")]).panes(&[Pane::Anywhere]).section(Section::App),
@@ -514,7 +513,6 @@ pub const ROWS: &[Row] = &[
     listed(Act::CopyFirstLink, "copy_first_link", &["U"]).panes(&[Pane::ThreadRow]).section(Section::Thread),
     listed(Act::AskFree, "ask_free", &["aa"]).help(&[line(Group::Ask, "a a", "ask anything about the cursor")]).section(Section::Ask),
     listed(Act::PaletteMr, "palette_mr", &[]).section(Section::App),
-    listed(Act::PaletteFile, "palette_file", &[]).section(Section::App),
     command!(Act::GoCommand, "go", "open an MR: :go !42 · :go acme/widgets!42"),
     command!(Act::OpenCommand, "open", "open the MR, or the line, in the browser"),
     command!(Act::CopyCommand, "copy", "copy the link of the MR, or of the line"),

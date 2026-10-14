@@ -393,10 +393,10 @@ The config fails to load, naming the file, on an unknown action, a key that does
 
 ### Search: `ctrl-k`, `⌘k`, `,`, `:`
 
-One popup finds MRs, files and commands, picked by the first character as VS Code does.
-Nothing typed searches the queue's MRs; `/` first searches the open MR's files; `>` first runs commands, and `⌫` on an empty line steps back to MRs.
+One popup finds MRs and commands, picked by the first character as VS Code does.
+Nothing typed searches the queue's MRs; `>` first runs commands, and `⌫` on an empty line steps back to MRs.
 `ctrl-k`, `⌘k` and `,` open it on MRs; `:` and `⌘⇧k` (where the terminal tells it apart) open it on commands.
-The prompt shows the mode (`›`, `/`, `>`) and the title says what it searches.
+The prompt shows the mode (`›`, `>`) and the title says what it searches.
 
 MR terms (`src/query.rs`, shared with the queue filter and saved views): free words, `"quoted words"`, `@author` (`@me`; several are any of them), `!42` or `#42` (several are any of them), `~label` (`~"two words"`; several are all of them).
 The terms keep MRs, then the free words rank them fuzzily; `@loic ~infra slack` finds Loïc's infra MRs about slack.
