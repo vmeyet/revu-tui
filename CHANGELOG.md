@@ -29,6 +29,9 @@ Each entry says what changed, then where, then how to use it.
   Each revu keeps the other's pins, sort order and folded sections.
 - **A slow MR you left no longer spoils the next one.**
   When an MR is slow to open and you open another: its late error no longer shows, marks you offline or blocks the new one.
+- **GitHub's secondary rate limit is waited out.**
+  On GitHub, when it asks revu to slow down while requests are left.
+  A short wait passes on its own; a long one says `rate limited until 14:05`, and refreshing comes back then.
 
 ## 0.8.0 - 2026-10-14
 

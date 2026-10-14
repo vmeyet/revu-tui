@@ -21,7 +21,7 @@ Ratelimit-Remaining: 1992
 Ratelimit-Reset: <unix seconds>
 ```
 
-On `429` wait until `Ratelimit-Reset` (or `Retry-After`) then retry once.
+On `429` wait for `Retry-After` (or until `Ratelimit-Reset`) then retry once; a wait past a minute fails at once with `rate limited until 14:05`, and polling resumes then.
 The client reads `Ratelimit-Remaining` and, under 100, slows polling to the reset.
 
 ## Pagination

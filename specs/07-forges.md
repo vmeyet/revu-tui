@@ -33,7 +33,9 @@ forge = "github"      # a GitHub Enterprise host, which the name alone cannot te
 
 Both clients hold a `Transport` and keep only their own endpoints.
 It carries the token headers on a client that follows no redirect, checks every URL against the scheme, host and port of its base, reads lists by `Link: rel="next"`, and waits out one rate limit.
-A `Flavor` holds what differs: the rate-limit header names, whether a 403 with no request left is a rate limit (GitHub) and the forge's error body reader.
+A `Flavor` holds what differs: the rate-limit header names, whether a 403 can be a rate limit (GitHub) and the forge's error body reader.
+On GitHub a 403 is a rate limit when it leaves no request, carries `Retry-After`, or its message names a secondary rate limit; this follows GitHub's REST rate-limit documentation.
+A 403 or 429 waits `Retry-After` seconds, else until `x-ratelimit-reset`, else one minute for a secondary limit; past a minute it fails at once with `rate limited until 14:05`.
 An answer outside 2xx is an `HttpError { request, status, message }` inside the `anyhow::Error`; callers sort it with `downcast_ref`, never by its text.
 
 ## Neutral model (`src/forge/model.rs`, `src/forge/queue.rs`)

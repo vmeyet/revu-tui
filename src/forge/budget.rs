@@ -9,7 +9,7 @@ const UNKNOWN: u64 = u64::MAX;
 #[derive(Clone, Debug)]
 pub struct Budget {
     remaining: Arc<AtomicU64>,
-    /// Unix seconds a rate-limited request sleeps until; 0 when none waits.
+    /// Unix seconds the forge asked to wait until; 0, or a time gone by, when it asks none.
     waiting_until: Arc<AtomicU64>,
 }
 
@@ -24,7 +24,7 @@ impl Default for Budget {
 pub struct RateLimit {
     /// Requests left in the current window, once an answer said.
     pub remaining: Option<u64>,
-    /// How long until a waiting request goes again.
+    /// How long until the forge takes requests again, while it asked to wait.
     pub wait: Option<Duration>,
 }
 
@@ -45,18 +45,15 @@ impl Budget {
         }
     }
 
+    /// The later of two asked waits holds: a short one never hides a long one.
     pub fn waiting_for(&self, wait: Duration) {
-        self.waiting_until.store(unix_now() + wait.as_secs(), Ordering::Relaxed);
-    }
-
-    pub fn done_waiting(&self) {
-        self.waiting_until.store(0, Ordering::Relaxed);
+        self.waiting_until.fetch_max(unix_now() + wait.as_secs(), Ordering::Relaxed);
     }
 
     pub fn now(&self) -> RateLimit {
         let remaining = Some(self.remaining.load(Ordering::Relaxed)).filter(|n| *n != UNKNOWN);
-        let until = self.waiting_until.load(Ordering::Relaxed);
-        let wait = (until > 0).then(|| Duration::from_secs(until.saturating_sub(unix_now())));
+        let (until, now) = (self.waiting_until.load(Ordering::Relaxed), unix_now());
+        let wait = (until > now).then(|| Duration::from_secs(until - now));
         RateLimit { remaining, wait }
     }
 }
@@ -85,8 +82,10 @@ mod tests {
         assert_eq!(budget.now().remaining, Some(42));
         assert!(budget.now().is_low());
         clone.waiting_for(Duration::from_secs(30));
-        assert!(budget.now().wait.is_some_and(|w| (29..=30).contains(&w.as_secs())));
-        clone.done_waiting();
-        assert_eq!(budget.now().wait, None);
+        clone.waiting_for(Duration::from_secs(5));
+        assert!(budget.now().wait.is_some_and(|w| (29..=30).contains(&w.as_secs())), "the longer wait holds");
+        let other = Budget::default();
+        other.waiting_for(Duration::ZERO);
+        assert_eq!(other.now().wait, None, "a wait gone by is none");
     }
 }

@@ -19,7 +19,7 @@ const RAW: &str = "application/vnd.github.raw+json";
 const API_VERSION: &str = "2022-11-28";
 
 static FLAVOR: Flavor =
-    Flavor { remaining: "x-ratelimit-remaining", reset: "x-ratelimit-reset", waits_on_spent_403: true, error_message: wire::error_message };
+    Flavor { remaining: "x-ratelimit-remaining", reset: "x-ratelimit-reset", limits_with_403: true, error_message: wire::error_message };
 
 /// One GitHub host. The token goes to its API host only: `api.github.com` for github.com, the
 /// host itself for GitHub Enterprise; redirects are refused and every URL is checked first.
@@ -156,6 +156,26 @@ mod tests {
             .await;
         let me = Client::with_base(&creds(), &server.uri()).unwrap().me().await.unwrap();
         assert_eq!(me.name, "nina", "no name falls back to the login");
+        assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_secondary_limit_403_with_requests_left_is_waited_out() {
+        let server = MockServer::start().await;
+        let message =
+            serde_json::json!({"message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."});
+        let limited = ResponseTemplate::new(403)
+            .insert_header("x-ratelimit-remaining", "4999")
+            .insert_header("retry-after", "0")
+            .set_body_json(message);
+        Mock::given(method("GET")).and(path("/user")).respond_with(limited).up_to_n_times(1).mount(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7, "login": "nina", "name": "Nina"})))
+            .mount(&server)
+            .await;
+        let me = Client::with_base(&creds(), &server.uri()).unwrap().me().await.unwrap();
+        assert_eq!(me.name, "Nina");
         assert_eq!(server.received_requests().await.unwrap().len(), 2);
     }
 

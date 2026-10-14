@@ -20,7 +20,7 @@ const TOKEN_HEADER: &str = "PRIVATE-TOKEN";
 const GRAPHQL: &str = "../graphql";
 
 static FLAVOR: Flavor =
-    Flavor { remaining: "ratelimit-remaining", reset: "ratelimit-reset", waits_on_spent_403: false, error_message: wire::error_message };
+    Flavor { remaining: "ratelimit-remaining", reset: "ratelimit-reset", limits_with_403: false, error_message: wire::error_message };
 
 /// One GitLab host. The token is sent to that host and nowhere else: redirects are refused
 /// and every URL is checked against its origin before the header goes on.

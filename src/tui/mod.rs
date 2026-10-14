@@ -163,7 +163,12 @@ async fn event_loop(
                 Event::FocusLost => { wake(app); app.terminal_focus(false); vec![] }
                 _ => vec![],
             },
-            Some(incoming) = rx.recv() => { wake(app); app.apply_all(std::iter::once(incoming).chain(std::iter::from_fn(|| rx.try_recv().ok()))) }
+            Some(incoming) = rx.recv() => {
+                wake(app);
+                // A failure backs off by the wait its request was just told.
+                app.rate = backend.forge.rate();
+                app.apply_all(std::iter::once(incoming).chain(std::iter::from_fn(|| rx.try_recv().ok())))
+            }
             () = tokio::time::sleep_until(next_tick.into()) => {
                 ticked = Instant::now();
                 wake(app);

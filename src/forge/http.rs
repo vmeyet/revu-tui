@@ -3,7 +3,7 @@
 //! out once. What differs between forges is a `Flavor`.
 use super::budget::{self, Budget, RateLimit};
 use anyhow::{Context, Result, bail};
-use reqwest::header::{ACCEPT, HeaderMap};
+use reqwest::header::{ACCEPT, HeaderMap, RETRY_AFTER};
 use reqwest::{Method, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -11,7 +11,10 @@ use std::time::Duration;
 use url::Url;
 
 const PAGE_SIZE: &str = "100";
+/// The longest a request sleeps on a rate limit; past it, the request fails saying until when.
 const MAX_WAIT: Duration = Duration::from_secs(60);
+/// What GitHub asks after a secondary limit that names no wait: a minute at least.
+const SECONDARY_WAIT: Duration = Duration::from_secs(60);
 /// The most one request may take, its answer read whole: a slow page of diffs still fits.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -22,8 +25,9 @@ pub struct Flavor {
     pub remaining: &'static str,
     /// The header giving the unix time the window starts again.
     pub reset: &'static str,
-    /// Whether a 403 with no request left is a rate limit to wait out rather than a refusal.
-    pub waits_on_spent_403: bool,
+    /// Whether a 403 can be a rate limit rather than a refusal: with no request left, a
+    /// `Retry-After`, or a message naming a secondary rate limit.
+    pub limits_with_403: bool,
     /// The forge's error body, in one line.
     pub error_message: fn(&str) -> String,
 }
@@ -144,16 +148,19 @@ impl Transport {
         self.send_to(method, self.url(path)?, body, None).await
     }
 
-    /// Retried once after the wait the forge asks for when it rate-limits.
+    /// Retried once after the wait the forge asks for when it rate-limits; a wait past `MAX_WAIT`
+    /// fails at once, saying until when, and the budget holds that time.
     async fn send_to(&self, method: Method, url: Url, body: Option<&serde_json::Value>, accept: Option<&str>) -> Result<Response> {
         let first = self.send_once(method.clone(), url.clone(), body, accept).await?;
-        if !self.rate_limited(&first) {
-            return self.checked(first, &method, &url).await;
+        if first.status().is_success() {
+            return Ok(first);
         }
-        let wait = self.wait_from(first.headers()).min(MAX_WAIT);
+        let wait = Box::pin(self.limit_wait(first, &method, &url)).await?;
         self.budget.waiting_for(wait);
+        if wait > MAX_WAIT {
+            return Err(limited_until(wait));
+        }
         tokio::time::sleep(wait).await;
-        self.budget.done_waiting();
         let second = self.send_once(method.clone(), url.clone(), body, accept).await?;
         self.checked(second, &method, &url).await
     }
@@ -173,29 +180,50 @@ impl Transport {
         Ok(response)
     }
 
-    fn rate_limited(&self, response: &Response) -> bool {
-        let spent = budget::header_number(response.headers(), self.flavor.remaining) == Some(0);
-        match response.status() {
+    /// How long a refused answer asks to wait; an answer that is no rate limit is its `HttpError`.
+    async fn limit_wait(&self, refused: Response, method: &Method, url: &Url) -> Result<Duration> {
+        let headers = refused.headers().clone();
+        let refusal = self.refusal(refused, method, url).await;
+        self.wait_asked(refusal.status, &headers, &refusal.message).ok_or_else(|| refusal.into())
+    }
+
+    /// How long a refused answer asks to wait, when it is a rate limit.
+    fn wait_asked(&self, status: StatusCode, headers: &HeaderMap, message: &str) -> Option<Duration> {
+        let is_secondary = names_a_secondary_limit(message);
+        let asks_a_wait = headers.contains_key(RETRY_AFTER) || self.is_spent(headers) || is_secondary;
+        let is_limit = match status {
             StatusCode::TOO_MANY_REQUESTS => true,
-            StatusCode::FORBIDDEN => self.flavor.waits_on_spent_403 && spent,
+            StatusCode::FORBIDDEN => self.flavor.limits_with_403 && asks_a_wait,
             _ => false,
-        }
+        };
+        is_limit.then(|| self.wait_from(headers, is_secondary))
+    }
+
+    fn is_spent(&self, headers: &HeaderMap) -> bool {
+        budget::header_number(headers, self.flavor.remaining) == Some(0)
     }
 
     async fn checked(&self, response: Response, method: &Method, url: &Url) -> Result<Response> {
-        let status = response.status();
-        if status.is_success() {
+        if response.status().is_success() {
             return Ok(response);
         }
-        let body = response.text().await.unwrap_or_default();
-        let request = format!("{method} {}", url.path());
-        Err(HttpError { request, status, message: (self.flavor.error_message)(&body) }.into())
+        Err(self.refusal(response, method, url).await.into())
     }
 
-    /// `Retry-After` in seconds, else the reset header as a unix time, else one second.
-    fn wait_from(&self, headers: &HeaderMap) -> Duration {
+    async fn refusal(&self, response: Response, method: &Method, url: &Url) -> HttpError {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        HttpError { request: format!("{method} {}", url.path()), status, message: (self.flavor.error_message)(&body) }
+    }
+
+    /// `Retry-After` in seconds; else a minute for a secondary limit with requests left, whose reset
+    /// header times the other window; else the reset header as a unix time; else one second.
+    fn wait_from(&self, headers: &HeaderMap, is_secondary: bool) -> Duration {
         if let Some(seconds) = budget::header_number(headers, "retry-after") {
             return Duration::from_secs(seconds);
+        }
+        if is_secondary && !self.is_spent(headers) {
+            return SECONDARY_WAIT;
         }
         budget::header_number(headers, self.flavor.reset)
             .map_or(Duration::from_secs(1), |reset| Duration::from_secs(reset.saturating_sub(budget::unix_now())))
@@ -208,6 +236,16 @@ impl Transport {
         }
         Ok(url)
     }
+}
+
+fn names_a_secondary_limit(message: &str) -> bool {
+    message.to_lowercase().contains("secondary rate limit")
+}
+
+/// Said in local time, to the minute, as the reader reads a clock.
+fn limited_until(wait: Duration) -> anyhow::Error {
+    let until = chrono::Local::now() + wait;
+    anyhow::anyhow!("rate limited until {}", until.format("%H:%M"))
 }
 
 /// The `<url>` whose `rel="next"` in a `Link` header.
@@ -237,12 +275,68 @@ mod tests {
     static PLAIN: Flavor = Flavor {
         remaining: "ratelimit-remaining",
         reset: "ratelimit-reset",
-        waits_on_spent_403: false,
+        limits_with_403: false,
         error_message: |b| b.trim().to_owned(),
     };
 
+    static LIMITS_WITH_403: Flavor = Flavor { limits_with_403: true, ..PLAIN };
+
     fn transport(base: &str) -> Transport {
         Transport::new(base, HeaderMap::new(), &PLAIN).unwrap()
+    }
+
+    fn limiting(base: &str) -> Transport {
+        Transport::new(base, HeaderMap::new(), &LIMITS_WITH_403).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_secondary_limit_403_with_requests_left_is_waited_out_and_retried() {
+        let server = MockServer::start().await;
+        let limited = ResponseTemplate::new(403).insert_header("ratelimit-remaining", "4999").insert_header("retry-after", "0");
+        Mock::given(method("GET")).and(path("/api/user")).respond_with(limited).up_to_n_times(1).mount(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/api/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("nina"))
+            .mount(&server)
+            .await;
+        assert_eq!(limiting(&format!("{}/api/", server.uri())).get_text("user").await.unwrap(), "nina");
+        assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_wait_past_a_minute_fails_at_once_saying_until_when_and_the_budget_holds_it() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(403).insert_header("ratelimit-remaining", "12").insert_header("retry-after", "3600"))
+            .mount(&server)
+            .await;
+        let transport = limiting(&server.uri());
+        let clock =
+            |at: chrono::DateTime<chrono::Local>| format!("rate limited until {}", (at + Duration::from_secs(3600)).format("%H:%M"));
+        let before = chrono::Local::now();
+        let err = transport.get_text("user").await.unwrap_err().to_string();
+        assert!([clock(before), clock(chrono::Local::now())].contains(&err), "{err}");
+        assert_eq!(server.received_requests().await.unwrap().len(), 1, "no sleep, no retry");
+        assert!(transport.rate().wait.is_some_and(|wait| wait > MAX_WAIT));
+    }
+
+    #[test]
+    fn a_403_is_a_rate_limit_when_it_asks_a_wait_or_names_a_secondary_limit() {
+        let headers = |pairs: &[(&'static str, &'static str)]| {
+            pairs.iter().map(|(name, value)| (reqwest::header::HeaderName::from_static(name), HeaderValue::from_static(value))).collect()
+        };
+        let limiting = limiting("https://github.com/");
+        let wait = |headers: &HeaderMap, message: &str| limiting.wait_asked(StatusCode::FORBIDDEN, headers, message);
+        assert_eq!(wait(&headers(&[("retry-after", "30"), ("ratelimit-remaining", "4000")]), ""), Some(Duration::from_secs(30)));
+        assert_eq!(wait(&HeaderMap::new(), "You have exceeded a secondary rate limit."), Some(SECONDARY_WAIT));
+        assert_eq!(wait(&HeaderMap::new(), "Resource not accessible by integration"), None);
+        let soon = budget::unix_now() + 3000;
+        let reset = HeaderValue::from_str(&soon.to_string()).unwrap();
+        let other_window = [(reqwest::header::HeaderName::from_static("ratelimit-reset"), reset)].into_iter().collect();
+        let secondary_429 = limiting.wait_asked(StatusCode::TOO_MANY_REQUESTS, &other_window, "secondary rate limit");
+        assert_eq!(secondary_429, Some(SECONDARY_WAIT), "the reset of the hourly window is not the secondary limit's");
+        let plain = transport("https://gitlab.com/");
+        assert_eq!(plain.wait_asked(StatusCode::FORBIDDEN, &headers(&[("retry-after", "30")]), ""), None, "a GitLab 403 is a refusal");
     }
 
     #[tokio::test]
@@ -334,11 +428,11 @@ mod tests {
     fn wait_prefers_retry_after_then_reset_then_a_second() {
         let transport = transport("https://gitlab.com/api/v4/");
         let mut headers = HeaderMap::new();
-        assert_eq!(transport.wait_from(&headers), Duration::from_secs(1));
+        assert_eq!(transport.wait_from(&headers, false), Duration::from_secs(1));
         let soon = budget::unix_now() + 30;
         headers.insert("ratelimit-reset", HeaderValue::from_str(&soon.to_string()).unwrap());
-        assert!((28..=30).contains(&transport.wait_from(&headers).as_secs()));
+        assert!((28..=30).contains(&transport.wait_from(&headers, false).as_secs()));
         headers.insert("retry-after", HeaderValue::from_static("5"));
-        assert_eq!(transport.wait_from(&headers), Duration::from_secs(5));
+        assert_eq!(transport.wait_from(&headers, false), Duration::from_secs(5));
     }
 }
