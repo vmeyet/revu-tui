@@ -1,11 +1,12 @@
 //! `a`: questions to Claude about what is under the cursor, answered in the right pane.
 use super::{Action, App, Focus, Input, MrKey, Open};
+use crate::act::{self, Act, Pane};
 use crate::ai::anthropic::{self, Ask, Outcome, Role, Turn};
 use crate::ai::context::{self, Prompt, Scope};
 use crate::forge::Position;
 use crate::review::Row;
 use chrono::{DateTime, Utc};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 
 const HALF_PAGE: usize = 10;
 
@@ -233,25 +234,24 @@ impl App {
     }
 
     pub(super) fn handle_answer_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let Some(answer) = self.open.as_ref().and_then(|o| o.answer.as_ref()) else { return vec![] };
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.scroll_answer(1),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll_answer(-1),
-            KeyCode::Char('d') if ctrl => self.scroll_answer(HALF_PAGE as isize),
-            KeyCode::Char('u') if ctrl => self.scroll_answer(-(HALF_PAGE as isize)),
-            KeyCode::Char('f') if ctrl => self.scroll_answer(super::keys::full_page(self.areas.side)),
-            KeyCode::Char('b') if ctrl => self.scroll_answer(-super::keys::full_page(self.areas.side)),
-            KeyCode::Char('g') => self.scroll_answer(isize::MIN / 2),
-            KeyCode::Char('G') => self.scroll_answer(isize::MAX / 2),
-            KeyCode::Char('y') => return vec![Action::Copy { text: answer.text.clone(), done: "copied".into() }],
-            KeyCode::Char('c') => self.draft_from_answer(&answer.clone()),
-            KeyCode::Enter if answer.state != AnswerState::Streaming => return self.question_box(Input::FollowUp),
-            KeyCode::Char('R') => {
+        match act::act_in(Pane::Answer, key) {
+            Some(Act::MoveDown) => self.scroll_answer(1),
+            Some(Act::MoveUp) => self.scroll_answer(-1),
+            Some(Act::PageDown) => self.scroll_answer(HALF_PAGE as isize),
+            Some(Act::PageUp) => self.scroll_answer(-(HALF_PAGE as isize)),
+            Some(Act::FullPageDown) => self.scroll_answer(super::keys::full_page(self.areas.side)),
+            Some(Act::FullPageUp) => self.scroll_answer(-super::keys::full_page(self.areas.side)),
+            Some(Act::Top) => self.scroll_answer(isize::MIN / 2),
+            Some(Act::Bottom) => self.scroll_answer(isize::MAX / 2),
+            Some(Act::AnswerCopy) => return vec![Action::Copy { text: answer.text.clone(), done: "copied".into() }],
+            Some(Act::AnswerDraft) => self.draft_from_answer(&answer.clone()),
+            Some(Act::AnswerFollowUp) if answer.state != AnswerState::Streaming => return self.question_box(Input::FollowUp),
+            Some(Act::AnswerAgain) => {
                 let (label, request, target) = (answer.label.clone(), answer.request.clone(), answer.target.clone());
                 return self.start_answer(label, request, target, true);
             }
-            KeyCode::Esc | KeyCode::Char('x') => self.close_answer(),
+            Some(Act::Back | Act::ClosePane) => self.close_answer(),
             _ => {}
         }
         vec![]

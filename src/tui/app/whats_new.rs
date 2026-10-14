@@ -1,8 +1,9 @@
 //! What changed in revu itself: one toast on the first start after an update, and the `:news` page.
 use super::keys::scroll_key;
 use super::{Action, App};
+use crate::act::{self, Act, Pane};
 use crate::changelog::{Changelog, Position, Section};
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WhatsNew {
@@ -36,8 +37,8 @@ impl App {
     /// The view stops the scroll at the last page, so no key needs to know how long the page is.
     pub(super) fn handle_news_page_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(scroll) = self.news_page else { return vec![] };
-        self.news_page = match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => None,
+        self.news_page = match act::act_in(Pane::Page, key) {
+            Some(Act::Back | Act::Quit) => None,
             _ => Some(scroll_key(scroll, usize::MAX, key).unwrap_or(scroll)),
         };
         vec![]

@@ -1,8 +1,9 @@
 //! The prose view (`v`): the Markdown file under the cursor drawn rendered in the diff area (`specs/11-prose-diff.md`).
 use super::{Action, App, MrKey, Open};
+use crate::act::{self, Act, Pane};
 use crate::outline::Sides;
 use crate::review::FileKind;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -80,11 +81,11 @@ impl App {
             self.update_prose(|prose| Prose { scroll, ..prose });
             return vec![];
         }
-        match key.code {
-            KeyCode::Char('r') => self.read_prose(prose),
-            KeyCode::Char('D') => self.toggle_side_by_side(),
-            KeyCode::Char('v' | 'x') | KeyCode::Esc => {
-                self.key_did = Some(crate::act::Act::Prose);
+        match act::act_in(Pane::Prose, key) {
+            Some(Act::Refresh) => self.read_prose(prose),
+            Some(Act::SideBySide) => self.toggle_side_by_side(),
+            Some(Act::Prose | Act::ClosePane | Act::Back) => {
+                self.key_did = Some(Act::Prose);
                 self.update_open(|open| open.with_prose(None));
                 vec![]
             }
@@ -94,11 +95,11 @@ impl App {
 
     /// `zR` shows every unchanged run and `zM` folds them again; `zz` and `zh` act as anywhere; the diff's other
     /// prefixed keys would move a cursor out of sight, so they do nothing.
-    pub(super) fn prose_prefixed(&mut self, prefix: char, c: char) -> Vec<Action> {
-        match (prefix, c) {
-            ('z', 'R' | 'M') => self.update_prose(|prose| Prose { unfolded: c == 'R', ..prose }),
-            ('z', 'z') => return self.toggle_zen(),
-            ('z', 'h') => self.header_folded = !self.header_folded,
+    pub(super) fn prose_prefixed(&mut self, act: Option<Act>) -> Vec<Action> {
+        match act {
+            Some(Act::UnfoldAll | Act::FoldAll) => self.update_prose(|prose| Prose { unfolded: act == Some(Act::UnfoldAll), ..prose }),
+            Some(Act::Zen) => return self.toggle_zen(),
+            Some(Act::FoldHeader) => self.header_folded = !self.header_folded,
             _ => {}
         }
         vec![]

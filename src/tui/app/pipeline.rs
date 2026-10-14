@@ -1,7 +1,8 @@
 //! The pipeline pane (`p`): the jobs of the head commit's CI run, failed ones first in each stage.
 use super::{Action, App, Focus, Open};
+use crate::act::{self, Act, Pane};
 use crate::forge::checks::{Checks, Job, JobState};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 use std::time::{Duration, Instant};
 
 /// How often a run still going is asked again while the pane shows it.
@@ -78,26 +79,25 @@ impl App {
         let Some(pipeline) = &open.pipeline else { return vec![] };
         let jobs = pipeline.jobs();
         let last = jobs.len().saturating_sub(1);
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let url = jobs.get(pipeline.selected).map(|j| j.web_url.clone()).or_else(|| match &pipeline.run {
             Run::Ready(checks) => checks.web_url.clone(),
             _ => open.review.mr.pipeline.as_ref().and_then(|p| p.web_url.clone()),
         });
-        let selected = match key.code {
-            KeyCode::Char('j') | KeyCode::Down => pipeline.selected + 1,
-            KeyCode::Char('k') | KeyCode::Up => pipeline.selected.saturating_sub(1),
-            KeyCode::Char('d') if ctrl => pipeline.selected + 10,
-            KeyCode::Char('u') if ctrl => pipeline.selected.saturating_sub(10),
-            KeyCode::Char('g') => 0,
-            KeyCode::Char('G') => last,
-            KeyCode::Char('o') => return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
-            KeyCode::Char('y') => return url.map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
-            KeyCode::Char('r') => {
+        let selected = match act::act_in(Pane::Pipeline, key) {
+            Some(Act::MoveDown) => pipeline.selected + 1,
+            Some(Act::MoveUp) => pipeline.selected.saturating_sub(1),
+            Some(Act::PageDown) => pipeline.selected + 10,
+            Some(Act::PageUp) => pipeline.selected.saturating_sub(10),
+            Some(Act::Top) => 0,
+            Some(Act::Bottom) => last,
+            Some(Act::OpenBrowser) => return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
+            Some(Act::CopyLink) => return url.map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
+            Some(Act::Refresh) => {
                 let action = load(open);
                 self.update_open(|open| Open { pipeline: open.pipeline.map(|p| Pipeline { due: None, ..p }), ..open });
                 return vec![action];
             }
-            KeyCode::Esc | KeyCode::Char('p' | 'x') => {
+            Some(Act::Back | Act::Pipeline | Act::ClosePane) => {
                 self.focus = Focus::Review;
                 self.update_open(|open| open.with_pipeline(None));
                 return vec![];

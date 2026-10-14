@@ -384,11 +384,11 @@ impl App {
             return self.ask_key(c);
         }
         if prefix == 'z' && self.outline_keys() {
-            self.fold_outline(c);
+            self.fold_outline(act);
             return vec![];
         }
         if self.prose_open() {
-            return self.prose_prefixed(prefix, c);
+            return self.prose_prefixed(act);
         }
         act.map(|act| self.diff_prefixed(act)).unwrap_or_default()
     }
@@ -482,22 +482,21 @@ impl App {
 
     fn is_help_key(&self, key: KeyEvent) -> bool {
         let crate::keymap::Feed::Keys(keys) = self.keymap.feed(None, key) else { return false };
-        keys.first().is_some_and(|k| k.code == KeyCode::Char('?'))
+        keys.first().is_some_and(|k| act::act_in(Pane::Anywhere, *k) == Some(Act::Help))
     }
 }
 
 /// The scroll a moving key gives, kept at or under `last`; `None` for any other key.
 pub(super) fn scroll_key(scroll: usize, last: usize, key: KeyEvent) -> Option<usize> {
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Some(scroll.saturating_add(1).min(last)),
-        KeyCode::Char('k') | KeyCode::Up => Some(scroll.saturating_sub(1)),
-        KeyCode::Char('d') if ctrl => Some(scroll.saturating_add(HALF_PAGE.unsigned_abs()).min(last)),
-        KeyCode::Char('u') if ctrl => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
-        KeyCode::Char('f') if ctrl => Some((scroll + 2 * HALF_PAGE.unsigned_abs()).min(last)),
-        KeyCode::Char('b') if ctrl => Some(scroll.saturating_sub(2 * HALF_PAGE.unsigned_abs())),
-        KeyCode::Char('g') => Some(0),
-        KeyCode::Char('G') => Some(last),
+    match act::act_in(Pane::Page, key)? {
+        Act::MoveDown => Some(scroll.saturating_add(1).min(last)),
+        Act::MoveUp => Some(scroll.saturating_sub(1)),
+        Act::PageDown => Some(scroll.saturating_add(HALF_PAGE.unsigned_abs()).min(last)),
+        Act::PageUp => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
+        Act::FullPageDown => Some((scroll + 2 * HALF_PAGE.unsigned_abs()).min(last)),
+        Act::FullPageUp => Some(scroll.saturating_sub(2 * HALF_PAGE.unsigned_abs())),
+        Act::Top => Some(0),
+        Act::Bottom => Some(last),
         _ => None,
     }
 }

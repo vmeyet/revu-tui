@@ -5,9 +5,10 @@ mod rows;
 
 pub use rows::{Entry, PaneLine, Rows};
 
+use crate::act::{self, Act, Pane};
 use crate::outline::{Direction, Reading, Section, Shape};
 use crate::review::{Place, Review, Row, Side};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 use rows::View;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -139,22 +140,21 @@ impl App {
     pub(super) fn handle_outline_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return vec![] };
         let last = outline.rows.entries.len().saturating_sub(1);
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let moved = |selected: usize| Outline { selected: selected.min(last), ..outline.clone() };
-        let next = match key.code {
-            KeyCode::Char('j') | KeyCode::Down => moved(outline.selected + 1),
-            KeyCode::Char('k') | KeyCode::Up => moved(outline.selected.saturating_sub(1)),
-            KeyCode::Char('d') if ctrl => moved(outline.selected + 10),
-            KeyCode::Char('u') if ctrl => moved(outline.selected.saturating_sub(10)),
-            KeyCode::Char('g') => moved(0),
-            KeyCode::Char('G') => moved(last),
-            KeyCode::Char('a') => outline.shown_as(|o| Outline { all: !o.all, ..o }),
-            KeyCode::Char('t') => outline.shown_as(|o| Outline { flat: !o.flat, ..o }),
-            KeyCode::Char('u') => outline.shown_as(|o| Outline { direction: o.direction.reversed(), ..o }),
-            KeyCode::Char('s') => outline.shown_as(|o| Outline { stack: !o.stack, ..o }),
-            KeyCode::Enter => return self.jump_from_outline(),
-            KeyCode::Char('r') => return self.read_outline(),
-            KeyCode::Esc | KeyCode::Char('O' | 'x') => {
+        let next = match act::act_in(Pane::Outline, key) {
+            Some(Act::MoveDown) => moved(outline.selected + 1),
+            Some(Act::MoveUp) => moved(outline.selected.saturating_sub(1)),
+            Some(Act::PageDown) => moved(outline.selected + 10),
+            Some(Act::PageUp) => moved(outline.selected.saturating_sub(10)),
+            Some(Act::Top) => moved(0),
+            Some(Act::Bottom) => moved(last),
+            Some(Act::OutlinePublic) => outline.shown_as(|o| Outline { all: !o.all, ..o }),
+            Some(Act::OutlineTree) => outline.shown_as(|o| Outline { flat: !o.flat, ..o }),
+            Some(Act::OutlineCalls) => outline.shown_as(|o| Outline { direction: o.direction.reversed(), ..o }),
+            Some(Act::OutlineStack) => outline.shown_as(|o| Outline { stack: !o.stack, ..o }),
+            Some(Act::Open) => return self.jump_from_outline(),
+            Some(Act::Refresh) => return self.read_outline(),
+            Some(Act::Back | Act::Outline | Act::ClosePane) => {
                 self.close_outline();
                 return vec![];
             }
@@ -165,11 +165,11 @@ impl App {
     }
 
     /// `zo` `zc` `za` while the outline has the keys.
-    pub(super) fn fold_outline(&mut self, key: char) {
-        let open = match key {
-            'o' => Some(true),
-            'c' => Some(false),
-            'a' => None,
+    pub(super) fn fold_outline(&mut self, act: Option<Act>) {
+        let open = match act {
+            Some(Act::FoldOpen) => Some(true),
+            Some(Act::FoldClose) => Some(false),
+            Some(Act::FoldToggle) => None,
             _ => return,
         };
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return };
@@ -184,7 +184,7 @@ impl App {
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
         let Some(entry) = outline.rows.entries.get(outline.selected) else { return vec![] };
         if entry.header.is_some() {
-            self.fold_outline('a');
+            self.fold_outline(Some(Act::FoldToggle));
             return vec![];
         }
         let place = match (&entry.site, entry.change.map(|c| &reading.changes[c])) {

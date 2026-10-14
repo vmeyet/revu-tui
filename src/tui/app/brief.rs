@@ -2,11 +2,12 @@
 //! threads, from the queue row or the open review. Threads are rows the cursor walks; `enter` jumps
 //! to one in the diff. It opens only on demand: an MR opens on its diff.
 use super::{Action, App, Focus};
+use crate::act::{self, Act, Pane};
 use crate::forge::checks::JobState;
 use crate::forge::{MrKey, PipelineStatus, QueueMr, ReviewState};
 use crate::review::{Place, Review, Row};
 use chrono::{DateTime, Utc};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 
 const HALF_PAGE: usize = 10;
 /// Words of a thread's first note kept for its row; the view cuts them to the width.
@@ -215,27 +216,26 @@ impl App {
 
     pub(super) fn handle_brief_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(brief) = self.brief.clone() else { return vec![] };
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let walks = !brief.targets().is_empty();
-        self.brief = match key.code {
-            KeyCode::Esc | KeyCode::Char('i' | 'q') => None,
-            KeyCode::Char('o') => return vec![Action::OpenUrl(brief.web_url)],
-            KeyCode::Char('y') => return vec![Action::copy_link(brief.web_url)],
-            KeyCode::Enter => return self.brief_enter(&brief),
-            KeyCode::Char('p') => return self.brief_pipeline(),
-            KeyCode::Char('d') if ctrl => Some(brief.scrolled(HALF_PAGE as isize)),
-            KeyCode::Char('u') if ctrl => Some(brief.scrolled(-(HALF_PAGE as isize))),
-            KeyCode::Char('f') if ctrl => Some(brief.scrolled(2 * HALF_PAGE as isize)),
-            KeyCode::Char('b') if ctrl => Some(brief.scrolled(-2 * HALF_PAGE as isize)),
-            KeyCode::Char('j') | KeyCode::Down if walks => Some(brief.down()),
-            KeyCode::Char('k') | KeyCode::Up if walks => Some(brief.up()),
-            KeyCode::Char('j') | KeyCode::Down => Some(brief.scrolled(1)),
-            KeyCode::Char('k') | KeyCode::Up => Some(brief.scrolled(-1)),
-            KeyCode::Char('g') => Some(Brief { scroll: 0, selected: None, follow: false, ..brief }),
-            KeyCode::Char('G') if walks => {
+        self.brief = match act::act_in(Pane::Cover, key) {
+            Some(Act::Back | Act::Description | Act::Quit) => None,
+            Some(Act::OpenBrowser) => return vec![Action::OpenUrl(brief.web_url)],
+            Some(Act::CopyLink) => return vec![Action::copy_link(brief.web_url)],
+            Some(Act::Open) => return self.brief_enter(&brief),
+            Some(Act::Pipeline) => return self.brief_pipeline(),
+            Some(Act::PageDown) => Some(brief.scrolled(HALF_PAGE as isize)),
+            Some(Act::PageUp) => Some(brief.scrolled(-(HALF_PAGE as isize))),
+            Some(Act::FullPageDown) => Some(brief.scrolled(2 * HALF_PAGE as isize)),
+            Some(Act::FullPageUp) => Some(brief.scrolled(-2 * HALF_PAGE as isize)),
+            Some(Act::MoveDown) if walks => Some(brief.down()),
+            Some(Act::MoveUp) if walks => Some(brief.up()),
+            Some(Act::MoveDown) => Some(brief.scrolled(1)),
+            Some(Act::MoveUp) => Some(brief.scrolled(-1)),
+            Some(Act::Top) => Some(Brief { scroll: 0, selected: None, follow: false, ..brief }),
+            Some(Act::Bottom) if walks => {
                 Some(Brief { selected: Some(brief.targets().len() - 1), follow: true, scroll: usize::MAX, ..brief })
             }
-            KeyCode::Char('G') => Some(Brief { scroll: usize::MAX, ..brief }),
+            Some(Act::Bottom) => Some(Brief { scroll: usize::MAX, ..brief }),
             _ => Some(brief),
         };
         vec![]

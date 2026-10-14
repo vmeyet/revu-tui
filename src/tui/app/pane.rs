@@ -3,7 +3,7 @@
 use super::{Action, App, Focus, Open};
 use crate::act::{self, Act};
 use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyEvent, KeyModifiers};
 use std::collections::BTreeSet;
 
 const HALF_PAGE: usize = 5;
@@ -260,27 +260,27 @@ impl App {
     }
 
     pub(super) fn handle_pane_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.pane_move(1),
-            KeyCode::Char('k') | KeyCode::Up => self.pane_move(-1),
-            KeyCode::Char('d') if ctrl => self.pane_move(HALF_PAGE as isize),
-            KeyCode::Char('u') if ctrl => self.pane_move(-(HALF_PAGE as isize)),
-            KeyCode::Char('f') if ctrl => self.pane_move(2 * HALF_PAGE as isize),
-            KeyCode::Char('b') if ctrl => self.pane_move(-2 * HALF_PAGE as isize),
-            KeyCode::Char('g') => self.pane_move(isize::MIN / 2),
-            KeyCode::Char('G') => self.pane_move(isize::MAX / 2),
-            KeyCode::Char('J') => self.pane_jump(true),
-            KeyCode::Char('K') => self.pane_jump(false),
-            KeyCode::Enter if self.open.as_ref().is_some_and(Open::lists_every_thread) => {
+        let lists_every_thread = self.open.as_ref().is_some_and(Open::lists_every_thread);
+        match act::act_in(act::Pane::Threads, key) {
+            Some(Act::MoveDown) => self.pane_move(1),
+            Some(Act::MoveUp) => self.pane_move(-1),
+            Some(Act::PageDown) => self.pane_move(HALF_PAGE as isize),
+            Some(Act::PageUp) => self.pane_move(-(HALF_PAGE as isize)),
+            Some(Act::FullPageDown) => self.pane_move(2 * HALF_PAGE as isize),
+            Some(Act::FullPageUp) => self.pane_move(-2 * HALF_PAGE as isize),
+            Some(Act::Top) => self.pane_move(isize::MIN / 2),
+            Some(Act::Bottom) => self.pane_move(isize::MAX / 2),
+            Some(Act::NextInLine) => self.pane_jump(true),
+            Some(Act::PrevInLine) => self.pane_jump(false),
+            Some(Act::Open) if lists_every_thread => {
                 self.unfold_focused();
                 return self.jump_to_focused();
             }
-            KeyCode::Enter => self.unfold_focused(),
-            KeyCode::Char('T') => self.toggle_every_thread(),
-            KeyCode::Char('m') if self.open.as_ref().is_some_and(Open::lists_every_thread) => self.toggle_mine(),
-            KeyCode::Char('P') => self.open_publish(),
-            KeyCode::Esc | KeyCode::Char('x') => self.close_pane(),
+            Some(Act::Open) => self.unfold_focused(),
+            Some(Act::EveryThread) => self.toggle_every_thread(),
+            Some(Act::Mine) if lists_every_thread => self.toggle_mine(),
+            Some(Act::Publish) => self.open_publish(),
+            Some(Act::ClosePane) => self.close_pane(),
             _ => return self.handle_thread_key(key).unwrap_or_default(),
         }
         vec![]

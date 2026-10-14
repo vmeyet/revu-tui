@@ -1,10 +1,11 @@
 //! The file tree in the right pane (`t`) and viewed files (`zv`, `m`).
 use super::{Action, App, Focus, Open};
+use crate::act::{self, Act, Pane};
 use crate::diff::LineKind;
 use crate::diff::fold::Fold;
 use crate::review::tree::{self, TreeFolds, TreeRow};
 use crate::review::{File, Row};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 
 /// The tree while it is open: which folders the reader flipped, and the row under the cursor.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -48,21 +49,20 @@ impl App {
         let Some(tree) = open.tree.clone() else { return vec![] };
         let rows = self.kept.tree_rows(open);
         let (last, here) = (rows.len().saturating_sub(1), rows.get(tree.selected).cloned());
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let moved = |selected: usize| Some(Tree { selected: selected.min(last), ..tree.clone() });
-        let next = match key.code {
-            KeyCode::Char('j') | KeyCode::Down => moved(tree.selected + 1),
-            KeyCode::Char('k') | KeyCode::Up => moved(tree.selected.saturating_sub(1)),
-            KeyCode::Char('d') if ctrl => moved(tree.selected + 10),
-            KeyCode::Char('u') if ctrl => moved(tree.selected.saturating_sub(10)),
-            KeyCode::Char('g') => moved(0),
-            KeyCode::Char('G') => moved(last),
-            KeyCode::Esc | KeyCode::Char('t') => None,
-            KeyCode::Char('v') if ctrl => match here {
+        let next = match act::act_in(Pane::Tree, key) {
+            Some(Act::MoveDown) => moved(tree.selected + 1),
+            Some(Act::MoveUp) => moved(tree.selected.saturating_sub(1)),
+            Some(Act::PageDown) => moved(tree.selected + 10),
+            Some(Act::PageUp) => moved(tree.selected.saturating_sub(10)),
+            Some(Act::Top) => moved(0),
+            Some(Act::Bottom) => moved(last),
+            Some(Act::Back | Act::Tree) => None,
+            Some(Act::ViewFile) => match here {
                 Some(TreeRow::File { index, .. }) => return self.view_file(index),
                 _ => Some(tree.clone()),
             },
-            KeyCode::Enter => match here {
+            Some(Act::Open) => match here {
                 Some(TreeRow::Folder { path, .. }) => Some(Tree { folds: tree.folds.toggled(&path), ..tree.clone() }),
                 Some(TreeRow::File { index, .. }) => return self.show_file(index),
                 None => Some(tree.clone()),
