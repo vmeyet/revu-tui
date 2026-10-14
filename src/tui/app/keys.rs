@@ -1,6 +1,6 @@
 use super::pane::Threads;
 use super::{Action, App, Focus};
-use crate::act::Act;
+use crate::act::{self, Act, Pane};
 use crate::review::Row;
 use crate::tui::help::{self, Help};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -98,30 +98,61 @@ impl App {
             self.open_palette(mode);
             return vec![];
         }
-        match key.code {
-            KeyCode::Char(':') => self.open_palette(crate::tui::palette::Mode::Commands),
-            KeyCode::Char(',') => self.open_palette(crate::tui::palette::Mode::Mrs),
-            KeyCode::Char('q') if self.focus != Focus::Queue && self.open.as_ref().is_some_and(super::Open::side_open) => {
-                self.key_did = Some(Act::ClosePane);
-                return self.handle_side_key(KeyEvent::from(KeyCode::Esc));
-            }
-            KeyCode::Char('q') => return self.quit_key(super::quit::QuitKey::Q),
-            KeyCode::Char('?') => self.help = Some(Help::default()),
-            KeyCode::Char('Y') => self.start_share(None),
-            KeyCode::Char('h') | KeyCode::Left => return self.focus_left(),
-            KeyCode::Char('l') | KeyCode::Right => return self.focus_right(),
-            KeyCode::Char('z' | '[' | ']') if self.focus != Focus::Side || self.tree_open() => self.pending = key.code.as_char(),
-            KeyCode::Char('z') if self.outline_keys() => self.pending = Some('z'),
-            KeyCode::Char('a') if self.reads_a_prefix() => self.pending = Some('a'),
-            _ => {
-                return match self.focus {
-                    Focus::Queue => self.handle_queue_key(key),
-                    Focus::Review => self.handle_review_key(key),
-                    Focus::Side => self.handle_side_key(key),
-                };
-            }
+        if let Some(actions) = self.handle_anywhere(key) {
+            return actions;
         }
+        if let Some(prefix) = self.prefix_opened(key) {
+            self.pending = Some(prefix);
+            return vec![];
+        }
+        match self.focus {
+            Focus::Queue => self.handle_queue_key(key),
+            Focus::Review => self.handle_review_key(key),
+            Focus::Side => self.handle_side_key(key),
+        }
+    }
+
+    /// The keys every pane shares; `q` closes a right pane first.
+    fn handle_anywhere(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
+        let closes_a_pane = self.focus != Focus::Queue && self.open.as_ref().is_some_and(super::Open::side_open);
+        let actions = match act::act_in(Pane::Anywhere, key)? {
+            Act::Palette => self.palette_on(crate::tui::palette::Mode::Commands),
+            Act::Jump => self.palette_on(crate::tui::palette::Mode::Mrs),
+            Act::Quit if closes_a_pane => {
+                self.key_did = Some(Act::ClosePane);
+                self.handle_side_key(KeyEvent::from(KeyCode::Esc))
+            }
+            Act::Quit => self.quit_key(super::quit::QuitKey::Q),
+            Act::Help => {
+                self.help = Some(Help::default());
+                vec![]
+            }
+            Act::Share => {
+                self.start_share(None);
+                vec![]
+            }
+            Act::FocusLeft => self.focus_left(),
+            Act::FocusRight => self.focus_right(),
+            _ => return None,
+        };
+        Some(actions)
+    }
+
+    fn palette_on(&mut self, mode: crate::tui::palette::Mode) -> Vec<Action> {
+        self.open_palette(mode);
         vec![]
+    }
+
+    /// The first key of a two-key default, where the focused pane reads it as one.
+    fn prefix_opened(&self, key: KeyEvent) -> Option<char> {
+        let KeyCode::Char(c) = key.code else { return None };
+        let is_read = match c {
+            'z' | '[' | ']' if self.focus != Focus::Side || self.tree_open() => true,
+            'z' => self.outline_keys(),
+            'a' => self.reads_a_prefix(),
+            _ => false,
+        };
+        is_read.then_some(c)
     }
 
     /// Left, toward the queue; from the diff it also leaves zen, which hides the queue.
@@ -174,28 +205,31 @@ impl App {
     }
 
     pub(super) fn handle_queue_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.queue_move(self.step()),
-            KeyCode::Char('k') | KeyCode::Up => self.queue_move(-self.step()),
-            KeyCode::Char('g') => self.queue_first(),
-            KeyCode::Char('G') => self.queue_last(),
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(HALF_PAGE),
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(-HALF_PAGE),
-            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(full_page(self.areas.queue)),
-            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => self.queue_move(-full_page(self.areas.queue)),
-            KeyCode::Char('/') => self.filtering = true,
-            KeyCode::Char('*') => return self.toggle_scope(),
-            KeyCode::Char('s') => return self.sort_queue(),
-            KeyCode::Char('\'') => self.pending = Some('\''),
-            KeyCode::Char(c @ '1'..='9') => self.apply_view(c),
-            KeyCode::Char('S') => return self.group_queue(),
-            KeyCode::Char('b') => return self.toggle_pin(),
-            KeyCode::Char('i') => self.open_brief_from_queue(),
-            KeyCode::Enter => return self.open_selected(),
-            KeyCode::Char('r') => return self.refresh_queue(),
-            KeyCode::Char('o') => return self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
-            KeyCode::Char('y') => return self.selected_mr().map(|mr| vec![Action::copy_link(mr.web_url.clone())]).unwrap_or_default(),
-            KeyCode::Esc if !self.filter.is_empty() => {
+        let Some(act) = act::act_in(Pane::Queue, key) else { return vec![] };
+        match act {
+            Act::MoveDown => self.queue_move(self.step()),
+            Act::MoveUp => self.queue_move(-self.step()),
+            Act::Top => self.queue_first(),
+            Act::Bottom => self.queue_last(),
+            Act::PageDown => self.queue_move(HALF_PAGE),
+            Act::PageUp => self.queue_move(-HALF_PAGE),
+            Act::FullPageDown => self.queue_move(full_page(self.areas.queue)),
+            Act::FullPageUp => self.queue_move(-full_page(self.areas.queue)),
+            Act::Filter => self.filtering = true,
+            Act::Scope => return self.toggle_scope(),
+            Act::SortQueue => return self.sort_queue(),
+            Act::Views => match key.code {
+                KeyCode::Char(rank @ '1'..='9') => self.apply_view(rank),
+                _ => self.pending = Some('\''),
+            },
+            Act::GroupByAuthor => return self.group_queue(),
+            Act::Pin => return self.toggle_pin(),
+            Act::Description => self.open_brief_from_queue(),
+            Act::Open => return self.open_selected(),
+            Act::Refresh => return self.refresh_queue(),
+            Act::OpenBrowser => return self.selected_mr().map(|mr| vec![Action::OpenUrl(mr.web_url.clone())]).unwrap_or_default(),
+            Act::CopyLink => return self.selected_mr().map(|mr| vec![Action::copy_link(mr.web_url.clone())]).unwrap_or_default(),
+            Act::Back if !self.filter.is_empty() => {
                 self.filter.clear();
                 self.view = None;
                 self.queue_settle();
@@ -231,7 +265,7 @@ impl App {
 
     pub(super) fn handle_review_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if self.open.is_none() {
-            if key.code == KeyCode::Esc {
+            if act::act_in(Pane::Diff, key) == Some(Act::Back) {
                 self.focus = Focus::Queue;
             }
             return vec![];
@@ -255,59 +289,61 @@ impl App {
     }
 
     fn move_in_review(&mut self, key: KeyEvent) -> Vec<Action> {
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.review_move(self.step()),
-            KeyCode::Char('k') | KeyCode::Up => self.review_move(-self.step()),
-            KeyCode::Char('g') => self.review_first(),
-            KeyCode::Char('G') => self.review_last(),
-            KeyCode::Char('/') => self.start_search(),
-            KeyCode::Char('n') if self.search.is_some() => self.search_step(true),
-            KeyCode::Char('N') if self.search.is_some() => self.search_step(false),
-            KeyCode::Char('n') => return self.jump_to_thread(true),
-            KeyCode::Char('N') => return self.jump_to_thread(false),
-            KeyCode::Char('m') => return self.view_and_move_on(),
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
-            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(full_page(self.areas.review)),
-            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-full_page(self.areas.review)),
-            KeyCode::Char('D') => return self.toggle_side_by_side(),
-            KeyCode::Char('>') => return self.cycle_peek(true),
-            KeyCode::Char('<') => return self.cycle_peek(false),
-            KeyCode::Char('t') => self.toggle_tree(),
-            KeyCode::Char('T') => self.toggle_every_thread(),
-            KeyCode::Char('p') => return self.toggle_pipeline(),
-            KeyCode::Char('O') => return self.toggle_outline(),
-            KeyCode::Char('W') => self.toggle_whitespace(),
-            KeyCode::Char('+') => {
+        let Some(act) = act::act_in(Pane::Diff, key) else { return vec![] };
+        let has_pane = self.open.as_ref().is_some_and(|o| o.pane.is_some());
+        match act {
+            Act::MoveDown => self.review_move(self.step()),
+            Act::MoveUp => self.review_move(-self.step()),
+            Act::Top => self.review_first(),
+            Act::Bottom => self.review_last(),
+            Act::Search => self.start_search(),
+            Act::NextThread if self.search.is_some() => self.search_step(true),
+            Act::PrevThread if self.search.is_some() => self.search_step(false),
+            Act::NextThread => return self.jump_to_thread(true),
+            Act::PrevThread => return self.jump_to_thread(false),
+            Act::ViewedNext => return self.view_and_move_on(),
+            Act::PageDown => self.review_move(HALF_PAGE),
+            Act::PageUp => self.review_move(-HALF_PAGE),
+            Act::FullPageDown => self.review_move(full_page(self.areas.review)),
+            Act::FullPageUp => self.review_move(-full_page(self.areas.review)),
+            Act::SideBySide => return self.toggle_side_by_side(),
+            Act::PeekAfter => return self.cycle_peek(true),
+            Act::PeekBefore => return self.cycle_peek(false),
+            Act::Tree => self.toggle_tree(),
+            Act::EveryThread => self.toggle_every_thread(),
+            Act::Pipeline => return self.toggle_pipeline(),
+            Act::Outline => return self.toggle_outline(),
+            Act::Whitespace => self.toggle_whitespace(),
+            Act::React => {
                 self.open_react_here();
             }
-            KeyCode::Char('=') => return self.expand_context(),
-            KeyCode::Char('w') => {
+            Act::MoreContext => return self.expand_context(),
+            Act::Wrap => {
                 let wrap = !self.wraps();
                 self.wrap = Some(wrap);
                 self.toast(if wrap { "long lines wrap" } else { "long lines end in …" });
             }
-            KeyCode::Tab => self.review_jump(true, |r| matches!(r, Row::File { .. })),
-            KeyCode::BackTab => self.review_jump(false, |r| matches!(r, Row::File { .. })),
-            KeyCode::Enter => return self.enter_review_row(),
-            KeyCode::Esc | KeyCode::Char('x') if self.answer_open() => {
+            Act::NextFile => self.review_jump(true, |r| matches!(r, Row::File { .. })),
+            Act::PrevFile => self.review_jump(false, |r| matches!(r, Row::File { .. })),
+            Act::Open => return self.enter_review_row(),
+            Act::Back | Act::ClosePane if self.answer_open() => {
                 self.key_did = Some(Act::ClosePane);
                 self.close_answer();
             }
-            KeyCode::Esc | KeyCode::Char('x') if self.open.as_ref().is_some_and(|o| o.pane.is_some()) => {
+            Act::Back | Act::ClosePane if has_pane => {
                 self.key_did = Some(Act::ClosePane);
                 self.close_pane();
             }
-            KeyCode::Esc if self.zen => return self.leave_zen(),
-            KeyCode::Esc => self.focus = Focus::Queue,
-            KeyCode::Char('r') => return self.refresh_open(),
-            KeyCode::Char('i') => self.open_brief_from_review(),
-            KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => return self.view_here(crate::review::Side::New),
-            KeyCode::Char('v') => return self.open_prose(),
-            KeyCode::Char('o') => {
+            Act::Back if self.zen => return self.leave_zen(),
+            Act::Back => self.focus = Focus::Queue,
+            Act::Refresh => return self.refresh_open(),
+            Act::Description => self.open_brief_from_review(),
+            Act::ViewFile => return self.view_here(crate::review::Side::New),
+            Act::Prose => return self.open_prose(),
+            Act::OpenBrowser => {
                 return self.open.as_ref().map(|o| vec![Action::OpenUrl(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }
-            KeyCode::Char('y') => {
+            Act::CopyLink => {
                 return self.open.as_ref().map(|o| vec![Action::copy_link(o.line_url(self.hosts.kind_of(&o.key)))]).unwrap_or_default();
             }
             _ => {}
@@ -329,29 +365,20 @@ impl App {
         actions
     }
 
+    /// The second key of a two-key default: the views, the agent session and the queue's own first, then the
+    /// questions, the outline's and the prose's folds, then the diff's.
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
         if prefix == '\'' {
             self.apply_view(c);
             return vec![];
         }
-        if (prefix, c) == ('a', 'g') {
+        let act = act::act_after(prefix, c);
+        if act == Some(Act::Session) {
             return self.open_session();
         }
         if self.focus == Focus::Queue {
-            let open = match (prefix, c) {
-                ('[' | ']', 'r') => return self.walk_reviews(prefix == ']'),
-                ('[' | ']', 'm') => return self.step_mr(prefix == ']'),
-                ('z', 'o') => Some(true),
-                ('z', 'c') => Some(false),
-                ('z', 'a') => None,
-                ('z', 'z') => return self.toggle_zen(),
-                _ => return vec![],
-            };
-            if let Some(actions) = self.fold_stack(open) {
-                return actions;
-            }
-            return self.fold_section(open);
+            return act.map(|act| self.queue_prefixed(act)).unwrap_or_default();
         }
         if prefix == 'a' {
             return self.ask_key(c);
@@ -363,24 +390,43 @@ impl App {
         if self.prose_open() {
             return self.prose_prefixed(prefix, c);
         }
-        let forward = prefix == ']';
-        match (prefix, c) {
-            ('z', 'a') => return self.fold_at_cursor(None),
-            ('z', 'o') => return self.fold_at_cursor(Some(true)),
-            ('z', 'c') => return self.fold_at_cursor(Some(false)),
-            ('z', 'h') => self.header_folded = !self.header_folded,
-            ('z', 'z') => return self.toggle_zen(),
-            ('z', 'v') => return self.toggle_viewed(),
-            ('z', 'M') => return self.fold_all(true),
-            ('z', 'R') => return self.fold_all(false),
-            ('[' | ']', 'r') => return self.walk_reviews(forward),
-            ('[' | ']', 'm') => return self.step_mr(forward),
-            ('[' | ']', 'c') => self.review_jump(forward, |r| matches!(r, Row::Hunk { .. })),
-            ('[' | ']', 'n') => return self.jump_to_marked(forward, Threads::Open),
-            ('[' | ']', 'N') => return self.jump_to_marked(forward, Threads::Every),
-            ('[' | ']', 'f') => {
+        act.map(|act| self.diff_prefixed(act)).unwrap_or_default()
+    }
+
+    fn queue_prefixed(&mut self, act: Act) -> Vec<Action> {
+        let open = match act {
+            Act::NextReview | Act::PrevReview => return self.walk_reviews(act == Act::NextReview),
+            Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
+            Act::FoldOpen => Some(true),
+            Act::FoldClose => Some(false),
+            Act::FoldToggle => None,
+            Act::Zen => return self.toggle_zen(),
+            _ => return vec![],
+        };
+        if let Some(actions) = self.fold_stack(open) {
+            return actions;
+        }
+        self.fold_section(open)
+    }
+
+    fn diff_prefixed(&mut self, act: Act) -> Vec<Action> {
+        match act {
+            Act::FoldToggle => return self.fold_at_cursor(None),
+            Act::FoldOpen => return self.fold_at_cursor(Some(true)),
+            Act::FoldClose => return self.fold_at_cursor(Some(false)),
+            Act::FoldHeader => self.header_folded = !self.header_folded,
+            Act::Zen => return self.toggle_zen(),
+            Act::Viewed => return self.toggle_viewed(),
+            Act::FoldAll => return self.fold_all(true),
+            Act::UnfoldAll => return self.fold_all(false),
+            Act::NextReview | Act::PrevReview => return self.walk_reviews(act == Act::NextReview),
+            Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
+            Act::NextHunk | Act::PrevHunk => self.review_jump(act == Act::NextHunk, |r| matches!(r, Row::Hunk { .. })),
+            Act::NextThread | Act::PrevThread => return self.jump_to_marked(act == Act::NextThread, Threads::Open),
+            Act::NextAnyThread | Act::PrevAnyThread => return self.jump_to_marked(act == Act::NextAnyThread, Threads::Every),
+            Act::NextFileUnresolved | Act::PrevFileUnresolved => {
                 let wanted = self.files_with_unresolved();
-                self.review_jump(forward, move |r| matches!(r, Row::File { index, .. } if wanted.contains(index)));
+                self.review_jump(act == Act::NextFileUnresolved, move |r| matches!(r, Row::File { index, .. } if wanted.contains(index)));
             }
             _ => {}
         }

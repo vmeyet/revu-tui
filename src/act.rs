@@ -1,6 +1,8 @@
 //! Every action revu has, in one table: the name `[keys.bind]` and `revu usage` give it, its default keys, its
 //! lines in the `?` help and its palette verb. The keymap, the help, the palette, the usage report and
 //! `docs/reference/keys.md` all read it from here.
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use std::sync::LazyLock;
 
 /// One action; its row in [`ROWS`] says everything else about it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,6 +172,19 @@ pub struct Row {
     pub verb: Option<Verb>,
     /// Where one of its one-key keys is counted as it; a two-key one is counted wherever its first key was read.
     pub counts: &'static [Place],
+    /// Where its one-key keys do it.
+    pub panes: &'static [Pane],
+}
+
+/// Where a key does an action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pane {
+    /// Wherever the keys go to a pane, before the pane gets them.
+    Anywhere,
+    Queue,
+    Diff,
+    /// A thread, note or draft under the diff's cursor, before the diff's own keys.
+    ThreadRow,
 }
 
 /// Where a key lands, which decides the action it is counted as.
@@ -213,7 +228,7 @@ impl Name {
 }
 
 const fn row(act: Act, name: Name, keys: &'static [&'static str]) -> Row {
-    Row { act, name, keys, help: &[], verb: None, counts: &[] }
+    Row { act, name, keys, help: &[], verb: None, counts: &[], panes: &[] }
 }
 
 const fn bound(act: Act, name: &'static str, keys: &'static [&'static str]) -> Row {
@@ -251,15 +266,21 @@ impl Row {
     const fn counts(self, counts: &'static [Place]) -> Self {
         Self { counts, ..self }
     }
+
+    const fn panes(self, panes: &'static [Pane]) -> Self {
+        Self { panes, ..self }
+    }
 }
 
 /// One row per [`Act`], in its order: bindable actions first, then the others `revu usage` lists, then the rest.
 pub const ROWS: &[Row] = &[
-    bound(Act::NextThread, "next_thread", &["]n", "n"]).help(&[
-        line(Group::Move, "]n [n", "next, previous open conversation"),
-        line(Group::Move, "n N", "the same, while no search is on"),
-    ]),
-    bound(Act::PrevThread, "prev_thread", &["[n", "N"]),
+    bound(Act::NextThread, "next_thread", &["]n", "n"])
+        .help(&[
+            line(Group::Move, "]n [n", "next, previous open conversation"),
+            line(Group::Move, "n N", "the same, while no search is on"),
+        ])
+        .panes(&[Pane::Diff]),
+    bound(Act::PrevThread, "prev_thread", &["[n", "N"]).panes(&[Pane::Diff]),
     bound(Act::NextAnyThread, "next_any_thread", &["]N"]).help(&[line(Group::Move, "]N [N", "next, previous conversation, resolved too")]),
     bound(Act::PrevAnyThread, "prev_any_thread", &["[N"]),
     bound(Act::NextHunk, "next_hunk", &["]c"]).help(&[line(Group::Move, "]c [c", "next, previous hunk")]),
@@ -272,8 +293,11 @@ pub const ROWS: &[Row] = &[
     bound(Act::PrevFileUnresolved, "prev_file_unresolved", &["[f"]),
     bound(Act::NextReview, "next_review", &["]r"]).help(&[line(Group::Move, "]r [r", "next, previous MR that needs you")]),
     bound(Act::PrevReview, "prev_review", &["[r"]),
-    bound(Act::NextFile, "next_file", &["tab"]).counts(DIFF).help(&[line(Group::Move, "tab S-tab", "next, previous file")]),
-    bound(Act::PrevFile, "prev_file", &["backtab"]).counts(DIFF),
+    bound(Act::NextFile, "next_file", &["tab"])
+        .help(&[line(Group::Move, "tab S-tab", "next, previous file")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::PrevFile, "prev_file", &["backtab"]).panes(&[Pane::Diff]).counts(DIFF),
     bound(Act::FoldToggle, "fold_toggle", &["za"]).help(&[line(Group::View, "za zc zo", "toggle, close, open the fold")]),
     bound(Act::FoldOpen, "fold_open", &["zo"]).help(&[
         line(Group::Queue, "zo zc", "open, fold the section or stack"),
@@ -287,101 +311,178 @@ pub const ROWS: &[Row] = &[
     bound(Act::Zen, "zen", &["zz"]).help(&[line(Group::View, "zz", "zen: the diff alone, quiet")]),
     bound(Act::PrevMr, "prev_mr", &["[m"]),
     bound(Act::NextMr, "next_mr", &["]m"]).help(&[line(Group::Move, "]m [m", "next, previous MR in the queue")]),
-    bound(Act::SideBySide, "side_by_side", &["D"]).counts(DIFF).help(&[line(Group::View, "D", "inline or side by side, diff and prose")]),
-    bound(Act::PeekAfter, "peek_after", &[">"]).counts(DIFF).help(&[line(Group::View, "> <", "the code after, before, alone")]),
-    bound(Act::PeekBefore, "peek_before", &["<"]).counts(DIFF),
-    bound(Act::Tree, "tree", &["t"]).counts(DIFF).help(&[line(Group::View, "t", "file tree")]),
+    bound(Act::SideBySide, "side_by_side", &["D"])
+        .help(&[line(Group::View, "D", "inline or side by side, diff and prose")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::PeekAfter, "peek_after", &[">"])
+        .help(&[line(Group::View, "> <", "the code after, before, alone")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::PeekBefore, "peek_before", &["<"]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::Tree, "tree", &["t"]).help(&[line(Group::View, "t", "file tree")]).panes(&[Pane::Diff]).counts(DIFF),
     bound(Act::EveryThread, "every_thread", &["T"])
-        .counts(DIFF_AND_PANE)
-        .help(&[line(Group::View, "T", "every thread of the MR"), line(Group::Thread, "T", "every thread; enter goes to it")]),
-    bound(Act::Pipeline, "pipeline", &["p"]).counts(DIFF).help(&[line(Group::View, "p", "pipeline")]),
-    bound(Act::Outline, "outline", &["O"]).counts(DIFF).help(&[line(Group::View, "O", "outline: the symbols the MR changes")]),
-    bound(Act::Prose, "prose", &["v"]).counts(DIFF).help(&[line(Group::View, "v", "prose: the Markdown file rendered, its blocks marked")]),
-    bound(Act::Wrap, "wrap", &["w"]).counts(DIFF).help(&[line(Group::View, "w W", "wrap long lines, hide whitespace changes")]),
-    bound(Act::Whitespace, "whitespace", &["W"]).counts(DIFF),
-    bound(Act::MoreContext, "more_context", &["="]).counts(DIFF).help(&[line(Group::View, "= +", "more lines, react on a thread")]),
-    bound(Act::ViewFile, "view_file", &["ctrl-v"]).counts(DIFF_AND_PANE).help(&[line(Group::View, "^v", "the file in your own program")]),
-    bound(Act::Description, "description", &["i"]).counts(&[Place::Queue, Place::Diff]).help(&[line(
-        Group::View,
-        "i",
-        "the MR cover page",
-    )]),
-    bound(Act::Comment, "comment", &["c"]).counts(DIFF).help(&[line(Group::Comment, "c", "comment on the line, reply on a thread")]),
-    bound(Act::CommentOld, "comment_old", &["C"]).counts(DIFF).help(&[line(Group::Comment, "C", "comment on the old side")]),
-    bound(Act::Select, "select", &["V"]).counts(DIFF).help(&[line(Group::Comment, "V", "select lines")]),
-    bound(Act::Suggest, "suggest", &["s"]).counts(DIFF).help(&[line(Group::Comment, "s", "suggest a change")]),
-    bound(Act::Editor, "editor", &["E"]).counts(ON_A_THREAD_AND_DIFF).help(&[line(Group::Comment, "E", "write in $EDITOR")]),
-    bound(Act::Resolve, "resolve", &["R"]).counts(ON_A_THREAD_AND_DIFF).help(&[line(Group::Thread, "R", "resolve, unresolve")]),
-    bound(Act::Publish, "publish", &["P"]).counts(DIFF_AND_PANE).help(&[line(Group::Comment, "P", "publish every draft")]),
-    bound(Act::Approve, "approve", &["A"]).counts(DIFF).help(&[line(Group::Comment, "A M", "approve or unapprove, merge mine")]),
-    bound(Act::Merge, "merge", &["M"]).counts(DIFF),
-    bound(Act::Ready, "ready", &["H"]).counts(DIFF).help(&[line(Group::Comment, "H", "mark mine draft or ready")]),
-    bound(Act::Share, "share", &["Y"]).counts(EVERYWHERE).help(&[line(Group::Comment, "Y", "share the MR, after a preview")]),
+        .help(&[line(Group::View, "T", "every thread of the MR"), line(Group::Thread, "T", "every thread; enter goes to it")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF_AND_PANE),
+    bound(Act::Pipeline, "pipeline", &["p"]).help(&[line(Group::View, "p", "pipeline")]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::Outline, "outline", &["O"])
+        .help(&[line(Group::View, "O", "outline: the symbols the MR changes")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::Prose, "prose", &["v"])
+        .help(&[line(Group::View, "v", "prose: the Markdown file rendered, its blocks marked")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::Wrap, "wrap", &["w"])
+        .help(&[line(Group::View, "w W", "wrap long lines, hide whitespace changes")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::Whitespace, "whitespace", &["W"]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::MoreContext, "more_context", &["="])
+        .help(&[line(Group::View, "= +", "more lines, react on a thread")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::ViewFile, "view_file", &["ctrl-v"])
+        .help(&[line(Group::View, "^v", "the file in your own program")])
+        .panes(&[Pane::Diff, Pane::ThreadRow])
+        .counts(DIFF_AND_PANE),
+    bound(Act::Description, "description", &["i"])
+        .help(&[line(Group::View, "i", "the MR cover page")])
+        .panes(&[Pane::Queue, Pane::Diff])
+        .counts(&[Place::Queue, Place::Diff]),
+    bound(Act::Comment, "comment", &["c"])
+        .help(&[line(Group::Comment, "c", "comment on the line, reply on a thread")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::CommentOld, "comment_old", &["C"])
+        .help(&[line(Group::Comment, "C", "comment on the old side")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::Select, "select", &["V"]).help(&[line(Group::Comment, "V", "select lines")]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::Suggest, "suggest", &["s"]).help(&[line(Group::Comment, "s", "suggest a change")]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::Editor, "editor", &["E"])
+        .help(&[line(Group::Comment, "E", "write in $EDITOR")])
+        .panes(&[Pane::Diff, Pane::ThreadRow])
+        .counts(ON_A_THREAD_AND_DIFF),
+    bound(Act::Resolve, "resolve", &["R"])
+        .help(&[line(Group::Thread, "R", "resolve, unresolve")])
+        .panes(&[Pane::Diff, Pane::ThreadRow])
+        .counts(ON_A_THREAD_AND_DIFF),
+    bound(Act::Publish, "publish", &["P"])
+        .help(&[line(Group::Comment, "P", "publish every draft")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF_AND_PANE),
+    bound(Act::Approve, "approve", &["A"])
+        .help(&[line(Group::Comment, "A M", "approve or unapprove, merge mine")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    bound(Act::Merge, "merge", &["M"]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::Ready, "ready", &["H"]).help(&[line(Group::Comment, "H", "mark mine draft or ready")]).panes(&[Pane::Diff]).counts(DIFF),
+    bound(Act::Share, "share", &["Y"])
+        .help(&[line(Group::Comment, "Y", "share the MR, after a preview")])
+        .panes(&[Pane::Anywhere])
+        .counts(EVERYWHERE),
     bound(Act::Session, "session", &["ag"]).help(&[line(Group::App, "ag", "the agent session of the MR: a, then g")]),
-    bound(Act::React, "react", &["+"]).counts(ON_A_THREAD_AND_DIFF),
-    bound(Act::OpenBrowser, "open_browser", &["o"]).counts(&[Place::Queue, Place::Diff, Place::Pane, Place::ThreadRow]).help(&[line(
-        Group::App,
-        "o y",
-        "open in the browser, copy the link",
-    )]),
-    bound(Act::CopyLink, "copy_link", &["y"]).counts(&[Place::Queue, Place::Diff, Place::Pane, Place::ThreadRow]),
-    bound(Act::Scope, "scope", &["*"]).counts(QUEUE).help(&[line(Group::Queue, "*", "this repo, or every project")]),
-    bound(Act::SortQueue, "sort_queue", &["s"]).counts(QUEUE).help(&[line(Group::Queue, "s", "next sort order")]),
-    bound(Act::GroupByAuthor, "group_by_author", &["S"]).counts(QUEUE).help(&[line(Group::Queue, "S", "group by author")]),
-    bound(Act::Filter, "filter", &["/"]).counts(QUEUE).help(&[line(Group::Queue, "/", "filter: words @author !42 ~label")]),
-    bound(Act::Palette, "palette", &[":"]).counts(EVERYWHERE).help(&[line(Group::App, ":", "commands: :go !42, :set theme=nord")]),
-    bound(Act::Views, "views", &["'", "1", "2", "3", "4", "5", "6", "7", "8", "9"]).counts(QUEUE).help(&[line(
-        Group::Queue,
-        "' 1-9",
-        "a saved view, by letter or rank",
-    )]),
-    bound(Act::Jump, "jump", &["ctrl-k", ","]).counts(EVERYWHERE).help(&[line(Group::App, "^k ,", "MRs · / files · > commands")]),
-    bound(Act::Help, "help", &["?"]).counts(EVERYWHERE).help(&[line(Group::App, "?", "this help")]),
-    bound(Act::Quit, "quit", &["q", "ctrl-c"]).counts(EVERYWHERE).help(&[line(Group::App, "q ^c", "quit: twice; q closes a pane first")]),
-    listed(Act::MoveDown, "move_down", &["j", "down"]).counts(EVERYWHERE).help(&[line(Group::Move, "j k", "move")]),
-    listed(Act::MoveUp, "move_up", &["k", "up"]).counts(EVERYWHERE),
-    listed(Act::PageDown, "page_down", &["ctrl-d"]).counts(EVERYWHERE).help(&[line(Group::Move, "^d ^u", "half a page; space too")]),
-    listed(Act::PageUp, "page_up", &["ctrl-u"]).counts(EVERYWHERE),
-    listed(Act::FullPageDown, "full_page_down", &["ctrl-f"]).counts(EVERYWHERE).help(&[line(
-        Group::Move,
-        "^f ^b",
-        "a full page; PgDn PgUp too",
-    )]),
-    listed(Act::FullPageUp, "full_page_up", &["ctrl-b"]).counts(EVERYWHERE),
-    listed(Act::Top, "top", &["g"]).counts(EVERYWHERE).help(&[line(Group::Move, "g G", "first, last")]),
-    listed(Act::Bottom, "bottom", &["G"]).counts(EVERYWHERE),
-    listed(Act::Open, "open", &["enter"]).counts(EVERYWHERE).help(&[
-        line(Group::Move, "enter", "open, or toggle the fold or the thread"),
-        line(Group::Outline, "enter", "the call in the diff, the definition, a section"),
+    bound(Act::React, "react", &["+"]).panes(&[Pane::Diff, Pane::ThreadRow]).counts(ON_A_THREAD_AND_DIFF),
+    bound(Act::OpenBrowser, "open_browser", &["o"])
+        .help(&[line(Group::App, "o y", "open in the browser, copy the link")])
+        .panes(&[Pane::Queue, Pane::Diff, Pane::ThreadRow])
+        .counts(&[Place::Queue, Place::Diff, Place::Pane, Place::ThreadRow]),
+    bound(Act::CopyLink, "copy_link", &["y"]).panes(&[Pane::Queue, Pane::Diff, Pane::ThreadRow]).counts(&[
+        Place::Queue,
+        Place::Diff,
+        Place::Pane,
+        Place::ThreadRow,
     ]),
-    listed(Act::Back, "back", &["esc"]).counts(&[Place::Queue, Place::Diff]),
-    listed(Act::FocusLeft, "focus_left", &["h", "left"]).counts(EVERYWHERE).help(&[line(
-        Group::Move,
-        "h l",
-        "pane to the left, to the right",
-    )]),
-    listed(Act::FocusRight, "focus_right", &["l", "right"]).counts(EVERYWHERE),
-    listed(Act::Refresh, "refresh", &["r"]).counts(&[Place::Queue, Place::Diff]).help(&[line(Group::App, "r", "refresh")]),
-    listed(Act::Reply, "reply", &["r", "c"]).counts(ON_A_THREAD).help(&[
-        line(Group::Comment, "r R e d", "on a thread row: reply, resolve, edit, delete"),
-        line(Group::Thread, "r c", "reply, as a draft"),
-    ]),
-    listed(Act::ApplySuggestion, "apply_suggestion", &["S"]).counts(ON_A_THREAD).help(&[line(
-        Group::Thread,
-        "S +",
-        "apply the suggestion, react",
-    )]),
-    listed(Act::EditDraft, "edit_draft", &["e"]).counts(ON_A_THREAD).help(&[line(Group::Thread, "e d", "edit, delete my draft")]),
-    listed(Act::DeleteDraft, "delete_draft", &["d"]).counts(ON_A_THREAD),
-    listed(Act::ClosePane, "close_pane", &["esc", "x"]).counts(&[Place::Pane]).help(&[line(
-        Group::Move,
-        "esc x",
-        "close the pane, back to the queue",
-    )]),
-    listed(Act::NextInLine, "next_in_line", &["J"]).counts(&[Place::Pane]).help(&[line(Group::Thread, "J K", "next, previous thread")]),
+    bound(Act::Scope, "scope", &["*"]).help(&[line(Group::Queue, "*", "this repo, or every project")]).panes(&[Pane::Queue]).counts(QUEUE),
+    bound(Act::SortQueue, "sort_queue", &["s"]).help(&[line(Group::Queue, "s", "next sort order")]).panes(&[Pane::Queue]).counts(QUEUE),
+    bound(Act::GroupByAuthor, "group_by_author", &["S"])
+        .help(&[line(Group::Queue, "S", "group by author")])
+        .panes(&[Pane::Queue])
+        .counts(QUEUE),
+    bound(Act::Filter, "filter", &["/"])
+        .help(&[line(Group::Queue, "/", "filter: words @author !42 ~label")])
+        .panes(&[Pane::Queue])
+        .counts(QUEUE),
+    bound(Act::Palette, "palette", &[":"])
+        .help(&[line(Group::App, ":", "commands: :go !42, :set theme=nord")])
+        .panes(&[Pane::Anywhere])
+        .counts(EVERYWHERE),
+    bound(Act::Views, "views", &["'", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+        .help(&[line(Group::Queue, "' 1-9", "a saved view, by letter or rank")])
+        .panes(&[Pane::Queue])
+        .counts(QUEUE),
+    bound(Act::Jump, "jump", &["ctrl-k", ","])
+        .help(&[line(Group::App, "^k ,", "MRs · / files · > commands")])
+        .panes(&[Pane::Anywhere])
+        .counts(EVERYWHERE),
+    bound(Act::Help, "help", &["?"]).help(&[line(Group::App, "?", "this help")]).panes(&[Pane::Anywhere]).counts(EVERYWHERE),
+    bound(Act::Quit, "quit", &["q", "ctrl-c"])
+        .help(&[line(Group::App, "q ^c", "quit: twice; q closes a pane first")])
+        .panes(&[Pane::Anywhere])
+        .counts(EVERYWHERE),
+    listed(Act::MoveDown, "move_down", &["j", "down"])
+        .help(&[line(Group::Move, "j k", "move")])
+        .panes(&[Pane::Queue, Pane::Diff])
+        .counts(EVERYWHERE),
+    listed(Act::MoveUp, "move_up", &["k", "up"]).panes(&[Pane::Queue, Pane::Diff]).counts(EVERYWHERE),
+    listed(Act::PageDown, "page_down", &["ctrl-d"])
+        .help(&[line(Group::Move, "^d ^u", "half a page; space too")])
+        .panes(&[Pane::Queue, Pane::Diff])
+        .counts(EVERYWHERE),
+    listed(Act::PageUp, "page_up", &["ctrl-u"]).panes(&[Pane::Queue, Pane::Diff]).counts(EVERYWHERE),
+    listed(Act::FullPageDown, "full_page_down", &["ctrl-f"])
+        .help(&[line(Group::Move, "^f ^b", "a full page; PgDn PgUp too")])
+        .panes(&[Pane::Queue, Pane::Diff])
+        .counts(EVERYWHERE),
+    listed(Act::FullPageUp, "full_page_up", &["ctrl-b"]).panes(&[Pane::Queue, Pane::Diff]).counts(EVERYWHERE),
+    listed(Act::Top, "top", &["g"]).help(&[line(Group::Move, "g G", "first, last")]).panes(&[Pane::Queue, Pane::Diff]).counts(EVERYWHERE),
+    listed(Act::Bottom, "bottom", &["G"]).panes(&[Pane::Queue, Pane::Diff]).counts(EVERYWHERE),
+    listed(Act::Open, "open", &["enter"])
+        .help(&[
+            line(Group::Move, "enter", "open, or toggle the fold or the thread"),
+            line(Group::Outline, "enter", "the call in the diff, the definition, a section"),
+        ])
+        .panes(&[Pane::Queue, Pane::Diff])
+        .counts(EVERYWHERE),
+    listed(Act::Back, "back", &["esc"]).panes(&[Pane::Queue, Pane::Diff]).counts(&[Place::Queue, Place::Diff]),
+    listed(Act::FocusLeft, "focus_left", &["h", "left"])
+        .help(&[line(Group::Move, "h l", "pane to the left, to the right")])
+        .panes(&[Pane::Anywhere])
+        .counts(EVERYWHERE),
+    listed(Act::FocusRight, "focus_right", &["l", "right"]).panes(&[Pane::Anywhere]).counts(EVERYWHERE),
+    listed(Act::Refresh, "refresh", &["r"])
+        .help(&[line(Group::App, "r", "refresh")])
+        .panes(&[Pane::Queue, Pane::Diff])
+        .counts(&[Place::Queue, Place::Diff]),
+    listed(Act::Reply, "reply", &["r", "c"])
+        .help(&[
+            line(Group::Comment, "r R e d", "on a thread row: reply, resolve, edit, delete"),
+            line(Group::Thread, "r c", "reply, as a draft"),
+        ])
+        .panes(&[Pane::ThreadRow])
+        .counts(ON_A_THREAD),
+    listed(Act::ApplySuggestion, "apply_suggestion", &["S"])
+        .help(&[line(Group::Thread, "S +", "apply the suggestion, react")])
+        .panes(&[Pane::ThreadRow])
+        .counts(ON_A_THREAD),
+    listed(Act::EditDraft, "edit_draft", &["e"])
+        .help(&[line(Group::Thread, "e d", "edit, delete my draft")])
+        .panes(&[Pane::ThreadRow])
+        .counts(ON_A_THREAD),
+    listed(Act::DeleteDraft, "delete_draft", &["d"]).panes(&[Pane::ThreadRow]).counts(ON_A_THREAD),
+    listed(Act::ClosePane, "close_pane", &["esc", "x"])
+        .help(&[line(Group::Move, "esc x", "close the pane, back to the queue")])
+        .panes(&[Pane::Diff])
+        .counts(&[Place::Pane]),
+    listed(Act::NextInLine, "next_in_line", &["J"]).help(&[line(Group::Thread, "J K", "next, previous thread")]).counts(&[Place::Pane]),
     listed(Act::PrevInLine, "prev_in_line", &["K"]).counts(&[Place::Pane]),
-    listed(Act::OpenLink, "open_link", &["u"]).counts(ON_A_THREAD).help(&[line(Group::Thread, "u U", "open, copy the first link")]),
-    listed(Act::CopyFirstLink, "copy_first_link", &["U"]).counts(ON_A_THREAD),
+    listed(Act::OpenLink, "open_link", &["u"])
+        .help(&[line(Group::Thread, "u U", "open, copy the first link")])
+        .panes(&[Pane::ThreadRow])
+        .counts(ON_A_THREAD),
+    listed(Act::CopyFirstLink, "copy_first_link", &["U"]).panes(&[Pane::ThreadRow]).counts(ON_A_THREAD),
     listed(Act::AskExplain, "ask_explain", &["ae"]).help(&[line(Group::Ask, "a e r s", "explain, risks, summary")]),
     listed(Act::AskRisks, "ask_risks", &["ar"]),
     listed(Act::AskSummary, "ask_summary", &["as"]),
@@ -411,9 +512,15 @@ pub const ROWS: &[Row] = &[
     command!(Counted, Act::OutlineCommand, "outline", "the functions and classes the MR changes, in the right pane"),
     command!(Counted, Act::SessionCommand, "session", "open the agent session of the MR, or start one"),
     command!(Counted, Act::NewsCommand, "news", "what changed in revu, the newest version first"),
-    counted(Act::Pin, "pin", &["b"]).counts(QUEUE).help(&[line(Group::Queue, "b", "pin on top of the queue, or unpin")]),
-    counted(Act::ViewedNext, "viewed", &["m"]).counts(DIFF).help(&[line(Group::View, "m", "file viewed, on to the next one")]),
-    unnamed(Act::Search, &["/"]).help(&[line(Group::View, "/ n N", "find text in the MR, next, previous")]),
+    counted(Act::Pin, "pin", &["b"])
+        .help(&[line(Group::Queue, "b", "pin on top of the queue, or unpin")])
+        .panes(&[Pane::Queue])
+        .counts(QUEUE),
+    counted(Act::ViewedNext, "viewed", &["m"])
+        .help(&[line(Group::View, "m", "file viewed, on to the next one")])
+        .panes(&[Pane::Diff])
+        .counts(DIFF),
+    unnamed(Act::Search, &["/"]).help(&[line(Group::View, "/ n N", "find text in the MR, next, previous")]).panes(&[Pane::Diff]),
     unnamed(Act::Mine, &["m"]).help(&[line(Group::Thread, "m", "every thread: only mine, or all")]),
     unnamed(Act::PostNow, &[]).help(&[line(Group::Comment, "⌘enter ^s", "in the box: post now, no draft")]),
     unnamed(Act::NewLine, &[]).help(&[line(Group::Comment, "⌥enter ^o", "in the box: new line, $EDITOR")]),
@@ -555,6 +662,44 @@ impl Act {
     }
 }
 
+/// Every default key of every action, as the terminal reports it.
+static DEFAULT_KEYS: LazyLock<Vec<(&'static Row, Vec<KeyEvent>)>> = LazyLock::new(|| {
+    ROWS.iter()
+        .flat_map(|row| row.keys.iter().filter_map(|text| crate::keymap::parse(text).ok()).map(move |keys| (row, keys)))
+        .map(|(row, keys)| (row, keys.iter().map(|key| key.event()).collect()))
+        .collect()
+});
+
+/// The action whose default is `prefix` then `second`: `z` then `a`.
+pub fn act_after(prefix: char, second: char) -> Option<Act> {
+    let typed = [KeyEvent::from(KeyCode::Char(prefix)), KeyEvent::from(KeyCode::Char(second))];
+    DEFAULT_KEYS.iter().find(|(_, keys)| *keys == typed).map(|(row, _)| row.act)
+}
+
+/// `c` opens a two-key default.
+pub fn is_prefix(c: char) -> bool {
+    let first = KeyEvent::from(KeyCode::Char(c));
+    DEFAULT_KEYS.iter().any(|(_, keys)| keys.len() == 2 && keys[0] == first)
+}
+
+/// The first action `applies` keeps whose one-key default is `code` with exactly `modifiers`.
+pub fn with_key(code: KeyCode, modifiers: KeyModifiers, applies: impl Fn(&Row) -> bool) -> Option<Act> {
+    let is_it = |(row, keys): &&(&Row, Vec<KeyEvent>)| {
+        let is_the_key = matches!(keys.as_slice(), [own] if own.code == code && own.modifiers == modifiers);
+        is_the_key && applies(row)
+    };
+    DEFAULT_KEYS.iter().find(is_it).map(|(row, _)| row.act)
+}
+
+/// What `key` does in `pane`: its ctrl default when ctrl is held, else the key whatever its modifiers.
+/// Where two rows share a key in one pane, the first one wins.
+pub fn act_in(pane: Pane, key: KeyEvent) -> Option<Act> {
+    let works_here = |row: &Row| row.panes.contains(&pane);
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let held = if ctrl { with_key(key.code, KeyModifiers::CONTROL, works_here) } else { None };
+    held.or_else(|| with_key(key.code, KeyModifiers::NONE, works_here))
+}
+
 /// Every action `[keys.bind]` can name, with the default key a binding stands for.
 pub fn bindable() -> impl Iterator<Item = (&'static str, &'static str)> {
     ROWS.iter().filter_map(|row| match row.name {
@@ -602,6 +747,18 @@ mod tests {
         for group in GROUPS {
             for act in group.acts() {
                 assert!(act.row().help.iter().any(|line| line.group == group), "{act:?} has no line in {group:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_key_counts_as_one_action_per_place() {
+        for place in [Place::Queue, Place::Diff, Place::Pane, Place::ThreadRow] {
+            let counted: Vec<&(&Row, Vec<KeyEvent>)> =
+                DEFAULT_KEYS.iter().filter(|(row, keys)| keys.len() == 1 && row.counts.contains(&place)).collect();
+            for (i, (row, keys)) in counted.iter().enumerate() {
+                let twin = counted[i + 1..].iter().find(|(other, same)| same == keys && other.act != row.act);
+                assert!(twin.is_none(), "{:?} and {:?} both count {keys:?} in {place:?}", row.act, twin.map(|(other, _)| other.act));
             }
         }
     }

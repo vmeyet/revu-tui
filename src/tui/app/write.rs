@@ -1,5 +1,6 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
 use super::{Action, App, EntryKind, Failure, Input, MrKey, Open};
+use crate::act::{self, Act, Pane};
 use crate::forge::{Approval, Position};
 use crate::review::{Draft, Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -15,28 +16,29 @@ pub struct Publish {
 
 impl App {
     pub(super) fn handle_write_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
-        let actions = match key.code {
-            KeyCode::Char('c') => self.comment_here(),
-            KeyCode::Char('C') => self.comment_old_side(),
-            KeyCode::Char('V') => {
+        let selecting = self.open.as_ref().is_some_and(|o| o.select_from.is_some());
+        let actions = match act::act_in(Pane::Diff, key)? {
+            Act::Comment => self.comment_here(),
+            Act::CommentOld => self.comment_old_side(),
+            Act::Select => {
                 self.start_select();
                 vec![]
             }
-            KeyCode::Char('E') => self.compose_here(false),
-            KeyCode::Char('R') => self.toggle_resolved(),
-            KeyCode::Char('s') => self.compose_here(true),
-            KeyCode::Char('A') => self.toggle_approval(),
-            KeyCode::Char('M') => self.merge_here(),
-            KeyCode::Char('H') => self.toggle_draft(),
-            KeyCode::Char('P') => {
+            Act::Editor => self.compose_here(false),
+            Act::Resolve => self.toggle_resolved(),
+            Act::Suggest => self.compose_here(true),
+            Act::Approve => self.toggle_approval(),
+            Act::Merge => self.merge_here(),
+            Act::Ready => self.toggle_draft(),
+            Act::Publish => {
                 self.open_publish();
                 vec![]
             }
-            KeyCode::Esc if self.open.as_ref().is_some_and(|o| o.select_from.is_some()) => {
+            Act::Back if selecting => {
                 self.drop_select();
                 vec![]
             }
-            KeyCode::Char('y') if self.open.as_ref().is_some_and(|o| o.select_from.is_some()) => {
+            Act::CopyLink if selecting => {
                 let text = self.selected_lines().join("\n");
                 self.drop_select();
                 vec![Action::Copy { text, done: "copied".into() }]

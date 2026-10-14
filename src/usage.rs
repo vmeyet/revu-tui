@@ -1,14 +1,13 @@
 //! What revu is used for, counted on this machine only: which actions, how long on each screen,
 //! and a few habits a faster key would replace. Opt-in with `[usage] enabled = true`.
 //! Nothing about the MRs is kept: no titles, paths, text, hosts or projects, only action names.
-use crate::act::{Act, Place, ROWS, Row};
+use crate::act::{self, Act, Place, Row};
 use crate::cache::Cache;
 use anyhow::{Result, bail};
 use chrono::NaiveDate;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::sync::LazyLock;
 use std::time::Duration;
 
 /// The file, at the cache root; deleting it starts the counts again.
@@ -127,14 +126,6 @@ const VIEWS_PREFIX: char = '\'';
 /// Moves held with ctrl are not counted.
 const NOT_WITH_CTRL: &[Act] = &[Act::MoveDown, Act::MoveUp, Act::Top, Act::Bottom, Act::Open];
 
-/// Every default key of every action, as the terminal reports it.
-static DEFAULT_KEYS: LazyLock<Vec<(&'static Row, Vec<KeyEvent>)>> = LazyLock::new(|| {
-    ROWS.iter()
-        .flat_map(|row| row.keys.iter().filter_map(|text| crate::keymap::parse(text).ok()).map(move |keys| (row, keys)))
-        .map(|(row, keys)| (row, keys.iter().map(|key| key.event()).collect()))
-        .collect()
-});
-
 /// The action a key stands for, after the user's bindings turned it into revu's own.
 /// `prefix` is the first key of a two-key sequence already typed (`z`, `[`, `]`, `a`, `'`).
 pub fn action(prefix: Option<char>, key: KeyEvent, place: Place) -> Option<&'static str> {
@@ -150,8 +141,7 @@ fn prefixed(prefix: char, key: KeyEvent) -> Option<Act> {
     if prefix == VIEWS_PREFIX {
         return Some(Act::Views);
     }
-    let typed = [KeyEvent::from(KeyCode::Char(prefix)), KeyEvent::from(KeyCode::Char(c))];
-    DEFAULT_KEYS.iter().find(|(_, keys)| *keys == typed).map(|(row, _)| row.act)
+    act::act_after(prefix, c)
 }
 
 /// A key alone: ctrl keys first, then the key whatever its modifiers, among the actions counted in `place`.
@@ -159,36 +149,23 @@ fn single(key: KeyEvent, place: Place) -> Option<Act> {
     if is_palette_chord(key) {
         return Some(Act::Jump);
     }
+    let counted_here = |row: &Row| row.counts.contains(&place);
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    if ctrl && let Some(act) = one_key(key.code, KeyModifiers::CONTROL, place) {
+    if ctrl && let Some(act) = act::with_key(key.code, KeyModifiers::CONTROL, counted_here) {
         return Some(act);
     }
     if let KeyCode::Char(c) = key.code
-        && is_prefix(c)
+        && (c == VIEWS_PREFIX || act::is_prefix(c))
     {
         return None;
     }
-    one_key(key.code, KeyModifiers::NONE, place).filter(|act| !(ctrl && NOT_WITH_CTRL.contains(act)))
+    act::with_key(key.code, KeyModifiers::NONE, counted_here).filter(|act| !(ctrl && NOT_WITH_CTRL.contains(act)))
 }
 
 /// `ctrl-k` or `⌘k`, either case.
 fn is_palette_chord(key: KeyEvent) -> bool {
     let is_k = matches!(key.code, KeyCode::Char('k' | 'K'));
     is_k && key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER)
-}
-
-fn is_prefix(c: char) -> bool {
-    let first = KeyEvent::from(KeyCode::Char(c));
-    c == VIEWS_PREFIX || DEFAULT_KEYS.iter().any(|(_, keys)| keys.len() == 2 && keys[0] == first)
-}
-
-/// The action counted in `place` whose default is `code` with exactly `modifiers`.
-fn one_key(code: KeyCode, modifiers: KeyModifiers, place: Place) -> Option<Act> {
-    let is_it = |(row, keys): &&(&Row, Vec<KeyEvent>)| {
-        let is_the_key = matches!(keys.as_slice(), [own] if own.code == code && own.modifiers == modifiers);
-        is_the_key && row.counts.contains(&place)
-    };
-    DEFAULT_KEYS.iter().find(is_it).map(|(row, _)| row.act)
 }
 /// How often a hint shows as a toast, over every session; after that only the report counts it.
 const HINT_TOASTS: u64 = 3;
@@ -462,18 +439,6 @@ mod tests {
         assert_eq!(action(Some('a'), key('r'), Place::Diff), Some("ask_risks"));
         assert_eq!(action(None, key('z'), Place::Diff), None, "a prefix alone is no action");
         assert_eq!(action(None, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL), Place::Queue), Some("jump"));
-    }
-
-    #[test]
-    fn a_key_counts_as_one_action_per_place() {
-        for place in [Place::Queue, Place::Diff, Place::Pane, Place::ThreadRow] {
-            let counted: Vec<&(&Row, Vec<KeyEvent>)> =
-                DEFAULT_KEYS.iter().filter(|(row, keys)| keys.len() == 1 && row.counts.contains(&place)).collect();
-            for (i, (row, keys)) in counted.iter().enumerate() {
-                let twin = counted[i + 1..].iter().find(|(other, same)| same == keys && other.act != row.act);
-                assert!(twin.is_none(), "{:?} and {:?} both count {keys:?} in {place:?}", row.act, twin.map(|(other, _)| other.act));
-            }
-        }
     }
 
     #[test]
