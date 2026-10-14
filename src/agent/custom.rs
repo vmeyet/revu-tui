@@ -48,7 +48,7 @@ fn call(command: &str, mr: &Mr, name: &str, dir: &Path) -> Result<Call> {
     let fill = |word: &String| {
         PLACEHOLDERS.iter().zip(&values).fold(word.clone(), |word, (name, value)| word.replace(&format!("{{{name}}}"), value))
     };
-    Ok(Call { argv: words.iter().map(fill).collect(), dir: Some(dir.to_owned()), path: None })
+    Ok(Call::new(&words.iter().map(fill).collect::<Vec<_>>()).in_dir(dir))
 }
 
 #[cfg(test)]
@@ -105,7 +105,7 @@ mod tests {
         agent.open(&mr(), &cache, Choice::Find).unwrap();
         let before = script.calls().len();
         let Outcome::Handoff(Handoff { call, said }) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
-        assert_eq!(call, Call { argv: vec!["aider".into(), "--restore".into(), WORKTREE.into()], dir: Some(WORKTREE.into()), path: None });
+        assert_eq!(call, Call::new(&["aider", "--restore", WORKTREE]).in_dir(Path::new(WORKTREE)));
         assert!(said.starts_with("the session revu remembered for !42"), "{said}");
         assert_eq!(script.calls().len(), before, "nothing is looked for: no git, no list");
     }

@@ -134,7 +134,7 @@ fn pane_call(run: &dyn Run, call: &Call) -> Result<Call> {
     let program = call.program();
     let located = run.locate(program).with_context(|| format!("no session shown: `{program}` is not on revu's PATH"))?;
     let argv = std::iter::once(located).chain(call.argv.iter().skip(1).cloned()).collect();
-    Ok(Call { argv, dir: call.dir.clone(), path: run.search_path() })
+    Ok(Call { argv, path: run.search_path(), ..call.clone() })
 }
 
 /// The split command's words, `{command}` replaced by the program's own words and `{dir}` by its folder.
@@ -142,7 +142,7 @@ fn split_call(command: &str, program: &Call, dir: &Path) -> Result<Call> {
     let words = shell_words::split(command).with_context(|| format!("`{command}` does not split into words"))?;
     let folder = dir.to_string_lossy();
     let filled = |word: &String| if word == COMMAND { program.words() } else { vec![word.replace("{dir}", &folder)] };
-    Ok(Call { argv: words.iter().flat_map(filled).collect(), dir: None, path: None })
+    Ok(Call::new(&words.iter().flat_map(filled).collect::<Vec<_>>()))
 }
 
 #[cfg(test)]

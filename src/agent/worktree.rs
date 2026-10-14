@@ -25,7 +25,7 @@ pub(super) fn on_branch(run: &dyn Run, repo: &Path, branch: &str) -> Result<Fold
         bail!("revu does not trust the branch name {}", branch.escape_debug());
     }
     let listed = git(run, repo, &["worktree", "list", "--porcelain"])?;
-    let fetched = git(run, repo, &["fetch", "origin", &format!("+refs/heads/{branch}:refs/remotes/origin/{branch}")]);
+    let fetched = run.output(&git_call(repo, &["fetch", "origin", &format!("+refs/heads/{branch}:refs/remotes/origin/{branch}")]).slow());
     if let Some(dir) = checked_out(&listed, branch) {
         return Ok(Folder { dir, notice: fetched.is_ok().then(|| notice(run, repo, branch)).flatten() });
     }
@@ -33,11 +33,11 @@ pub(super) fn on_branch(run: &dyn Run, repo: &Path, branch: &str) -> Result<Fold
     let place = dir.to_string_lossy();
     let is_here = git(run, repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok();
     if is_here {
-        git(run, repo, &["worktree", "add", &place, branch])?;
+        run.output(&git_call(repo, &["worktree", "add", &place, branch]).slow())?;
         return Ok(Folder { dir: dir.clone(), notice: fetched.is_ok().then(|| notice(run, repo, branch)).flatten() });
     }
     fetched.map_err(|why| not_fetched(branch, &why))?;
-    git(run, repo, &["worktree", "add", "-b", branch, &place, &format!("origin/{branch}")])?;
+    run.output(&git_call(repo, &["worktree", "add", "-b", branch, &place, &format!("origin/{branch}")]).slow())?;
     Ok(Folder { dir, notice: None })
 }
 
@@ -70,8 +70,12 @@ pub(super) fn main_checkout(run: &dyn Run, dir: &Path) -> PathBuf {
     listed.lines().find_map(|line| line.strip_prefix("worktree ")).map_or_else(|| dir.to_owned(), PathBuf::from)
 }
 
+fn git_call(repo: &Path, args: &[&str]) -> Call {
+    Call::new(&[&["git"], args].concat()).in_dir(repo)
+}
+
 fn git(run: &dyn Run, repo: &Path, args: &[&str]) -> Result<String> {
-    run.output(&Call::new(&[&["git"], args].concat()).in_dir(repo))
+    run.output(&git_call(repo, args))
 }
 
 /// The folder of the worktree whose `branch` line names `branch`, in what `git worktree list --porcelain` printed.
@@ -169,6 +173,17 @@ mod tests {
         let err = format!("{:#}", on_branch(&script, Path::new(REPO), "feat/checkout").unwrap_err());
         assert_eq!(err, format!("no session started: the branch `feat/checkout` could not be fetched from origin: {rejected}"));
         assert!(!err.contains("fork"));
+    }
+
+    #[test]
+    fn the_fetch_and_the_new_worktree_get_the_long_limit_and_a_stuck_fetch_starts_nothing() {
+        let script = only_on_origin();
+        on_branch(&script, Path::new(REPO), "feat/checkout").unwrap();
+        let limits: Vec<u64> = script.calls().iter().map(|call| call.limit.as_secs()).collect();
+        assert_eq!(limits, [15, 120, 15, 120], "{:?}", script.lines());
+        let stuck = only_on_origin().fails("git fetch", "`git fetch` took longer than 120s: revu stopped it");
+        let err = format!("{:#}", on_branch(&stuck, Path::new(REPO), "feat/checkout").unwrap_err());
+        assert!(err.starts_with("no session started") && err.ends_with("revu stopped it"), "{err}");
     }
 
     #[test]

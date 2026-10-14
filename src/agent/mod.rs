@@ -6,6 +6,7 @@ mod custom;
 mod place;
 mod show;
 mod terminal;
+mod timed;
 mod worktree;
 
 use crate::cache::{Cache, keys};
@@ -17,8 +18,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub use custom::check;
 pub use place::check_split;
@@ -26,6 +28,10 @@ pub use terminal::Terminal;
 
 /// A session name longer than this is cut: it is a tmux window's name too.
 const NAME_CHARS: usize = 60;
+/// A listing, or a terminal asked for a pane, answers well within this; past it the program is stuck.
+const QUICK_TIMEOUT: Duration = Duration::from_secs(15);
+/// Fetching a branch, adding a worktree or starting a session waits on the network or a big checkout.
+const SLOW_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// What a session is told about its MR.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,11 +62,22 @@ pub struct Call {
     pub dir: Option<PathBuf>,
     /// revu's `PATH`, for a program a terminal starts with an environment of its own.
     pub path: Option<String>,
+    /// How long it may run before it is stopped, unless it runs on the terminal.
+    pub limit: Duration,
 }
 
 impl Call {
     fn new<S: AsRef<str>>(argv: &[S]) -> Self {
-        Self { argv: argv.iter().map(|word| word.as_ref().to_owned()).collect(), dir: None, path: None }
+        Self { argv: argv.iter().map(|word| word.as_ref().to_owned()).collect(), dir: None, path: None, limit: QUICK_TIMEOUT }
+    }
+
+    fn slow(self) -> Self {
+        Self { limit: SLOW_TIMEOUT, ..self }
+    }
+
+    /// `git fetch`: the program and its first word, as a failure names it.
+    fn named(&self) -> String {
+        format!("{} {}", self.program(), self.argv.get(1).map_or("", String::as_str))
     }
 
     /// The words that run the program as it is meant to run: behind `env PATH=…` when it carries a `PATH`.
@@ -132,11 +149,11 @@ pub struct Programs;
 
 impl Run for Programs {
     fn output(&self, call: &Call) -> Result<String> {
-        let program = call.program();
-        let output = call.command().stdin(Stdio::null()).output().with_context(|| format!("cannot run `{program}`"))?;
+        let ended = timed::output_within(call.command(), call.limit).with_context(|| format!("cannot run `{}`", call.program()))?;
+        let output = ended.with_context(|| format!("`{}` took longer than {}s: revu stopped it", call.named(), call.limit.as_secs()))?;
         let (printed, complained) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
         if !output.status.success() {
-            bail!("`{program} {}` failed: {}", call.argv.get(1).map_or("", String::as_str), reason(&complained, &printed));
+            bail!("`{}` failed: {}", call.named(), reason(&complained, &printed));
         }
         Ok(printed.into_owned())
     }
@@ -630,6 +647,8 @@ mod tests {
         let warned = Programs.output(&sh("echo '[]'; echo 'a warning' >&2")).unwrap();
         assert_eq!(warned, "[]\n", "a warning beside the answer is not part of it");
         assert!(Programs.output(&Call::new(&["revu-no-such-program"])).unwrap_err().to_string().contains("revu-no-such-program"));
+        let stuck = Call { limit: Duration::from_secs(1), ..sh("sleep 30") };
+        assert_eq!(Programs.output(&stuck).unwrap_err().to_string(), "`sh -c` took longer than 1s: revu stopped it");
         assert_eq!(Programs.foreground(&sh("exit 0")), Ok(()));
         assert!(Programs.foreground(&sh("exit 3")).unwrap_err().starts_with("sh ended with"));
     }

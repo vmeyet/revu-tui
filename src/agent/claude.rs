@@ -62,7 +62,7 @@ pub(super) fn session(agent: &Agent, jobs: &Path, mr: &Mr, kept: Option<&Kept>, 
         }
     };
     if !session.live {
-        run.output(&Call::new(&[PROGRAM, "--bg", "--resume", &session.resume_id]).in_dir(&session.dir))?;
+        run.output(&Call::new(&[PROGRAM, "--bg", "--resume", &session.resume_id]).in_dir(&session.dir).slow())?;
     }
     Ok(Step::Ready(ready(session, case)))
 }
@@ -129,7 +129,7 @@ fn start(agent: &Agent, mr: &Mr) -> Result<Ready> {
     let run = agent.run.as_ref();
     let folder = worktree::on_branch(run, agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
     let name = mr.session_name();
-    let printed = run.output(&start_call(mr, &name).in_dir(&folder.dir))?;
+    let printed = run.output(&start_call(mr, &name).in_dir(&folder.dir).slow())?;
     let active = sessions(&run.output(&Call::new(&[PROGRAM, "agents", "--json"]))?);
     let session =
         started(&active, &printed, &name).with_context(|| format!("claude started a session it does not list: {}", printed.trim()))?;

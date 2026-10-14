@@ -60,6 +60,8 @@ Each entry says what changed, then where, then how to use it.
   An old `[ai] enabled` or `provider` now warns and points at `[ai.anthropic]` and `[ai.typesafe]`.
 - **Refreshing comes back after a sleep or a dropped VPN.**
   In the queue and an open MR: a request that gets no answer gives up, the status line says offline, and polling tries again.
+- **Opening an agent session no longer waits forever.**
+  On `a g` and `:session`: a stuck `git fetch`, tmux or terminal is stopped and the toast says which.
 
 ## 0.7.0 - 2026-10-12
 
