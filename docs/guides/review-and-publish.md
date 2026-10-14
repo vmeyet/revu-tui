@@ -51,6 +51,7 @@ A line with a conversation has a mark left of its numbers.
 | `enter` or `l` on a marked line | Open its threads in the right pane; in a narrow window, `enter` unfolds them under the line |
 | `]n` `[n` | Next, previous line with an open thread or your draft; a folded file or hunk on the way opens |
 | `]N` `[N` | The same, resolved threads too |
+| `n` `N` | The same as `]n` `[n`, while no search is on |
 | `T` or `:threads` | Every thread of the MR in the right pane, open ones first; `J` `K` walk them, `enter` takes the diff to one |
 | `m` in that list | Only the threads you take part in: you wrote in it, or have a draft there; `m` again shows them all |
 | `r` or `c` | Reply, as a draft |

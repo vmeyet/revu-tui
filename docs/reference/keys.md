@@ -19,6 +19,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `tab` `S-tab` | next, previous file |
 | `]c` `[c` | next, previous hunk |
 | `]n` `[n` | next, previous open conversation |
+| `n` `N` | the same, while no search is on |
 | `]N` `[N` | next, previous conversation, resolved too |
 | `]f` `[f` | next, previous file with a thread |
 | `]r` `[r` | next, previous MR that needs you |

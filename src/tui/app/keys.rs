@@ -262,6 +262,8 @@ impl App {
             KeyCode::Char('/') => self.start_search(),
             KeyCode::Char('n') if self.search.is_some() => self.search_step(true),
             KeyCode::Char('N') if self.search.is_some() => self.search_step(false),
+            KeyCode::Char('n') => return self.jump_to_thread(true),
+            KeyCode::Char('N') => return self.jump_to_thread(false),
             KeyCode::Char('m') => return self.view_and_move_on(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
@@ -310,6 +312,12 @@ impl App {
             _ => {}
         }
         vec![]
+    }
+
+    /// `n` and `N` with no search live: `]n` and `[n`, counted as them.
+    fn jump_to_thread(&mut self, forward: bool) -> Vec<Action> {
+        self.key_did = Some(if forward { "next_thread" } else { "prev_thread" });
+        self.jump_to_marked(forward, Threads::Open)
     }
 
     /// A refresh also posts again every draft GitLab does not hold yet.
@@ -595,8 +603,8 @@ mod tests {
     fn with_the_azerty_preset_parentheses_jump_like_brackets() {
         let mut plain = with_review();
         let before = plain.open.as_ref().unwrap().row().cloned();
-        press(&mut plain, ")n");
-        assert_eq!(plain.open.as_ref().unwrap().row().cloned(), before, "without the preset `)n` does nothing");
+        press(&mut plain, ")f");
+        assert_eq!(plain.open.as_ref().unwrap().row().cloned(), before, "without the preset `)f` does nothing");
         let mut app = with_keys(r#"layout = "azerty""#);
         press(&mut app, ")c)c)n");
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`)c` twice then `)n`, as `]c]c]n` would");
@@ -606,6 +614,43 @@ mod tests {
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Header), "`(N` goes back");
         press(&mut app, "]N");
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }), "brackets keep working");
+    }
+
+    #[test]
+    fn with_no_search_n_and_capital_n_jump_between_open_threads_like_brackets() {
+        let row = |app: &App| app.open.as_ref().unwrap().row().cloned();
+        for (letter, brackets) in [("n", "]n"), ("N", "[n"), ("nn", "]n]n"), ("Nn", "[n]n")] {
+            let mut typed = with_review();
+            let mut jumped = with_review();
+            press(&mut typed, letter);
+            press(&mut jumped, brackets);
+            assert_eq!(row(&typed), row(&jumped), "{letter} as {brackets}");
+        }
+        let mut zen = with_review();
+        let mut bracket_zen = with_review();
+        press(&mut zen, "zzn");
+        press(&mut bracket_zen, "zz]n");
+        assert_eq!(row(&zen), row(&bracket_zen), "in zen too");
+    }
+
+    #[test]
+    fn with_a_live_search_n_and_capital_n_still_step_through_the_matches() {
+        let mut app = with_review();
+        press(&mut app, "/client");
+        app.handle_key(code(KeyCode::Enter));
+        let first = app.open.as_ref().unwrap().selected;
+        let mut thread = with_review();
+        thread.open = app.open.clone();
+        press(&mut thread, "]n");
+        press(&mut app, "n");
+        let after_n = app.open.as_ref().unwrap().selected;
+        assert_ne!(after_n, first);
+        assert_ne!(after_n, thread.open.as_ref().unwrap().selected, "the next match, not the next thread");
+        press(&mut app, "N");
+        assert_eq!(app.open.as_ref().unwrap().selected, first);
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "n");
+        assert_eq!(app.open.as_ref().unwrap().row(), thread.open.as_ref().unwrap().row(), "once esc clears it, n is ]n again");
     }
 
     #[test]

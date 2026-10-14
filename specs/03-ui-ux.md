@@ -257,7 +257,7 @@ While the pane is on a range comment, the range's other lines show `│` in `acc
 
 ### Find in the MR (`/`)
 
-`/` in the diff opens a line in the status row: each key typed moves the cursor to the first match from where the search started, and every match on screen is drawn reversed. The search covers the whole MR, not the screen: every line of every hunk, both sides, and each file's path, folded files and hunks included (`[review] fold`, too large, viewed); a match inside a fold opens it. Smart case: all lowercase matches any case, a capital asks for the exact one. `enter` keeps the search, `esc` while typing drops it and puts the cursor back. Then `n` and `N` go to the next and previous match, round the end of the MR with a toast, and the status row counts `3/17`; `esc` clears it. A user binding on `n` or `N` wins over these.
+`/` in the diff opens a line in the status row: each key typed moves the cursor to the first match from where the search started, and every match on screen is drawn reversed. The search covers the whole MR, not the screen: every line of every hunk, both sides, and each file's path, folded files and hunks included (`[review] fold`, too large, viewed); a match inside a fold opens it. Smart case: all lowercase matches any case, a capital asks for the exact one. `enter` keeps the search, `esc` while typing drops it and puts the cursor back. Then `n` and `N` go to the next and previous match, round the end of the MR with a toast, and the status row counts `3/17`; `esc` clears it. With no search kept, `n` and `N` are `]n` and `[n`, and count as them. A user binding on `n` or `N` wins over these.
 
 ### Visual select
 
@@ -340,6 +340,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `]c` `[c` | next, previous change (hunk) | M1 |
 | `]n` `[n` | next, previous line with an unresolved thread or my draft, in every file: a folded file or hunk on the way opens and stays open; nothing left says `]N` | M1 |
 | `]N` `[N` | the same, resolved threads too | M1 |
+| `n` `N` | `]n` `[n`, while no search is kept | post-M5 |
 | `]f` `[f` | next, previous file with unresolved threads | M1 |
 | `za` | toggle fold under the cursor | M1 |
 | `zc` `zo` | close, open | M1 |

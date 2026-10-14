@@ -16,19 +16,19 @@ expression: "render(&mut app, 100, 30)"
 │      14 +    │  tab S-tab  next, previous file                                   │               │
 │      15      │      ]c [c  next, previous hunk                                   │               │
 │      16      │      ]n [n  next, previous open conversation                      │               │
-│     ▾ @@ -40,│      ]N [N  next, previous conversation, resolved too             │               │
-│      41  fn i│      ]f [f  next, previous file with a thread                     │               │
-│      41 -    │      ]r [r  next, previous MR that needs you                      │               │
-│      42 +    │      ]m [m  next, previous MR in the queue                        │               │
-│      43 +    │                                                                   │               │
-│      44  }   │  VIEW                                                             │               │
-│              │      / n N  find text in the MR, next, previous                   │               │
-│  ▸ Cargo.lock│          i  the MR cover page                                     │ +1 −1  folded │
+│     ▾ @@ -40,│        n N  the same, while no search is on                       │               │
+│      41  fn i│      ]N [N  next, previous conversation, resolved too             │               │
+│      41 -    │      ]f [f  next, previous file with a thread                     │               │
+│      42 +    │      ]r [r  next, previous MR that needs you                      │               │
+│      43 +    │      ]m [m  next, previous MR in the queue                        │               │
+│      44  }   │                                                                   │               │
+│              │  VIEW                                                             │               │
+│  ▸ Cargo.lock│      / n N  find text in the MR, next, previous                   │ +1 −1  folded │
+│              │          i  the MR cover page                                     │               │
 │              │          D  inline or side by side, diff and prose                │               │
 │              │        > <  the code after, before, alone                         │               │
-│              │          t  file tree                                             │               │
 │              │                                                                   │               │
-│              ╰──────────────── 1–22 of 66 · j k scroll · ? every key · esc close ╯               │
+│              ╰──────────────── 1–22 of 67 · j k scroll · ? every key · esc close ╯               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

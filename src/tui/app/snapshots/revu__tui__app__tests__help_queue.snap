@@ -26,11 +26,11 @@ expression: "render(&mut app, 160, 45)"
 │                        │  tab S-tab  next, previous file                                                                           │                         │
 │                        │      ]c [c  next, previous hunk                            SEARCH & APP                                   │                         │
 │                        │      ]n [n  next, previous open conversation                ^k ,  MRs · / files · > commands              │                         │
-│                        │      ]N [N  next, previous conversation, resolved too          :  commands: :go !42, :set theme=nord      │                         │
-│                        │      ]f [f  next, previous file with a thread                o y  open in the browser, copy the link      │                         │
-│                        │      ]r [r  next, previous MR that needs you                  ag  the agent session of the MR: a, then g  │                         │
-│                        │      ]m [m  next, previous MR in the queue                     r  refresh                                 │                         │
-│                        │                                                                ?  this help                               │                         │
+│                        │        n N  the same, while no search is on                    :  commands: :go !42, :set theme=nord      │                         │
+│                        │      ]N [N  next, previous conversation, resolved too        o y  open in the browser, copy the link      │                         │
+│                        │      ]f [f  next, previous file with a thread                 ag  the agent session of the MR: a, then g  │                         │
+│                        │      ]r [r  next, previous MR that needs you                   r  refresh                                 │                         │
+│                        │      ]m [m  next, previous MR in the queue                     ?  this help                               │                         │
 │                        │                                                             q ^c  quit: twice; q closes a pane first      │                         │
 │                        │                                                                                                           │                         │
 │                        ╰────────────────────────────────────────────────────────────────────────────────── ? every key · esc close ╯                         │

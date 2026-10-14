@@ -23,6 +23,7 @@ Now `(` and `)` work like `[` and `]`.
 | `]m` `[m` | `)m` `(m` |
 
 The bracket keys keep working.
+On any layout, `n` and `N` jump between open threads too, while no search is on.
 
 ## Your own keys
 
