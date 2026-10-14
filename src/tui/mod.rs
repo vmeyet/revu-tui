@@ -81,6 +81,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         claude: claude(&ctx.config.ai),
         opening: std::sync::Arc::default(),
         saved: std::sync::Arc::default(),
+        changed: std::sync::Arc::default(),
         draft_lanes: lanes::Lanes::default(),
     };
     let settings = Settings {

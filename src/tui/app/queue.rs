@@ -1,4 +1,4 @@
-use super::order::{self, Order};
+use super::order::{self, Order, ViewChange};
 use super::stack::{self, Item};
 use super::{Action, App};
 use crate::forge::{PipelineStatus, QueueMr, Sections};
@@ -131,18 +131,19 @@ impl App {
 
     /// `s`: the next order; `S`: grouping by author on or off. Both are remembered for this scope.
     pub(super) fn sort_queue(&mut self) -> Vec<Action> {
-        self.queue_view.order = self.queue_view.order.next(self.triaged());
-        self.save_queue_view()
+        let order = self.queue_view.order.next(self.triaged());
+        self.change_view(ViewChange::Order(order))
     }
 
     pub(super) fn group_queue(&mut self) -> Vec<Action> {
-        self.queue_view.by_author = !self.queue_view.by_author;
-        self.save_queue_view()
+        self.change_view(ViewChange::ByAuthor(!self.queue_view.by_author))
     }
 
-    fn save_queue_view(&mut self) -> Vec<Action> {
+    fn change_view(&mut self, change: ViewChange) -> Vec<Action> {
+        self.queue_view = change.clone().apply(std::mem::take(&mut self.queue_view));
         self.queue_settle();
-        vec![Action::SaveQueueView { scope: self.scope(), view: self.queue_view.clone() }]
+        self.next_save += 1;
+        vec![Action::ChangeQueueView { scope: self.scope(), change, order: self.next_save }]
     }
 
     /// What the queue title says after the scope: the filter (or the view that set it), the
@@ -269,16 +270,10 @@ impl App {
     pub(super) fn fold_section(&mut self, open: Option<bool>) -> Vec<Action> {
         let Some(name) = self.section_here() else { return vec![] };
         let now_open = open.unwrap_or_else(|| self.queue_view.closed_sections.contains(name));
-        if now_open {
-            self.queue_view.closed_sections.remove(name);
-        } else {
-            self.queue_view.closed_sections.insert(name.to_owned());
-        }
         if let Some(header) = self.queue_rows().iter().position(|r| matches!(r, QueueRow::Section { name: n, .. } if *n == name)) {
             self.queue_selected = header;
         }
-        self.queue_move(0);
-        self.save_queue_view()
+        self.change_view(ViewChange::Section { name: name.to_owned(), closed: !now_open })
     }
 
     /// The stack under the cursor: its row, or the row of the stack an unfolded MR belongs to.
@@ -299,13 +294,10 @@ impl App {
     pub(super) fn fold_stack(&mut self, open: Option<bool>) -> Option<Vec<Action>> {
         let (row, id) = self.stack_here()?;
         let now_open = open.unwrap_or_else(|| !self.queue_view.open_stacks.contains(&id));
-        if now_open {
-            self.queue_view.open_stacks.insert(id);
-        } else {
-            self.queue_view.open_stacks.remove(&id);
+        if !now_open {
             self.queue_selected = row;
         }
-        Some(self.save_queue_view())
+        Some(self.change_view(ViewChange::Stack { id, open: now_open }))
     }
 
     pub(super) fn open_selected(&mut self) -> Vec<Action> {
@@ -387,10 +379,10 @@ mod tests {
     fn a_folded_section_is_saved_and_comes_back_folded() {
         let mut app = with_queue();
         let actions = press(&mut app, "gzc");
-        let [Action::SaveQueueView { view, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert!(view.closed_sections.contains("TO REVIEW"));
+        let [Action::ChangeQueueView { change, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!(change, &ViewChange::Section { name: "TO REVIEW".into(), closed: true });
         let mut next = with_queue();
-        next.apply(Incoming::QueueView { scope: next.scope(), view: view.clone() });
+        next.apply(Incoming::QueueView { scope: next.scope(), view: change.clone().apply(QueueView::default()) });
         assert!(
             next.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "TO REVIEW", open: false, .. })),
             "folded after a restart"

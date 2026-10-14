@@ -203,7 +203,9 @@ mod tests {
         let mut app = stacked_app();
         app.queue_selected = stack_row(&app);
         let actions = app.handle_key(code(KeyCode::Enter));
-        assert!(matches!(actions.as_slice(), [Action::SaveQueueView { view, .. }] if view.open_stacks.contains("acme/widgets!61")));
+        assert!(
+            matches!(actions.as_slice(), [Action::ChangeQueueView { change: ViewChange::Stack { id, open: true }, .. }] if id == "acme/widgets!61")
+        );
         let members: Vec<u64> =
             app.queue_rows().iter().filter_map(|r| if let QueueRow::Stacked(mr) = r { Some(mr.number) } else { None }).collect();
         assert_eq!(members, vec![61, 62, 63]);

@@ -241,6 +241,8 @@ share.json                          (shared root) per host, the share target I l
 Files are written to a temp name then renamed, mode 0600, directory 0700.
 `reactions.json` is read, changed and written under a lock on `reactions.json.lock` (`Cache::update`), so two revu processes adding at once both count; a missing or broken file is no history.
 `share.json` goes the same way; a missing or broken file, or a target since removed from the config, preselects the first target.
+Pins and the queue view are saved the same way, one change at a time (pin or unpin one MR, set one choice of the view), so two revu processes sharing a cache keep each other's.
+Of two changes to one MR's pin or one choice, the later one made wins even when the earlier one finishes last.
 Once a day, starting the TUI prunes every host's cache in the background: the forge is asked once per project which kept MRs are merged or closed (GitLab `merge_requests?iids[]=…&state=all`, GitHub one GraphQL query with a `pullRequest(number:)` alias per PR), and their `mr/…/<number>/` folders go; so does any MR folder untouched for 30 days, which also covers a project the forge cannot answer for. Pruning twice is harmless.
 Opening an MR paints from cache, then the MR, its discussions and drafts are read in parallel.
 While the `head_sha` is the one painted, no diff is read and the painted files stay, with all built on them; a differing one reads the diffs (from the cache when loading ahead kept them) and clears word-diff and fold state for changed files only.

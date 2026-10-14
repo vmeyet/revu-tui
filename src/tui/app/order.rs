@@ -67,6 +67,46 @@ impl Default for QueueView {
     }
 }
 
+/// One choice in the queue view, saved over the view the cache holds so a choice made in another revu stays.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ViewChange {
+    Order(Order),
+    ByAuthor(bool),
+    Section { name: String, closed: bool },
+    Stack { id: String, open: bool },
+}
+
+impl ViewChange {
+    /// What the change sets: of two changes to one target, the later one made wins.
+    pub fn target(&self) -> String {
+        match self {
+            ViewChange::Order(_) => "order".into(),
+            ViewChange::ByAuthor(_) => "by_author".into(),
+            ViewChange::Section { name, .. } => format!("section {name}"),
+            ViewChange::Stack { id, .. } => format!("stack {id}"),
+        }
+    }
+
+    pub fn apply(self, view: QueueView) -> QueueView {
+        match self {
+            ViewChange::Order(order) => QueueView { order, ..view },
+            ViewChange::ByAuthor(by_author) => QueueView { by_author, ..view },
+            ViewChange::Section { name, closed } => QueueView { closed_sections: with(view.closed_sections, name, closed), ..view },
+            ViewChange::Stack { id, open } => QueueView { open_stacks: with(view.open_stacks, id, open), ..view },
+        }
+    }
+}
+
+/// `set` holding `item` when `on`, without it otherwise.
+pub fn with<T: Ord>(mut set: std::collections::BTreeSet<T>, item: T, on: bool) -> std::collections::BTreeSet<T> {
+    if on {
+        set.insert(item);
+    } else {
+        set.remove(&item);
+    }
+    set
+}
+
 /// What the reader rarely needs, until they fold or open a section themselves.
 fn folded_at_first() -> std::collections::BTreeSet<String> {
     ["DONE", "DRAFTS", "OTHER"].map(str::to_owned).into()
@@ -143,6 +183,23 @@ mod tests {
     }
 
     #[test]
+    fn a_change_sets_one_choice_and_leaves_the_others() {
+        let view = ViewChange::ByAuthor(true).apply(QueueView::default());
+        let view = ViewChange::Section { name: "DONE".into(), closed: false }.apply(view);
+        let view = ViewChange::Stack { id: "acme/widgets!61".into(), open: true }.apply(view);
+        let view = ViewChange::Section { name: "OPEN".into(), closed: true }.apply(view);
+        assert!(view.by_author && view.order == Order::Updated);
+        assert_eq!(view.closed_sections, ["DRAFTS", "OPEN", "OTHER"].map(str::to_owned).into());
+        assert_eq!(view.open_stacks, ["acme/widgets!61".to_owned()].into());
+        let closed_again = ViewChange::Stack { id: "acme/widgets!61".into(), open: false }.apply(view.clone());
+        assert!(closed_again.open_stacks.is_empty());
+        assert_eq!(
+            ViewChange::Stack { id: "acme/widgets!61".into(), open: false }.target(),
+            ViewChange::Stack { id: "acme/widgets!61".into(), open: true }.target()
+        );
+    }
+
+    #[test]
     fn s_cycles_through_the_orders_and_offers_urgency_only_with_jev() {
         use Order::{Author, Oldest, Size, Updated, Urgency};
         let walk = |triaged| {
@@ -188,8 +245,8 @@ mod tests {
         let mut app = scoped_app();
         app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
         let actions = press(&mut app, "s");
-        let view = QueueView { order: order::Order::Oldest, ..QueueView::default() };
-        assert_eq!(actions, vec![Action::SaveQueueView { scope: Some("acme/widgets".into()), view }]);
+        let [Action::ChangeQueueView { scope, change, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((scope.as_deref(), change), (Some("acme/widgets"), &ViewChange::Order(order::Order::Oldest)));
         press(&mut app, "ss");
         assert_eq!(app.queue_view.order, order::Order::Size);
         assert_eq!(app.queue_view_label().as_deref(), Some("smallest first"));

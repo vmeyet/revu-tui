@@ -53,14 +53,14 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     Err(e) => send(failed(Failure::Queue, &e)),
                 }
             }
-            Action::SaveQueueView { scope, view } => {
-                let saved = backend.off(move |b| b.cache.write(&keys::queue_view(scope.as_deref()), &view)).await;
+            Action::ChangeQueueView { scope, change, order } => {
+                let saved = backend.off(move |b| b.change_queue_view(scope.as_deref(), change, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
             }
-            Action::SavePins { scope, pins } => {
-                let saved = backend.off(move |b| b.cache.write(&keys::pins(scope.as_deref()), &pins)).await;
+            Action::ChangePin { scope, key, on, order } => {
+                let saved = backend.off(move |b| b.change_pin(scope.as_deref(), &key, on, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }

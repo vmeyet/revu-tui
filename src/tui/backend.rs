@@ -66,6 +66,8 @@ pub(super) struct Backend {
     pub(super) opening: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     /// The order of the last state save written per MR; also the one lock every write of `state.json` takes.
     pub(super) saved: std::sync::Arc<std::sync::Mutex<HashMap<MrKey, u64>>>,
+    /// The order of the last change written per cache entry and target: pins and the queue view.
+    pub(super) changed: std::sync::Arc<std::sync::Mutex<HashMap<String, u64>>>,
     /// Draft writes and publishing of one MR wait for each other: on GitHub each reads the pending review, then writes it.
     pub(super) draft_lanes: Lanes,
 }
@@ -724,6 +726,31 @@ impl Backend {
         Ok(())
     }
 
+    pub(super) fn change_pin(&self, scope: Option<&str>, key: &MrKey, on: bool, order: u64) -> Result<()> {
+        let change = |pins: BTreeSet<MrKey>| app::with_member(pins, key.clone(), on);
+        self.change_entry(&keys::pins(scope), &format!("{key:?}"), order, change)
+    }
+
+    pub(super) fn change_queue_view(&self, scope: Option<&str>, change: app::ViewChange, order: u64) -> Result<()> {
+        self.change_entry(&keys::queue_view(scope), &change.target(), order, |view| change.apply(view))
+    }
+
+    /// Changes `entry` as the cache holds it, so another revu's changes stay, unless a newer change of
+    /// `target` already landed: changes run each on its own blocking thread, so they can finish out of order.
+    fn change_entry<T>(&self, entry: &str, target: &str, order: u64, change: impl FnOnce(T) -> T) -> Result<()>
+    where
+        T: Serialize + serde::de::DeserializeOwned + Default,
+    {
+        let mut changed = self.changed.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let id = format!("{entry} {target}");
+        if changed.get(&id).is_some_and(|&last| last >= order) {
+            return Ok(());
+        }
+        self.cache.update(entry, change)?;
+        changed.insert(id, order);
+        Ok(())
+    }
+
     /// Under the lock of the reader's saves, so neither writes over what the other just wrote.
     fn mark_opened(&self, key: &MrKey) {
         let _saving = self.saved.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -868,6 +895,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            changed: std::sync::Arc::default(),
             draft_lanes: Lanes::default(),
         };
         let spot = app::Spot { path: "a.rs".into(), old: None, new: Some(3) };
@@ -912,6 +940,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            changed: std::sync::Arc::default(),
             draft_lanes: Lanes::default(),
         };
         let mr = queue().review_requested[0].clone();
@@ -961,6 +990,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            changed: std::sync::Arc::default(),
             draft_lanes: Lanes::default(),
         };
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
@@ -1131,6 +1161,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            changed: std::sync::Arc::default(),
             draft_lanes: Lanes::default(),
         }
     }
@@ -1213,6 +1244,35 @@ mod tests {
         assert!(rows.is_empty() && gone == [MrKey::new("acme/widgets", 43)], "a listed pin is not fetched");
     }
 
+    #[test]
+    fn two_pin_changes_finishing_out_of_order_keep_the_later_one_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        let (infra, widgets) = (MrKey::new("acme/infra", 35), key());
+        backend.change_pin(None, &infra, false, 2).unwrap();
+        backend.change_pin(None, &widgets, true, 3).unwrap();
+        backend.change_pin(None, &infra, true, 1).unwrap();
+        assert_eq!(backend.pins(None), [widgets].into(), "the pin of 35, made before its unpin, lands after it and changes nothing");
+    }
+
+    #[test]
+    fn two_revus_sharing_a_cache_keep_each_others_pins_and_queue_view() {
+        let dir = tempfile::tempdir().unwrap();
+        let desktop = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        let phone = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        let (infra, widgets) = (MrKey::new("acme/infra", 35), key());
+        desktop.change_pin(None, &infra, true, 1).unwrap();
+        phone.change_pin(None, &widgets, true, 1).unwrap();
+        assert_eq!(desktop.pins(None), [infra.clone(), widgets.clone()].into());
+        desktop.change_pin(None, &infra, false, 2).unwrap();
+        assert_eq!(phone.pins(None), [widgets].into());
+        desktop.change_queue_view(None, app::ViewChange::ByAuthor(true), 3).unwrap();
+        phone.change_queue_view(None, app::ViewChange::Section { name: "DONE".into(), closed: false }, 2).unwrap();
+        let view: app::QueueView = desktop.cache.read(&keys::queue_view(None)).unwrap();
+        assert!(view.by_author);
+        assert!(!view.closed_sections.contains("DONE") && view.closed_sections.contains("DRAFTS"), "{view:?}");
+    }
+
     #[tokio::test]
     async fn a_host_that_fails_to_answer_keeps_its_last_rows_and_is_named() {
         use wiremock::matchers::{method, path};
@@ -1256,6 +1316,7 @@ mod tests {
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),
+            changed: std::sync::Arc::default(),
             draft_lanes: Lanes::default(),
         }
     }
