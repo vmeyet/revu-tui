@@ -556,7 +556,7 @@ mod tests {
     /// The group titles the open key list shows, as its uppercase headers.
     fn help_titles(app: &mut App) -> Vec<&'static str> {
         let screen = render(app, 160, 60);
-        crate::tui::help::GROUPS.iter().map(|g| g.title).filter(|t| screen.contains(&format!("  {} ", t.to_uppercase()))).collect()
+        crate::tui::help::GROUPS.iter().map(|g| g.title()).filter(|t| screen.contains(&format!("  {} ", t.to_uppercase()))).collect()
     }
 
     #[test]
@@ -575,7 +575,7 @@ mod tests {
         press(&mut thread, "?");
         assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "outline pane", "ask claude", "search & app"]);
         press(&mut thread, "?");
-        assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(|g| g.title));
+        assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(crate::act::Group::title));
         thread.handle_key(code(KeyCode::Esc));
         assert_eq!(thread.help, None);
     }

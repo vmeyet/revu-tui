@@ -20,55 +20,6 @@ pub enum Place {
     Pane,
 }
 
-/// Actions revu has that `[keys.bind]` cannot name: moves, opening, the pane's own keys, questions.
-const INTERNAL: &[&str] = &[
-    "move_down",
-    "move_up",
-    "page_down",
-    "page_up",
-    "full_page_down",
-    "full_page_up",
-    "top",
-    "bottom",
-    "open",
-    "back",
-    "focus_left",
-    "focus_right",
-    "refresh",
-    "reply",
-    "apply_suggestion",
-    "edit_draft",
-    "delete_draft",
-    "close_pane",
-    "next_in_line",
-    "prev_in_line",
-    "open_link",
-    "copy_first_link",
-    "ask_explain",
-    "ask_risks",
-    "ask_summary",
-    "ask_thread",
-    "ask_comment",
-    "ask_free",
-    "palette_mr",
-    "palette_file",
-    ":go",
-    ":open",
-    ":copy",
-    ":approve",
-    ":merge",
-    ":publish",
-    ":threads",
-    ":all",
-    ":set",
-    ":view",
-    ":ai",
-    ":ask",
-    ":share",
-    ":help",
-    ":quit",
-];
-
 /// How the report groups actions, in the order a review goes; anything not listed lands in OTHER,
 /// so a new action shows up without anyone updating this table.
 const GROUPS: &[(&str, &[&str])] = &[
@@ -174,7 +125,7 @@ pub const HINTS: &[(&str, &str)] = &[
 
 /// Every action the report knows, bindable ones first.
 pub fn known() -> Vec<&'static str> {
-    crate::keymap::ACTIONS.iter().map(|(name, _)| *name).chain(INTERNAL.iter().copied()).collect()
+    crate::act::listed_names().collect()
 }
 
 /// The action a key stands for, after the user's bindings turned it into revu's own.
@@ -623,14 +574,9 @@ mod tests {
     }
 
     #[test]
-    fn the_action_table_lists_the_known_actions() {
-        assert_eq!(crate::act::listed_names().collect::<Vec<_>>(), known());
-    }
-
-    #[test]
     fn every_bindable_action_can_be_counted() {
         let places = [Place::Queue, Place::Diff, Place::Pane];
-        for (name, keys) in crate::keymap::ACTIONS {
+        for (name, keys) in crate::act::bindable() {
             let events = crate::keymap::parse(keys).unwrap();
             let (prefix, last) = match events.as_slice() {
                 [only] if only.plain_char() == Some('\'') => (Some('\''), key('m')),
@@ -638,7 +584,7 @@ mod tests {
                 [first, second] => (first.plain_char(), second.event()),
                 _ => panic!("{name}"),
             };
-            let found = places.iter().any(|place| action(prefix, last, *place) == Some(*name));
+            let found = places.iter().any(|place| action(prefix, last, *place) == Some(name));
             assert!(found, "`{name}` ({keys}) is never counted");
         }
     }

@@ -10,7 +10,7 @@ TDD order inside each milestone is given; write the failing test first.
 2. `cargo build && cargo test` must be green before and after.
 3. Run against the real thing with `revu login --from-glab` once, then `cargo run -- <cmd>`; never paste output that names a private project into the repo.
 4. Snapshot changes (`cargo insta review`) are reviewed by eye: a snapshot is a design decision.
-5. Every new key goes in the `?` help (`src/tui/help.rs`) in the same MR; `cargo run -- docs` then writes it into `docs/reference/keys.md`.
+5. Every new key gets its row, with its `?` help line, in `src/act.rs` in the same MR; `cargo run -- docs` then writes it into `docs/reference/keys.md`.
 
 ## M0 · Bootstrap (done 2026-09-22)
 

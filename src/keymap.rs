@@ -1,79 +1,14 @@
 //! Keys the user adds on top of revu's own: a layout preset and per-action aliases from `[keys]`.
 //! A user key never replaces a default one; it stands for it, so it does what that key does in the
 //! pane you are in, and the help shows it in front of the default.
+use crate::act;
 use crate::config::{Keys, Layout};
 use anyhow::{Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;
 
-/// Every action `[keys.bind]` can name, with the default keys it stands for.
-pub const ACTIONS: &[(&str, &str)] = &[
-    ("next_thread", "]n"),
-    ("prev_thread", "[n"),
-    ("next_any_thread", "]N"),
-    ("prev_any_thread", "[N"),
-    ("next_hunk", "]c"),
-    ("prev_hunk", "[c"),
-    ("next_file_unresolved", "]f"),
-    ("prev_file_unresolved", "[f"),
-    ("next_review", "]r"),
-    ("prev_review", "[r"),
-    ("next_file", "tab"),
-    ("prev_file", "backtab"),
-    ("fold_toggle", "za"),
-    ("fold_open", "zo"),
-    ("fold_close", "zc"),
-    ("fold_all", "zM"),
-    ("unfold_all", "zR"),
-    ("fold_header", "zh"),
-    ("viewed", "zv"),
-    ("zen", "zz"),
-    ("prev_mr", "[m"),
-    ("next_mr", "]m"),
-    ("side_by_side", "D"),
-    ("peek_after", ">"),
-    ("peek_before", "<"),
-    ("tree", "t"),
-    ("every_thread", "T"),
-    ("pipeline", "p"),
-    ("outline", "O"),
-    ("prose", "v"),
-    ("wrap", "w"),
-    ("whitespace", "W"),
-    ("more_context", "="),
-    ("view_file", "ctrl-v"),
-    ("description", "i"),
-    ("comment", "c"),
-    ("comment_old", "C"),
-    ("select", "V"),
-    ("suggest", "s"),
-    ("editor", "E"),
-    ("resolve", "R"),
-    ("publish", "P"),
-    ("approve", "A"),
-    ("merge", "M"),
-    ("ready", "H"),
-    ("share", "Y"),
-    ("session", "ag"),
-    ("react", "+"),
-    ("open_browser", "o"),
-    ("copy_link", "y"),
-    ("scope", "*"),
-    ("sort_queue", "s"),
-    ("group_by_author", "S"),
-    ("filter", "/"),
-    ("palette", ":"),
-    ("views", "'"),
-    ("jump", "ctrl-k"),
-    ("help", "?"),
-    ("quit", "q"),
-];
-
-/// Every key revu reads outside a text box, in some pane: a user key may not take one of them.
-const TAKEN: &str = "bqhHl:,z[]ai/*royjkgGDtTpOWw+=<>xcCVsEPAMmedJKRSuUYnNv?'123456789";
-
-/// The second keys each built-in prefix already reads.
-const PREFIXED: &[(char, &str)] = &[('z', "aochzvMR"), ('[', "cnNfrm"), (']', "cnNfrm"), ('a', "erstahg")];
+/// Built-in keys a binding may still take over.
+const UNGUARDED: &[&str] = &["ac", "left", "right", "up", "down"];
 
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -209,6 +144,30 @@ fn named(text: &str) -> Result<Option<Key>> {
     Ok(Some(Key { code, ctrl, alt }))
 }
 
+/// Every key, or two keys in a row, that revu reads outside a text box and a binding may not take.
+fn guarded() -> impl Iterator<Item = Vec<Key>> {
+    act::ROWS.iter().flat_map(|row| row.keys).filter(|key| !UNGUARDED.contains(key)).filter_map(|key| parse(key).ok())
+}
+
+/// Whether revu reads `key`, alone or as the first of two keys: a named key like `enter` whatever its
+/// modifiers, a character only with the ctrl it is read with.
+fn is_taken(key: Key) -> bool {
+    let wanted = if key.ctrl { Key { alt: false, ..key } } else { key };
+    guarded().filter_map(|keys| keys.first().copied()).any(|own| match key.code {
+        Code::Char(_) => own == wanted,
+        _ => own.code == key.code,
+    })
+}
+
+fn is_prefix(c: char) -> bool {
+    guarded().any(|keys| keys.len() == 2 && keys[0] == Key::char(c))
+}
+
+/// The bindable action whose default is `keys`.
+fn default_of(keys: &[Key]) -> Option<&'static str> {
+    act::bindable().find(|(_, default)| parse(default).is_ok_and(|parsed| parsed == keys)).map(|(name, _)| name)
+}
+
 /// What the loop does with a key before the app sees it.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Feed {
@@ -238,7 +197,7 @@ impl Keymap {
             map.aliases.insert(vec![Key::char(')')], vec![Key::char(']')]);
         }
         for (action, texts) in &keys.bind {
-            let Some((_, default)) = ACTIONS.iter().find(|(name, _)| *name == current(action)) else {
+            let Some((_, default)) = act::bindable().find(|(name, _)| *name == current(action)) else {
                 bail!("`[keys.bind] {action}` is not an action; the actions are {}", names());
             };
             let target = parse(default)?;
@@ -269,28 +228,16 @@ impl Keymap {
     /// Which built-in key the binding would shadow, if any.
     fn taken_by(&self, binding: &[Key]) -> Option<String> {
         let first = binding[0];
-        let default_of = |keys: &[Key]| ACTIONS.iter().find(|(_, d)| parse(d).is_ok_and(|p| p == keys)).map(|(name, _)| *name);
         let prefix = first.plain_char().and_then(|c| self.prefix_of(c));
-        match (binding, prefix) {
+        let shadowed = match (binding, prefix) {
             ([_, second], Some(p)) => {
-                let reads = PREFIXED.iter().find(|(c, _)| *c == p).is_some_and(|(_, s)| second.plain_char().is_some_and(|c| s.contains(c)));
-                let canon = [Key::char(p), *second];
-                reads.then(|| default_of(&canon).map_or_else(|| format!("`{}`", label(&canon)), |n| format!("`{}` ({n})", label(&canon))))
+                let canon = vec![Key::char(p), *second];
+                guarded().any(|keys| keys == canon).then_some(canon)
             }
-            _ if self.aliases.contains_key(&binding[..1]) => Some(format!("`{}`", first.label())),
-            _ => {
-                let taken = match first.plain_char() {
-                    Some(c) => TAKEN.contains(c),
-                    None => {
-                        matches!(first.code, Code::Enter | Code::Esc | Code::Tab | Code::BackTab)
-                            || (first.ctrl && matches!(first.code, Code::Char('c' | 'd' | 'u' | 'f' | 'b' | 'k' | 'v')))
-                    }
-                };
-                taken.then(|| {
-                    default_of(&binding[..1]).map_or_else(|| format!("`{}`", first.label()), |n| format!("`{}` ({n})", first.label()))
-                })
-            }
-        }
+            _ if self.aliases.contains_key(&binding[..1]) => return Some(format!("`{}`", first.label())),
+            _ => is_taken(first).then(|| vec![first]),
+        };
+        shadowed.map(|keys| default_of(&keys).map_or_else(|| format!("`{}`", label(&keys)), |n| format!("`{}` ({n})", label(&keys))))
     }
 
     /// The built-in prefix a key opens: its own, or the one the layout gives it.
@@ -298,7 +245,7 @@ impl Keymap {
         match c {
             '(' if self.azerty => Some('['),
             ')' if self.azerty => Some(']'),
-            'z' | '[' | ']' | 'a' => Some(c),
+            _ if is_prefix(c) => Some(c),
             _ => None,
         }
     }
@@ -371,7 +318,7 @@ pub fn current(action: &str) -> &str {
 }
 
 fn names() -> String {
-    ACTIONS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
+    act::bindable().map(|(name, _)| name).collect::<Vec<_>>().join(", ")
 }
 
 #[cfg(test)]
@@ -492,45 +439,11 @@ mod tests {
     }
 
     #[test]
-    fn every_action_default_parses_and_every_one_key_default_is_taken() {
-        for (name, default) in ACTIONS {
-            let keys = parse(default).unwrap();
-            if let [key] = keys.as_slice()
-                && let Some(c) = key.plain_char()
-            {
-                assert!(TAKEN.contains(c), "{name}: `{c}` should be in TAKEN");
-            }
-        }
-    }
-
-    #[test]
-    fn the_action_table_holds_the_bindable_actions_and_the_taken_keys() {
-        assert_eq!(crate::act::bindable().collect::<Vec<_>>(), ACTIONS);
-        let keys: Vec<Vec<Key>> = crate::act::ROWS.iter().flat_map(|row| row.keys).map(|key| parse(key).unwrap()).collect();
-        let mut taken: Vec<char> = keys.iter().filter_map(|key| key[0].plain_char()).collect();
-        taken.sort_unstable();
-        taken.dedup();
-        let mut expected: Vec<char> = TAKEN.chars().collect();
-        expected.sort_unstable();
-        assert_eq!(taken, expected);
-        for (prefix, seconds) in PREFIXED {
-            let mut read: Vec<char> = keys
-                .iter()
-                .filter(|key| key.len() == 2 && key[0].plain_char() == Some(*prefix) && label(key) != "ac")
-                .filter_map(|key| key[1].plain_char())
-                .collect();
-            read.sort_unstable();
-            let mut expected: Vec<char> = seconds.chars().collect();
-            expected.sort_unstable();
-            assert_eq!(read, expected, "after {prefix}");
-        }
-    }
-
-    #[test]
     fn two_actions_share_a_default_only_when_their_panes_never_meet() {
         let apart = [("suggest", "sort_queue")];
-        for (i, (name, default)) in ACTIONS.iter().enumerate() {
-            for (other, same) in ACTIONS[i + 1..].iter().filter(|(_, d)| d == default) {
+        let actions: Vec<(&str, &str)> = act::bindable().collect();
+        for (i, (name, default)) in actions.iter().enumerate() {
+            for (other, same) in actions[i + 1..].iter().filter(|(_, d)| d == default) {
                 assert!(apart.contains(&(*name, *other)), "{name} and {other} both default to `{same}`");
             }
         }

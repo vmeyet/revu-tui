@@ -149,7 +149,7 @@ impl App {
     /// What the token under the cursor completes to, for tab and the ghost text.
     pub fn completions_for(&self, line: &str) -> Vec<String> {
         match palette::slot(line) {
-            Slot::Verb => palette::VERBS.iter().map(|(verb, _)| (*verb).to_owned()).collect(),
+            Slot::Verb => crate::act::verbs().map(|verb| verb.word.to_owned()).collect(),
             Slot::Mr => self.queue_mrs().iter().map(|mr| format!("{}{}", self.hosts.kind_of(&mr.key()).sigil(), mr.number)).collect(),
             Slot::Setting => vec!["theme=".to_owned()],
             Slot::Theme => Theme::NAMES.iter().map(|name| format!("theme={name}")).collect(),
@@ -323,7 +323,7 @@ mod tests {
     fn arrows_pick_a_command_from_the_list_and_enter_runs_it_or_waits_for_its_argument() {
         let mut app = with_queue();
         press(&mut app, ":");
-        for _ in 0..crate::tui::palette::VERBS.iter().position(|(v, _)| *v == "all").unwrap() {
+        for _ in 0..crate::act::verbs().position(|verb| verb.word == "all").unwrap() {
             app.handle_key(code(KeyCode::Down));
         }
         app.handle_key(code(KeyCode::Up));

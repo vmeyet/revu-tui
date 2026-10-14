@@ -13,6 +13,7 @@ src/
   ctx.rs             Ctx { forge: Forge, config, cache, json, project } opened once per command
   config.rs          ~/.config/revu/config.toml
   cache.rs           ~/.cache/revu/<host>/…  json files, atomic writes
+  act.rs             every action: its `[keys.bind]` and usage name, default keys, `?` help lines and palette verb
   keymap.rs          `[keys]`: the AZERTY preset and `[keys.bind]` aliases
   mrref.rs           `group/project!42`, `owner/repo#42`, `42` on the command line
   query.rs           the filter language the palette, the queue filter and saved views share

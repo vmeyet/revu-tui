@@ -144,29 +144,9 @@ impl App {
     }
 
     pub(super) fn count_command(&mut self, command: &Command) {
-        self.count(match command {
-            Command::Go(_) => ":go",
-            Command::Open => ":open",
-            Command::Copy => ":copy",
-            Command::Merge => ":merge",
-            Command::Ready => ":ready",
-            Command::Approve => ":approve",
-            Command::Publish => ":publish",
-            Command::Threads => ":threads",
-            Command::All => ":all",
-            Command::Pin => ":pin",
-            Command::Unpin => ":unpin",
-            Command::Set { .. } => ":set",
-            Command::View(_) => ":view",
-            Command::Outline => ":outline",
-            Command::AiOff | Command::AiOn => ":ai",
-            Command::Ask(_) => ":ask",
-            Command::Share(_) => ":share",
-            Command::Session => ":session",
-            Command::News => ":news",
-            Command::Help => ":help",
-            Command::Quit => ":quit",
-        });
+        if let Some(name) = command.act().row().name {
+            self.count(name);
+        }
     }
 
     /// Adds the time read since the clock last counted to the screen on show; called by `tick`.

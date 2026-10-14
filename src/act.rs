@@ -131,7 +131,7 @@ pub enum Act {
     AnswerDraft,
 }
 
-/// The `?` help group a line shows in.
+/// A task of the `?` help and its keys; a key that only works in one pane says which in its words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
     Move,
@@ -529,8 +529,7 @@ mod tests {
         }
     }
 
-    const GROUPS: [Group; 8] =
-        [Group::Move, Group::Queue, Group::View, Group::Comment, Group::Thread, Group::Outline, Group::Ask, Group::App];
+    use crate::tui::help::GROUPS;
 
     #[test]
     fn every_help_line_shows_once_and_a_group_lists_only_acts_with_a_line_in_it() {

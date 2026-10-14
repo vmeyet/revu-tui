@@ -1,8 +1,9 @@
 //! The reference pages under `docs/reference/`, written from the code so they never drift:
-//! keys from the help groups and the keymap, commands from clap, config keys from [`SETTINGS`].
+//! keys from the action table and the keymap, commands from clap, config keys from [`SETTINGS`].
+use crate::act;
 use crate::cli::Cli;
 use crate::config::{Keys, Layout};
-use crate::keymap::{ACTIONS, Keymap};
+use crate::keymap::Keymap;
 use crate::tui::help::GROUPS;
 use anyhow::Result;
 use clap::{Arg, Command, CommandFactory};
@@ -401,15 +402,15 @@ fn keys_page() -> Result<String> {
         "Press `?` in revu for the keys of the pane you are in, `?` again for this whole list, with your own keys.".to_owned(),
         "A key like `]n` is two keys in a row: `]`, then `n`.".to_owned(),
     ];
-    for group in &GROUPS {
+    for group in GROUPS {
         page.extend([
             String::new(),
-            format!("## {}", capitalized(group.title)),
+            format!("## {}", capitalized(group.title())),
             String::new(),
             "| Keys | Does |".into(),
             "|---|---|".into(),
         ]);
-        page.extend(group.keys.iter().map(|(keys, what)| format!("| {} | {what} |", code_words(keys))));
+        page.extend(group.lines().iter().map(|line| format!("| {} | {} |", code_words(line.keys), line.does)));
     }
     page.extend([
         String::new(),
@@ -421,9 +422,9 @@ fn keys_page() -> Result<String> {
         "| Default | AZERTY |".to_owned(),
         "|---|---|".to_owned(),
     ]);
-    let changed = GROUPS.iter().flat_map(|g| g.keys.iter()).filter_map(|(keys, _)| {
-        let label = azerty.label(keys);
-        (label != *keys).then(|| format!("| {} | {} |", code_words(keys), code_words(&label)))
+    let changed = GROUPS.iter().flat_map(|g| g.lines()).filter_map(|line| {
+        let label = azerty.label(line.keys);
+        (label != line.keys).then(|| format!("| {} | {} |", code_words(line.keys), code_words(&label)))
     });
     page.extend(changed);
     page.extend([
@@ -436,7 +437,7 @@ fn keys_page() -> Result<String> {
         "| Action | Default key |".to_owned(),
         "|---|---|".to_owned(),
     ]);
-    page.extend(ACTIONS.iter().map(|(action, key)| format!("| `{action}` | `{key}` |")));
+    page.extend(act::bindable().map(|(action, key)| format!("| `{action}` | `{key}` |")));
     Ok(finish(&page))
 }
 

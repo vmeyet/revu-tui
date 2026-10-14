@@ -2,6 +2,7 @@
 //! review goes, in one or two columns. In the compact layout the first `?` lists the keys of the tap bar alone.
 use super::app::{App, Focus};
 use super::ui::{pane, truncate};
+use crate::act::Group;
 use crate::keymap::Keymap;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -10,13 +11,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Padding, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
-/// One task and its keys; a key that only works in one pane says which in its words.
-pub struct Group {
-    pub title: &'static str,
-    pub keys: &'static [(&'static str, &'static str)],
-    /// The panes whose first `?` shows it.
-    pub focus: &'static [Focus],
-}
+/// The groups, in the order a review goes.
+pub const GROUPS: [Group; 8] =
+    [Group::Move, Group::Queue, Group::View, Group::Comment, Group::Thread, Group::Outline, Group::Ask, Group::App];
 
 /// The overlay while open: how far it scrolled, and whether it lists every key or the focused pane's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -24,136 +21,6 @@ pub struct Help {
     pub scroll: usize,
     pub every_key: bool,
 }
-
-pub const GROUPS: [Group; 8] = [
-    Group {
-        title: "move",
-        keys: &[
-            ("j k", "move"),
-            ("g G", "first, last"),
-            ("^d ^u", "half a page; space too"),
-            ("^f ^b", "a full page; PgDn PgUp too"),
-            ("h l", "pane to the left, to the right"),
-            ("enter", "open, or toggle the fold or the thread"),
-            ("esc x", "close the pane, back to the queue"),
-            ("tab S-tab", "next, previous file"),
-            ("]c [c", "next, previous hunk"),
-            ("]n [n", "next, previous open conversation"),
-            ("n N", "the same, while no search is on"),
-            ("]N [N", "next, previous conversation, resolved too"),
-            ("]f [f", "next, previous file with a thread"),
-            ("]r [r", "next, previous MR that needs you"),
-            ("]m [m", "next, previous MR in the queue"),
-        ],
-        focus: &[Focus::Queue, Focus::Review],
-    },
-    Group {
-        title: "queue",
-        keys: &[
-            ("/", "filter: words @author !42 ~label"),
-            ("' 1-9", "a saved view, by letter or rank"),
-            ("*", "this repo, or every project"),
-            ("s", "next sort order"),
-            ("S", "group by author"),
-            ("b", "pin on top of the queue, or unpin"),
-            ("zo zc", "open, fold the section or stack"),
-        ],
-        focus: &[Focus::Queue],
-    },
-    Group {
-        title: "view",
-        keys: &[
-            ("/ n N", "find text in the MR, next, previous"),
-            ("i", "the MR cover page"),
-            ("D", "inline or side by side, diff and prose"),
-            ("> <", "the code after, before, alone"),
-            ("t", "file tree"),
-            ("T", "every thread of the MR"),
-            ("p", "pipeline"),
-            ("O", "outline: the symbols the MR changes"),
-            ("v", "prose: the Markdown file rendered, its blocks marked"),
-            ("zz", "zen: the diff alone, quiet"),
-            ("w W", "wrap long lines, hide whitespace changes"),
-            ("= +", "more lines, react on a thread"),
-            ("^v", "the file in your own program"),
-            ("za zc zo", "toggle, close, open the fold"),
-            ("zM zR", "fold, unfold every file"),
-            ("zh", "fold the MR header"),
-            ("zv", "file viewed: it folds away"),
-            ("m", "file viewed, on to the next one"),
-        ],
-        focus: &[Focus::Review],
-    },
-    Group {
-        title: "comment & publish",
-        keys: &[
-            ("c", "comment on the line, reply on a thread"),
-            ("C", "comment on the old side"),
-            ("V", "select lines"),
-            ("s", "suggest a change"),
-            ("E", "write in $EDITOR"),
-            ("r R e d", "on a thread row: reply, resolve, edit, delete"),
-            ("⌘enter ^s", "in the box: post now, no draft"),
-            ("⌥enter ^o", "in the box: new line, $EDITOR"),
-            ("⌥← ⌥→ ⌥⌫", "in the box: word back, on, delete"),
-            ("esc", "drop the selection, leave the box"),
-            ("P", "publish every draft"),
-            ("A M", "approve or unapprove, merge mine"),
-            ("H", "mark mine draft or ready"),
-            ("Y", "share the MR, after a preview"),
-        ],
-        focus: &[Focus::Review, Focus::Side],
-    },
-    Group {
-        title: "thread pane",
-        keys: &[
-            ("r c", "reply, as a draft"),
-            ("R", "resolve, unresolve"),
-            ("J K", "next, previous thread"),
-            ("T", "every thread; enter goes to it"),
-            ("m", "every thread: only mine, or all"),
-            ("e d", "edit, delete my draft"),
-            ("S +", "apply the suggestion, react"),
-            ("u U", "open, copy the first link"),
-        ],
-        focus: &[Focus::Side],
-    },
-    Group {
-        title: "outline pane",
-        keys: &[
-            ("t", "call tree, or the flat list"),
-            ("u", "calls, or called by"),
-            ("s", "the whole stack, unchanged calls too"),
-            ("a", "public symbols only, or all"),
-            ("zo zc za", "open, close, toggle the branch"),
-            ("enter", "the call in the diff, the definition, a section"),
-        ],
-        focus: &[Focus::Side],
-    },
-    Group {
-        title: "ask claude",
-        keys: &[
-            ("a e r s", "explain, risks, summary"),
-            ("a t c a", "thread, comment, anything"),
-            ("a h", "answers kept for this MR"),
-            ("c ⏎ R y", "answer: draft, follow up, again, copy"),
-        ],
-        focus: &[Focus::Review, Focus::Side],
-    },
-    Group {
-        title: "search & app",
-        keys: &[
-            ("^k ,", "MRs · / files · > commands"),
-            (":", "commands: :go !42, :set theme=nord"),
-            ("o y", "open in the browser, copy the link"),
-            ("ag", "the agent session of the MR: a, then g"),
-            ("r", "refresh"),
-            ("?", "this help"),
-            ("q ^c", "quit: twice; q closes a pane first"),
-        ],
-        focus: &[Focus::Queue, Focus::Review, Focus::Side],
-    },
-];
 
 /// Padding inside the frame: two columns on each side, one row above and below.
 const PAD_X: u16 = 2;
@@ -165,9 +32,21 @@ const KEY_GAP: usize = 2;
 /// From this overlay width the groups share two columns.
 const TWO_COLUMNS_FROM: u16 = 100;
 
+/// The panes whose first `?` shows the group.
+fn panes(group: Group) -> &'static [Focus] {
+    match group {
+        Group::Move => &[Focus::Queue, Focus::Review],
+        Group::Queue => &[Focus::Queue],
+        Group::View => &[Focus::Review],
+        Group::Comment | Group::Ask => &[Focus::Review, Focus::Side],
+        Group::Thread | Group::Outline => &[Focus::Side],
+        Group::App => &[Focus::Queue, Focus::Review, Focus::Side],
+    }
+}
+
 /// The groups the overlay lists: every one, or those of the focused pane.
-fn groups(every_key: bool, focus: Focus) -> impl Iterator<Item = &'static Group> {
-    GROUPS.iter().filter(move |g| every_key || g.focus.contains(&focus))
+fn groups(every_key: bool, focus: Focus) -> impl Iterator<Item = Group> {
+    GROUPS.into_iter().filter(move |g| every_key || panes(*g).contains(&focus))
 }
 
 /// The last row the list can scroll to: its groups in one column, so scrolling never stops short.
@@ -193,7 +72,7 @@ fn shown(app: &App, every_key: bool) -> Vec<(&'static str, Vec<(String, &'static
         let page = app.page();
         return vec![(page.name(), page.taps().iter().map(|tap| (keymap.label(tap.keys), tap.does)).collect())];
     }
-    groups(every_key, app.focus).map(|g| (g.title, g.keys.iter().map(|(keys, what)| (keymap.label(keys), *what)).collect())).collect()
+    groups(every_key, app.focus).map(|g| (g.title(), g.lines().iter().map(|line| (keymap.label(line.keys), line.does)).collect())).collect()
 }
 
 /// A column of groups as lines: faded uppercase headers, keys right-aligned in the accent.
@@ -294,28 +173,17 @@ mod tests {
 
     #[test]
     fn every_bindable_action_has_its_key_in_a_group() {
-        let words: HashSet<String> =
-            GROUPS.iter().flat_map(|g| g.keys.iter()).flat_map(|(keys, _)| keys.split(' ')).map(as_default).collect();
-        let missing: Vec<&str> = crate::keymap::ACTIONS.iter().filter(|(_, key)| !words.contains(*key)).map(|(name, _)| *name).collect();
+        let words: HashSet<String> = GROUPS.iter().flat_map(|g| g.lines()).flat_map(|line| line.keys.split(' ')).map(as_default).collect();
+        let missing: Vec<&str> = crate::act::bindable().filter(|(_, key)| !words.contains(*key)).map(|(name, _)| name).collect();
         assert!(missing.is_empty(), "actions with no line in the help: {missing:?}");
-    }
-
-    #[test]
-    fn the_action_table_holds_the_help_lines() {
-        use crate::act::Group as Act;
-        let table = [Act::Move, Act::Queue, Act::View, Act::Comment, Act::Thread, Act::Outline, Act::Ask, Act::App];
-        for (group, old) in table.iter().zip(&GROUPS) {
-            let lines: Vec<(&str, &str)> = group.lines().iter().map(|line| (line.keys, line.does)).collect();
-            assert_eq!((group.title(), lines.as_slice()), (old.title, old.keys));
-        }
     }
 
     #[test]
     fn a_key_says_one_thing_per_group() {
         for group in &GROUPS {
             let mut seen = HashSet::new();
-            for (keys, _) in group.keys {
-                assert!(seen.insert(*keys), "{keys} twice in {}", group.title);
+            for line in group.lines() {
+                assert!(seen.insert(line.keys), "{} twice in {}", line.keys, group.title());
             }
         }
     }
@@ -325,7 +193,7 @@ mod tests {
         assert_eq!(split(&[3, 3]), 1);
         assert_eq!(split(&[20, 1, 1, 1]), 1, "one tall group stays alone on the left");
         assert_eq!(split(&[1, 1, 1, 1, 10]), 4);
-        let sizes: Vec<usize> = GROUPS.iter().map(|g| g.keys.len()).collect();
+        let sizes: Vec<usize> = GROUPS.iter().map(|g| g.lines().len()).collect();
         let at = split(&sizes);
         let (left, right) = (column_height(&sizes[..at]), column_height(&sizes[at..]));
         assert!(left.abs_diff(right) <= 8, "left {left} rows, right {right}");
@@ -339,10 +207,10 @@ mod tests {
 
     #[test]
     fn a_pane_lists_its_own_groups_and_every_key_lists_them_all() {
-        let titles = |every_key, focus| groups(every_key, focus).map(|g| g.title).collect::<Vec<_>>();
+        let titles = |every_key, focus| groups(every_key, focus).map(Group::title).collect::<Vec<_>>();
         assert_eq!(titles(false, Focus::Queue), ["move", "queue", "search & app"]);
         assert_eq!(titles(false, Focus::Review), ["move", "view", "comment & publish", "ask claude", "search & app"]);
         assert_eq!(titles(false, Focus::Side), ["comment & publish", "thread pane", "outline pane", "ask claude", "search & app"]);
-        assert_eq!(titles(true, Focus::Side), GROUPS.map(|g| g.title));
+        assert_eq!(titles(true, Focus::Side), GROUPS.map(Group::title));
     }
 }

@@ -437,7 +437,8 @@ Two columns when the overlay is at least 100 columns wide, split between groups 
 The frame pads two columns on the sides and one row above and below; a blank row separates groups and six columns separate the two columns.
 It takes at most 90 % of the screen each way, centred, and scrolls with `j k`, `^d ^u`, `g G` when taller; the bottom border says where you are.
 Keys show as they are in effect: user bindings first, `(`/`)` for `[`/`]` with the AZERTY preset.
-The groups live in `src/tui/help.rs`; a test fails when a bindable action has no line there.
+Each line lives with its action in `src/act.rs`, which also orders the lines of a group; `src/tui/help.rs` orders the groups and says which panes show them.
+A test fails when a bindable action has no line.
 
 ## Toasts and errors
 

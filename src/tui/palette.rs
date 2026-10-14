@@ -3,6 +3,7 @@
 //! `~label` narrow them, see `query`), `/` finds files, `>` runs commands. `:` opens it on
 //! commands, with fuzzy tab completion, a ghost suggestion and history.
 use super::complete::{self, Cycle};
+use crate::act::{self, Act};
 use crate::forge::MrKey;
 use crate::fuzzy;
 
@@ -98,38 +99,44 @@ pub enum Command {
     Quit,
 }
 
-pub const VERBS: [(&str, &str); 21] = [
-    ("go", "open an MR: :go !42 · :go acme/widgets!42"),
-    ("open", "open the MR, or the line, in the browser"),
-    ("copy", "copy the link of the MR, or of the line"),
-    ("approve", "approve the open MR, or take the approval back"),
-    ("merge", "merge my approved MR, after a yes"),
-    ("ready", "mark my MR ready for review, or a draft again"),
-    ("publish", "publish every draft, in the publish modal"),
-    ("threads", "every thread of the MR in the right pane"),
-    ("all", "the queue: this repo only, or every project"),
-    ("pin", "pin the MR on top of the queue"),
-    ("unpin", "take the MR's pin off"),
-    ("outline", "the functions and classes the MR changes, in the right pane"),
-    ("set", "change and save a setting: :set theme=nord"),
-    ("view", "the file in your program: :view · :view old · :view src/a.rs:42"),
-    ("ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
-    ("ai", "switch AI off or back on for this session: :ai off, :ai on"),
-    ("share", "post the MR through a [share] command: :share · :share review"),
-    ("session", "open the agent session of the MR, or start one"),
-    ("news", "what changed in revu, the newest version first"),
-    ("help", "show the keys"),
-    ("quit", "leave"),
-];
+impl Command {
+    /// The action the command is counted and listed as.
+    pub fn act(&self) -> Act {
+        match self {
+            Self::Go(_) => Act::GoCommand,
+            Self::Open => Act::OpenCommand,
+            Self::Copy => Act::CopyCommand,
+            Self::Merge => Act::MergeCommand,
+            Self::Ready => Act::ReadyCommand,
+            Self::Approve => Act::ApproveCommand,
+            Self::Publish => Act::PublishCommand,
+            Self::Threads => Act::ThreadsCommand,
+            Self::All => Act::AllCommand,
+            Self::Pin => Act::PinCommand,
+            Self::Unpin => Act::UnpinCommand,
+            Self::Set { .. } => Act::SetCommand,
+            Self::View(_) => Act::ViewCommand,
+            Self::Outline => Act::OutlineCommand,
+            Self::AiOff | Self::AiOn => Act::AiCommand,
+            Self::Ask(_) => Act::AskCommand,
+            Self::Share(_) => Act::ShareCommand,
+            Self::Session => Act::SessionCommand,
+            Self::News => Act::NewsCommand,
+            Self::Help => Act::HelpCommand,
+            Self::Quit => Act::QuitCommand,
+        }
+    }
+}
 
 /// The commands the list shows for what is typed: all of them on an empty line, else ranked by
 /// how well their verb matches, at most `MAX_SHOWN`.
 pub fn verbs_for(input: &str) -> Vec<(&'static str, &'static str)> {
     let verb = input.split_whitespace().next().unwrap_or("");
+    let verbs = act::verbs().map(|verb| (verb.word, verb.does));
     let ranked: Vec<(&str, &str)> = if verb.is_empty() {
-        VERBS.to_vec()
+        verbs.collect()
     } else {
-        fuzzy::rank(verb, VERBS.iter().map(|(v, what)| ((*v).to_owned(), (*v, *what)))).into_iter().map(|(_, pair)| pair).collect()
+        fuzzy::rank(verb, verbs.map(|(v, what)| (v.to_owned(), (v, what)))).into_iter().map(|(_, pair)| pair).collect()
     };
     ranked.into_iter().take(MAX_SHOWN).collect()
 }
@@ -168,7 +175,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
         "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => {
-            let close = fuzzy::suggestions(unknown, VERBS.iter().map(|(v, _)| *v), 3);
+            let close = fuzzy::suggestions(unknown, act::verbs().map(|verb| verb.word), 3);
             if close.is_empty() {
                 Err(format!("unknown command :{unknown}"))
             } else {
@@ -358,8 +365,11 @@ mod tests {
     }
 
     #[test]
-    fn the_action_table_holds_the_verbs() {
-        assert_eq!(crate::act::verbs().map(|verb| (verb.word, verb.does)).collect::<Vec<_>>(), VERBS);
+    fn a_command_is_the_act_of_its_verb() {
+        for verb in act::verbs() {
+            let command = ["", " off", " x=y"].iter().find_map(|argument| parse(&format!("{}{argument}", verb.word)).ok()).unwrap();
+            assert_eq!(command.act().row().verb, Some(verb), "{}", verb.word);
+        }
     }
 
     #[test]
@@ -395,7 +405,7 @@ mod tests {
 
     #[test]
     fn tab_cycles_and_the_ghost_suggests() {
-        let verbs: Vec<String> = VERBS.iter().map(|(v, _)| (*v).to_owned()).collect();
+        let verbs: Vec<String> = act::verbs().map(|verb| verb.word.to_owned()).collect();
         let mut p = typed("pu");
         assert_eq!(p.ghost(&verbs).as_deref(), Some("blish"));
         p.accept(&verbs);
@@ -439,7 +449,7 @@ mod tests {
 
     #[test]
     fn the_command_list_follows_the_typed_verb() {
-        assert_eq!(verbs_for("").len(), VERBS.len().min(MAX_SHOWN));
+        assert_eq!(verbs_for("").len(), act::verbs().count().min(MAX_SHOWN));
         assert_eq!(verbs_for("pub").first().map(|(v, _)| *v), Some("publish"));
         assert_eq!(verbs_for("go !42").first().map(|(v, _)| *v), Some("go"));
         assert!(typed("pu").naming_command() && !typed("go !4").naming_command());
