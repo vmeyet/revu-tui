@@ -623,6 +623,11 @@ mod tests {
     }
 
     #[test]
+    fn the_action_table_lists_the_known_actions() {
+        assert_eq!(crate::act::listed_names().collect::<Vec<_>>(), known());
+    }
+
+    #[test]
     fn every_bindable_action_can_be_counted() {
         let places = [Place::Queue, Place::Diff, Place::Pane];
         for (name, keys) in crate::keymap::ACTIONS {

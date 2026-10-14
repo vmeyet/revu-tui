@@ -504,6 +504,29 @@ mod tests {
     }
 
     #[test]
+    fn the_action_table_holds_the_bindable_actions_and_the_taken_keys() {
+        assert_eq!(crate::act::bindable().collect::<Vec<_>>(), ACTIONS);
+        let keys: Vec<Vec<Key>> = crate::act::ROWS.iter().flat_map(|row| row.keys).map(|key| parse(key).unwrap()).collect();
+        let mut taken: Vec<char> = keys.iter().filter_map(|key| key[0].plain_char()).collect();
+        taken.sort_unstable();
+        taken.dedup();
+        let mut expected: Vec<char> = TAKEN.chars().collect();
+        expected.sort_unstable();
+        assert_eq!(taken, expected);
+        for (prefix, seconds) in PREFIXED {
+            let mut read: Vec<char> = keys
+                .iter()
+                .filter(|key| key.len() == 2 && key[0].plain_char() == Some(*prefix) && label(key) != "ac")
+                .filter_map(|key| key[1].plain_char())
+                .collect();
+            read.sort_unstable();
+            let mut expected: Vec<char> = seconds.chars().collect();
+            expected.sort_unstable();
+            assert_eq!(read, expected, "after {prefix}");
+        }
+    }
+
+    #[test]
     fn two_actions_share_a_default_only_when_their_panes_never_meet() {
         let apart = [("suggest", "sort_queue")];
         for (i, (name, default)) in ACTIONS.iter().enumerate() {

@@ -1,4 +1,6 @@
 //! Merge request review in your terminal, on GitLab and GitHub: the library behind the `revu` binary.
+#[cfg_attr(not(test), allow(dead_code))]
+mod act;
 mod agent;
 mod ai;
 mod auth;

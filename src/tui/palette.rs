@@ -358,6 +358,11 @@ mod tests {
     }
 
     #[test]
+    fn the_action_table_holds_the_verbs() {
+        assert_eq!(crate::act::verbs().map(|verb| (verb.word, verb.does)).collect::<Vec<_>>(), VERBS);
+    }
+
+    #[test]
     fn parses_verbs_and_aliases() {
         assert_eq!(parse(":go !42"), Ok(Command::Go("!42".into())));
         assert_eq!(parse("g acme/widgets!42"), Ok(Command::Go("acme/widgets!42".into())));

@@ -301,6 +301,16 @@ mod tests {
     }
 
     #[test]
+    fn the_action_table_holds_the_help_lines() {
+        use crate::act::Group as Act;
+        let table = [Act::Move, Act::Queue, Act::View, Act::Comment, Act::Thread, Act::Outline, Act::Ask, Act::App];
+        for (group, old) in table.iter().zip(&GROUPS) {
+            let lines: Vec<(&str, &str)> = group.lines().iter().map(|line| (line.keys, line.does)).collect();
+            assert_eq!((group.title(), lines.as_slice()), (old.title, old.keys));
+        }
+    }
+
+    #[test]
     fn a_key_says_one_thing_per_group() {
         for group in &GROUPS {
             let mut seen = HashSet::new();
