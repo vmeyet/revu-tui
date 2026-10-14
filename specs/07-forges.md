@@ -124,7 +124,9 @@ Every host the config remembers a login for (`host`, `[hosts.*]`) and holding a 
 Each host answers its own queue with its own username, rows carry their host (`MrKey.host`, `None` for the host `revu` started with), and `Sections::merge` sorts each section newest first.
 Opening a row, its drafts, its pipeline and its cache all go to that row's host; the `!` or `#` and the line links follow the row's forge (`Hosts::kind_of`).
 Rows carry a short host tag (`gitlab`, `github`) only when more than one host is in the queue.
-A checkout's queue keeps to the checkout's own host; a host that fails to answer is left out rather than failing the queue (`revu list` names it on stderr).
+A checkout's queue keeps to the checkout's own host; a host that fails to answer never fails the queue (`revu list` leaves it out and names it on stderr).
+In the TUI it keeps the rows it last answered, from its cache, and a toast names it: `git.acme.test did not answer · showing its last rows`.
+Its MRs stay in To review, so its next answer notifies nothing already seen.
 
 ## What changed in phase 1 that a user can see
 

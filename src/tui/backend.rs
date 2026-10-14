@@ -263,21 +263,18 @@ impl Backend {
     }
 
     /// Every project's queue also asks the other hosts I am logged in to; one that fails to
-    /// answer is left out rather than failing the whole queue. The ready command runs alongside;
-    /// when it fails the queue still paints, with its last answer, and the reason comes back apart.
-    /// What follows the answer: the pins found merged or closed, and that reason.
+    /// answer shows the rows it last answered rather than failing the whole queue. The ready command
+    /// runs alongside; when it fails the queue still paints, with its last answer, and the reason comes
+    /// back apart. What follows the answer: the pins found merged or closed, that reason, and the hosts
+    /// that did not answer.
     pub(super) async fn load_queue(&self, scope: Option<String>) -> Result<(Incoming, Vec<Incoming>)> {
         let others = async {
             if scope.is_some() {
-                return vec![];
+                return (vec![], vec![]);
             }
-            futures_util::future::join_all(self.others.iter().map(crate::ctx::Home::queue))
-                .await
-                .into_iter()
-                .filter_map(Result::ok)
-                .collect()
+            self.other_queues().await
         };
-        let (queue, others, said) = tokio::join!(self.forge.queue(scope.as_deref()), others, self.ask_ready());
+        let (queue, (others, silent), said) = tokio::join!(self.forge.queue(scope.as_deref()), others, self.ask_ready());
         let queue = queue?;
         let (wanted, saved) = (scope.clone(), queue.clone());
         let _ = self.off(move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
@@ -292,9 +289,31 @@ impl Backend {
         let follow = [
             (!gone.is_empty()).then(|| Incoming::PinsGone { scope: scope.clone(), gone }),
             failure.map(|message| Incoming::Failed { what: app::Failure::Ready, message }),
+            (!silent.is_empty()).then(|| Incoming::Failed { what: app::Failure::Host, message: silent_note(&silent) }),
         ];
         let answer = self.off(move |b| b.queue_answer(scope, &queue, &others, ready.as_ref(), pinned, false)).await?;
         Ok((answer, follow.into_iter().flatten().collect()))
+    }
+
+    /// Each other host's queue; one that does not answer gives the rows it last answered, and its name.
+    async fn other_queues(&self) -> (Vec<Queue>, Vec<String>) {
+        let answers = futures_util::future::join_all(self.others.iter().map(crate::ctx::Home::queue)).await;
+        let mut queues = vec![];
+        let mut silent = vec![];
+        for (home, answer) in self.others.iter().zip(answers) {
+            match answer {
+                Ok(queue) => queues.push(queue),
+                Err(e) => {
+                    tracing::warn!("the queue of {} failed: {e:#}", home.host);
+                    silent.push(home.host.clone());
+                }
+            }
+        }
+        let wanted = silent.clone();
+        let kept = self.off(move |b| {
+            b.others.iter().filter(|home| wanted.contains(&home.host)).filter_map(crate::ctx::Home::cached).collect::<Vec<_>>()
+        });
+        (queues.into_iter().chain(kept.await.unwrap_or_default()).collect(), silent)
     }
 
     pub(super) fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
@@ -732,6 +751,10 @@ impl Backend {
             })
             .collect()
     }
+}
+
+fn silent_note(hosts: &[String]) -> String {
+    format!("{} did not answer · showing {} last rows", hosts.join(", "), if hosts.len() == 1 { "its" } else { "their" })
 }
 
 /// What the reader folded wins over the defaults, file by file.
@@ -1188,6 +1211,28 @@ mod tests {
         assert_eq!(gone, [MrKey::new("acme/widgets", 43)], "the merged one goes; 44 failed to fetch and stays");
         let (rows, gone) = backend.pins_outside(None, &queue().listed().collect()).await;
         assert!(rows.is_empty() && gone == [MrKey::new("acme/widgets", 43)], "a listed pin is not fetched");
+    }
+
+    #[tokio::test]
+    async fn a_host_that_fails_to_answer_keeps_its_last_rows_and_is_named() {
+        use wiremock::matchers::{method, path};
+        let (main, silent) = (wiremock::MockServer::start().await, wiremock::MockServer::start().await);
+        wiremock::Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(include_str!("../forge/gitlab/fixtures/queue.json")))
+            .mount(&main)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let creds = crate::auth::Credentials { host: "git.acme.test".into(), token: "glpat-xxxx".into() };
+        let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", silent.uri())).unwrap());
+        let other = crate::ctx::Home { host: "git.acme.test".into(), forge, cache: Cache::in_dir(dir.path()) };
+        other.cache.write_entry(&keys::queue(None), &queue().on_host("git.acme.test")).unwrap();
+        let backend = Backend { others: vec![other], ..backend_on(&main) };
+        let (Incoming::Queue { sections, .. }, follow) = backend.load_queue(None).await.unwrap() else { panic!("a queue") };
+        let there = sections.all().filter(|mr| mr.host.as_deref() == Some("git.acme.test")).count();
+        assert_eq!(there, sections.all().count() / 2, "the silent host keeps the rows it last had");
+        let [Incoming::Failed { what: app::Failure::Host, message }] = follow.as_slice() else { panic!("{follow:?}") };
+        assert_eq!(message, "git.acme.test did not answer · showing its last rows");
     }
 
     fn queue() -> Queue {

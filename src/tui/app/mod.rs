@@ -347,6 +347,8 @@ pub enum Input {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Failure {
     Queue,
+    /// Another host did not answer the queue; its rows are the ones it last answered.
+    Host,
     Open,
     Poll,
     Local,

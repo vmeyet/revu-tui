@@ -19,6 +19,12 @@ Each entry says what changed, then where, then how to use it.
   In the list `Y` opens when you have several places to share to, on each host apart.
   It opens on the place you last shared to, so `Y` then `enter` repeats it; `1` to `9` pick one directly.
 
+### Fixed
+
+- **A second host that misses one refresh keeps its MRs.**
+  In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
+  Once it answers again, no notification comes for an MR you already had.
+
 ## 0.8.0 - 2026-10-14
 
 ### New

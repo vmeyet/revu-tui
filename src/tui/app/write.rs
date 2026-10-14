@@ -415,7 +415,9 @@ impl App {
             Failure::Merge => self.warn(format!("not merged: {message}")),
             Failure::SetDraft => self.warn(format!("not changed: {message}")),
             Failure::React { thread, index, emoji, on } => self.react_failed(&thread, index, emoji, on, &message),
-            Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Triage | Failure::Ready => self.warn(message),
+            Failure::Queue | Failure::Open | Failure::Poll | Failure::Local | Failure::Host | Failure::Triage | Failure::Ready => {
+                self.warn(message);
+            }
         }
     }
 }

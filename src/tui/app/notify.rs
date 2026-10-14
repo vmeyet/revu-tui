@@ -65,6 +65,23 @@ mod tests {
     }
 
     #[test]
+    fn a_host_that_misses_a_poll_keeps_its_rows_with_a_note_and_its_return_announces_nothing() {
+        let mut app = app();
+        let elsewhere = |mr: crate::forge::QueueMr| crate::forge::QueueMr { host: Some("git.acme.test".into()), ..mr };
+        let full = sections();
+        let both = crate::forge::Sections {
+            to_review: full.to_review.iter().cloned().chain(full.to_review.iter().cloned().map(elsewhere)).collect(),
+            ..full
+        };
+        announce(&mut app, both.clone());
+        app.apply(Incoming::Failed { what: Failure::Host, message: "git.acme.test did not answer · showing its last rows".into() });
+        let toast = app.live_toast().unwrap();
+        assert!(!toast.danger && toast.text.starts_with("git.acme.test"), "{toast:?}");
+        assert_eq!(announce(&mut app, both.clone()), vec![], "the kept rows are not new");
+        assert_eq!(announce(&mut app, both), vec![], "nor are they once the host answers again");
+    }
+
+    #[test]
     fn several_arrivals_share_one_notification_and_off_means_off() {
         let mut app = app();
         let full = sections();

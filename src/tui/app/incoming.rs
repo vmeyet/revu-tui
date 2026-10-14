@@ -213,6 +213,7 @@ impl App {
                 self.back_off();
             }
             Failure::Local => self.warn(message),
+            Failure::Host => self.toast(message),
             Failure::Triage => self.triage_failed(&message),
             other => self.apply_write_failure(other, message),
         }
