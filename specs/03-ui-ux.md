@@ -299,6 +299,8 @@ The MR's description, checks, reviews, threads and files are the cover (`i`), dr
 `enter` publishes from anywhere in the modal; `e` edits the selected draft.
 Before sending, every draft is checked against the current diff: a draft whose line left it is marked `✗`, the cursor lands on it, and `m` turns it into a note on the MR (the forge would refuse it otherwise).
 While publishing, the modal shows the spinner and disables keys; a failure keeps the drafts and toasts the reason.
+Publishing sends what the forge holds, so `enter` refuses while a draft save, edit or delete of that MR is unanswered (`a draft change is still on its way`), and after the forge refused an edit or a delete until a fresh read of the drafts (`r`).
+A refused delete puts the draft back as the forge holds it; a refused edit puts back the forge's text and leaves the new one in the compose box of that draft, opened at once when no other box is.
 GitLab approves in a second request after `bulk_publish`: when only the approval is refused, the drafts are gone from the list and from `drafts.json` and the warning reads `published 2 comments, not approved: <reason>`. GitHub submits the review with the approval in one request, so it has no such half.
 
 ## Keys

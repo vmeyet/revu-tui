@@ -716,7 +716,7 @@ mod tests {
         press(&mut app, "e");
         assert_eq!((app.input_label(), listed_place(&app)), ("edit draft".to_owned(), Some(Place::All)));
         app.handle_key(code(KeyCode::Esc));
-        assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
+        assert_eq!(deletes(&press(&mut app, "d")), [9]);
     }
 
     #[test]

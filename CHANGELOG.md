@@ -62,6 +62,9 @@ Each entry says what changed, then where, then how to use it.
   In the queue and an open MR: a request that gets no answer gives up, the status line says offline, and polling tries again.
 - **Opening an agent session no longer waits forever.**
   On `a g` and `:session`: a stuck `git fetch`, tmux or terminal is stopped and the toast says which.
+- **A draft you deleted or edited is never published as it was.**
+  When deleting or editing a draft fails, for example while you are offline.
+  The draft comes back as the forge holds it, your new text waits in the box, and `P` waits for `r`.
 - **A comment survives an editor that exits with an error.**
   When you write in `$EDITOR` with `E` or `ctrl-o`, and vim quits with `:cq` or after an error.
   The text waits in the comment box, and `enter` saves it.

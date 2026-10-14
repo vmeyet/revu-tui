@@ -68,6 +68,7 @@ impl App {
                 let follow = self.apply_draft_saved(&key, &draft, id, &body);
                 self.composed.extend(follow);
             }
+            Incoming::DraftChanged { key } => self.draft_write_answered(&key),
             Incoming::Published { key, approval, count } => self.apply_published(&key, &approval, count),
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
             Incoming::Resolved { key, thread, resolved } => self.apply_resolved(&key, &thread, resolved),
@@ -125,7 +126,8 @@ impl App {
 
     /// Actions an `Incoming` produced, taken by the loop right after `apply`.
     pub fn take_actions(&mut self) -> Vec<super::Action> {
-        std::mem::take(&mut self.composed)
+        let actions = std::mem::take(&mut self.composed);
+        self.sending(actions)
     }
 
     fn apply_review(&mut self, key: super::MrKey, review: Review, cached: Option<std::time::Duration>) {
@@ -134,6 +136,7 @@ impl App {
         }
         if cached.is_none() {
             self.news = self.open.as_ref().filter(|o| o.key == key).and_then(|o| news(&o.review, &review)).or(self.news.take());
+            self.drafts_read(&key);
         }
         let current = self.open.take_if(|o| o.key == key);
         let fresh_open = current.is_none();

@@ -188,6 +188,8 @@ pub struct App {
     pub buffer: Field,
     /// Text typed for a target and left with `esc`, by target: it comes back when the box opens there again.
     pub unsent: HashMap<String, String>,
+    /// Per MR, the draft writes the forge has not answered yet and whether it refused one.
+    pub draft_writes: HashMap<MrKey, super::writes::DraftWrites>,
     /// Where the compose box was opened from: the keys go back there once it closes.
     pub compose_from: Focus,
     /// The diff row the cursor left for the compose box under another row; it goes back there once the box closes.
@@ -345,6 +347,7 @@ impl App {
             input: None,
             buffer: Field::default(),
             unsent: HashMap::new(),
+            draft_writes: HashMap::new(),
             compose_from: Focus::default(),
             compose_left: None,
             publish: None,

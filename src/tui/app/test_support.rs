@@ -184,6 +184,15 @@ pub(super) fn saved(actions: &[Action], id: u64) -> Incoming {
     Incoming::DraftSaved { key: key.clone(), draft: draft.clone(), id, body: draft.body.clone() }
 }
 
+/// The forge ids of the drafts `actions` delete on the open MR; any other action fails the test.
+pub(super) fn deletes(actions: &[Action]) -> Vec<u64> {
+    let delete = |action: &Action| match action {
+        Action::DeleteDraft { key, id, .. } if *key == mr_key() => *id,
+        other => panic!("not a draft delete on the MR: {other:?}"),
+    };
+    actions.iter().map(delete).collect()
+}
+
 pub(super) fn cells(app: &mut App, width: u16, height: u16) -> ratatui::buffer::Buffer {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal.draw(|f| ui::draw(f, app)).unwrap();

@@ -19,7 +19,7 @@ impl App {
         if self.quitting == pending {
             self.quitting = None;
         }
-        actions
+        self.sending(actions)
     }
 
     fn route_key(&mut self, key: KeyEvent) -> Vec<Action> {

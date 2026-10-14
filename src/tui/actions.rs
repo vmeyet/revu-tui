@@ -110,17 +110,18 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
-            Action::SaveDraft { key, draft } => send(backend.save_draft(key, draft).await.unwrap_or_else(|e| failed(Failure::Draft, &e))),
-            Action::UpdateDraft { key, id, draft } => {
-                if let Err(e) = backend.update_draft(&key, id, &draft).await {
-                    send(failed(Failure::Local, &e));
-                }
-            }
-            Action::DeleteDraft { key, id } => {
-                if let Err(e) = backend.delete_draft(&key, id).await {
-                    send(failed(Failure::Local, &e));
-                }
-            }
+            Action::SaveDraft { key, draft } => send(match backend.save_draft(key.clone(), draft).await {
+                Ok(saved) => saved,
+                Err(e) => failed(Failure::Draft { key }, &e),
+            }),
+            Action::UpdateDraft { key, id, draft, held } => send(match backend.update_draft(&key, id, &draft).await {
+                Ok(()) => Incoming::DraftChanged { key },
+                Err(e) => failed(Failure::DraftUpdate { key, held, wanted: draft.body }, &e),
+            }),
+            Action::DeleteDraft { key, id, held } => send(match backend.delete_draft(&key, id).await {
+                Ok(()) => Incoming::DraftChanged { key },
+                Err(e) => failed(Failure::DraftDelete { key, held }, &e),
+            }),
             Action::Publish { key, approve, count } => {
                 send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }

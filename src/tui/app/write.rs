@@ -133,7 +133,7 @@ impl App {
     fn delete_draft(&mut self, index: usize) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(draft) = open.review.drafts.get(index) else { return vec![] };
-        let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id });
+        let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id, held: Box::new(draft.clone()) });
         self.update_open(|open| {
             open.with_drafts_changed(|drafts| drafts.into_iter().enumerate().filter(|(i, _)| *i != index).map(|(_, d)| d).collect())
         });
@@ -151,8 +151,9 @@ impl App {
     fn edit_draft(&mut self, index: usize) -> bool {
         let Some(draft) = self.open.as_ref().and_then(|o| o.review.drafts.get(index)) else { return false };
         let Some(id) = draft.draft_id() else { return false };
-        let body = draft.body.clone();
-        self.open_input(Input::EditDraft { draft: id }, &body);
+        let input = Input::EditDraft { draft: id };
+        let body = if self.is_unsent(&input) { String::new() } else { draft.body.clone() };
+        self.open_input(input, &body);
         true
     }
 
@@ -237,7 +238,7 @@ impl App {
         let Some(open) = &self.open else { return vec![] };
         let Some(draft) = open.review.drafts.get(index).filter(|d| d.anchor.is_some()).cloned() else { return vec![] };
         let key = open.key.clone();
-        let delete = draft.id.map(|id| Action::DeleteDraft { key: key.clone(), id });
+        let delete = draft.id.map(|id| Action::DeleteDraft { key: key.clone(), id, held: Box::new(draft.clone()) });
         let moved = draft.on_the_mr().with_local_id(self.new_local_id());
         let save = Action::SaveDraft { key, draft: Box::new(moved.clone()) };
         self.update_open(|open| open.with_draft_replaced(index, moved));
@@ -248,6 +249,10 @@ impl App {
         let (Some(open), Some(publish)) = (&self.open, &self.publish) else { return vec![] };
         if self.unsaved_drafts() > 0 {
             self.warn("some drafts are not saved yet · r to retry");
+            return vec![];
+        }
+        if let Some(why) = self.publish_blocked(&open.key) {
+            self.warn(why);
             return vec![];
         }
         if let Some(&index) = open.review.stranded().first() {
@@ -318,8 +323,10 @@ impl App {
     /// is deleted from the forge so publishing never shows it; one edited meanwhile is updated there.
     /// Any other draft under the same id is the one the forge folded this note into: it goes.
     pub(super) fn apply_draft_saved(&mut self, key: &MrKey, sent: &Draft, id: u64, body: &str) -> Vec<Action> {
+        self.draft_write_answered(key);
         let Some(open) = self.open.as_ref().filter(|o| &o.key == key) else { return vec![] };
-        let delete = vec![Action::DeleteDraft { key: key.clone(), id }];
+        let landed = Draft { local_id: None, ..sent.clone() }.held_as(id, body);
+        let delete = vec![Action::DeleteDraft { key: key.clone(), id, held: Box::new(landed) }];
         let Some(draft) = open.review.drafts.iter().find(|d| d.local_id == sent.local_id) else { return delete };
         match draft.id {
             None => {}
@@ -327,7 +334,8 @@ impl App {
             Some(_) => return delete,
         }
         let saved = draft.clone().held_as(id, refolded(body, &sent.body, &draft.body));
-        let update = (saved.body != body).then(|| Action::UpdateDraft { key: key.clone(), id, draft: Box::new(saved.clone()) });
+        let held = Box::new(draft.clone().held_as(id, body));
+        let update = (saved.body != body).then(|| Action::UpdateDraft { key: key.clone(), id, draft: Box::new(saved.clone()), held });
         self.update_open(|open| {
             open.with_drafts_changed(|drafts| {
                 drafts
@@ -377,7 +385,17 @@ impl App {
 
     pub(super) fn apply_write_failure(&mut self, what: Failure, message: String) {
         match what {
-            Failure::Draft => self.warn(format!("draft not saved: {message} · r to retry")),
+            Failure::Draft { key } => {
+                self.draft_write_answered(&key);
+                self.warn(format!("draft not saved: {message} · r to retry"));
+            }
+            Failure::DraftUpdate { key, held, wanted } => {
+                let warning = format!("draft not changed: {message} · your text waits in the box");
+                self.draft_write_refused(&key, &held, Some(wanted), warning);
+            }
+            Failure::DraftDelete { key, held } => {
+                self.draft_write_refused(&key, &held, None, format!("draft not deleted: {message} · it is back, d deletes it again"));
+            }
             Failure::Publish => {
                 if let Some(publish) = &self.publish {
                     self.publish = Some(Publish { busy: false, ..publish.clone() });
@@ -527,11 +545,11 @@ mod tests {
         press(&mut app, "e");
         assert_eq!((app.input_label(), app.buffer.text()), ("edit draft".to_owned(), "nit"));
         let actions = type_text(&mut app, " (typo)");
-        let [Action::UpdateDraft { key, id: 9, draft }] = actions.as_slice() else { panic!("{actions:?}") };
+        let [Action::UpdateDraft { key, id: 9, draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
         assert_eq!(*key, mr_key());
         assert_eq!((draft.body.as_str(), draft.position.is_some()), ("nit (typo)", true), "the position travels with the edit");
         assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit (typo)");
-        assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
+        assert_eq!(deletes(&press(&mut app, "d")), [9]);
         assert_eq!(app.draft_count(), 0);
         assert_eq!(marker_here(&app), None, "the line is plain again");
     }
@@ -542,7 +560,7 @@ mod tests {
         on_line(&mut app);
         press(&mut app, "c");
         type_text(&mut app, "nit");
-        app.apply(Incoming::Failed { what: Failure::Draft, message: "offline".into() });
+        app.apply(Incoming::Failed { what: Failure::Draft { key: mr_key() }, message: "offline".into() });
         assert!(app.live_toast().unwrap().text.contains("r to retry"));
         let actions = press(&mut app, "r");
         assert!(matches!(actions.as_slice(), [Action::RefreshMr(key), Action::SaveDraft { .. }] if *key == mr_key()), "{actions:?}");
@@ -573,7 +591,7 @@ mod tests {
         press(&mut app, "l");
         assert_eq!(press(&mut app, "d"), vec![], "no id to delete yet");
         app.apply(saved(&save, 9));
-        assert_eq!(app.take_actions(), vec![Action::DeleteDraft { key: mr_key(), id: 9 }], "the forge would publish it otherwise");
+        assert_eq!(deletes(&app.take_actions()), [9], "the forge would publish it otherwise");
         assert_eq!(app.draft_count(), 0);
     }
 
@@ -587,7 +605,7 @@ mod tests {
         app.apply(saved(&save, 9));
         assert_eq!(app.take_actions(), vec![]);
         app.apply(saved(&save, 11));
-        assert_eq!(app.take_actions(), vec![Action::DeleteDraft { key: mr_key(), id: 11 }], "two saves raced and both posted");
+        assert_eq!(deletes(&app.take_actions()), [11], "two saves raced and both posted");
         assert_eq!(app.open.as_ref().unwrap().review.drafts[0].id, Some(9));
     }
 
@@ -602,7 +620,7 @@ mod tests {
         press(&mut app, "Pd");
         app.handle_key(code(KeyCode::Esc));
         app.apply(saved(&first, 9));
-        assert_eq!(app.take_actions(), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
+        assert_eq!(deletes(&app.take_actions()), [9]);
         assert_eq!(app.unsaved_drafts(), 1, "the second draft did not take the first one's id");
         app.apply(saved(&second, 10));
         let drafts = &app.open.as_ref().unwrap().review.drafts;
@@ -633,7 +651,7 @@ mod tests {
         on_line(&mut app);
         press(&mut app, "c");
         let save = type_text(&mut app, "nit");
-        app.apply(Incoming::Failed { what: Failure::Draft, message: "offline".into() });
+        app.apply(Incoming::Failed { what: Failure::Draft { key: mr_key() }, message: "offline".into() });
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
         assert_eq!((app.draft_count(), app.unsaved_drafts()), (1, 1), "the poll did not lose it");
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(listing(&save, 9)), cached: None });
@@ -710,7 +728,7 @@ mod tests {
         assert!(!app.publish.as_ref().unwrap().busy);
         assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "nit!");
         assert!(app.live_toast().unwrap().text.contains("not published"));
-        assert_eq!(press(&mut app, "d"), vec![Action::DeleteDraft { key: mr_key(), id: 9 }]);
+        assert_eq!(deletes(&press(&mut app, "d")), [9]);
         assert_eq!(app.draft_count(), 0);
         app.handle_key(code(KeyCode::Esc));
         assert_eq!(app.publish, None);

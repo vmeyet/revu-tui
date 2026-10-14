@@ -3,7 +3,7 @@
 use super::wire::{self, Actor, Anchor, Label, Nodes, QueuePr, Review, ReviewRequest, user_of};
 use super::{Client, owner_and_name};
 use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, Queue, QueueMr, Refs};
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -736,14 +736,13 @@ impl Client {
     pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<forge::Approval> {
         let prs = self.threads(key).await?;
         let event = if approve { "APPROVE" } else { "COMMENT" };
-        match prs.pending_review() {
-            Some(review) => {
-                let query = "mutation($id: ID!, $event: PullRequestReviewEvent!) { submitPullRequestReview(input: {pullRequestReviewId: $id, event: $event}) { clientMutationId } }";
-                self.graphql::<Value>(query, json!({"id": review.id, "event": event})).await?;
-            }
-            None if approve => self.approve(key, true).await?,
-            None => bail!("nothing to publish: no pending review on {}#{}", key.project, key.number),
-        }
+        let Some(review) = prs.pending_review() else {
+            ensure!(approve, "nothing to publish: no pending review on {}#{}", key.project, key.number);
+            self.approve(key, true).await?;
+            return Ok(forge::Approval::Given);
+        };
+        let query = "mutation($id: ID!, $event: PullRequestReviewEvent!) { submitPullRequestReview(input: {pullRequestReviewId: $id, event: $event}) { clientMutationId } }";
+        self.graphql::<Value>(query, json!({"id": review.id, "event": event})).await?;
         Ok(if approve { forge::Approval::Given } else { forge::Approval::NotAsked })
     }
 
