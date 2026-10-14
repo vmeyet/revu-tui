@@ -1,6 +1,7 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
 use super::{Action, App, Input, MrKey, Open, Post};
 use crate::review::{Draft, DraftId, Place, Review};
+use crate::tui::compose::Edited;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
@@ -148,6 +149,19 @@ impl App {
             Input::Reply { thread } => self.add_draft(Draft::reply(&thread, text)),
             Input::EditDraft { draft } => self.change_draft(draft, text),
             question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
+        }
+    }
+
+    /// What the editor gave back becomes a draft; after an editor error the text waits in the box, to be read before it is saved.
+    pub(super) fn apply_composed(&mut self, input: Input, edited: Edited) {
+        match edited {
+            Edited::Cancelled => {}
+            Edited::Done(text) => self.composed = self.submit(input, text),
+            Edited::Errored(text) if self.open.is_some() => {
+                self.open_input(input, &text);
+                self.warn("the editor exited with an error · your text is in the box, enter saves it");
+            }
+            Edited::Errored(_) => {}
         }
     }
 

@@ -741,10 +741,10 @@ mod tests {
         );
         assert!(app.input.is_none(), "the editor takes the text over");
         let input = Input::Comment { position: position.clone() };
-        app.apply(Incoming::Composed { input: input.clone(), text: None });
+        app.apply(Incoming::Composed { input: input.clone(), edited: Edited::Cancelled });
         assert_eq!(app.take_actions(), vec![]);
         assert_eq!(app.draft_count(), 0);
-        app.apply(Incoming::Composed { input, text: Some("from the editor".into()) });
+        app.apply(Incoming::Composed { input, edited: Edited::Done("from the editor".into()) });
         let actions = app.take_actions();
         assert!(matches!(actions.as_slice(), [Action::SaveDraft { .. }]), "{actions:?}");
         assert_eq!(app.open.as_ref().unwrap().review.drafts[0].body, "from the editor");
@@ -754,6 +754,20 @@ mod tests {
         assert!(
             matches!(actions.as_slice(), [Action::Compose { input: Input::EditDraft { draft: crate::review::DraftId::Local(1) }, draft }] if draft == "from the editor")
         );
+    }
+
+    #[test]
+    fn text_from_an_editor_that_exited_with_an_error_waits_in_the_box() {
+        let mut app = with_review();
+        on_line(&mut app);
+        let actions = press(&mut app, "E");
+        let [Action::Compose { input, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        app.apply(Incoming::Composed { input: input.clone(), edited: Edited::Errored("half a thought".into()) });
+        assert_eq!(app.take_actions(), vec![], "nothing is saved before a look");
+        assert_eq!((app.input.as_ref(), app.buffer.text()), (Some(input), "half a thought"));
+        assert!(app.live_toast().unwrap().text.contains("the editor exited with an error"));
+        let actions = app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(actions.as_slice(), [Action::SaveDraft { draft, .. }] if draft.body == "half a thought"), "{actions:?}");
     }
 
     #[test]

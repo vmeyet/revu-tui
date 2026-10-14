@@ -4,6 +4,7 @@ pub(super) use super::*;
 pub(super) use crate::forge::gitlab::fixture;
 pub(super) use crate::forge::{DiffFile, Discussion, Emoji, Kind, Mr, PipelineStatus};
 pub(super) use crate::review::{Place, Row};
+pub(super) use crate::tui::compose::Edited;
 pub(super) use crate::tui::help::Help;
 pub(super) use crate::tui::theme::Theme;
 pub(super) use crate::tui::ui;

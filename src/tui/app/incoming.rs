@@ -99,11 +99,7 @@ impl App {
                 let follow = self.reread(&key);
                 self.composed.extend(follow);
             }
-            Incoming::Composed { input, text } => {
-                if let Some(text) = text {
-                    self.composed = self.submit(input, text);
-                }
-            }
+            Incoming::Composed { input, edited } => self.apply_composed(input, edited),
             Incoming::ViewReady { key, view } => self.apply_view_ready(&key, view),
             Incoming::Viewed { view, outcome } => self.apply_viewed(&view, outcome),
             Incoming::SessionPick { mr, sessions } => self.offer_sessions(*mr, sessions),

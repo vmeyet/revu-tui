@@ -160,6 +160,7 @@ All writing happens in one compose box at the bottom of the pane; the global inp
 - It starts one row high and grows with the text up to 8 rows or 40 % of the pane, then scrolls.
 - `enter` saves the draft; `⌘enter` or `ctrl-s` posts a new thread or a reply publicly at once (the box closes, the text waits under its target until the forge takes it, and a refusal opens the box again with it); in an edit-draft box they save as `enter` does; `alt-enter`, `shift-enter` (Kitty protocol) or `ctrl-j` insert a newline.
 - `E` moves the text to `$EDITOR` (then back into the box, or straight to a draft when the editor exits with content), as today.
+  A changed text from an editor that exits with an error (vim's `:cq`, or any error in the session) opens in the box with a warning instead of being saved or thrown away; an untouched or empty file is a cancel whatever the exit.
 - `s` on a line or a `V` range opens the box prefilled with the suggestion block, and `E` still works on it.
 - `esc` leaves the box without losing the text: each target keeps its unsent text for the session, so going back to the line finds it; an empty box simply closes.
 - Drafts still go through the forge's draft mechanism (GitLab draft notes, the GitHub pending review) and `P` publishes them all; nothing in this spec changes publishing.

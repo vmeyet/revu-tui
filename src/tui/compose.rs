@@ -5,9 +5,18 @@ use std::process::{Command, ExitStatus};
 
 const FALLBACK: &str = "vi";
 
-/// Opens the draft in the user's editor and gives back the message to send, or `None` when
-/// the user backed out. The temp file is gone either way.
-pub fn edit(draft: &str) -> Result<Option<String>> {
+/// What the editor gave back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Edited {
+    /// The file came back untouched or empty: the user backed out.
+    Cancelled,
+    Done(String),
+    /// The text changed but the editor exited with an error, as vim does on `:cq` or after any error in the session.
+    Errored(String),
+}
+
+/// Opens the draft in the user's editor and gives back what came of it. The temp file is gone either way.
+pub fn edit(draft: &str) -> Result<Edited> {
     let file = tempfile::Builder::new().prefix("mr-").suffix(".md").tempfile()?;
     std::fs::write(file.path(), draft)?;
     let status = Editor::from_env().open(file.path())?;
@@ -15,11 +24,14 @@ pub fn edit(draft: &str) -> Result<Option<String>> {
     Ok(to_send(draft, &edited, status.success()))
 }
 
-/// Nothing to send when the editor gave up, the file came back empty, or the draft is untouched.
-fn to_send(draft: &str, edited: &str, editor_ok: bool) -> Option<String> {
+fn to_send(draft: &str, edited: &str, editor_ok: bool) -> Edited {
     let text = edited.trim();
-    let changed = text != draft.trim();
-    (editor_ok && changed && !text.is_empty()).then(|| text.to_owned())
+    let is_cancelled = text.is_empty() || text == draft.trim();
+    match (is_cancelled, editor_ok) {
+        (true, _) => Edited::Cancelled,
+        (false, true) => Edited::Done(text.to_owned()),
+        (false, false) => Edited::Errored(text.to_owned()),
+    }
 }
 
 /// The editor to open, and the arguments it was configured with, as in `EDITOR="code -w"`.
@@ -74,16 +86,22 @@ mod tests {
 
     #[test]
     fn a_changed_file_is_sent_without_its_surrounding_blank() {
-        assert_eq!(to_send("", "hello\n", true), Some("hello".into()));
-        assert_eq!(to_send("hi", "\nhi there\n\n", true), Some("hi there".into()));
-        assert_eq!(to_send("a", "one\ntwo", true), Some("one\ntwo".into()));
+        assert_eq!(to_send("", "hello\n", true), Edited::Done("hello".into()));
+        assert_eq!(to_send("hi", "\nhi there\n\n", true), Edited::Done("hi there".into()));
+        assert_eq!(to_send("a", "one\ntwo", true), Edited::Done("one\ntwo".into()));
     }
 
     #[test]
-    fn nothing_is_sent_when_the_editor_failed_the_file_is_empty_or_the_draft_is_untouched() {
-        assert_eq!(to_send("", "hello", false), None);
-        assert_eq!(to_send("", "  \n ", true), None);
-        assert_eq!(to_send("hi", "", true), None);
-        assert_eq!(to_send("hi", "hi\n", true), None);
+    fn a_changed_file_is_kept_when_the_editor_exits_with_an_error() {
+        assert_eq!(to_send("", "hello\n", false), Edited::Errored("hello".into()));
+    }
+
+    #[test]
+    fn an_empty_or_untouched_file_cancels_whatever_the_editor_exit() {
+        for editor_ok in [true, false] {
+            assert_eq!(to_send("", "  \n ", editor_ok), Edited::Cancelled);
+            assert_eq!(to_send("hi", "", editor_ok), Edited::Cancelled);
+            assert_eq!(to_send("hi", "hi\n", editor_ok), Edited::Cancelled);
+        }
     }
 }

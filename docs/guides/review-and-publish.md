@@ -33,6 +33,7 @@ In a narrow window and in zen it sits in the diff, under the line or the thread 
 `⌥enter` adds a new line, `↑` and `↓` move between lines.
 `⌥←` and `⌥→` jump a word, `⌥⌫` deletes the word before the cursor.
 `ctrl-o` moves the text to `$EDITOR`.
+When the editor exits with an error, as vim does on `:cq`, the text you wrote waits in the box: `enter` saves it.
 `esc` leaves the box and keeps the text for later.
 
 ## Read and answer threads

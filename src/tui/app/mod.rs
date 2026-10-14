@@ -525,10 +525,10 @@ pub enum Incoming {
         said: String,
         outcome: Result<(), String>,
     },
-    /// What came back from the editor; `None` when the user backed out.
+    /// What came back from the editor.
     Composed {
         input: Input,
-        text: Option<String>,
+        edited: crate::tui::compose::Edited,
     },
     /// A piece of Claude's answer `id` for the MR `key`.
     Answer {
