@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.8.0 - 2026-10-14
+
 ### New
 
 - **Your most used reactions come first.**
