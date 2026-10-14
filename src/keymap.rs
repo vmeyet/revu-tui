@@ -7,9 +7,6 @@ use anyhow::{Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;
 
-/// Built-in keys a binding may still take over.
-const UNGUARDED: &[&str] = &["ac", "left", "right", "up", "down"];
-
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Key {
@@ -146,7 +143,7 @@ fn named(text: &str) -> Result<Option<Key>> {
 
 /// Every key, or two keys in a row, that revu reads outside a text box and a binding may not take.
 fn guarded() -> impl Iterator<Item = Vec<Key>> {
-    act::ROWS.iter().flat_map(|row| row.keys).filter(|key| !UNGUARDED.contains(key)).filter_map(|key| parse(key).ok())
+    act::ROWS.iter().flat_map(|row| row.keys).filter_map(|key| parse(key).ok())
 }
 
 /// Whether revu reads `key`, alone or as the first of two keys: a named key like `enter` whatever its
@@ -414,6 +411,14 @@ mod tests {
         assert_eq!(chars(&map.feed(Some(press(')')), press('c'))), "]c", "anything else is still the `]` prefix");
         let zx = Keymap::new(&keys(Layout::Qwerty, &[("zen", &["zx"])])).unwrap();
         assert_eq!(chars(&zx.feed(Some(press('z')), press('a'))), "za", "holding `z` never breaks `za`");
+    }
+
+    #[test]
+    fn a_comment_question_and_the_arrows_are_taken_like_every_other_key() {
+        for (key, shown) in [("ac", "`ac`"), ("left", "`←`"), ("right", "`→`"), ("up", "`↑`"), ("down", "`↓`")] {
+            let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &[key])])).unwrap_err().to_string();
+            assert!(err.contains(&format!("is already revu's {shown}")), "{key}: {err}");
+        }
     }
 
     #[test]
