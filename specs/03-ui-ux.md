@@ -274,7 +274,7 @@ One of:
 - **Files** (`t`): a tree with folders before files, folders deeper than two levels folded, `+adds −dels`, `◆n` unresolved threads and `✓` viewed on each file; `enter` on a folder folds it, on a file jumps the diff there (the tree stays open), `t` or `esc` closes it. The title counts viewed files.
 - **AI answer** (M4): title `ask · file` and the streaming markdown; a `cached` tag when served from cache.
 
-`zv` (in the diff or the tree) marks the file viewed and folds it. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
+`zv` (in the diff or the tree) marks the file viewed and folds it; the cursor stays on its header. `m` in the diff does the same, then moves to the first changed line of the next file not viewed yet, round the end of the MR; a next file that waits folded stops the cursor on its header, and with every file viewed it stays with a toast. On a viewed file `m` unmarks it and stays, as `zv` does. Viewed files are saved per MR with a fingerprint of their change: a file the author pushes to again comes back unviewed.
 
 The MR's description, checks, reviews, threads and files are the cover (`i`), drawn over the main area rather than in this pane; `o` opens the MR in the browser and `y` copies its link.
 
@@ -345,6 +345,7 @@ Marked `M1` `M2` `M3` `M4` by milestone. Everything is in `?` `?`.
 | `zc` `zo` | close, open | M1 |
 | `zM` `zR` | fold, unfold every file | M1 |
 | `zv` | mark viewed (folds) | M3 |
+| `m` | mark viewed, on to the first change of the next file not viewed | post-M5 |
 | `t` | file tree | M3 |
 | `T` | every thread of the MR in the right pane (`09-thread-pane.md` § Every thread) | M3b |
 | `p` | pipeline: jobs by stage, failures first, `o` opens a job | M5 |

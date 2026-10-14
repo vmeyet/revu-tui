@@ -57,6 +57,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `zM` `zR` | fold, unfold every file |
 | `zh` | fold the MR header |
 | `zv` | file viewed: it folds away |
+| `m` | file viewed, on to the next one |
 
 ## Comment & publish
 

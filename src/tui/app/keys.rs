@@ -262,6 +262,7 @@ impl App {
             KeyCode::Char('/') => self.start_search(),
             KeyCode::Char('n') if self.search.is_some() => self.search_step(true),
             KeyCode::Char('N') if self.search.is_some() => self.search_step(false),
+            KeyCode::Char('m') => return self.view_and_move_on(),
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(HALF_PAGE),
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(-HALF_PAGE),
             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.review_move(full_page(self.areas.review)),

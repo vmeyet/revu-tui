@@ -26,7 +26,7 @@ The bottom row is a tap bar: each label presses a key for you.
 | Page | Labels | Keys they press |
 |---|---|---|
 | Queue | open, filter, refresh, copy, more | `enter` `/` `r` `y` `:` |
-| Diff | file, thread, viewed, comment, back, more | `tab` `]n` `zv` `c` `h` `:` |
+| Diff | file, thread, viewed, comment, back, more | `tab` `]n` `m` `c` `h` `:` |
 | A thread, in the diff or in the pane | reply, resolve, react, copy, back, more | `r` `R` `+` `y` `h` `:` |
 | Another right pane | back, more | `h` `:` |
 

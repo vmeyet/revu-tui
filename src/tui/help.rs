@@ -79,6 +79,7 @@ pub const GROUPS: [Group; 8] = [
             ("zM zR", "fold, unfold every file"),
             ("zh", "fold the MR header"),
             ("zv", "file viewed: it folds away"),
+            ("m", "file viewed, on to the next one"),
         ],
         focus: &[Focus::Review],
     },

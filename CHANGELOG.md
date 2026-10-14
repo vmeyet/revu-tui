@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **Mark a file viewed and move on in one key.**
+  In the diff and zen, on a thread row, and as `viewed` in the phone's tap bar.
+  `m` marks the file viewed and jumps to the first change of the next file not viewed; `zv` still stays put.
+
 ## 0.8.0 - 2026-10-14
 
 ### New

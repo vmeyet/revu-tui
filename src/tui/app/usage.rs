@@ -250,6 +250,14 @@ mod tests {
     }
 
     #[test]
+    fn m_counts_as_viewed() {
+        let mut app = counting();
+        to_step(&mut app, 1);
+        press(&mut app, "m");
+        assert_eq!(app.take_usage().unwrap().actions.get("viewed"), Some(&1));
+    }
+
+    #[test]
     fn typed_text_is_never_counted() {
         let mut app = counting();
         to_step(&mut app, 1);

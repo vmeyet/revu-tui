@@ -63,7 +63,7 @@ One bottom row of labels, under the status row, in the compact layout only; `[tu
 | Page | Labels and the keys they press |
 |---|---|
 | Queue | open `enter` · filter `/` · refresh `r` · copy `y` · more `:` |
-| Diff | file `tab` · thread `]n` · viewed `zv` · comment `c` · back `h` · more `:` |
+| Diff | file `tab` · thread `]n` · viewed `m` · comment `c` · back `h` · more `:` |
 | Thread: a thread row in the diff, or the thread pane | reply `r` · resolve `R` · react `+` · copy `y` · back `h` · more `:` |
 | Pane: tree, pipeline, outline, answer | back `h` · more `:` |
 

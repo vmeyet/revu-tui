@@ -1,8 +1,9 @@
-//! The file tree in the right pane (`t`) and viewed files (`zv`).
+//! The file tree in the right pane (`t`) and viewed files (`zv`, `m`).
 use super::{Action, App, Focus, Open};
+use crate::diff::LineKind;
 use crate::diff::fold::Fold;
-use crate::review::Row;
 use crate::review::tree::{self, TreeFolds, TreeRow};
+use crate::review::{File, Row};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// The tree while it is open: which folders the reader flipped, and the row under the cursor.
@@ -107,6 +108,34 @@ impl App {
         self.review_jump_to(|row| matches!(row, Row::File { index: i, .. } if *i == index));
         actions
     }
+
+    /// `m`: `zv`, then, once the file is viewed, on to the first change of the next file not viewed yet, wrapping.
+    pub(super) fn view_and_move_on(&mut self) -> Vec<Action> {
+        let actions = self.toggle_viewed();
+        let Some(open) = &self.open else { return actions };
+        let files = open.review.files.clone();
+        let unviewed: Vec<bool> = files.iter().map(|file| !open.review.viewed.contains(&file.new_path)).collect();
+        let is_viewed_here = open.row().and_then(Row::file).is_some_and(|index| !unviewed[index]);
+        if !is_viewed_here {
+            return actions;
+        }
+        if !unviewed.contains(&true) {
+            self.toast("every file viewed");
+            return actions;
+        }
+        self.review_jump(true, move |row| is_first_stop(&files, &unviewed, row));
+        actions
+    }
+}
+
+/// Where `m` lands in a file not viewed yet: a changed line, or the header of a file that waits folded.
+fn is_first_stop(files: &[File], unviewed: &[bool], row: &Row) -> bool {
+    match *row {
+        Row::File { index, open: false } => unviewed[index],
+        Row::Pair { file, .. } => unviewed[file],
+        Row::Line { file, hunk, index } => unviewed[file] && files[file].hunks[hunk].lines[index].kind != LineKind::Context,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -150,6 +179,81 @@ mod tests {
         press(&mut app, "zv");
         assert!(!app.open.as_ref().unwrap().review.viewed.contains(&path));
         assert!(app.open.as_ref().unwrap().review.fold.file_is_open(&path));
+    }
+
+    fn viewed(app: &App) -> Vec<String> {
+        app.open.as_ref().unwrap().review.viewed.iter().cloned().collect()
+    }
+
+    fn row(app: &App) -> Row {
+        app.open.as_ref().unwrap().row().cloned().unwrap()
+    }
+
+    #[test]
+    fn m_marks_the_file_viewed_as_zv_does_then_moves_to_the_first_change_of_the_next_unviewed_file() {
+        let mut marked = with_long_review();
+        let mut zv = with_long_review();
+        to_step(&mut marked, 3);
+        to_step(&mut zv, 3);
+        assert_eq!(press(&mut marked, "m"), press(&mut zv, "zv"));
+        assert_eq!(viewed(&marked), viewed(&zv));
+        assert_eq!(row(&zv), Row::File { index: 0, open: false }, "zv stays on the folded file");
+        assert_eq!(row(&marked), Row::Line { file: 1, hunk: 0, index: 0 }, "mod.rs, its removed line");
+    }
+
+    #[test]
+    fn m_wraps_to_the_first_file_and_stays_once_every_file_is_viewed() {
+        let mut app = with_long_review();
+        app.review_jump_to(|row| matches!(row, Row::Line { file: 1, .. }));
+        press(&mut app, "m");
+        assert_eq!(row(&app), Row::Line { file: 0, hunk: 0, index: 0 }, "from the last file, on to the first");
+        press(&mut app, "m");
+        assert_eq!(row(&app), Row::File { index: 0, open: false });
+        assert_eq!(app.live_toast().map(|t| t.text.clone()).as_deref(), Some("every file viewed"));
+    }
+
+    #[test]
+    fn m_on_a_viewed_file_unmarks_it_and_stays() {
+        let mut app = with_long_review();
+        to_step(&mut app, 3);
+        press(&mut app, "zvm");
+        assert_eq!(viewed(&app), [] as [String; 0]);
+        assert_eq!(row(&app), Row::File { index: 0, open: true });
+    }
+
+    #[test]
+    fn m_stops_on_the_header_of_a_next_file_that_opens_folded() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "m");
+        assert_eq!(row(&app), Row::File { index: 1, open: false }, "Cargo.lock waits folded until viewed");
+    }
+
+    /// `m` on charge.rs: it is viewed, and the cursor waits on the folded Cargo.lock.
+    fn assert_m_moves_on(place: &str, mut app: App) {
+        press(&mut app, "m");
+        assert_eq!(viewed(&app), ["src/pay/charge.rs"], "{place}");
+        assert_eq!(row(&app), Row::File { index: 1, open: false }, "{place}");
+    }
+
+    #[test]
+    fn m_works_in_zen_in_a_narrow_or_compact_window_and_on_a_thread_row() {
+        let mut zen = with_review();
+        on_line(&mut zen);
+        press(&mut zen, "zz");
+        assert_m_moves_on("zen", zen);
+        let mut narrow = with_review();
+        render(&mut narrow, 100, 30);
+        on_line(&mut narrow);
+        assert_m_moves_on("narrow", narrow);
+        let mut compact = with_review();
+        phone(&mut compact);
+        on_line(&mut compact);
+        assert_m_moves_on("compact", compact);
+        let mut thread_row = zen_with_threads(vec![thread_on_line_13("t1", 1)]);
+        press(&mut thread_row, "j");
+        assert!(thread_row.on_thread_row());
+        assert_m_moves_on("thread row", thread_row);
     }
 
     #[test]

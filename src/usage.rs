@@ -289,6 +289,7 @@ fn diff_key(code: KeyCode) -> Option<&'static str> {
         KeyCode::Char('V') => "select",
         KeyCode::Char('E') => "editor",
         KeyCode::Char('R') => "resolve",
+        KeyCode::Char('m') => "viewed",
         KeyCode::Char('s') => "suggest",
         KeyCode::Char('A') => "approve",
         KeyCode::Char('M') => "merge",

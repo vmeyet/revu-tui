@@ -29,7 +29,7 @@ const QUEUE: [Tap; 5] = [
 const DIFF: [Tap; 6] = [
     tap("file", "tab", "next file"),
     tap("thread", "]n", "next open thread"),
-    tap("viewed", "zv", "file viewed: it folds away"),
+    tap("viewed", "m", "file viewed, on to the next one"),
     tap("comment", "c", "comment on the line"),
     tap("back", "h", "back to the queue"),
     MORE,
@@ -209,7 +209,7 @@ mod tests {
             on_line(&mut app);
             app
         };
-        for (label, keys) in [("file", "tab"), ("thread", "]n"), ("viewed", "zv"), ("comment", "c"), ("back", "h"), ("more", ":")] {
+        for (label, keys) in [("file", "tab"), ("thread", "]n"), ("viewed", "m"), ("comment", "c"), ("back", "h"), ("more", ":")] {
             let mut tapped = on_a_line();
             let (typed, asked) = after(on_a_line(), keys);
             assert_eq!(tap(&mut tapped, label), asked, "{label}");
