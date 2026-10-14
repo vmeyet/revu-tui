@@ -1,6 +1,7 @@
 //! What revu is used for, counted on this machine only: which actions, how long on each screen,
 //! and a few habits a faster key would replace. Opt-in with `[usage] enabled = true`.
 //! Nothing about the MRs is kept: no titles, paths, text, hosts or projects, only action names.
+use crate::act::{self, Section};
 use crate::cache::Cache;
 use anyhow::{Result, bail};
 use chrono::NaiveDate;
@@ -11,102 +12,6 @@ use std::time::Duration;
 /// The file, at the cache root; deleting it starts the counts again.
 pub const FILE: &str = "usage.jsonl";
 
-/// How the report groups actions, in the order a review goes; anything not listed lands in OTHER,
-/// so a new action shows up without anyone updating this table.
-const GROUPS: &[(&str, &[&str])] = &[
-    (
-        "move",
-        &[
-            "move_down",
-            "move_up",
-            "page_down",
-            "page_up",
-            "full_page_down",
-            "full_page_up",
-            "top",
-            "bottom",
-            "focus_left",
-            "focus_right",
-            "open",
-            "back",
-        ],
-    ),
-    (
-        "jump",
-        &[
-            "next_thread",
-            "prev_thread",
-            "next_any_thread",
-            "prev_any_thread",
-            "next_hunk",
-            "prev_hunk",
-            "next_file",
-            "prev_file",
-            "next_file_unresolved",
-            "prev_file_unresolved",
-            "next_review",
-            "prev_review",
-            "next_mr",
-            "prev_mr",
-        ],
-    ),
-    ("queue", &["refresh", "scope", "sort_queue", "group_by_author", "filter", "views"]),
-    (
-        "view",
-        &[
-            "fold_toggle",
-            "fold_open",
-            "fold_close",
-            "fold_all",
-            "unfold_all",
-            "fold_header",
-            "viewed",
-            "zen",
-            "side_by_side",
-            "peek_after",
-            "peek_before",
-            "tree",
-            "pipeline",
-            "outline",
-            "prose",
-            "wrap",
-            "whitespace",
-            "more_context",
-            "view_file",
-            "description",
-        ],
-    ),
-    (
-        "comment & publish",
-        &["comment", "comment_old", "select", "suggest", "editor", "resolve", "publish", "approve", "merge", "ready", "share"],
-    ),
-    (
-        "thread pane",
-        &[
-            "every_thread",
-            "reply",
-            "react",
-            "apply_suggestion",
-            "edit_draft",
-            "delete_draft",
-            "close_pane",
-            "next_in_line",
-            "prev_in_line",
-            "open_link",
-            "copy_first_link",
-        ],
-    ),
-    ("ask claude", &["ask_explain", "ask_risks", "ask_summary", "ask_thread", "ask_comment", "ask_free"]),
-    ("search & app", &["palette", "jump", "palette_mr", "palette_file", "open_browser", "copy_link", "session", "help", "quit"]),
-    (
-        "commands",
-        &[
-            ":go", ":open", ":copy", ":approve", ":merge", ":ready", ":publish", ":threads", ":all", ":outline", ":set", ":view", ":ai",
-            ":ask", ":share", ":session", ":help", ":quit",
-        ],
-    ),
-];
-
 /// A habit a faster key replaces, with what to try instead.
 pub const HINTS: &[(&str, &str)] = &[
     ("long_walk", "walked 15 lines or more with j or k to a hunk or a thread; ]c (next hunk) or ]n (next thread) jumps there"),
@@ -116,7 +21,7 @@ pub const HINTS: &[(&str, &str)] = &[
 
 /// Every action the report knows, bindable ones first.
 pub fn known() -> Vec<&'static str> {
-    crate::act::listed_names().collect()
+    crate::act::listed_names()
 }
 
 /// How often a hint shows as a toast, over every session; after that only the report counts it.
@@ -335,19 +240,18 @@ pub fn report(days: &[Day], today: NaiveDate, window: Option<u32>) -> Report {
         hints: HINTS.iter().filter_map(|(name, text)| hints.get(*name).map(|n| ((*name).to_owned(), *n, (*text).to_owned()))).collect(),
     }
 }
-
 /// Names by report group, groups in review order, OTHER last for anything no group lists.
 fn grouped<'a>(names: impl Iterator<Item = &'a str>) -> Vec<(String, Vec<String>)> {
     let names: Vec<&str> = names.collect();
-    let mut out: Vec<(String, Vec<String>)> = GROUPS
+    let members_of =
+        |section: Section| act::listed_in(section).into_iter().filter(|m| names.contains(m)).map(str::to_owned).collect::<Vec<_>>();
+    let mut out: Vec<(String, Vec<String>)> = Section::ALL
         .iter()
-        .map(|(group, members)| {
-            ((*group).to_owned(), members.iter().filter(|m| names.contains(m)).map(|m| (*m).to_owned()).collect::<Vec<_>>())
-        })
+        .map(|report| (report.title().to_owned(), members_of(*report)))
         .filter(|(_, members)| !members.is_empty())
         .collect();
-    let other: Vec<String> =
-        names.iter().filter(|name| !GROUPS.iter().any(|(_, members)| members.contains(name))).map(|n| (*n).to_owned()).collect();
+    let is_in_a_group = |name: &str| Section::ALL.iter().any(|report| act::listed_in(*report).contains(&name));
+    let other: Vec<String> = names.iter().filter(|name| !is_in_a_group(name)).map(|n| (*n).to_owned()).collect();
     if !other.is_empty() {
         out.push(("other".to_owned(), other));
     }
@@ -491,11 +395,27 @@ mod tests {
     }
 
     #[test]
+    fn every_countable_action_is_known_once_in_the_order_of_the_table() {
+        let known = known();
+        for name in ["pin", ":ready", ":pin", ":unpin", ":outline", ":session", ":news"] {
+            assert!(known.contains(&name), "`{name}` is counted, so it shows when unused");
+        }
+        assert_eq!(known.iter().filter(|name| **name == "viewed").count(), 1, "`m` and `zv` share a name");
+        let commands: Vec<String> = crate::act::verbs().map(|verb| format!(":{}", verb.word)).collect();
+        let report = grouped(known.iter().copied());
+        assert_eq!(
+            report.iter().find(|(group, _)| group == "commands").map(|(_, names)| names),
+            Some(&commands),
+            "as the palette lists them"
+        );
+    }
+
+    #[test]
     fn an_action_no_group_lists_still_shows() {
         let groups = grouped(["next_thread", "brand_new"].into_iter());
         assert_eq!(groups.last().unwrap(), &("other".to_owned(), vec!["brand_new".to_owned()]));
         for name in known() {
-            let listed = GROUPS.iter().any(|(_, members)| members.contains(&name));
+            let listed = Section::ALL.iter().any(|report| act::listed_in(*report).contains(&name));
             assert!(listed, "`{name}` belongs in a report group");
         }
     }

@@ -32,6 +32,9 @@ Each entry says what changed, then where, then how to use it.
   In `config.toml`: revu stops at start and names the key, as it does for any key already taken.
 - **`revu usage` counts what each key did.**
   In `revu usage`: a key that does nothing, like `c` in prose, no longer counts; `enter` in the thread pane counts as what it did.
+- **`revu usage` lists every action it counts, in one order.**
+  Under NEVER USED and RARELY USED: `b`, `:ready`, `:pin` and the other commands now show when unused.
+  Actions follow the order of the keys reference, and commands the order of the palette.
 - **Your own keys work on the cover page.**
   On the MR cover page, `i`: a key from `[keys.bind]` does what its action does there, as in every other pane.
 - **A second host that misses one refresh keeps its MRs.**

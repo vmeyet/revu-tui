@@ -449,6 +449,7 @@ A network failure while browsing does not clear the screen: the stale view stays
 ## Usage counts (`[usage]`)
 
 - A key counts as the action its handler ran, under that action's name in `src/act.rs`: `q` closing a pane is `close_pane`, `enter` on a file row `fold_toggle`, `enter` on a resolved thread in the pane `fold_toggle`; a key that does nothing counts nothing, and neither does an action with no name (the search, the outline's own keys).
+- `revu usage` lists every counted action under its section in `src/act.rs`, in table order, so commands come in the palette's order.
 - Screen time runs up to `IDLE_AFTER` (60 s) after the last key, click or wheel, and stops while the terminal reports it lost focus (`?1004`); focus back starts it again.
 - `long_walk`: 15 `j`/`k` in a row in the diff, counted on the step that reaches or passes a hunk header or a marked line, once per walk.
 - `queue_after_zen`: leaving zen with a key, then opening another MR from the queue within `ZEN_TO_QUEUE` (30 s).
