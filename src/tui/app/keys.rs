@@ -146,6 +146,9 @@ impl App {
     /// The first key of a two-key default, where the focused pane reads it as one.
     fn prefix_opened(&self, key: KeyEvent) -> Option<char> {
         let KeyCode::Char(c) = key.code else { return None };
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return None;
+        }
         let is_read = match c {
             'z' | '[' | ']' if self.focus != Focus::Side || self.tree_open() => true,
             'z' => self.outline_keys(),
@@ -278,9 +281,7 @@ impl App {
         {
             return actions;
         }
-        if !key.modifiers.contains(KeyModifiers::CONTROL)
-            && let Some(actions) = self.handle_write_key(key)
-        {
+        if let Some(actions) = self.handle_write_key(key) {
             return actions;
         }
         let actions = self.move_in_review(key);

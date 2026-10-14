@@ -3,7 +3,7 @@
 use super::{Action, App, Focus, Open};
 use crate::act::{self, Act};
 use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
-use crossterm::event::{KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 use std::collections::BTreeSet;
 
 const HALF_PAGE: usize = 5;
@@ -288,15 +288,14 @@ impl App {
 
     /// The keys that act on the thread, note or draft under the cursor, in the pane or on a thread row of the diff.
     pub(super) fn handle_thread_key(&mut self, key: KeyEvent) -> Option<Vec<Action>> {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let actions = match act::act_in(act::Pane::ThreadRow, key)? {
-            Act::OpenLink if !ctrl => self.link_or_toast().map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default(),
+            Act::OpenLink => self.link_or_toast().map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default(),
             Act::CopyFirstLink => self.link_or_toast().map(|url| vec![Action::copy_link(url)]).unwrap_or_default(),
             Act::OpenBrowser => self.thread_url().map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
             Act::CopyLink => self.thread_url().map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
             Act::ViewFile => self.view_thread(),
             Act::Resolve => self.toggle_resolved(),
-            Act::DeleteDraft if !ctrl => self.delete_draft_here(),
+            Act::DeleteDraft => self.delete_draft_here(),
             Act::Editor => self.compose_draft_here(),
             Act::Reply => {
                 self.reply_here();
@@ -310,7 +309,7 @@ impl App {
                 self.open_react();
                 vec![]
             }
-            Act::EditDraft if !ctrl => {
+            Act::EditDraft => {
                 if !self.edit_draft_here() {
                     self.toast("e edits one of your drafts");
                 }

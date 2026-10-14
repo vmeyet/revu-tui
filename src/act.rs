@@ -721,13 +721,13 @@ pub fn with_key(code: KeyCode, modifiers: KeyModifiers, applies: impl Fn(&Row) -
     DEFAULT_KEYS.iter().find(is_it).map(|(row, _)| row.act)
 }
 
-/// What `key` does in `pane`: its ctrl default when ctrl is held, else the key whatever its modifiers.
+/// What `key` does in `pane`: with ctrl held, only a ctrl default; else its plain default, whatever else is held.
 /// Where two rows share a key in one pane, the first one wins.
 pub fn act_in(pane: Pane, key: KeyEvent) -> Option<Act> {
     let works_here = |row: &Row| row.panes.contains(&pane);
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    let held = if ctrl { with_key(key.code, KeyModifiers::CONTROL, works_here) } else { None };
-    held.or_else(|| with_key(key.code, KeyModifiers::NONE, works_here))
+    let modifiers = if ctrl { KeyModifiers::CONTROL } else { KeyModifiers::NONE };
+    with_key(key.code, modifiers, works_here)
 }
 
 /// Every action `[keys.bind]` can name, with the default key a binding stands for.
@@ -791,6 +791,38 @@ mod tests {
                 assert!(twin.is_none(), "{:?} and {:?} both count {keys:?} in {place:?}", row.act, twin.map(|(other, _)| other.act));
             }
         }
+    }
+
+    fn press(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
+        KeyEvent::new(code, modifiers)
+    }
+
+    #[test]
+    fn a_ctrl_default_does_its_action_in_every_pane_it_works_in() {
+        let ctrl_keys: Vec<(&Row, KeyEvent)> = DEFAULT_KEYS
+            .iter()
+            .filter_map(|(row, keys)| match keys.as_slice() {
+                [only] if only.modifiers == KeyModifiers::CONTROL => Some((*row, *only)),
+                _ => None,
+            })
+            .collect();
+        let names: Vec<&str> = ctrl_keys.iter().filter_map(|(row, _)| row.name.counted()).collect();
+        assert_eq!(names, ["view_file", "jump", "quit", "page_down", "page_up", "full_page_down", "full_page_up"]);
+        for (row, key) in ctrl_keys {
+            for pane in row.panes {
+                assert_eq!(act_in(*pane, key), Some(row.act), "{key:?} in {pane:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_letter_with_ctrl_does_nothing_unless_it_is_a_ctrl_default() {
+        assert_eq!(act_in(Pane::Tree, press(KeyCode::Char('t'), KeyModifiers::CONTROL)), None);
+        assert_eq!(act_in(Pane::ThreadRow, press(KeyCode::Char('r'), KeyModifiers::CONTROL)), None);
+        assert_eq!(act_in(Pane::Cover, press(KeyCode::Char('i'), KeyModifiers::CONTROL)), None);
+        assert_eq!(act_in(Pane::Queue, press(KeyCode::Char('j'), KeyModifiers::CONTROL)), None);
+        assert_eq!(act_in(Pane::Queue, press(KeyCode::Char('j'), KeyModifiers::ALT)), Some(Act::MoveDown), "only ctrl is told apart");
+        assert_eq!(act_in(Pane::Diff, press(KeyCode::Char('v'), KeyModifiers::CONTROL)), Some(Act::ViewFile));
     }
 
     #[test]

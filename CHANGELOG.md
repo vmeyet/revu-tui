@@ -23,6 +23,9 @@ Each entry says what changed, then where, then how to use it.
 
 - **Paging down at the end of a Markdown file no longer stops revu.**
   In the prose view (`v`), after `G`, with `^f` or PgDn.
+- **A letter pressed with ctrl no longer does what the letter alone does.**
+  Everywhere outside a text box: `^t` no longer closes the file tree, `^r` no longer replies, `^j` no longer moves.
+  Only the ctrl keys the help lists act: `^d` `^u` `^f` `^b` `^k` `^v` and `^c`.
 - **A second host that misses one refresh keeps its MRs.**
   In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
   Once it answers again, no notification comes for an MR you already had.
