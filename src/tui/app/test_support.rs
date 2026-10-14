@@ -59,6 +59,7 @@ pub(super) fn settings() -> Settings {
         share: vec![],
         prefetch: 0,
         ascii: false,
+        reactions: crate::reactions::History::default(),
         quit_confirm: true,
         usage: false,
         whats_new: WhatsNew::default(),

@@ -9,6 +9,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **Your most used reactions come first.**
+  In the reaction picker, on each host apart, with GitLab emoji you found by name among them.
+  `+` lists the three you give most, then the usual eight.
 - **Copy a link to the device in your hand.**
   Over ssh or mosh, and inside tmux with `set-clipboard on`.
   `y` copies the link of the MR, line, thread or job, and every copy reaches your terminal's clipboard.

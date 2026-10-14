@@ -74,6 +74,7 @@ Side by side, `D`, keeps every thread in the pane.
 ## React
 
 `+` opens the eight reactions both forges share: 👍 👎 😄 😕 💖 🎉 🚀 👀.
+The three you give most on that host come first, then the rest of the eight in that order.
 Press `1` to `8`, or move with `h` `l` and press `enter`.
 On GitLab, `/` searches every emoji by name: type part of it (`100`, `party`), move with `←` `→`, and press `enter`.
 GitHub has only the eight.

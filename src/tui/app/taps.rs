@@ -228,6 +228,17 @@ mod tests {
     }
 
     #[test]
+    fn the_react_label_and_plus_on_a_thread_row_open_the_same_row() {
+        let mut app = on_a_thread_row();
+        app.reactions = crate::reactions::History::default().with("gitlab.com", Emoji::Eyes);
+        tap(&mut app, "react");
+        let tapped = app.react.take().unwrap().row;
+        press(&mut app, "+");
+        assert_eq!(app.react.take().unwrap().row, tapped);
+        assert_eq!(tapped[0], Emoji::Eyes);
+    }
+
+    #[test]
     fn a_tap_on_a_thread_label_acts_on_the_thread_under_the_cursor() {
         let mut app = on_a_thread_row();
         let resolved = tap(&mut app, "resolve");

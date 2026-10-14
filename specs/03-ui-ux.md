@@ -170,6 +170,10 @@ A hunk row is `▾ @@ -a,b +c,d @@ context`, `muted`, with the function context 
 On a line with a thread, `+` opens the reaction picker on the thread's first note, the diff keeping the focus (zen reacts this way); elsewhere `+` does nothing.
 The two keys used to be one `+`, which left `[keys.bind]` unable to tell `more_context` from `react`.
 The picker holds the eight reactions both forges share; where the forge takes any emoji (`Kind::any_emoji`, GitLab), `/` turns it into a search over every emoji by its short code, ranked by the fuzzy matcher, eight to a page.
+The row leads with the three reactions I gave most on the MR's host (`reactions.json` in the shared cache), the most given first, ties to the latest; the eight follow in their fixed order without those, eight slots in all.
+Three is under half the row, so at least five of the eight keep their order; on GitLab a leading emoji found by name pushes the last of the eight out of the row, `/` still finds them.
+Where the forge takes only the eight, only they lead.
+Adding a reaction counts it, taking one off does not; a search lists my most used first among equally good matches.
 
 Sticky headers: once a file's own row scrolls above the view, a copy stays pinned at the top of the diff, on the surface colour, until the next file's row reaches the top.
 When the cursor's hunk header has also scrolled off, it is pinned below the file.

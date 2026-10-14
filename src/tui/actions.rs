@@ -2,7 +2,7 @@
 use super::app::{self, Action, Failure, Incoming, Part, Post, QueueView};
 use super::backend::{Backend, MrState, Opening};
 use super::blocking;
-use crate::cache::keys;
+use crate::cache::{Cache, keys};
 use crate::forge::{Forge, MrKey};
 use anyhow::{Context as _, Result};
 use futures_util::StreamExt;
@@ -141,6 +141,11 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::React { key, thread, index, note, emoji, on } => {
                 if let Err(e) = backend.forge_of(&key).react(&note, emoji, on).await {
                     send(failed(app::react_failure(thread, index, emoji, on), &e));
+                }
+            }
+            Action::CountReaction { host, emoji } => {
+                if let Err(e) = blocking(move || crate::reactions::record(&Cache::shared(), &host, emoji)).await {
+                    tracing::warn!("counting the reaction failed: {e:#}");
                 }
             }
             Action::Merge { key, head, plan } => {

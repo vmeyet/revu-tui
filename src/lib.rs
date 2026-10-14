@@ -20,6 +20,7 @@ mod open;
 mod outline;
 mod program;
 mod query;
+mod reactions;
 mod ready;
 mod render;
 mod review;

@@ -101,6 +101,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         share: crate::share::targets(&ctx.config.share),
         prefetch: ctx.config.queue.prefetch,
         ascii: ctx.config.tui.ascii,
+        reactions: crate::reactions::read(&Cache::shared()),
         quit_confirm: ctx.config.keys.quit_confirm,
         usage: ctx.config.usage.enabled,
         whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),

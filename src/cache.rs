@@ -136,6 +136,24 @@ impl Cache {
         self.write_bytes(key, &serde_json::to_vec(value)?)
     }
 
+    /// Reads, changes and writes one entry while holding `<key>.lock`, so revu processes sharing
+    /// the cache take turns and none loses another's change; a missing or broken entry starts from the default.
+    pub fn update<T: Serialize + DeserializeOwned + Default>(&self, key: &str, change: impl FnOnce(T) -> T) -> Result<T> {
+        let lock = self.dir.join(format!("{key}.lock"));
+        create_private_dirs(&self.dir, lock.parent().context("cache key has no parent")?)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock)
+            .with_context(|| format!("opening {}", lock.display()))?;
+        std::fs::set_permissions(&lock, private(FILE_MODE))?;
+        file.lock().with_context(|| format!("locking {}", lock.display()))?;
+        let changed = change(self.read(key).unwrap_or_default());
+        self.write(key, &changed)?;
+        Ok(changed)
+    }
+
     /// A file that is not JSON, such as a downloaded picture; a missing one is a miss.
     pub fn read_bytes(&self, key: &str) -> Option<Vec<u8>> {
         std::fs::read(self.dir.join(key)).ok()
@@ -264,6 +282,11 @@ pub mod keys {
     /// How far the reader got in revu's own changelog, in the shared cache.
     pub fn news() -> String {
         "news.json".to_owned()
+    }
+
+    /// How often I gave each reaction, per host, in the shared cache.
+    pub fn reactions() -> String {
+        "reactions.json".to_owned()
     }
 
     fn slug(project: &str) -> String {
@@ -472,6 +495,35 @@ mod tests {
         let finished: HashSet<(String, u64)> = [("acme/widgets".to_owned(), 40)].into();
         let gone: Vec<u64> = to_forget(&all, &finished, now, day * 30).into_iter().map(|k| k.number).collect();
         assert_eq!(gone, [40, 42], "41 is open and was read two days ago");
+    }
+
+    #[test]
+    fn an_update_starts_a_missing_or_broken_entry_from_the_default() {
+        let (dir, cache) = cache();
+        assert_eq!(cache.update("count.json", |n: u32| n + 1).unwrap(), 1);
+        assert_eq!(cache.update("count.json", |n: u32| n + 1).unwrap(), 2);
+        std::fs::write(dir.path().join("gitlab.com/count.json"), b"{nope").unwrap();
+        assert_eq!(cache.update("count.json", |n: u32| n + 1).unwrap(), 1);
+        assert_eq!(cache.read::<u32>("count.json"), Some(1));
+    }
+
+    #[test]
+    fn updates_from_many_writers_at_once_lose_nothing() {
+        let (_dir, cache) = cache();
+        let writers: Vec<_> = (0..8)
+            .map(|_| {
+                let cache = cache.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..25 {
+                        cache.update("count.json", |n: u32| n + 1).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        assert_eq!(cache.read::<u32>("count.json"), Some(200));
     }
 
     #[test]

@@ -1,17 +1,18 @@
 //! `+` in the thread pane, or on a diff line with a thread: react to a note with one of the eight reactions
 //! both forges share, or on GitLab with any emoji found by name after `/`. The count moves at once;
-//! a refusal puts it back.
-use super::{Action, App, EntryKind, Failure};
+//! a refusal puts it back. The reactions I give most on the host lead the row.
+use super::{Action, App, EntryKind, Failure, MrKey};
 use crate::forge::{Emoji, Note};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// The picker open on note `note` of thread `thread`, `selected` the reaction `enter` gives.
-/// With a `search` (GitLab only), the choices are the emoji whose name matches it.
+/// The choices are `row`, or with a `search` (GitLab only) the emoji whose name matches it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pick {
     pub thread: String,
     pub note: usize,
     pub selected: usize,
+    pub row: Vec<Emoji>,
     pub search: Option<Search>,
 }
 
@@ -24,19 +25,27 @@ pub struct Search {
 /// How many choices the status line shows at once.
 pub const PAGE: usize = 8;
 
-impl Pick {
-    fn on(thread: String, note: usize) -> Self {
-        Self { thread, note, selected: 0, search: None }
-    }
+/// How many of my most used reactions lead the row: under half of it, so most of the eight keep their place.
+const LEADING: usize = 3;
 
+/// The picker's row: my `LEADING` most used reactions, then the eight in their fixed order without those.
+fn row(most_used: &[Emoji]) -> Vec<Emoji> {
+    let leading = &most_used[..most_used.len().min(LEADING)];
+    let rest = Emoji::ALL.into_iter().filter(|e| !leading.contains(e));
+    leading.iter().copied().chain(rest).take(PAGE).collect()
+}
+
+impl Pick {
     fn choices(&self) -> &[Emoji] {
-        self.search.as_ref().map_or(&Emoji::ALL, |s| &s.found)
+        self.search.as_ref().map_or(&self.row, |s| &s.found)
     }
 }
 
 impl Search {
-    fn of(query: String) -> Self {
-        let names = Emoji::ALL.into_iter().chain(Emoji::others()).map(|e| (e.gitlab().to_owned(), e));
+    /// Equally good matches keep the order they are listed in, so my most used come first among them.
+    fn of(query: String, most_used: &[Emoji]) -> Self {
+        let rest = Emoji::ALL.into_iter().chain(Emoji::others()).filter(|e| !most_used.contains(e));
+        let names = most_used.iter().copied().chain(rest).map(|e| (e.gitlab().to_owned(), e));
         let found = crate::fuzzy::rank(&query, names).into_iter().map(|(_, e)| e).collect();
         Self { query, found }
     }
@@ -54,7 +63,7 @@ impl App {
             return;
         };
         let Some(thread) = stop.thread else { return };
-        self.react = Some(Pick::on(thread, note));
+        self.react = Some(self.pick_on(thread, note));
     }
 
     /// `+` on a diff line with a thread: the picker on its first note, as the pane would open it,
@@ -65,8 +74,23 @@ impl App {
         let Some(thread) = place.and_then(|place| open.review.conversations(&place).into_iter().find_map(|c| c.thread)) else {
             return false;
         };
-        self.react = Some(Pick::on(thread, 0));
+        self.react = Some(self.pick_on(thread, 0));
         true
+    }
+
+    fn pick_on(&self, thread: String, note: usize) -> Pick {
+        Pick { thread, note, selected: 0, row: row(&self.most_used()), search: None }
+    }
+
+    fn host_of<'a>(&'a self, key: &'a MrKey) -> &'a str {
+        key.host.as_deref().unwrap_or(&self.host)
+    }
+
+    /// The reactions I gave on the open MR's host that its forge takes, the most used first.
+    fn most_used(&self) -> Vec<Emoji> {
+        let Some(open) = &self.open else { return vec![] };
+        let any = self.any_emoji();
+        self.reactions.most_used(self.host_of(&open.key)).into_iter().filter(|e| any || Emoji::ALL.contains(e)).collect()
     }
 
     /// Whether the open MR's forge takes any emoji, not only the eight.
@@ -78,20 +102,21 @@ impl App {
         let Some(pick) = self.react.take() else { return vec![] };
         let last = pick.choices().len().saturating_sub(1);
         let moved = |selected: usize| Some(Pick { selected, ..pick.clone() });
+        let find = |query: String| Search::of(query, &self.most_used());
         let (next, chosen) = match (key.code, &pick.search) {
             (KeyCode::Enter, _) => (None, pick.choices().get(pick.selected).copied()),
             (KeyCode::Right, _) | (KeyCode::Char('l'), None) => (moved((pick.selected + 1).min(last)), None),
             (KeyCode::Left, _) | (KeyCode::Char('h'), None) => (moved(pick.selected.saturating_sub(1)), None),
-            (KeyCode::Char(c @ '1'..='8'), None) => (None, Some(Emoji::ALL[c as usize - '1' as usize])),
+            (KeyCode::Char(c @ '1'..='8'), None) => (None, pick.row.get(c as usize - '1' as usize).copied()),
             (KeyCode::Char('/'), None) if self.any_emoji() => {
-                (Some(Pick { selected: 0, search: Some(Search::of(String::new())), ..pick.clone() }), None)
+                (Some(Pick { selected: 0, search: Some(find(String::new())), ..pick.clone() }), None)
             }
             (KeyCode::Backspace, Some(search)) => {
-                let shorter = search.query.char_indices().next_back().map(|(end, _)| Search::of(search.query[..end].to_owned()));
+                let shorter = search.query.char_indices().next_back().map(|(end, _)| find(search.query[..end].to_owned()));
                 (Some(Pick { selected: 0, search: shorter, ..pick.clone() }), None)
             }
             (KeyCode::Char(c), Some(search)) => {
-                (Some(Pick { selected: 0, search: Some(Search::of(format!("{}{c}", search.query))), ..pick.clone() }), None)
+                (Some(Pick { selected: 0, search: Some(find(format!("{}{c}", search.query))), ..pick.clone() }), None)
             }
             _ => (None, None),
         };
@@ -99,15 +124,23 @@ impl App {
         chosen.map(|emoji| self.toggle_reaction(&pick, emoji)).unwrap_or_default()
     }
 
-    /// Mine on or off, shown at once, then asked of the forge.
+    /// Mine on or off, shown at once, then asked of the forge; one given is counted.
     fn toggle_reaction(&mut self, pick: &Pick, emoji: Emoji) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(note) = open.review.thread(&pick.thread).and_then(|t| t.notes.get(pick.note)).cloned() else { return vec![] };
         let on = !note.reactions.iter().any(|r| r.emoji == emoji && r.mine);
-        let action =
-            Action::React { key: open.key.clone(), thread: pick.thread.clone(), index: pick.note, note: Box::new(note), emoji, on };
+        let host = self.host_of(&open.key).to_owned();
+        let react = Action::React { key: open.key.clone(), thread: pick.thread.clone(), index: pick.note, note: Box::new(note), emoji, on };
         self.update_open(|open| open.relaid(|review| review.with_reaction(&pick.thread, pick.note, emoji, on)));
-        vec![action]
+        if !on {
+            return vec![react];
+        }
+        vec![react, self.count_reaction(host, emoji)]
+    }
+
+    fn count_reaction(&mut self, host: String, emoji: Emoji) -> Action {
+        self.reactions = self.reactions.with(&host, emoji);
+        Action::CountReaction { host, emoji }
     }
 
     /// The forge refused: the count goes back to what it was.
@@ -158,6 +191,8 @@ pub fn failure(thread: String, index: usize, emoji: Emoji, on: bool) -> Failure 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::row;
+    use crate::reactions::History;
     use crate::tui::app::test_support::*;
 
     /// A thread open in the pane whose one note already has `👍 2`, one of them mine.
@@ -180,6 +215,109 @@ mod tests {
         app.open.as_ref().unwrap().review.thread("5ugg").unwrap().notes[0].reactions.clone()
     }
 
+    fn hundred() -> Emoji {
+        Emoji::from_gitlab("100").unwrap()
+    }
+
+    /// The history after giving each of `given` once on gitlab.com, in that order.
+    fn given(given: &[Emoji]) -> History {
+        given.iter().fold(History::default(), |history, &emoji| history.with("gitlab.com", emoji))
+    }
+
+    fn row_on_plus(app: &mut App) -> Vec<Emoji> {
+        press(app, "+");
+        app.react.take().unwrap().row
+    }
+
+    #[test]
+    fn with_no_history_the_row_is_the_eight_in_their_order() {
+        assert_eq!(row(&[]), Emoji::ALL);
+        assert_eq!(row_on_plus(&mut with_reactions()), Emoji::ALL);
+    }
+
+    #[test]
+    fn the_most_used_lead_and_the_eight_follow_without_them() {
+        use Emoji::{Confused, Eyes, Heart, Hooray, Laugh, Rocket, ThumbsDown, ThumbsUp};
+        assert_eq!(row(&[Eyes]), [Eyes, ThumbsUp, ThumbsDown, Laugh, Confused, Heart, Hooray, Rocket]);
+        assert_eq!(row(&[Eyes, Rocket, Heart, Laugh]), [Eyes, Rocket, Heart, ThumbsUp, ThumbsDown, Laugh, Confused, Hooray], "three lead");
+    }
+
+    #[test]
+    fn on_gitlab_an_emoji_found_by_name_can_lead_and_the_last_of_the_eight_make_room() {
+        use Emoji::{Confused, Eyes, Heart, Hooray, Laugh, ThumbsDown, ThumbsUp};
+        let mut app = with_reactions();
+        app.reactions = given(&[hundred(), Eyes, hundred()]);
+        assert_eq!(row_on_plus(&mut app), [hundred(), Eyes, ThumbsUp, ThumbsDown, Laugh, Confused, Heart, Hooray]);
+    }
+
+    #[test]
+    fn on_github_only_the_eight_lead() {
+        let mut app = with_reactions();
+        app.hosts = crate::forge::Hosts::one("gitlab.com", Kind::GitHub);
+        app.reactions = given(&[hundred(), hundred(), Emoji::Eyes]);
+        let row = row_on_plus(&mut app);
+        assert_eq!(row[0], Emoji::Eyes);
+        assert!(row.iter().all(|e| Emoji::ALL.contains(e)), "{row:?}");
+    }
+
+    #[test]
+    fn equal_counts_go_to_the_latest_given() {
+        let mut app = with_reactions();
+        app.reactions = given(&[Emoji::Heart, Emoji::Rocket, Emoji::Eyes, Emoji::Laugh]);
+        assert_eq!(row_on_plus(&mut app)[..3], [Emoji::Laugh, Emoji::Eyes, Emoji::Rocket]);
+    }
+
+    #[test]
+    fn counts_are_kept_per_host() {
+        let mut app = with_reactions();
+        app.reactions = History::default().with("github.com", Emoji::Eyes);
+        assert_eq!(row_on_plus(&mut app), Emoji::ALL, "github.com's counts stay on github.com");
+    }
+
+    #[test]
+    fn a_reaction_is_counted_when_given_not_when_taken_off() {
+        let mut app = with_reactions();
+        let given = press(&mut app, "+3");
+        assert!(
+            matches!(given.as_slice(), [Action::React { on: true, .. }, Action::CountReaction { host, emoji: Emoji::Laugh }] if host == "gitlab.com")
+        );
+        assert_eq!(app.reactions.most_used("gitlab.com"), [Emoji::Laugh]);
+        let taken = press(&mut app, "+1");
+        assert!(matches!(taken.as_slice(), [Action::React { emoji: Emoji::Laugh, on: false, .. }]), "{taken:?}");
+        assert_eq!(app.reactions, History::default().with("gitlab.com", Emoji::Laugh));
+    }
+
+    #[test]
+    fn the_pane_and_the_diff_line_open_the_same_row() {
+        let mut app = with_reactions();
+        app.reactions = given(&[Emoji::Rocket]);
+        let in_pane = row_on_plus(&mut app);
+        app.close_pane();
+        let mut open = app.open.clone().unwrap();
+        let place = Place::Line { file: 0, new: Some(13), old: None };
+        open.selected = open.rows.iter().position(|r| open.review.place_of(r).as_ref() == Some(&place)).unwrap();
+        app.open = Some(open);
+        assert_eq!(row_on_plus(&mut app), in_pane);
+        assert_eq!(in_pane[0], Emoji::Rocket);
+    }
+
+    #[test]
+    fn a_search_puts_my_most_used_first_among_equal_matches() {
+        let mut app = with_reactions();
+        app.reactions = given(&[hundred()]);
+        press(&mut app, "+/");
+        assert_eq!(app.react.as_ref().unwrap().choices()[..2], [hundred(), Emoji::ThumbsUp], "an empty search matches all alike");
+    }
+
+    #[test]
+    fn the_picker_row_with_history() {
+        let mut app = with_reactions();
+        app.reactions = given(&[hundred(), Emoji::Eyes, hundred(), Emoji::Rocket]);
+        press(&mut app, "+");
+        let screen = render(&mut app, 150, 24);
+        insta::assert_snapshot!("react_row_with_history", screen.lines().last().unwrap());
+    }
+
     #[test]
     fn plus_opens_the_picker_and_a_digit_toggles_my_reaction_at_once() {
         let mut app = with_reactions();
@@ -188,15 +326,15 @@ mod tests {
         assert_eq!(press(&mut app, "+"), vec![]);
         assert!(render(&mut app, 150, 24).contains("react"), "the picker takes the status line");
         let actions = press(&mut app, "7");
-        let [Action::React { emoji, on, note, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        let [Action::React { emoji, on, note, .. }, _] = actions.as_slice() else { panic!("{actions:?}") };
         assert_eq!((*emoji, *on, note.node.as_deref()), (Emoji::Rocket, true, Some("gid://gitlab/DiffNote/1")));
         assert!(reactions_of(&app).contains(&crate::forge::Reaction { emoji: Emoji::Rocket, count: 1, mine: true }));
         assert!(app.react.is_none(), "one pick closes the picker");
         press(&mut app, "+");
         assert!(app.react.is_some(), "the picker opens again");
-        let actions = app.handle_key(code(KeyCode::Enter));
+        let actions = press(&mut app, "2");
         let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!((*emoji, *on), (Emoji::ThumbsUp, false), "enter on my own reaction takes it off");
+        assert_eq!((*emoji, *on), (Emoji::ThumbsUp, false), "a pick of my own reaction takes it off");
         assert_eq!(reactions_of(&app)[0], crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 1, mine: false });
     }
 
@@ -214,7 +352,7 @@ mod tests {
         assert_eq!(app.focus, Focus::Review, "the diff keeps the focus");
         assert!(render(&mut app, 150, 24).contains("react"), "zen shows the picker");
         let actions = press(&mut app, "7");
-        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Rocket, on: true, .. }]), "{actions:?}");
+        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Rocket, on: true, .. }, _]), "{actions:?}");
         let mut open = app.open.clone().unwrap();
         open.selected = open.rows.iter().position(|r| matches!(r, Row::Line { .. }) && !open.is_marked(r)).unwrap();
         app.open = Some(open);
@@ -231,7 +369,7 @@ mod tests {
         let screen = render(&mut app, 150, 24);
         assert!(screen.contains("/100▏") && screen.contains("💯"), "{screen}");
         let actions = app.handle_key(code(KeyCode::Enter));
-        let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        let [Action::React { emoji, on, .. }, _] = actions.as_slice() else { panic!("{actions:?}") };
         assert_eq!((emoji.gitlab(), *on), ("100", true));
         assert!(reactions_of(&app).iter().any(|r| r.emoji.glyph() == "💯" && r.mine), "the count moves at once");
         press(&mut app, "+");

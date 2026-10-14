@@ -50,6 +50,8 @@ pub struct Settings {
     pub prefetch: usize,
     /// `[tui] ascii`: reactions in plain words, for terminals that draw emoji at the wrong width.
     pub ascii: bool,
+    /// The reactions I gave on each host, read once at start: the picker offers the most used first.
+    pub reactions: crate::reactions::History,
     /// `[keys] quit_confirm`: `q` and `ctrl-c` need a second press.
     pub quit_confirm: bool,
     /// `[usage] enabled`: count the actions used and the time per screen.
@@ -125,6 +127,8 @@ pub struct App {
     pub confirm: Option<super::Confirm>,
     /// The reaction picker `+` opened on a note; every key answers it first.
     pub react: Option<super::Pick>,
+    /// The reactions I gave on each host, counted as I give them.
+    pub reactions: crate::reactions::History,
     /// What `/` looks for in the diff, while it is typed and after, until `esc`.
     pub search: Option<super::Search>,
     /// The answers `a h` found kept for the open MR, which the search box lists.
@@ -294,6 +298,7 @@ impl App {
             news: None,
             confirm: None,
             react: None,
+            reactions: settings.reactions,
             search: None,
             past_answers: vec![],
             ascii: settings.ascii,

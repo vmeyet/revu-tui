@@ -209,6 +209,11 @@ pub enum Action {
         emoji: crate::forge::Emoji,
         on: bool,
     },
+    /// Count one more `emoji` given on `host`, so the picker there offers it sooner.
+    CountReaction {
+        host: String,
+        emoji: crate::forge::Emoji,
+    },
     /// Merge the MR as `plan` says while its head is `head`; asked only after the reader said yes.
     Merge {
         key: MrKey,

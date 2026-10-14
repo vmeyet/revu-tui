@@ -234,9 +234,11 @@ mr/<group+project>/<number>/state.json    viewed files, folds, last opened
 mr/<group+project>/<number>/ai/answer.<request_hash>.json   Claude's answer, its title, time, head, request
 pruned.json                         (shared root) when the cache was last pruned
 news.json                           (shared root) how far the reader got in revu's own changelog
+reactions.json                      (shared root) per host, each reaction I gave: how often, and when last
 ```
 
 Files are written to a temp name then renamed, mode 0600, directory 0700.
+`reactions.json` is read, changed and written under a lock on `reactions.json.lock` (`Cache::update`), so two revu processes adding at once both count; a missing or broken file is no history.
 Once a day, starting the TUI prunes every host's cache in the background: the forge is asked once per project which kept MRs are merged or closed (GitLab `merge_requests?iids[]=…&state=all`, GitHub one GraphQL query with a `pullRequest(number:)` alias per PR), and their `mr/…/<number>/` folders go; so does any MR folder untouched for 30 days, which also covers a project the forge cannot answer for. Pruning twice is harmless.
 Opening an MR paints from cache, then three requests refresh it in parallel; a differing `head_sha` invalidates diffs and clears word-diff and fold state for changed files only.
 
