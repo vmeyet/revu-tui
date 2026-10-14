@@ -21,6 +21,8 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **Paging down at the end of a Markdown file no longer stops revu.**
+  In the prose view (`v`), after `G`, with `^f` or PgDn.
 - **A second host that misses one refresh keeps its MRs.**
   In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
   Once it answers again, no notification comes for an MR you already had.

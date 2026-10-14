@@ -493,7 +493,7 @@ pub(super) fn scroll_key(scroll: usize, last: usize, key: KeyEvent) -> Option<us
         Act::MoveUp => Some(scroll.saturating_sub(1)),
         Act::PageDown => Some(scroll.saturating_add(HALF_PAGE.unsigned_abs()).min(last)),
         Act::PageUp => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
-        Act::FullPageDown => Some((scroll + 2 * HALF_PAGE.unsigned_abs()).min(last)),
+        Act::FullPageDown => Some(scroll.saturating_add(2 * HALF_PAGE.unsigned_abs()).min(last)),
         Act::FullPageUp => Some(scroll.saturating_sub(2 * HALF_PAGE.unsigned_abs())),
         Act::Top => Some(0),
         Act::Bottom => Some(last),
@@ -756,6 +756,14 @@ mod tests {
         assert_eq!(app.open.as_ref().unwrap().selected, top + page);
         app.handle_key(ctrl('b'));
         assert_eq!(app.open.as_ref().unwrap().selected, top);
+    }
+
+    #[test]
+    fn a_page_down_from_the_very_end_stays_there() {
+        let end = usize::MAX;
+        for key in [ctrl('f'), ctrl('d'), key('j')] {
+            assert_eq!(super::scroll_key(end, end, key), Some(end), "{key:?}");
+        }
     }
 
     #[test]
