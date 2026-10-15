@@ -503,7 +503,7 @@ mod tests {
         let hours_ago = |h: i64| app.today - chrono::Duration::hours(h);
         let answers = vec![
             past("explain · charge.rs", head.as_str(), hours_ago(1), "It retries."),
-            past("summary", "older1", hours_ago(30), "Cards charged once."),
+            past("summary", "01de51", hours_ago(30), "Cards charged once."),
         ];
         app.apply(Incoming::PastAnswers { key: mr_key(), answers });
         let screen = render(&mut app, 150, 30);

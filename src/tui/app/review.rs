@@ -661,7 +661,7 @@ mod tests {
         );
         let text: String = (1..=40).map(|n| format!("line {n}\n")).collect();
         let contexts = |app: &App| app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
-        app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "old".into(), text: text.clone() });
+        app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "01d".into(), text: text.clone() });
         assert_eq!(contexts(&app), 0, "a file read at another head is dropped");
         app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "bbbb".into(), text });
         assert_eq!(contexts(&app), 20, "ten above, ten below");

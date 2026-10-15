@@ -2,7 +2,7 @@
 //! review that holds my drafts until `publish` submits it.
 use super::wire::{self, Actor, Anchor, Label, Nodes, QueuePr, Review, ReviewRequest, user_of};
 use super::{Client, owner_and_name};
-use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, Queue, QueueMr, Refs};
+use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, Queue, QueueMr, Refs, Sha};
 use anyhow::{Context, Result, bail, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -199,8 +199,8 @@ struct Pr {
     updated_at: DateTime<Utc>,
     base_ref_name: String,
     head_ref_name: String,
-    base_ref_oid: String,
-    head_ref_oid: String,
+    base_ref_oid: Sha,
+    head_ref_oid: Sha,
     changed_files: u32,
     #[serde(default)]
     mergeable: Option<String>,
@@ -258,7 +258,7 @@ impl Pr {
             target_branch: self.base_ref_name,
             web_url: self.url,
             updated_at: self.updated_at,
-            refs: Refs { base: self.base_ref_oid.clone().into(), start: self.base_ref_oid.into(), head: self.head_ref_oid.into() },
+            refs: Refs { base: self.base_ref_oid.clone(), start: self.base_ref_oid, head: self.head_ref_oid },
             pipeline,
             changes_count: Some(self.changed_files.to_string()),
             conflicts: self.mergeable.as_deref() == Some("CONFLICTING"),
@@ -305,8 +305,8 @@ struct ThreadsRepository {
 #[serde(rename_all = "camelCase")]
 pub(super) struct PrThreads {
     id: String,
-    base_ref_oid: String,
-    head_ref_oid: String,
+    base_ref_oid: Sha,
+    head_ref_oid: Sha,
     review_threads: Page<Thread>,
     reviews: Page<Comment>,
     comments: Page<Comment>,
@@ -460,7 +460,7 @@ impl PrThreads {
     }
 
     fn refs(&self) -> Refs {
-        Refs { base: self.base_ref_oid.clone().into(), start: self.base_ref_oid.clone().into(), head: self.head_ref_oid.clone().into() }
+        Refs { base: self.base_ref_oid.clone(), start: self.base_ref_oid.clone(), head: self.head_ref_oid.clone() }
     }
 
     /// My pending review, which holds every draft: its node id and its database id.

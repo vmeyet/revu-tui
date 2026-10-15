@@ -1,5 +1,5 @@
 //! GitLab's JSON as it comes and goes, and its conversion to and from the neutral model.
-use crate::forge::{self, LineRef, Refs};
+use crate::forge::{self, LineRef, Refs, Sha};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -92,14 +92,14 @@ impl Mr {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiffRefs {
-    pub base_sha: String,
-    pub head_sha: String,
-    pub start_sha: String,
+    pub base_sha: Sha,
+    pub head_sha: Sha,
+    pub start_sha: Sha,
 }
 
 impl From<DiffRefs> for Refs {
     fn from(refs: DiffRefs) -> Self {
-        Self { base: refs.base_sha.into(), start: refs.start_sha.into(), head: refs.head_sha.into() }
+        Self { base: refs.base_sha, start: refs.start_sha, head: refs.head_sha }
     }
 }
 
@@ -241,9 +241,9 @@ impl From<Note> for forge::Note {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
-    pub base_sha: String,
-    pub head_sha: String,
-    pub start_sha: String,
+    pub base_sha: Sha,
+    pub head_sha: Sha,
+    pub start_sha: Sha,
     pub position_type: String,
     #[serde(default)]
     pub old_path: Option<String>,
@@ -285,7 +285,7 @@ impl Position {
         line.number()?;
         let new_path = self.new_path.clone().or_else(|| self.old_path.clone())?;
         Some(forge::Position {
-            refs: Refs { base: self.base_sha.into(), start: self.start_sha.into(), head: self.head_sha.into() },
+            refs: Refs { base: self.base_sha, start: self.start_sha, head: self.head_sha },
             old_path: self.old_path.unwrap_or_else(|| new_path.clone()),
             new_path,
             line,
@@ -297,9 +297,9 @@ impl Position {
     /// `line_code` of each edge.
     pub fn from_model(position: &forge::Position) -> Self {
         Self {
-            base_sha: position.refs.base.to_string(),
-            head_sha: position.refs.head.to_string(),
-            start_sha: position.refs.start.to_string(),
+            base_sha: position.refs.base.clone(),
+            head_sha: position.refs.head.clone(),
+            start_sha: position.refs.start.clone(),
             position_type: "text".into(),
             old_path: Some(position.old_path.clone()),
             new_path: Some(position.new_path.clone()),
