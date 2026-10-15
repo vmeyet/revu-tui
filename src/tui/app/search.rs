@@ -2,6 +2,7 @@
 //! walk the matches; a match inside a fold opens it, as vim's search does.
 use super::{App, Open};
 use crate::review::{Review, Row};
+use crate::tui::toward::Toward;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
@@ -50,8 +51,9 @@ impl App {
     }
 
     /// `n` and `N`: the next or previous match, around the end of the MR back to its start.
-    pub(super) fn search_step(&mut self, forward: bool) {
+    pub(super) fn search_step(&mut self, toward: Toward) {
         let Some(open) = &self.open else { return };
+        let forward = toward == Toward::Next;
         let hits = self.matches();
         let here = hit_at(open);
         let after = |hit: &&Hit| if forward { Some(**hit) > here } else { Some(**hit) < here };

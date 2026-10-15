@@ -2,6 +2,7 @@ use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef, Sha};
 use crate::review::{Draft, Review, Row, Side};
+use crate::tui::toward::Toward;
 use std::time::{Duration, Instant};
 
 /// The MR on screen: the review plus where the reader is in it.
@@ -126,9 +127,9 @@ impl Open {
     }
 
     /// The next row index after the cursor that `wanted` accepts, wrapping around; None when there is none.
-    fn seek(&self, forward: bool, wanted: impl Fn(usize) -> bool) -> Option<usize> {
+    fn seek(&self, toward: Toward, wanted: impl Fn(usize) -> bool) -> Option<usize> {
         let len = self.rows.len();
-        (1..len).map(|k| if forward { (self.selected + k) % len } else { (self.selected + len - k) % len }).find(|&i| wanted(i))
+        (1..len).map(|k| toward.wrapped(self.selected, k, len)).find(|&i| wanted(i))
     }
 
     fn fold_target(&self) -> Option<(String, Option<usize>)> {
@@ -224,12 +225,12 @@ fn before_stop(review: &Review, rows: &[Row], row: &Row) -> Option<usize> {
     rows.iter().rposition(|r| !later(r) && review.place_of(r) == place)
 }
 
-/// The side `>` shows after `peek`, or `<` when not `forward`: diff, after, before, and round.
-fn next_peek(peek: Option<Side>, forward: bool) -> Option<Side> {
-    match (peek, forward) {
-        (None, true) | (Some(Side::Old), false) => Some(Side::New),
-        (Some(Side::New), true) | (None, false) => Some(Side::Old),
-        (Some(Side::Old), true) | (Some(Side::New), false) => None,
+/// The side `>` shows after `peek`, or `<` going back: diff, after, before, and round.
+fn next_peek(peek: Option<Side>, toward: Toward) -> Option<Side> {
+    match (peek, toward) {
+        (None, Toward::Next) | (Some(Side::Old), Toward::Previous) => Some(Side::New),
+        (Some(Side::New), Toward::Next) | (None, Toward::Previous) => Some(Side::Old),
+        (Some(Side::Old), Toward::Next) | (Some(Side::New), Toward::Previous) => None,
     }
 }
 
@@ -252,16 +253,16 @@ impl App {
         self.update_open(|open| open.move_by(delta));
     }
 
-    pub(super) fn review_jump(&mut self, forward: bool, wanted: impl Fn(&Row) -> bool) {
+    pub(super) fn review_jump(&mut self, toward: Toward, wanted: impl Fn(&Row) -> bool) {
         let Some(open) = &self.open else { return };
         let rows = open.rows.clone();
-        self.review_jump_where(forward, |index| wanted(&rows[index]));
+        self.review_jump_where(toward, |index| wanted(&rows[index]));
     }
 
     /// Moves to the next row index `wanted` accepts, wrapping around.
-    pub(super) fn review_jump_where(&mut self, forward: bool, wanted: impl Fn(usize) -> bool) {
+    pub(super) fn review_jump_where(&mut self, toward: Toward, wanted: impl Fn(usize) -> bool) {
         let Some(open) = &self.open else { return };
-        match open.seek(forward, wanted) {
+        match open.seek(toward, wanted) {
             Some(index) => self.update_open(|open| open.move_to(index)),
             None => self.toast("nothing to jump to"),
         }
@@ -363,10 +364,10 @@ impl App {
     }
 
     /// `>` and `<`: the diff, the code after, the code before, each key the other way round.
-    pub(super) fn cycle_peek(&mut self, forward: bool) -> Vec<Action> {
+    pub(super) fn cycle_peek(&mut self, toward: Toward) -> Vec<Action> {
         let Some(open) = self.open.take() else { return vec![] };
         let next = open.relaid(|review| {
-            let peek = next_peek(review.peek, forward);
+            let peek = next_peek(review.peek, toward);
             review.with_peek(peek)
         });
         self.toast(match next.review.peek {

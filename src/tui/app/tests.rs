@@ -40,7 +40,7 @@ fn snapshot_review_open() {
 #[test]
 fn snapshot_thread_open() {
     let mut app = with_review();
-    walk_to_any_thread(&mut app, true);
+    walk_to_any_thread(&mut app, Toward::Next);
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("thread_open", render(&mut app, 120, 24));
 }
@@ -110,7 +110,7 @@ fn snapshot_publish_modal() {
 #[test]
 fn snapshot_thread_with_a_draft_reply() {
     let mut app = with_review();
-    walk_to_any_thread(&mut app, true);
+    walk_to_any_thread(&mut app, Toward::Next);
     app.handle_key(code(KeyCode::Enter));
     press(&mut app, "r");
     let save = type_text(&mut app, "agreed, keys are per card");
@@ -297,7 +297,7 @@ fn snapshot_narrow_pane_and_a_three_line_box() {
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("pane_narrow", render(&mut app, 100, 20));
     let mut app = with_review();
-    walk_to_any_thread(&mut app, true);
+    walk_to_any_thread(&mut app, Toward::Next);
     press(&mut app, "lr");
     press(&mut app, "agreed");
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
@@ -630,7 +630,7 @@ fn a_drag_in_the_diff_copies_only_the_code_text_and_lights_it() {
 #[test]
 fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
     let mut app = with_review();
-    walk_to_any_thread(&mut app, true);
+    walk_to_any_thread(&mut app, Toward::Next);
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_mut().unwrap();
     let mut threads = open.review.threads.to_vec();
@@ -654,8 +654,8 @@ fn in_a_short_zen_column_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_t
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
     let list = render(&mut app, 138, 24);
     assert!(list.contains("the whole MR · 3 threads") && !list.contains("@@ -12,4"), "the list takes the diff's column:\n{list}");
-    walk_to_thread(&mut app, true);
-    walk_to_thread(&mut app, true);
+    walk_to_thread(&mut app, Toward::Next);
+    walk_to_thread(&mut app, Toward::Next);
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_ref().unwrap();
     assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));

@@ -273,9 +273,9 @@ pub struct App {
 /// A config this revu partly ignores says so before what is new in revu, which shows again on `:news`.
 fn first_toast(settings: &Settings, now: Instant) -> Option<Toast> {
     if !settings.ignored_settings.is_empty() {
-        return Some(Toast::starting(settings.ignored_settings.join(" · "), true, now));
+        return Some(Toast::warning(settings.ignored_settings.join(" · "), now));
     }
-    settings.whats_new.announcement().map(|text| Toast::starting(text, false, now))
+    settings.whats_new.announcement().map(|text| Toast::info(text, now))
 }
 
 impl App {

@@ -1,4 +1,5 @@
 //! Completing the token being typed, shared by the `:` command line and the input row.
+use super::toward::Toward;
 use crate::fuzzy;
 
 /// How many candidates tab-cycling walks through.
@@ -39,9 +40,8 @@ impl Cycle {
         (!options.is_empty()).then_some(Self { options, at: 0 })
     }
 
-    pub fn advance(&mut self, backwards: bool) {
-        let n = self.options.len();
-        self.at = if backwards { (self.at + n - 1) % n } else { (self.at + 1) % n };
+    pub fn advance(&mut self, toward: Toward) {
+        self.at = toward.wrapped(self.at, 1, self.options.len());
     }
 
     pub fn current(&self) -> &str {
@@ -90,11 +90,11 @@ mod tests {
     fn cycling_walks_the_candidates_both_ways_and_wraps() {
         let mut cycle = Cycle::new("rock", &candidates()).expect("matches");
         assert_eq!(cycle.current(), "rock");
-        cycle.advance(false);
+        cycle.advance(Toward::Next);
         assert_eq!(cycle.current(), "rocket");
-        cycle.advance(false);
+        cycle.advance(Toward::Next);
         assert_eq!(cycle.current(), "rock", "two matches, so it wraps");
-        cycle.advance(true);
+        cycle.advance(Toward::Previous);
         assert_eq!(cycle.current(), "rocket");
         assert_eq!(Cycle::new("zzz", &candidates()), None);
     }

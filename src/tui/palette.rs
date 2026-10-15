@@ -3,6 +3,7 @@
 //! `query`), `>` runs commands. `:` opens it on commands, with fuzzy tab completion, a ghost
 //! suggestion and history.
 use super::complete::{self, Cycle};
+use super::toward::Toward;
 use crate::act::{self, Act};
 use crate::forge::MrKey;
 use crate::fuzzy;
@@ -269,9 +270,9 @@ impl Palette {
     }
 
     /// Replaces the token being typed with the next candidate for its slot.
-    pub fn complete(&mut self, candidates: &[String], backwards: bool) {
+    pub fn complete(&mut self, candidates: &[String], toward: Toward) {
         let cycling = if let Some(mut cycling) = self.cycle.take() {
-            cycling.cycle.advance(backwards);
+            cycling.cycle.advance(toward);
             cycling
         } else {
             let (prefix, token) = split_last_token(&self.input);
@@ -407,10 +408,10 @@ mod tests {
         assert_eq!(p.input, "publish ");
         let mrs = vec!["!42".to_owned(), "!41".to_owned()];
         let mut p = typed("go 4");
-        p.complete(&mrs, false);
+        p.complete(&mrs, Toward::Next);
         assert_eq!(p.input, "go !42 ");
         assert!(p.hint().unwrap().starts_with("[!42]"));
-        p.complete(&mrs, false);
+        p.complete(&mrs, Toward::Next);
         assert_eq!(p.input, "go !41 ");
     }
 

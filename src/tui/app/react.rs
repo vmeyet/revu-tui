@@ -487,7 +487,7 @@ mod tests {
         let mut app = with_reactions();
         render(&mut app, 50, 30);
         app.close_pane();
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         press(&mut app, "j");
         assert!(app.on_thread_row());
         app

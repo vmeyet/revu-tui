@@ -6,6 +6,7 @@ use crate::query::Query;
 use crate::tui::help::Help;
 use crate::tui::palette::{self, Candidate, Command, MAX_SHOWN, Mode, Palette, Slot, Target};
 use crate::tui::theme::Theme;
+use crate::tui::toward::Toward;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
@@ -43,8 +44,8 @@ impl App {
         let listed = palette::verbs_for(&palette.input).len();
         match code {
             KeyCode::Up | KeyCode::Down if palette.naming_command() => palette.move_by(if code == KeyCode::Up { -1 } else { 1 }, listed),
-            KeyCode::Up | KeyCode::Down => palette.complete(&candidates, code == KeyCode::Up),
-            KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, code == KeyCode::BackTab),
+            KeyCode::Up | KeyCode::Down => palette.complete(&candidates, Toward::next_if(code == KeyCode::Down)),
+            KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, Toward::next_if(code == KeyCode::Tab)),
             KeyCode::Right | KeyCode::End => palette.accept(&candidates),
             _ => {}
         }

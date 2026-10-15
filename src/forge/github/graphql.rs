@@ -413,7 +413,13 @@ impl Comment {
         self.full_database_id.as_deref().and_then(|id| id.parse().ok()).unwrap_or_default()
     }
 
-    fn note(&self, resolvable: bool, resolved: bool, position: Option<forge::Position>) -> Note {
+    /// A note in a review thread, `position` on its first one.
+    fn thread_note(&self, resolved: bool, position: Option<forge::Position>) -> Note {
+        Note { resolvable: true, resolved, position, ..self.loose_note() }
+    }
+
+    /// A note outside any review thread: a review summary or a PR comment.
+    fn loose_note(&self) -> Note {
         Note {
             id: self.number(),
             body: self.body.clone(),
@@ -421,9 +427,9 @@ impl Comment {
             created_at: self.created_at,
             updated_at: self.updated_at,
             system: false,
-            resolvable,
-            resolved,
-            position,
+            resolvable: false,
+            resolved: false,
+            position: None,
             suggestions: vec![],
             reactions: self
                 .reaction_groups
@@ -478,13 +484,12 @@ impl PrThreads {
             let notes: Vec<Note> = published
                 .iter()
                 .enumerate()
-                .map(|(i, c)| c.note(true, thread.is_resolved, if i == 0 { position.clone() } else { None }))
+                .map(|(i, c)| c.thread_note(thread.is_resolved, if i == 0 { position.clone() } else { None }))
                 .collect();
             (!notes.is_empty()).then(|| Discussion { id: thread.id.clone(), notes })
         });
         let summaries = self.reviews.nodes.iter().filter(|r| !r.pending() && !r.body.trim().is_empty());
-        let loose =
-            summaries.chain(&self.comments.nodes).map(|c| Discussion { id: c.id.as_str().into(), notes: vec![c.note(false, false, None)] });
+        let loose = summaries.chain(&self.comments.nodes).map(|c| Discussion { id: c.id.as_str().into(), notes: vec![c.loose_note()] });
         let mut all: Vec<Discussion> = threads.chain(loose).collect();
         all.sort_by_key(|d| d.notes.first().map(|n| n.created_at));
         all
@@ -856,7 +861,7 @@ mod tests {
             ]
         }))
         .unwrap();
-        let note = comment.note(false, false, None);
+        let note = comment.loose_note();
         assert_eq!((note.id, note.node.as_deref()), (77, Some("PRRC_kw1")));
         assert_eq!(note.reactions, [forge::Reaction { emoji: forge::Emoji::ThumbsUp, count: 2, mine: true }], "empty groups are left out");
     }

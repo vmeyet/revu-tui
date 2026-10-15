@@ -2,6 +2,7 @@
 //! it shows them, in zen or not; notifications wait until zen ends.
 use super::queue::QueueRow;
 use super::{Action, App, Focus, MrKey};
+use crate::tui::toward::Toward;
 use std::time::Instant;
 
 impl App {
@@ -42,17 +43,20 @@ impl App {
     }
 
     /// `]m` `[m`: the next or previous MR the queue shows, opened without leaving zen.
-    pub(super) fn step_mr(&mut self, forward: bool) -> Vec<Action> {
+    pub(super) fn step_mr(&mut self, toward: Toward) -> Vec<Action> {
         let order = self.zen_order();
         let current = self.opening.clone().or_else(|| self.open.as_ref().map(|o| o.key.clone()));
         let at = current.and_then(|key| order.iter().position(|k| *k == key));
-        let next = match (at, forward) {
+        let next = match (at, toward) {
             (None, _) => 0,
-            (Some(i), true) => i + 1,
-            (Some(i), false) => i.wrapping_sub(1),
+            (Some(i), Toward::Next) => i + 1,
+            (Some(i), Toward::Previous) => i.wrapping_sub(1),
         };
         let Some(key) = order.get(next).cloned() else {
-            self.toast(if forward { "the last MR of the queue" } else { "the first MR of the queue" });
+            self.toast(match toward {
+                Toward::Next => "the last MR of the queue",
+                Toward::Previous => "the first MR of the queue",
+            });
             return vec![];
         };
         self.select_in_queue(&key);

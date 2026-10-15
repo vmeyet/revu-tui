@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn ctrl_v_in_the_thread_pane_and_the_tree_uses_their_file() {
         let mut app = with_review();
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
         assert_eq!(app.handle_key(ctrl('v')), vec![view("src/pay/charge.rs", "bbbb", 13, None)], "the old line 13 opens at head line 13");

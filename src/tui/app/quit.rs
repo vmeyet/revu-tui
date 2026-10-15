@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn q_closes_the_right_pane_before_it_asks_to_quit() {
         let mut app = with_review();
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         press(&mut app, "l");
         assert!(app.open.as_ref().unwrap().pane.is_some());
         press(&mut app, "q");

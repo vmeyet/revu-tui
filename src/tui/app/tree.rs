@@ -5,6 +5,7 @@ use crate::diff::LineKind;
 use crate::diff::fold::Fold;
 use crate::review::tree::{self, TreeFolds, TreeRow};
 use crate::review::{File, Row};
+use crate::tui::toward::Toward;
 use crossterm::event::KeyEvent;
 
 /// The tree while it is open: which folders the reader flipped, and the row under the cursor.
@@ -132,7 +133,7 @@ impl App {
             self.toast("every file viewed");
             return actions;
         }
-        self.review_jump(true, move |row| is_first_stop(&files, &unviewed, row));
+        self.review_jump(Toward::Next, move |row| is_first_stop(&files, &unviewed, row));
         actions
     }
 }

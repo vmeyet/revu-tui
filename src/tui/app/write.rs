@@ -26,9 +26,9 @@ impl App {
                 self.start_select();
                 vec![]
             }
-            Act::Editor => self.compose_here(false),
+            Act::Editor => self.compose_in_editor(),
             Act::Resolve => self.toggle_resolved(),
-            Act::Suggest => self.compose_here(true),
+            Act::Suggest => self.compose_suggestion(),
             Act::Approve => self.toggle_approval(),
             Act::Merge => self.merge_here(),
             Act::Ready => self.toggle_draft(),
@@ -178,16 +178,24 @@ impl App {
         }
     }
 
-    /// `E` writes a new thread in the editor; `s` opens the box with a suggestion block for the selected lines.
-    fn compose_here(&mut self, suggestion: bool) -> Vec<Action> {
+    /// A new thread on the line under the cursor, or why there is none.
+    fn new_thread_here(&mut self) -> Option<Input> {
         let Some(position) = self.position_here() else {
             self.toast("move onto a line first");
-            return vec![];
+            return None;
         };
-        let input = Input::Comment { position: Box::new(position) };
-        if !suggestion {
-            return vec![Action::Compose { input, draft: String::new() }];
-        }
+        Some(Input::Comment { position: Box::new(position) })
+    }
+
+    /// `E`: a new thread on the line under the cursor, written in the editor.
+    fn compose_in_editor(&mut self) -> Vec<Action> {
+        let Some(input) = self.new_thread_here() else { return vec![] };
+        vec![Action::Compose { input, draft: String::new() }]
+    }
+
+    /// `s`: the box opens with a suggestion block for the selected lines.
+    fn compose_suggestion(&mut self) -> Vec<Action> {
+        let Some(input) = self.new_thread_here() else { return vec![] };
         let lines = self.selected_lines();
         let draft = suggestion::prefill(&lines.iter().map(String::as_str).collect::<Vec<_>>());
         self.drop_select();
@@ -506,7 +514,7 @@ mod tests {
     #[test]
     fn r_in_a_thread_replies_as_a_draft_shown_in_the_pane_not_the_diff() {
         let mut app = with_review();
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         app.handle_key(code(KeyCode::Enter));
         press(&mut app, "r");
         assert_eq!(app.input_label(), "reply to nina");
@@ -537,7 +545,7 @@ mod tests {
     #[test]
     fn big_r_flips_resolved_at_once_and_a_refusal_flips_it_back() {
         let mut app = with_review();
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         app.handle_key(code(KeyCode::Enter));
         let id: ThreadId = "c0ffee00c0ffee00".into();
         assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);

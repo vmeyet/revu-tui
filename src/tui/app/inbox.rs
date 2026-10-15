@@ -3,6 +3,7 @@
 //! shows how far each review went.
 use super::{Action, App, MrKey, Open};
 use crate::review::{Progress, Review, Row};
+use crate::tui::toward::Toward;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -60,14 +61,14 @@ impl App {
 
     /// The MR after (or before) the one being read, in review order: from the queue, the one
     /// after the selected row; outside the list, the first (or last) one.
-    fn review_neighbour(&self, forward: bool) -> Option<MrKey> {
+    fn review_neighbour(&self, toward: Toward) -> Option<MrKey> {
         let order = self.review_order();
         let here = self.open.as_ref().map(|o| o.key.clone()).or_else(|| self.selected_mr().map(crate::forge::QueueMr::key));
-        match here.and_then(|key| order.iter().position(|k| *k == key)) {
-            Some(at) if forward => order.get(at + 1).cloned(),
-            Some(at) => at.checked_sub(1).and_then(|before| order.get(before)).cloned(),
-            None if forward => order.first().cloned(),
-            None => order.last().cloned(),
+        match (here.and_then(|key| order.iter().position(|k| *k == key)), toward) {
+            (Some(at), Toward::Next) => order.get(at + 1).cloned(),
+            (Some(at), Toward::Previous) => at.checked_sub(1).and_then(|before| order.get(before)).cloned(),
+            (None, Toward::Next) => order.first().cloned(),
+            (None, Toward::Previous) => order.last().cloned(),
         }
     }
 
@@ -80,7 +81,7 @@ impl App {
 
     /// After a publish: the status line offers the next MR that needs me, when there is one.
     pub(super) fn offer_next(&mut self) {
-        self.offer = self.review_neighbour(true);
+        self.offer = self.review_neighbour(Toward::Next);
     }
 
     /// While the next MR is offered, `enter` opens it and any other key declines, then does what it does.

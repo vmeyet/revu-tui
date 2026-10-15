@@ -30,6 +30,7 @@ mod table;
 mod taps_view;
 mod theme;
 mod thread_view;
+mod toward;
 mod tree_view;
 mod ui;
 mod whats_new_view;

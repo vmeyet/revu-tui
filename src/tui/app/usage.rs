@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn usage_off_counts_nothing() {
         let mut app = with_long_review();
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         press(&mut app, "jjj");
         app.now += Duration::from_secs(5);
         app.tick();
@@ -394,7 +394,7 @@ mod tests {
     fn q_and_esc_that_close_the_pane_count_as_closing_it() {
         let mut app = with_review();
         app.usage = Some(crate::usage::Tally::default());
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
         press(&mut app, "q");
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn enter_in_the_thread_pane_counts_as_what_it_did() {
         let mut app = with_usage(with_review());
-        walk_to_any_thread(&mut app, true);
+        walk_to_any_thread(&mut app, Toward::Next);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
         assert_eq!(counted_by(&mut app, code(KeyCode::Enter)), ["fold_toggle"], "it folds the resolved thread");

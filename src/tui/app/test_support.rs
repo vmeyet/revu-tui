@@ -7,6 +7,7 @@ pub(super) use crate::review::{Place, Row};
 pub(super) use crate::tui::compose::Edited;
 pub(super) use crate::tui::help::Help;
 pub(super) use crate::tui::theme::Theme;
+pub(super) use crate::tui::toward::Toward;
 pub(super) use crate::tui::ui;
 pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use ratatui::Terminal;
@@ -606,11 +607,19 @@ pub(super) fn fold_every_file(app: &mut App, fold: crate::diff::fold::Fold) {
     }
 }
 
+/// `j` or `k`, the key that moves one row `toward`.
+fn step_key(toward: Toward) -> &'static str {
+    match toward {
+        Toward::Next => "j",
+        Toward::Previous => "k",
+    }
+}
+
 /// The pane's cursor moved note by note onto the next thread, or the one before, as `j` and `k` walk it.
-pub(super) fn walk_to_thread(app: &mut App, forward: bool) {
+pub(super) fn walk_to_thread(app: &mut App, toward: Toward) {
     let from = focused_thread(app);
     for _ in 0..50 {
-        press(app, if forward { "j" } else { "k" });
+        press(app, step_key(toward));
         if focused_thread(app) != from {
             return;
         }
@@ -619,13 +628,19 @@ pub(super) fn walk_to_thread(app: &mut App, forward: bool) {
 
 /// The diff's cursor moved row by row onto the next line with a thread, resolved ones too, or the one before;
 /// past the last row it goes on from the first, so the MR's own thread on the header comes next.
-pub(super) fn walk_to_any_thread(app: &mut App, forward: bool) {
+pub(super) fn walk_to_any_thread(app: &mut App, toward: Toward) {
     let rows = app.open.as_ref().unwrap().rows.len();
     for _ in 0..rows {
         let before = app.open.as_ref().unwrap().selected;
-        press(app, if forward { "j" } else { "k" });
+        press(app, step_key(toward));
         if app.open.as_ref().unwrap().selected == before {
-            press(app, if forward { "g" } else { "G" });
+            press(
+                app,
+                match toward {
+                    Toward::Next => "g",
+                    Toward::Previous => "G",
+                },
+            );
         }
         let open = app.open.as_ref().unwrap();
         if open.row().is_some_and(|row| !matches!(row, Row::Thread { .. }) && open.is_marked(row)) {

@@ -2,6 +2,7 @@ use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::review::Row;
 use crate::tui::help::{self, Help};
+use crate::tui::toward::Toward;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 
@@ -316,18 +317,18 @@ impl App {
             Act::Search => self.start_search(),
             Act::NextThread | Act::PrevThread if self.search.is_some() => {
                 self.key_did = Some(Act::Search);
-                self.search_step(act == Act::NextThread);
+                self.search_step(Toward::next_if(act == Act::NextThread));
             }
-            Act::NextThread => return self.jump_to_thread(true),
-            Act::PrevThread => return self.jump_to_thread(false),
+            Act::NextThread => return self.jump_to_thread(Toward::Next),
+            Act::PrevThread => return self.jump_to_thread(Toward::Previous),
             Act::ViewedNext => return self.view_and_move_on(),
             Act::PageDown => self.review_move(HALF_PAGE),
             Act::PageUp => self.review_move(-HALF_PAGE),
             Act::FullPageDown => self.review_move(full_page(self.areas.review)),
             Act::FullPageUp => self.review_move(-full_page(self.areas.review)),
             Act::SideBySide => return self.toggle_side_by_side(),
-            Act::PeekAfter => return self.cycle_peek(true),
-            Act::PeekBefore => return self.cycle_peek(false),
+            Act::PeekAfter => return self.cycle_peek(Toward::Next),
+            Act::PeekBefore => return self.cycle_peek(Toward::Previous),
             Act::Tree => self.toggle_tree(),
             Act::EveryThread => self.toggle_every_thread(),
             Act::Pipeline => return self.toggle_pipeline(),
@@ -342,8 +343,8 @@ impl App {
                 self.wrap = Some(wrap);
                 self.toast(if wrap { "long lines wrap" } else { "long lines end in …" });
             }
-            Act::NextFile => self.review_jump(true, |r| matches!(r, Row::File { .. })),
-            Act::PrevFile => self.review_jump(false, |r| matches!(r, Row::File { .. })),
+            Act::NextFile => self.review_jump(Toward::Next, |r| matches!(r, Row::File { .. })),
+            Act::PrevFile => self.review_jump(Toward::Previous, |r| matches!(r, Row::File { .. })),
             Act::Open => return self.enter_review_row(),
             Act::Back | Act::ClosePane if self.answer_open() => {
                 self.key_did = Some(Act::ClosePane);
@@ -371,9 +372,12 @@ impl App {
     }
 
     /// `n` and `N` with no search live: `]n` and `[n`, counted as them.
-    fn jump_to_thread(&mut self, forward: bool) -> Vec<Action> {
-        self.key_did = Some(if forward { Act::NextThread } else { Act::PrevThread });
-        self.jump_to_marked(forward)
+    fn jump_to_thread(&mut self, toward: Toward) -> Vec<Action> {
+        self.key_did = Some(match toward {
+            Toward::Next => Act::NextThread,
+            Toward::Previous => Act::PrevThread,
+        });
+        self.jump_to_marked(toward)
     }
 
     /// A refresh also posts again every draft GitLab does not hold yet.
@@ -423,7 +427,7 @@ impl App {
     fn queue_prefixed(&mut self, act: Act) -> Vec<Action> {
         self.did(act);
         let open = match act {
-            Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
+            Act::NextMr | Act::PrevMr => return self.step_mr(Toward::next_if(act == Act::NextMr)),
             Act::FoldOpen => Some(true),
             Act::FoldClose => Some(false),
             Act::FoldToggle => None,
@@ -447,9 +451,9 @@ impl App {
             Act::FoldClose => return self.fold_at_cursor(Some(false)),
             Act::Zen => return self.toggle_zen(),
             Act::Viewed => return self.toggle_viewed(),
-            Act::NextMr | Act::PrevMr => return self.step_mr(act == Act::NextMr),
-            Act::NextHunk | Act::PrevHunk => self.review_jump(act == Act::NextHunk, |r| matches!(r, Row::Hunk { .. })),
-            Act::NextThread | Act::PrevThread => return self.jump_to_marked(act == Act::NextThread),
+            Act::NextMr | Act::PrevMr => return self.step_mr(Toward::next_if(act == Act::NextMr)),
+            Act::NextHunk | Act::PrevHunk => self.review_jump(Toward::next_if(act == Act::NextHunk), |r| matches!(r, Row::Hunk { .. })),
+            Act::NextThread | Act::PrevThread => return self.jump_to_marked(Toward::next_if(act == Act::NextThread)),
             _ => self.did_nothing(),
         }
         vec![]
@@ -655,7 +659,7 @@ mod tests {
         press(&mut diff, "?");
         assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "ask claude", "search & app"]);
         let mut thread = with_review();
-        walk_to_any_thread(&mut thread, true);
+        walk_to_any_thread(&mut thread, Toward::Next);
         thread.handle_key(code(KeyCode::Enter));
         assert_eq!(thread.focus, Focus::Side);
         press(&mut thread, "?");
