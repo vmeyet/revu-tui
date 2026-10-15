@@ -1,8 +1,13 @@
 //! Cache files as revu has written them: a type that no longer reads one makes the cache drop it,
 //! and with it the reader's pins, viewed files and drafts.
 #![allow(clippy::unwrap_used)]
-use super::*;
+use super::MrState;
+use super::ai::SavedAnswer;
+use crate::cache::Entry;
+use crate::forge::{Discussion, Draft as HeldDraft, Mr, MrKey, Queue};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::collections::BTreeSet;
 
 /// `json` reads as `T` and writes back the same JSON.
 fn reads_back<T: DeserializeOwned + Serialize>(json: &str) {

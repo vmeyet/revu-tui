@@ -1,6 +1,6 @@
 //! The action runner: each action the app asks for runs in its own task and answers through `Incoming`.
 use super::app::{self, Action, Failure, Incoming, Part, Post, QueueView};
-use super::backend::{Backend, MrState, Opening};
+use super::backend::{Backend, MrState};
 use crate::blocking;
 use crate::cache::{Cache, keys};
 use crate::forge::{Forge, MrKey};
@@ -44,7 +44,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                         };
                         send(answer);
                         if let Some(sections) = counted
-                            && let Ok(progress) = backend.off(move |b| b.progress(&sections)).await
+                            && let Ok(progress) = backend.run_blocking(move |b| b.progress(&sections)).await
                         {
                             send(Incoming::Progress(progress));
                         }
@@ -54,19 +54,19 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
             }
             Action::ChangeQueueView { scope, change, order } => {
-                let saved = backend.off(move |b| b.change_queue_view(scope.as_ref(), change, order)).await;
+                let saved = backend.run_blocking(move |b| b.change_queue_view(scope.as_ref(), change, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::ChangePin { scope, key, on, order } => {
-                let saved = backend.off(move |b| b.change_pin(scope.as_ref(), &key, on, order)).await;
+                let saved = backend.run_blocking(move |b| b.change_pin(scope.as_ref(), &key, on, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::Open(key) => {
-                let _opening = Opening::start(&backend.opening);
+                let _opening = backend.start_opening();
                 let wanted = key.clone();
                 let cached = backend.read_cache(move |b| b.open_cached(&wanted)).await;
                 let painted = cached.as_ref().and_then(painted_head);
@@ -96,7 +96,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let chosen =
                     MrState { fold, viewed_files: viewed, auto_folded: (*auto_folded).clone(), side_by_side, spot, opened_at: None };
                 let save = move |b: &Backend| b.save_state(&key, order, chosen);
-                if let Err(e) = backend.off(save).await.and_then(|saved| saved) {
+                if let Err(e) = backend.run_blocking(save).await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
             }

@@ -27,7 +27,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
 | `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied |
 | `tui/actions.rs` | The action runner: one task per `Action`, answers sent back as `Incoming` |
-| `tui/backend.rs`, `tui/lanes.rs` | `Backend`: the forge, the cache and the AI behind the runner; one lane per MR for draft writes |
+| `tui/backend.rs`, `tui/backend/`, `tui/lanes.rs` | `Backend`: the forge, the cache and the AI behind the runner, one file per concern (`saves`, `queue`, `reviews`, `drafts`, `ai`, `files`, `prune`); one lane per MR for draft writes |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/theme.rs`, `tui/screen.rs`, `tui/ground.rs` | The colour palette; the terminal in raw mode on the alternate screen; the terminal's background, asked once at startup |
 | `tui/field.rs`, `complete.rs`, `palette.rs`, `help.rs` | The input box, tab completion, the `ctrl-k` palette, the `?` overlay |
@@ -69,7 +69,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 ## Boundaries
 
 - Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `forge/model.rs`.
-- Side effects live at the edges: `main.rs`, `commands/`, `tui/mod.rs` (the loop and the terminal), `tui/actions.rs` and `tui/backend.rs` (network, cache, processes).
+- Side effects live at the edges: `main.rs`, `commands/`, `tui/mod.rs` (the loop and the terminal), `tui/actions.rs` and `tui/backend/` (network, cache, processes).
 - `tui/app/` is pure: it reads time from `app.now` and `app.today`, set by the loop, and never does I/O; its tests drive it with keys and `Incoming` values.
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `Screen::lend`, with the key stream paused.
@@ -81,7 +81,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - One tokio multi-thread runtime (`#[tokio::main]`).
 - The loop is one task with a `tokio::select!` over terminal events, an unbounded `Incoming` channel and a tick; it never awaits the network.
 - Each `Action` runs in its own `tokio::spawn` task.
-- Blocking work goes to `spawn_blocking` through `blocking::run` (or `Backend::off`, which hands the work the backend): cache reads and writes, outline parsing, agent sessions, usage saves.
+- Blocking work goes to `spawn_blocking` through `blocking::run` (or `Backend::run_blocking`, which hands the work the backend): cache reads and writes, outline parsing, agent sessions, usage saves.
 - Child programs that answer quickly use `tokio::process`; programs that own the terminal block the loop on purpose.
 
 State shared between tasks, and why:
