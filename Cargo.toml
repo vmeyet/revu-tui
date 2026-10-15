@@ -59,7 +59,7 @@ mrk = { git = "https://github.com/vmeyet/mrk-cli", tag = "v0.7.0", package = "mr
 
 [features]
 default = ["prose"]
-# The rendered view of Markdown files (`specs/11-prose-diff.md`): about 6 MB of binary.
+# The rendered view of Markdown files (`v` in the diff): about 6 MB of binary.
 prose = ["dep:mrk"]
 
 [dev-dependencies]
@@ -77,11 +77,51 @@ codegen-units = 1
 
 [lints.rust]
 missing_docs = "warn"
+non_ascii_idents = "warn"
+redundant_lifetimes = "warn"
+single_use_lifetimes = "warn"
+trivial_numeric_casts = "warn"
+unit_bindings = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "warn"
 expect_used = "warn"
+# Restriction lints the code already meets, kept so it stays that way.
+cfg_not_test = "warn"
+dbg_macro = "warn"
+deref_by_slicing = "warn"
+empty_drop = "warn"
+empty_enum_variants_with_brackets = "warn"
+empty_structs_with_brackets = "warn"
+filetype_is_file = "warn"
+fn_to_numeric_cast_any = "warn"
+get_unwrap = "warn"
+infinite_loop = "warn"
+large_include_file = "warn"
+lossy_float_literal = "warn"
+mem_forget = "warn"
+mixed_read_write_in_expression = "warn"
+mutex_atomic = "warn"
+mutex_integer = "warn"
+panic_in_result_fn = "warn"
+rc_mutex = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+same_name_method = "warn"
+string_lit_chars_any = "warn"
+todo = "warn"
+try_err = "warn"
+undocumented_unsafe_blocks = "warn"
+unimplemented = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_self_imports = "warn"
+unneeded_field_pattern = "warn"
+unused_result_ok = "warn"
+verbose_file_reads = "warn"
+# Pedantic lints this code opts out of.
 cast_possible_truncation = "allow"
 cast_possible_wrap = "allow"
 cast_sign_loss = "allow"

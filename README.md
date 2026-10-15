@@ -44,7 +44,7 @@ revu 42             # straight into MR 42 of this project, in zen
 | [Troubleshooting](docs/troubleshooting.md) | When something does not work |
 | [What's new](CHANGELOG.md) | What changed in each version, and how to use it |
 
-Contributors: read [`AGENTS.md`](AGENTS.md) and the design in [`specs/`](specs/).
+Contributors: read [`ARCHITECTURE.md`](ARCHITECTURE.md), then [`AGENTS.md`](AGENTS.md).
 
 ## License
 

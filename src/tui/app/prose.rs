@@ -1,4 +1,4 @@
-//! The prose view (`v`): the Markdown file under the cursor drawn rendered in the diff area (`specs/11-prose-diff.md`).
+//! The prose view (`v`): the Markdown file under the cursor drawn rendered in the diff area.
 use super::{Action, App, MrKey, Open};
 use crate::act::{Act, Pane};
 use crate::outline::Sides;
