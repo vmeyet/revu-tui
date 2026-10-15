@@ -1,5 +1,5 @@
 use super::{App, Failure, Incoming, Open};
-use crate::forge::Discussion;
+use crate::forge::{ApprovalChange, Discussion};
 use crate::review::{Draft, Review, draft};
 
 impl App {
@@ -93,13 +93,16 @@ impl App {
                 let follow = self.merged(&key);
                 self.composed.extend(follow);
             }
-            Incoming::DraftSet { key, draft } => {
-                let follow = self.draft_set(&key, draft);
+            Incoming::DraftSet { key, readiness } => {
+                let follow = self.draft_set(&key, readiness);
                 self.composed.extend(follow);
             }
-            Incoming::Approved { key, approve } => {
-                self.set_approved(&key, approve);
-                self.toast(if approve { "approved" } else { "approval removed" });
+            Incoming::Approved { key, change } => {
+                self.set_approved(&key, change);
+                self.toast(match change {
+                    ApprovalChange::Approve => "approved",
+                    ApprovalChange::Unapprove => "approval removed",
+                });
                 let follow = self.reread(&key);
                 self.composed.extend(follow);
             }
@@ -356,7 +359,7 @@ mod tests {
         app.apply(Incoming::File { key: other.clone(), path: "src/pay/charge.rs".into(), sha: head, text: "fn main() {}".into() });
         app.apply(Incoming::Checks { key: other.clone(), checks: None });
         app.apply(Incoming::Resolved { key: other.clone(), thread: "c0ffee00c0ffee00".into(), resolved: true });
-        app.apply(Incoming::Approved { key: other.clone(), approve: true });
+        app.apply(Incoming::Approved { key: other.clone(), change: ApprovalChange::Approve });
         app.apply(Incoming::Published { key: other, approval: Approval::NotAsked, count: 1 });
         assert_eq!(app.open, before);
     }

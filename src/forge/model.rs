@@ -334,6 +334,51 @@ pub enum Approval {
     Refused(String),
 }
 
+/// What a publish says with the drafts: only them, or an approval too.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReviewKind {
+    Comment,
+    Approve,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApprovalChange {
+    Approve,
+    Unapprove,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReactionChange {
+    Add,
+    Remove,
+}
+
+impl ReactionChange {
+    pub fn undone(self) -> Self {
+        match self {
+            Self::Add => Self::Remove,
+            Self::Remove => Self::Add,
+        }
+    }
+}
+
+/// Whether an MR is a draft or ready for review.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Readiness {
+    Draft,
+    Ready,
+}
+
+impl Readiness {
+    /// The end of `!42 is …`.
+    pub fn described(self) -> &'static str {
+        match self {
+            Self::Draft => "a draft",
+            Self::Ready => "ready for review",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Approvals {
     pub approved: bool,
@@ -346,12 +391,13 @@ pub struct Approvals {
 impl Approvals {
     /// The approvals once mine, `me`'s, is added or taken back, counted the way the forge will
     /// until its own answer comes; a removal gives back the approval it had taken.
-    pub fn with_mine(&self, approve: bool, me: &str) -> Self {
+    pub fn with_mine(&self, change: ApprovalChange, me: &str) -> Self {
+        let approve = change == ApprovalChange::Approve;
         let had = self.approved_by.iter().any(|u| u.username == me);
         let mut approved_by: Vec<User> = self.approved_by.iter().filter(|u| u.username != me).cloned().collect();
-        let approvals_left = match (approve, had) {
-            (true, false) => self.approvals_left.saturating_sub(1),
-            (false, true) => self.approvals_left + 1,
+        let approvals_left = match (change, had) {
+            (ApprovalChange::Approve, false) => self.approvals_left.saturating_sub(1),
+            (ApprovalChange::Unapprove, true) => self.approvals_left + 1,
             _ => self.approvals_left,
         };
         if approve {
@@ -585,15 +631,14 @@ pub fn tally(awards: impl IntoIterator<Item = (Emoji, bool)>) -> Vec<Reaction> {
     counts.into_iter().map(|(emoji, (count, mine))| Reaction { emoji, count, mine }).collect()
 }
 
-/// A note with my reaction `emoji` added (`on`) or taken off, counts kept right.
-pub fn toggled(reactions: &[Reaction], emoji: Emoji, on: bool) -> Vec<Reaction> {
+/// A note with my reaction `emoji` added or taken off, counts kept right.
+pub fn toggled(reactions: &[Reaction], emoji: Emoji, change: ReactionChange) -> Vec<Reaction> {
     let mut all: Vec<Reaction> = reactions.to_vec();
-    match all.iter_mut().find(|r| r.emoji == emoji) {
-        Some(r) if on && !r.mine => *r = Reaction { count: r.count + 1, mine: true, ..*r },
-        Some(r) if !on && r.mine => *r = Reaction { count: r.count.saturating_sub(1), mine: false, ..*r },
-        Some(_) => {}
-        None if on => all.push(Reaction { emoji, count: 1, mine: true }),
-        None => {}
+    match (change, all.iter_mut().find(|r| r.emoji == emoji)) {
+        (ReactionChange::Add, Some(r)) if !r.mine => *r = Reaction { count: r.count + 1, mine: true, ..*r },
+        (ReactionChange::Remove, Some(r)) if r.mine => *r = Reaction { count: r.count.saturating_sub(1), mine: false, ..*r },
+        (ReactionChange::Add, None) => all.push(Reaction { emoji, count: 1, mine: true }),
+        _ => {}
     }
     all.retain(|r| r.count > 0);
     all.sort_by_key(|r| r.emoji);
@@ -725,10 +770,10 @@ mod tests {
     fn my_approval_counts_at_once_and_taking_it_back_undoes_it() {
         let lea = User { id: 1, username: "lea".into(), name: "Lea".into() };
         let before = Approvals { approved: false, approvals_left: 1, approved_by: vec![lea], ..Approvals::default() };
-        let mine = before.with_mine(true, "nina");
+        let mine = before.with_mine(ApprovalChange::Approve, "nina");
         assert_eq!((mine.approved, mine.approvals_left, mine.user_has_approved, mine.approved_by.len()), (true, 0, true, 2));
-        assert_eq!(mine.with_mine(true, "nina"), mine, "approving twice counts once");
-        assert_eq!(mine.with_mine(false, "nina"), Approvals { user_has_approved: false, ..before });
+        assert_eq!(mine.with_mine(ApprovalChange::Approve, "nina"), mine, "approving twice counts once");
+        assert_eq!(mine.with_mine(ApprovalChange::Unapprove, "nina"), Approvals { user_has_approved: false, ..before });
     }
 
     #[test]
@@ -742,12 +787,12 @@ mod tests {
             now,
             [Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }, Reaction { emoji: Emoji::Rocket, count: 1, mine: false }]
         );
-        let off = toggled(&now, Emoji::ThumbsUp, false);
+        let off = toggled(&now, Emoji::ThumbsUp, ReactionChange::Remove);
         assert_eq!(off[0], Reaction { emoji: Emoji::ThumbsUp, count: 1, mine: false });
-        let on = toggled(&now, Emoji::Eyes, true);
+        let on = toggled(&now, Emoji::Eyes, ReactionChange::Add);
         assert_eq!(on.last().copied(), Some(Reaction { emoji: Emoji::Eyes, count: 1, mine: true }));
-        assert_eq!(toggled(&on, Emoji::Eyes, false), now, "on then off gives back what was there");
-        assert_eq!(toggled(&now, Emoji::Rocket, false), now, "taking off a reaction I never gave changes nothing");
+        assert_eq!(toggled(&on, Emoji::Eyes, ReactionChange::Remove), now, "on then off gives back what was there");
+        assert_eq!(toggled(&now, Emoji::Rocket, ReactionChange::Remove), now, "taking off a reaction I never gave changes nothing");
     }
 
     fn mergeable() -> Mr {

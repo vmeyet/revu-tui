@@ -12,7 +12,7 @@ pub async fn run(ctx: &Ctx, args: RefArgs) -> Result<()> {
         println!("no drafts on {name}");
         return Ok(());
     }
-    ctx.forge.publish(&key, false).await?;
+    ctx.forge.publish(&key, crate::forge::ReviewKind::Comment).await?;
     if ctx.json {
         return crate::ctx::emit(&serde_json::json!({"project": key.project, "number": key.number, "published": drafts.len()}));
     }

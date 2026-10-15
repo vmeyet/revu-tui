@@ -12,9 +12,9 @@ pub mod rules;
 
 pub use budget::RateLimit;
 pub use model::{
-    Applicable, Approval, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod, MergePlan, Mr, MrKey,
-    MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, Refs, Sha, Side, Suggestion, ThreadId, User, tally,
-    toggled,
+    Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod,
+    MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange, Readiness,
+    Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -262,11 +262,11 @@ impl Forge {
         }
     }
 
-    /// Every draft of mine goes public as one review, approving the MR with it when asked; an error means nothing went public.
-    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<Approval> {
+    /// Every draft of mine goes public as one review of `kind`; an error means nothing went public.
+    pub async fn publish(&self, key: &MrKey, kind: ReviewKind) -> Result<Approval> {
         match self {
-            Forge::GitLab(client) => client.publish(key, approve).await,
-            Forge::GitHub(client) => client.publish(key, approve).await,
+            Forge::GitLab(client) => client.publish(key, kind).await,
+            Forge::GitHub(client) => client.publish(key, kind).await,
         }
     }
 
@@ -278,19 +278,19 @@ impl Forge {
     }
 
     /// Approves the MR, or takes my approval back.
-    pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
+    pub async fn approve(&self, key: &MrKey, change: ApprovalChange) -> Result<()> {
         match self {
-            Forge::GitLab(client) => client.approve(key, approve).await,
-            Forge::GitHub(client) => client.approve(key, approve).await,
+            Forge::GitLab(client) => client.approve(key, change).await,
+            Forge::GitHub(client) => client.approve(key, change).await,
         }
     }
 
     /// Adds my `emoji` to `note`, or takes it off. The note must carry the forge's GraphQL id.
-    pub async fn react(&self, note: &Note, emoji: Emoji, on: bool) -> Result<()> {
+    pub async fn react(&self, note: &Note, emoji: Emoji, change: ReactionChange) -> Result<()> {
         let node = note.node.as_deref().context("this note cannot take reactions yet: refresh with r")?;
         match self {
-            Forge::GitLab(client) => client.react(node, emoji, on).await,
-            Forge::GitHub(client) => client.react(node, emoji, on).await,
+            Forge::GitLab(client) => client.react(node, emoji, change).await,
+            Forge::GitHub(client) => client.react(node, emoji, change).await,
         }
     }
 
@@ -303,10 +303,10 @@ impl Forge {
     }
 
     /// Marks the MR a draft, or ready; one already there stays as it is.
-    pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
+    pub async fn set_readiness(&self, key: &MrKey, readiness: Readiness) -> Result<()> {
         match self {
-            Forge::GitLab(client) => client.set_draft(key, draft).await,
-            Forge::GitHub(client) => client.set_draft(key, draft).await,
+            Forge::GitLab(client) => client.set_readiness(key, readiness).await,
+            Forge::GitHub(client) => client.set_readiness(key, readiness).await,
         }
     }
 

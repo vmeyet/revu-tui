@@ -311,9 +311,9 @@ pub(super) fn asking() -> App {
     app
 }
 
-pub(super) fn the_ask(actions: &[Action]) -> (u64, crate::ai::anthropic::Ask, bool) {
-    let [Action::Ask { id, request, fresh, .. }] = actions else { panic!("{actions:?}") };
-    (*id, (**request).clone(), *fresh)
+pub(super) fn the_ask(actions: &[Action]) -> (u64, crate::ai::anthropic::Ask, AnswerSource) {
+    let [Action::Ask { id, request, source, .. }] = actions else { panic!("{actions:?}") };
+    (*id, (**request).clone(), *source)
 }
 
 pub(super) fn done(model: &str) -> crate::ai::anthropic::Outcome {

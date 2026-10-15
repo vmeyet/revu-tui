@@ -615,9 +615,12 @@ impl Client {
     }
 
     /// Adds my `emoji` to the comment `node`, or takes it off; GitHub needs no reaction id for either.
-    pub async fn react(&self, node: &str, emoji: forge::Emoji, on: bool) -> Result<()> {
+    pub async fn react(&self, node: &str, emoji: forge::Emoji, change: forge::ReactionChange) -> Result<()> {
         let Some(content) = emoji.github() else { bail!("GitHub reacts with eight emoji only") };
-        let mutation = if on { "addReaction" } else { "removeReaction" };
+        let mutation = match change {
+            forge::ReactionChange::Add => "addReaction",
+            forge::ReactionChange::Remove => "removeReaction",
+        };
         let query = format!(
             "mutation($id: ID!, $content: ReactionContent!) {{ {mutation}(input: {{subjectId: $id, content: $content}}) {{ clientMutationId }} }}"
         );
@@ -625,7 +628,8 @@ impl Client {
     }
 
     /// Marks the PR a draft, or ready for review; asked first, so a PR already there is left alone.
-    pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
+    pub async fn set_readiness(&self, key: &MrKey, readiness: forge::Readiness) -> Result<()> {
+        let draft = readiness == forge::Readiness::Draft;
         let (owner, name) = owner_and_name(&key.project)?;
         let data: DraftStateData = self.graphql(DRAFT_STATE, json!({"owner": owner, "name": name, "number": key.number})).await?;
         let pr = data.repository.and_then(|r| r.pull_request).with_context(|| format!("{}#{} not found", key.project, key.number))?;
@@ -739,17 +743,20 @@ impl Client {
 
     /// Submits my pending review, as an approval when asked; with nothing pending, an approval
     /// alone is still a review.
-    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<forge::Approval> {
+    pub async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
         let prs = self.threads(key).await?;
-        let event = if approve { "APPROVE" } else { "COMMENT" };
+        let (event, approval) = match kind {
+            forge::ReviewKind::Approve => ("APPROVE", forge::Approval::Given),
+            forge::ReviewKind::Comment => ("COMMENT", forge::Approval::NotAsked),
+        };
         let Some(review) = prs.pending_review() else {
-            ensure!(approve, "nothing to publish: no pending review on {}#{}", key.project, key.number);
-            self.approve(key, true).await?;
+            ensure!(kind == forge::ReviewKind::Approve, "nothing to publish: no pending review on {}#{}", key.project, key.number);
+            self.approve(key, forge::ApprovalChange::Approve).await?;
             return Ok(forge::Approval::Given);
         };
         let query = "mutation($id: ID!, $event: PullRequestReviewEvent!) { submitPullRequestReview(input: {pullRequestReviewId: $id, event: $event}) { clientMutationId } }";
         self.graphql::<Value>(query, json!({"id": review.id, "event": event})).await?;
-        Ok(if approve { forge::Approval::Given } else { forge::Approval::NotAsked })
+        Ok(approval)
     }
 
     pub async fn resolve(&self, discussion: &ThreadId, resolved: bool) -> Result<()> {
@@ -882,10 +889,11 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        client.react("PRRC_kw1", forge::Emoji::Hooray, true).await.unwrap();
-        let other = client.react("PRRC_kw1", forge::Emoji::from_gitlab("100").unwrap(), true).await.unwrap_err().to_string();
+        client.react("PRRC_kw1", forge::Emoji::Hooray, forge::ReactionChange::Add).await.unwrap();
+        let other =
+            client.react("PRRC_kw1", forge::Emoji::from_gitlab("100").unwrap(), forge::ReactionChange::Add).await.unwrap_err().to_string();
         assert!(other.contains("eight"), "GitHub is not asked: {other}");
-        let err = client.react("PRRC_kw1", forge::Emoji::Hooray, false).await.unwrap_err().to_string();
+        let err = client.react("PRRC_kw1", forge::Emoji::Hooray, forge::ReactionChange::Remove).await.unwrap_err().to_string();
         assert!(err.contains("Could not resolve"), "{err}");
     }
     #[test]
@@ -1255,7 +1263,11 @@ mod tests {
         let edited = client.update_draft(&key(), 105, &NewDraft { body: "nit: unused".into(), ..NewDraft::default() }).await.unwrap();
         assert_eq!(edited.body, "nit: unused");
         client.delete_draft(&key(), 103).await.unwrap();
-        assert_eq!(client.publish(&key(), true).await.unwrap(), forge::Approval::Given, "one review carries the notes and the approval");
+        assert_eq!(
+            client.publish(&key(), forge::ReviewKind::Approve).await.unwrap(),
+            forge::Approval::Given,
+            "one review carries the notes and the approval"
+        );
         let err = client.delete_draft(&key(), 101).await.unwrap_err().to_string();
         assert!(err.contains("not in my pending review"), "{err}");
     }
@@ -1324,7 +1336,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        client(&server).set_draft(&key(), true).await.unwrap();
+        client(&server).set_readiness(&key(), forge::Readiness::Draft).await.unwrap();
     }
 
     #[tokio::test]
@@ -1338,6 +1350,6 @@ mod tests {
             .expect(0)
             .mount(&server)
             .await;
-        client(&server).set_draft(&key(), false).await.unwrap();
+        client(&server).set_readiness(&key(), forge::Readiness::Ready).await.unwrap();
     }
 }

@@ -240,12 +240,15 @@ impl Client {
     }
 
     /// Every draft of mine on the MR becomes public at once, as one review; then the approval, when asked.
-    pub async fn publish(&self, key: &MrKey, approve: bool) -> Result<forge::Approval> {
+    pub async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
         self.http.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(key)), None).await?;
-        if !approve {
+        if kind == forge::ReviewKind::Comment {
             return Ok(forge::Approval::NotAsked);
         }
-        Ok(self.approve(key, true).await.map_or_else(|e| forge::Approval::Refused(e.to_string()), |()| forge::Approval::Given))
+        Ok(self
+            .approve(key, forge::ApprovalChange::Approve)
+            .await
+            .map_or_else(|e| forge::Approval::Refused(e.to_string()), |()| forge::Approval::Given))
     }
 
     pub async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
@@ -280,8 +283,11 @@ impl Client {
         self.http.put_json::<serde_json::Value>(&format!("{}/merge", mr_path(key)), &body).await.map(|_| ()).map_err(merge_refused)
     }
 
-    pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
-        let verb = if approve { "approve" } else { "unapprove" };
+    pub async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
+        let verb = match change {
+            forge::ApprovalChange::Approve => "approve",
+            forge::ApprovalChange::Unapprove => "unapprove",
+        };
         self.http.send_empty(Method::POST, &format!("{}/{verb}", mr_path(key)), None).await.map_err(cannot_approve)
     }
 }
@@ -536,7 +542,7 @@ mod tests {
         let renamed = forge::NewDraft { body: "nit: renamed".into(), ..draft.clone() };
         assert_eq!(client.update_draft(&key(), 2, &renamed).await.unwrap().id, 2);
         client.delete_draft(&key(), 2).await.unwrap();
-        client.publish(&key(), false).await.unwrap();
+        client.publish(&key(), forge::ReviewKind::Comment).await.unwrap();
         assert_eq!(server.received_requests().await.unwrap().len(), 5);
     }
 
@@ -551,7 +557,7 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("POST")).and(path(format!("{base}/approve"))).respond_with(ResponseTemplate::new(401)).mount(&server).await;
-        let approval = client(&server).publish(&key(), true).await.unwrap();
+        let approval = client(&server).publish(&key(), forge::ReviewKind::Approve).await.unwrap();
         assert_eq!(approval, forge::Approval::Refused("you cannot approve this MR (own MR or approval rules)".into()));
     }
 
@@ -597,9 +603,9 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        let err = client.approve(&key(), true).await.unwrap_err().to_string();
+        let err = client.approve(&key(), forge::ApprovalChange::Approve).await.unwrap_err().to_string();
         assert!(err.contains("cannot approve"), "{err}");
-        let err = client.approve(&key(), false).await.unwrap_err().to_string();
+        let err = client.approve(&key(), forge::ApprovalChange::Unapprove).await.unwrap_err().to_string();
         assert!(err.contains("HTTP 404"), "{err}");
     }
 

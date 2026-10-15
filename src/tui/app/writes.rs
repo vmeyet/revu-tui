@@ -98,7 +98,7 @@ mod tests {
         assert!(app.live_toast().unwrap().text.contains("r reads the drafts again"));
         let held = app.open.as_ref().unwrap().review.drafts.clone();
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review().with_drafts(held)), cached: None });
-        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), approve: false, count: 1 }]);
+        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), kind: ReviewKind::Comment, count: 1 }]);
     }
 
     #[test]
@@ -110,7 +110,7 @@ mod tests {
         let held = app.open.as_ref().unwrap().review.drafts.clone();
         app.apply(Incoming::Threads { key: mr_key(), mr: Box::new(mr()), discussions: discussions(), drafts: held.clone() });
         assert_eq!(app.open.as_ref().unwrap().review.drafts, held, "the draft the forge still holds stays");
-        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), approve: false, count: 1 }]);
+        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), kind: ReviewKind::Comment, count: 1 }]);
     }
 
     #[test]
@@ -124,7 +124,7 @@ mod tests {
         assert_eq!(publish_keys(&mut app), vec![]);
         assert!(app.live_toast().unwrap().text.contains("still on its way"));
         app.apply(Incoming::DraftChanged { key: mr_key() });
-        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), approve: false, count: 1 }]);
+        assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), kind: ReviewKind::Comment, count: 1 }]);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Reactions on GitLab notes: its award emoji, read for every note of an MR in one GraphQL query
 //! and changed by the note's GraphQL id, so removing mine needs no award id.
 use super::Client;
-use crate::forge::{Emoji, MrKey, Reaction, tally};
+use crate::forge::{Emoji, MrKey, Reaction, ReactionChange, tally};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use serde_json::json;
@@ -138,8 +138,11 @@ impl Client {
     }
 
     /// Adds my `emoji` to the note `node`, or takes it off.
-    pub async fn react(&self, node: &str, emoji: Emoji, on: bool) -> Result<()> {
-        let mutation = if on { "awardEmojiAdd" } else { "awardEmojiRemove" };
+    pub async fn react(&self, node: &str, emoji: Emoji, change: ReactionChange) -> Result<()> {
+        let mutation = match change {
+            ReactionChange::Add => "awardEmojiAdd",
+            ReactionChange::Remove => "awardEmojiRemove",
+        };
         let query =
             format!("mutation($id: AwardableID!, $name: String!) {{ {mutation}(input: {{awardableId: $id, name: $name}}) {{ errors }} }}");
         let answer: Answer<serde_json::Value> =
@@ -233,9 +236,9 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        client.react("gid://gitlab/DiffNote/11", Emoji::Rocket, true).await.unwrap();
-        client.react("gid://gitlab/DiffNote/11", Emoji::from_gitlab("100").unwrap(), true).await.unwrap();
-        let err = client.react("gid://gitlab/DiffNote/11", Emoji::Rocket, false).await.unwrap_err().to_string();
+        client.react("gid://gitlab/DiffNote/11", Emoji::Rocket, ReactionChange::Add).await.unwrap();
+        client.react("gid://gitlab/DiffNote/11", Emoji::from_gitlab("100").unwrap(), ReactionChange::Add).await.unwrap();
+        let err = client.react("gid://gitlab/DiffNote/11", Emoji::Rocket, ReactionChange::Remove).await.unwrap_err().to_string();
         assert!(err.contains("Not allowed"), "{err}");
     }
 }

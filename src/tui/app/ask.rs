@@ -40,6 +40,13 @@ pub struct PastAnswer {
     pub outcome: Outcome,
 }
 
+/// Where an answer may come from: `CacheFirst` reuses one kept for the same question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnswerSource {
+    CacheFirst,
+    Fresh,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnswerState {
     Streaming,
@@ -124,7 +131,7 @@ impl App {
         let Some(open) = &self.open else { return vec![] };
         let request = context::ask(&open.review, scope, prompt, context::BUDGET);
         let label = format!("{} · {}", label_of(prompt), scope_label(scope));
-        self.start_answer(label, request, target, false)
+        self.start_answer(label, request, target, AnswerSource::CacheFirst)
     }
 
     /// `:ask <question>`: about what `a a` would ask about.
@@ -149,10 +156,10 @@ impl App {
         request.turns.push(Turn { role: Role::Assistant, text: answer.text.clone() });
         request.turns.push(Turn { role: Role::User, text: question });
         let (label, target) = (answer.label.clone(), answer.target.clone());
-        self.start_answer(label, request, target, false)
+        self.start_answer(label, request, target, AnswerSource::CacheFirst)
     }
 
-    fn start_answer(&mut self, label: String, request: Ask, target: Target, fresh: bool) -> Vec<Action> {
+    fn start_answer(&mut self, label: String, request: Ask, target: Target, source: AnswerSource) -> Vec<Action> {
         if !self.asked {
             self.asked = true;
             let model = self.ask_model.clone().unwrap_or_default();
@@ -171,7 +178,7 @@ impl App {
             target,
         };
         let (key, head) = (open.key.clone(), open.review.mr.refs.head.clone());
-        let ask = Action::Ask { key, id: self.next_answer, request: Box::new(request), fresh, label: answer.label.clone(), head };
+        let ask = Action::Ask { key, id: self.next_answer, request: Box::new(request), source, label: answer.label.clone(), head };
         self.update_open(|open| open.showing_answer(answer));
         self.focus = Focus::Side;
         vec![ask]
@@ -230,7 +237,7 @@ impl App {
             Some(Act::AnswerFollowUp) if answer.state != AnswerState::Streaming => return self.question_box(Input::FollowUp),
             Some(Act::AnswerAgain) => {
                 let (label, request, target) = (answer.label.clone(), answer.request.clone(), answer.target.clone());
-                return self.start_answer(label, request, target, true);
+                return self.start_answer(label, request, target, AnswerSource::Fresh);
             }
             Some(Act::Back | Act::ClosePane) => self.close_answer(),
             _ => self.did_nothing(),
@@ -379,8 +386,8 @@ mod tests {
     fn a_a_asks_about_the_hunk_under_the_cursor_and_streams_into_the_pane() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, request, fresh) = the_ask(&ask_here(&mut app, "what does it do?"));
-        assert!(!fresh);
+        let (id, request, source) = the_ask(&ask_here(&mut app, "what does it do?"));
+        assert_eq!(source, AnswerSource::CacheFirst);
         assert_eq!(request.system.len(), 3, "rules, the MR, the hunk");
         assert!(request.system[2].text.contains("@@"));
         assert_eq!(request.turns.last().unwrap().text, "what does it do?");
@@ -446,8 +453,8 @@ mod tests {
             roles[1..],
             [(crate::ai::anthropic::Role::Assistant, "First answer."), (crate::ai::anthropic::Role::User, "and the tests?")]
         );
-        let (_, again, fresh) = the_ask(&press(&mut app, "R"));
-        assert!(fresh && again == request, "R asks the same thing past the cache");
+        let (_, again, source) = the_ask(&press(&mut app, "R"));
+        assert!(source == AnswerSource::Fresh && again == request, "R asks the same thing past the cache");
     }
 
     #[test]

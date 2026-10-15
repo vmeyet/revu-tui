@@ -436,9 +436,11 @@ impl Review {
     }
 
     /// My reaction `emoji` on note `index` of thread `id` added or taken off, ahead of the forge's answer.
-    pub fn with_reaction(self, id: &ThreadId, index: usize, emoji: crate::forge::Emoji, on: bool) -> Self {
-        let react =
-            |note: &crate::forge::Note| crate::forge::Note { reactions: crate::forge::toggled(&note.reactions, emoji, on), ..note.clone() };
+    pub fn with_reaction(self, id: &ThreadId, index: usize, emoji: crate::forge::Emoji, change: crate::forge::ReactionChange) -> Self {
+        let react = |note: &crate::forge::Note| crate::forge::Note {
+            reactions: crate::forge::toggled(&note.reactions, emoji, change),
+            ..note.clone()
+        };
         let threads = self
             .threads
             .iter()
@@ -455,8 +457,8 @@ impl Review {
 
     /// The MR marked approved by me or not, ahead of the forge's answer.
     /// My approval, `me`'s, added or taken back ahead of the forge's answer, so the header and `M` agree at once.
-    pub fn with_approved(self, approved: bool, me: &str) -> Self {
-        let approvals = self.mr.approvals.with_mine(approved, me);
+    pub fn with_approved(self, change: crate::forge::ApprovalChange, me: &str) -> Self {
+        let approvals = self.mr.approvals.with_mine(change, me);
         Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self }
     }
 

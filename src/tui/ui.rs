@@ -57,13 +57,17 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     let rows = [Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows), Constraint::Length(tap_rows)];
     let [main, input, status, taps] = Layout::vertical(rows).areas(screen);
     app.fit_threads();
-    let side_open = app.open.as_ref().is_some_and(super::app::Open::side_open);
-    let shown = columns(main.width, app.widths, app.open.is_some(), side_open, app.focus, app.zen);
+    let opened = match &app.open {
+        None => Opened::Nothing,
+        Some(open) if open.side_open() => Opened::MrWithPane,
+        Some(_) => Opened::Mr,
+    };
+    let shown = columns(main.width, app.widths, opened, app.focus, app.zen);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
     let (shown, review, side) = if app.zen { zen_areas(app, main, shown, [review, side]) } else { (shown, review, side) };
-    let side_open = side_open && shown.side > 0;
+    let side_open = opened == Opened::MrWithPane && shown.side > 0;
     let split = app.zen && shown.diff && side_open;
     let hidden = Rect::default();
     app.areas = super::app::Areas {
@@ -196,6 +200,14 @@ fn draw_pictures(f: &mut Frame<'_>, app: &mut App, pictures: &[thread_view::Plac
     }
 }
 
+/// What is open besides the queue: nothing, an MR, or an MR with its right pane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Opened {
+    Nothing,
+    Mr,
+    MrWithPane,
+}
+
 /// Which columns show, and how wide: zero hides the queue or the right pane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Columns {
@@ -208,7 +220,8 @@ struct Columns {
 /// and below that, or in a zen column too short to split, the pane is a page of its own while it has the keys.
 /// Below `widths.narrow` an open MR leaves the queue the same way: it shows only while it has the keys.
 /// Below `widths.compact` one page shows at a time: the queue while it has the keys, whole, else the diff or the pane.
-fn columns(width: u16, widths: Widths, mr_open: bool, side_open: bool, focus: Focus, zen: bool) -> Columns {
+fn columns(width: u16, widths: Widths, opened: Opened, focus: Focus, zen: bool) -> Columns {
+    let (mr_open, side_open) = (opened != Opened::Nothing, opened == Opened::MrWithPane);
     let side = SIDE_W.max(width * SIDE_PCT / 100);
     let paged = width < widths.compact && !zen;
     if paged && focus == Focus::Queue {
@@ -578,16 +591,24 @@ pub fn short_age(age: Duration) -> String {
 mod columns_tests {
     use super::*;
 
-    fn columns(width: u16, mr_open: bool, side_open: bool, focus: Focus, zen: bool) -> Columns {
-        super::columns(width, Widths::default(), mr_open, side_open, focus, zen)
+    fn columns(width: u16, opened: Opened, focus: Focus) -> Columns {
+        super::columns(width, Widths::default(), opened, focus, false)
+    }
+
+    fn zen_columns(width: u16, opened: Opened, focus: Focus) -> Columns {
+        super::columns(width, Widths::default(), opened, focus, true)
+    }
+
+    fn columns_with(width: u16, widths: Widths, opened: Opened, focus: Focus) -> Columns {
+        super::columns(width, widths, opened, focus, false)
     }
 
     #[test]
     fn a_set_narrow_width_moves_where_the_queue_hides_and_the_pane_turns_into_a_page() {
         let widths = Widths { narrow: 100, ..Widths::default() };
-        let reading = |width| super::columns(width, widths, true, false, Focus::Review, false).queue;
+        let reading = |width| columns_with(width, widths, Opened::Mr, Focus::Review).queue;
         assert_eq!((reading(99), reading(100), reading(110)), (0, QUEUE_W, QUEUE_W));
-        let pane = |width| super::columns(width, widths, true, true, Focus::Side, false);
+        let pane = |width| columns_with(width, widths, Opened::MrWithPane, Focus::Side);
         assert_eq!(pane(99), Columns { queue: 0, side: 99, diff: false });
         assert_eq!(pane(110), Columns { queue: 0, side: 44, diff: true }, "the pane beside the diff from 100");
     }
@@ -595,85 +616,85 @@ mod columns_tests {
     #[test]
     fn a_set_wide_width_moves_where_the_three_columns_start() {
         let widths = Widths { wide: 130, ..Widths::default() };
-        let pane = |width| super::columns(width, widths, true, true, Focus::Review, false);
+        let pane = |width| columns_with(width, widths, Opened::MrWithPane, Focus::Review);
         assert_eq!(pane(129), Columns { queue: 0, side: 51, diff: true });
         assert_eq!(pane(130), Columns { queue: QUEUE_W, side: 52, diff: true });
-        let late = super::columns(155, Widths { wide: 180, ..Widths::default() }, true, true, Focus::Review, false);
+        let late = columns_with(155, Widths { wide: 180, ..Widths::default() }, Opened::MrWithPane, Focus::Review);
         assert_eq!(late.queue, 0, "150 is no longer wide");
     }
 
     #[test]
     fn the_pane_takes_what_the_width_allows() {
         assert_eq!(
-            columns(160, true, true, Focus::Review, false),
+            columns(160, Opened::MrWithPane, Focus::Review),
             Columns { queue: WIDE_QUEUE_W, side: 64, diff: true },
             "three columns from 150"
         );
-        assert_eq!(columns(155, true, true, Focus::Review, false), Columns { queue: QUEUE_W, side: 62, diff: true });
+        assert_eq!(columns(155, Opened::MrWithPane, Focus::Review), Columns { queue: QUEUE_W, side: 62, diff: true });
         assert_eq!(
-            columns(130, true, true, Focus::Side, false),
+            columns(130, Opened::MrWithPane, Focus::Side),
             Columns { queue: 0, side: 52, diff: true },
             "the queue steps aside from 120"
         );
         assert_eq!(
-            columns(100, true, true, Focus::Side, false),
+            columns(100, Opened::MrWithPane, Focus::Side),
             Columns { queue: 0, side: 100, diff: false },
             "a page of its own below 120"
         );
         assert_eq!(
-            columns(100, true, true, Focus::Review, false),
+            columns(100, Opened::MrWithPane, Focus::Review),
             Columns { queue: 0, side: 0, diff: true },
             "h goes back to the diff at the same line"
         );
-        assert_eq!(columns(90, true, true, Focus::Side, false).side, 90);
-        assert_eq!(columns(80, true, false, Focus::Queue, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+        assert_eq!(columns(90, Opened::MrWithPane, Focus::Side).side, 90);
+        assert_eq!(columns(80, Opened::Mr, Focus::Queue), Columns { queue: QUEUE_W, side: 0, diff: true });
     }
 
     #[test]
     fn below_120_an_open_mr_shows_the_queue_only_while_it_has_the_keys() {
-        assert_eq!(columns(119, true, false, Focus::Review, false), Columns { queue: 0, side: 0, diff: true });
-        assert_eq!(columns(119, true, false, Focus::Queue, false), Columns { queue: QUEUE_W, side: 0, diff: true });
-        assert_eq!(columns(119, true, true, Focus::Queue, false).queue, QUEUE_W, "the pane behind it stays away");
-        assert_eq!(columns(119, false, false, Focus::Review, false).queue, QUEUE_W, "with no MR open the queue stays");
-        assert_eq!(columns(120, true, false, Focus::Review, false).queue, QUEUE_W, "from 120 the queue stays");
+        assert_eq!(columns(119, Opened::Mr, Focus::Review), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(columns(119, Opened::Mr, Focus::Queue), Columns { queue: QUEUE_W, side: 0, diff: true });
+        assert_eq!(columns(119, Opened::MrWithPane, Focus::Queue).queue, QUEUE_W, "the pane behind it stays away");
+        assert_eq!(columns(119, Opened::Nothing, Focus::Review).queue, QUEUE_W, "with no MR open the queue stays");
+        assert_eq!(columns(120, Opened::Mr, Focus::Review).queue, QUEUE_W, "from 120 the queue stays");
     }
 
     #[test]
     fn below_70_one_page_shows_at_a_time_and_the_queue_takes_the_window() {
-        assert_eq!(columns(69, false, false, Focus::Queue, false), Columns { queue: 69, side: 0, diff: false });
-        assert_eq!(columns(69, true, true, Focus::Queue, false), Columns { queue: 69, side: 0, diff: false }, "over an open MR too");
-        assert_eq!(columns(69, true, false, Focus::Review, false), Columns { queue: 0, side: 0, diff: true });
-        assert_eq!(columns(69, false, false, Focus::Review, false).queue, 0, "an MR on its way has the page already");
-        assert_eq!(columns(69, true, true, Focus::Side, false), Columns { queue: 0, side: 69, diff: false });
-        assert_eq!(columns(69, true, true, Focus::Queue, true), Columns { queue: 0, side: 0, diff: true }, "zen keeps its diff");
-        assert_eq!(columns(70, false, false, Focus::Queue, false), Columns { queue: QUEUE_W, side: 0, diff: true }, "from 70, as before");
+        assert_eq!(columns(69, Opened::Nothing, Focus::Queue), Columns { queue: 69, side: 0, diff: false });
+        assert_eq!(columns(69, Opened::MrWithPane, Focus::Queue), Columns { queue: 69, side: 0, diff: false }, "over an open MR too");
+        assert_eq!(columns(69, Opened::Mr, Focus::Review), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(columns(69, Opened::Nothing, Focus::Review).queue, 0, "an MR on its way has the page already");
+        assert_eq!(columns(69, Opened::MrWithPane, Focus::Side), Columns { queue: 0, side: 69, diff: false });
+        assert_eq!(zen_columns(69, Opened::MrWithPane, Focus::Queue), Columns { queue: 0, side: 0, diff: true }, "zen keeps its diff");
+        assert_eq!(columns(70, Opened::Nothing, Focus::Queue), Columns { queue: QUEUE_W, side: 0, diff: true }, "from 70, as before");
     }
 
     #[test]
     fn the_layout_setting_pages_a_wide_window_and_spares_a_small_one() {
         let forced = Widths { compact: u16::MAX, ..Widths::default() };
-        assert_eq!(super::columns(200, forced, true, true, Focus::Queue, false), Columns { queue: 200, side: 0, diff: false });
-        assert_eq!(super::columns(200, forced, true, true, Focus::Side, false), Columns { queue: 0, side: 200, diff: false });
+        assert_eq!(columns_with(200, forced, Opened::MrWithPane, Focus::Queue), Columns { queue: 200, side: 0, diff: false });
+        assert_eq!(columns_with(200, forced, Opened::MrWithPane, Focus::Side), Columns { queue: 0, side: 200, diff: false });
         let never = Widths { compact: 0, ..Widths::default() };
-        assert_eq!(super::columns(50, never, false, false, Focus::Queue, false), Columns { queue: QUEUE_W, side: 0, diff: true });
+        assert_eq!(columns_with(50, never, Opened::Nothing, Focus::Queue), Columns { queue: QUEUE_W, side: 0, diff: true });
     }
 
     #[test]
     fn the_queue_widens_from_160_columns() {
-        assert_eq!(columns(WIDE_QUEUE_FROM - 1, true, false, Focus::Review, false).queue, QUEUE_W);
-        assert_eq!(columns(WIDE_QUEUE_FROM, true, false, Focus::Review, false).queue, WIDE_QUEUE_W);
-        assert_eq!(columns(240, true, false, Focus::Review, false).queue, WIDE_QUEUE_W);
+        assert_eq!(columns(WIDE_QUEUE_FROM - 1, Opened::Mr, Focus::Review).queue, QUEUE_W);
+        assert_eq!(columns(WIDE_QUEUE_FROM, Opened::Mr, Focus::Review).queue, WIDE_QUEUE_W);
+        assert_eq!(columns(240, Opened::Mr, Focus::Review).queue, WIDE_QUEUE_W);
     }
 
     #[test]
     fn zen_never_puts_the_pane_beside_the_diff() {
-        assert_eq!(columns(200, true, false, Focus::Review, true), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(zen_columns(200, Opened::Mr, Focus::Review), Columns { queue: 0, side: 0, diff: true });
         assert_eq!(
-            columns(200, true, true, Focus::Side, true),
+            zen_columns(200, Opened::MrWithPane, Focus::Side),
             Columns { queue: 0, side: 200, diff: false },
             "the pane opens the narrow way"
         );
-        assert_eq!(columns(200, true, true, Focus::Review, true), Columns { queue: 0, side: 0, diff: true });
+        assert_eq!(zen_columns(200, Opened::MrWithPane, Focus::Review), Columns { queue: 0, side: 0, diff: true });
     }
 
     #[test]
@@ -733,7 +754,7 @@ mod columns_tests {
 
     #[test]
     fn the_pane_is_never_narrower_than_36_columns() {
-        assert_eq!(columns(80, true, true, Focus::Review, false).side, 0);
+        assert_eq!(columns(80, Opened::MrWithPane, Focus::Review).side, 0);
         assert_eq!(SIDE_W.max(80 * SIDE_PCT / 100), 36);
     }
 }

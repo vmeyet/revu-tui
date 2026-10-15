@@ -5,7 +5,7 @@ use crate::diff::fold::FoldState;
 use crate::forge::{MrKey, ProjectPath, Sections};
 use crate::log::OrWarn as _;
 use crate::review::Progress;
-use crate::tui::app::{self, QueueView};
+use crate::tui::app::{self, PinChange, QueueView};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -82,8 +82,8 @@ impl Saves {
         self.homes.cache_of(key).write(&keys::state(key), &state).or_warn("marking the MR opened");
     }
 
-    pub(in crate::tui) fn change_pin(&self, scope: Option<&ProjectPath>, key: &MrKey, on: bool, order: u64) -> Result<()> {
-        let change = |pins: BTreeSet<MrKey>| app::with_member(pins, key.clone(), on);
+    pub(in crate::tui) fn change_pin(&self, scope: Option<&ProjectPath>, key: &MrKey, change: PinChange, order: u64) -> Result<()> {
+        let change = |pins: BTreeSet<MrKey>| app::with_member(pins, key.clone(), change == PinChange::Pin);
         self.change_entry(&keys::pins(scope), &format!("{key:?}"), order, change)
     }
 
@@ -204,9 +204,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let saves = Saves::new(homes_in(dir.path()).into());
         let (infra, widgets) = (MrKey::new("acme/infra", 35), key());
-        saves.change_pin(None, &infra, false, 2).unwrap();
-        saves.change_pin(None, &widgets, true, 3).unwrap();
-        saves.change_pin(None, &infra, true, 1).unwrap();
+        saves.change_pin(None, &infra, PinChange::Unpin, 2).unwrap();
+        saves.change_pin(None, &widgets, PinChange::Pin, 3).unwrap();
+        saves.change_pin(None, &infra, PinChange::Pin, 1).unwrap();
         assert_eq!(saves.pins(None), [widgets].into(), "the pin of 35, made before its unpin, lands after it and changes nothing");
     }
 
@@ -216,10 +216,10 @@ mod tests {
         let desktop = Saves::new(homes_in(dir.path()).into());
         let phone = Saves::new(homes_in(dir.path()).into());
         let (infra, widgets) = (MrKey::new("acme/infra", 35), key());
-        desktop.change_pin(None, &infra, true, 1).unwrap();
-        phone.change_pin(None, &widgets, true, 1).unwrap();
+        desktop.change_pin(None, &infra, PinChange::Pin, 1).unwrap();
+        phone.change_pin(None, &widgets, PinChange::Pin, 1).unwrap();
         assert_eq!(desktop.pins(None), [infra.clone(), widgets.clone()].into());
-        desktop.change_pin(None, &infra, false, 2).unwrap();
+        desktop.change_pin(None, &infra, PinChange::Unpin, 2).unwrap();
         assert_eq!(phone.pins(None), [widgets].into());
         desktop.change_queue_view(None, app::ViewChange::Section { name: "OPEN".into(), closed: true }, 3).unwrap();
         phone.change_queue_view(None, app::ViewChange::Section { name: "DONE".into(), closed: false }, 2).unwrap();

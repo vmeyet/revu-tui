@@ -1,7 +1,7 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
 use super::{Action, App, EntryKind, Failure, Input, MrKey, Open};
 use crate::act::{self, Act, Pane};
-use crate::forge::{Approval, Position, ThreadId};
+use crate::forge::{Approval, ApprovalChange, Position, ReviewKind, ThreadId};
 use crate::review::{Draft, Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -205,8 +205,8 @@ impl App {
 
     pub(super) fn toggle_approval(&self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let approve = !open.review.mr.approvals.user_has_approved;
-        vec![Action::Approve { key: open.key.clone(), approve }]
+        let change = if open.review.mr.approvals.user_has_approved { ApprovalChange::Unapprove } else { ApprovalChange::Approve };
+        vec![Action::Approve { key: open.key.clone(), change }]
     }
 
     pub(super) fn draft_count(&self) -> usize {
@@ -277,7 +277,8 @@ impl App {
             self.warn(format!("the line of the draft on {} left the diff · m moves it to the MR", place.unwrap_or_default()));
             return vec![];
         }
-        let action = Action::Publish { key: open.key.clone(), approve: publish.approve, count: open.review.drafts.len() };
+        let kind = if publish.approve { ReviewKind::Approve } else { ReviewKind::Comment };
+        let action = Action::Publish { key: open.key.clone(), kind, count: open.review.drafts.len() };
         self.publish = Some(Publish { busy: true, ..publish.clone() });
         vec![action]
     }
@@ -375,7 +376,7 @@ impl App {
             Approval::NotAsked => self.toast(published),
             Approval::Given => {
                 self.toast(format!("{published} and approved"));
-                self.set_approved(key, true);
+                self.set_approved(key, ApprovalChange::Approve);
             }
             Approval::Refused(why) => self.warn(format!("{published}, not approved: {why}")),
         }
@@ -393,9 +394,9 @@ impl App {
         self.composed.extend(follow);
     }
 
-    pub(super) fn set_approved(&mut self, key: &MrKey, approve: bool) {
+    pub(super) fn set_approved(&mut self, key: &MrKey, change: ApprovalChange) {
         let me = self.me.clone();
-        self.update_open_of(key, |open| open.relaid(|review| review.with_approved(approve, &me)));
+        self.update_open_of(key, |open| open.relaid(|review| review.with_approved(change, &me)));
     }
 
     pub(super) fn apply_write_failure(&mut self, what: Failure, message: String) {
@@ -429,7 +430,7 @@ impl App {
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),
             Failure::SetDraft => self.warn(format!("not changed: {message}")),
-            Failure::React { thread, index, emoji, on } => self.react_failed(&thread, index, emoji, on, &message),
+            Failure::React { thread, index, emoji, change } => self.react_failed(&thread, index, emoji, change, &message),
             Failure::Queue
             | Failure::Open { .. }
             | Failure::Poll { .. }
@@ -528,7 +529,7 @@ mod tests {
         let mut app = with_review();
         let approvals = |app: &App| app.open.as_ref().unwrap().review.mr.approvals.clone();
         let before = approvals(&app);
-        app.apply(Incoming::Approved { key: mr_key(), approve: true });
+        app.apply(Incoming::Approved { key: mr_key(), change: ApprovalChange::Approve });
         let after = approvals(&app);
         assert!(after.user_has_approved && after.approved_by.iter().any(|u| u.username == "nina"));
         assert_eq!(after.approvals_left, before.approvals_left.saturating_sub(1));
@@ -536,7 +537,7 @@ mod tests {
         assert!(screen.contains(&format!("{} of", before.approved_by.len() + 1)), "the header counts it:\n{screen}");
         let asked = app.take_actions();
         assert!(asked.contains(&Action::RefreshMr(mr_key())), "then the forge's count replaces the guess: {asked:?}");
-        app.apply(Incoming::Approved { key: mr_key(), approve: false });
+        app.apply(Incoming::Approved { key: mr_key(), change: ApprovalChange::Unapprove });
         assert_eq!(approvals(&app), before, "taking it back undoes it");
     }
 
@@ -694,7 +695,7 @@ mod tests {
         press(&mut app, "a");
         assert!(app.publish.as_ref().unwrap().approve);
         let actions = app.handle_key(code(KeyCode::Enter));
-        assert_eq!(actions, vec![Action::Publish { key: mr_key(), approve: true, count: 2 }]);
+        assert_eq!(actions, vec![Action::Publish { key: mr_key(), kind: ReviewKind::Approve, count: 2 }]);
         assert!(app.publish.as_ref().unwrap().busy);
         assert_eq!(press(&mut app, "a"), vec![], "keys wait for the answer");
         app.apply(Incoming::Published { key: mr_key(), approval: Approval::Given, count: 2 });
@@ -773,10 +774,10 @@ mod tests {
     #[test]
     fn big_a_approves_then_unapproves() {
         let mut app = with_review();
-        assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: mr_key(), approve: true }]);
-        app.apply(Incoming::Approved { key: mr_key(), approve: true });
+        assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: mr_key(), change: ApprovalChange::Approve }]);
+        app.apply(Incoming::Approved { key: mr_key(), change: ApprovalChange::Approve });
         assert_eq!(app.live_toast().unwrap().text, "approved");
-        assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: mr_key(), approve: false }]);
+        assert_eq!(press(&mut app, "A"), vec![Action::Approve { key: mr_key(), change: ApprovalChange::Unapprove }]);
         app.apply(Incoming::Failed { what: Failure::Approve, message: "you cannot approve this MR".into() });
         assert!(app.live_toast().unwrap().danger);
     }

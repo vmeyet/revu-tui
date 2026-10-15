@@ -2,7 +2,7 @@
 //! both forges share, or on GitLab with any emoji found by name after `/`. The count moves at once;
 //! a refusal puts it back. The reactions I give most on the host lead the row.
 use super::{Action, App, EntryKind, Failure, MrKey};
-use crate::forge::{Emoji, Note, ThreadId};
+use crate::forge::{Emoji, Note, ReactionChange, ThreadId};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// The picker open on note `note` of thread `thread`, `selected` the reaction `enter` gives.
@@ -128,11 +128,12 @@ impl App {
     fn toggle_reaction(&mut self, pick: &Pick, emoji: Emoji) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(note) = open.review.thread(&pick.thread).and_then(|t| t.notes.get(pick.note)).cloned() else { return vec![] };
-        let on = !note.reactions.iter().any(|r| r.emoji == emoji && r.mine);
+        let change = if note.reactions.iter().any(|r| r.emoji == emoji && r.mine) { ReactionChange::Remove } else { ReactionChange::Add };
         let host = self.host_of(&open.key).to_owned();
-        let react = Action::React { key: open.key.clone(), thread: pick.thread.clone(), index: pick.note, note: Box::new(note), emoji, on };
-        self.update_open(|open| open.relaid(|review| review.with_reaction(&pick.thread, pick.note, emoji, on)));
-        if !on {
+        let react =
+            Action::React { key: open.key.clone(), thread: pick.thread.clone(), index: pick.note, note: Box::new(note), emoji, change };
+        self.update_open(|open| open.relaid(|review| review.with_reaction(&pick.thread, pick.note, emoji, change)));
+        if change == ReactionChange::Remove {
             return vec![react];
         }
         vec![react, self.count_reaction(host, emoji)]
@@ -144,8 +145,8 @@ impl App {
     }
 
     /// The forge refused: the count goes back to what it was.
-    pub(super) fn react_failed(&mut self, thread: &ThreadId, index: usize, emoji: Emoji, on: bool, message: &str) {
-        self.update_open(|open| open.relaid(|review| review.with_reaction(thread, index, emoji, !on)));
+    pub(super) fn react_failed(&mut self, thread: &ThreadId, index: usize, emoji: Emoji, change: ReactionChange, message: &str) {
+        self.update_open(|open| open.relaid(|review| review.with_reaction(thread, index, emoji, change.undone())));
         self.warn(format!("no reaction: {message}"));
     }
 
@@ -184,8 +185,8 @@ pub struct Prompt {
 }
 
 /// The reaction the failure was about, for `Failure::React`.
-pub fn failure(thread: ThreadId, index: usize, emoji: Emoji, on: bool) -> Failure {
-    Failure::React { thread, index, emoji, on }
+pub fn failure(thread: ThreadId, index: usize, emoji: Emoji, change: ReactionChange) -> Failure {
+    Failure::React { thread, index, emoji, change }
 }
 
 #[cfg(test)]
@@ -299,11 +300,11 @@ mod tests {
         let mut app = with_reactions();
         let given = press(&mut app, "+3");
         assert!(
-            matches!(given.as_slice(), [Action::React { on: true, .. }, Action::CountReaction { host, emoji: Emoji::Laugh }] if host == "gitlab.com")
+            matches!(given.as_slice(), [Action::React { change: ReactionChange::Add, .. }, Action::CountReaction { host, emoji: Emoji::Laugh }] if host == "gitlab.com")
         );
         assert_eq!(app.reactions.most_used("gitlab.com"), [Emoji::Laugh]);
         let taken = press(&mut app, "+1");
-        assert!(matches!(taken.as_slice(), [Action::React { emoji: Emoji::Laugh, on: false, .. }]), "{taken:?}");
+        assert!(matches!(taken.as_slice(), [Action::React { emoji: Emoji::Laugh, change: ReactionChange::Remove, .. }]), "{taken:?}");
         assert_eq!(app.reactions, History::default().with("gitlab.com", Emoji::Laugh));
     }
 
@@ -342,15 +343,15 @@ mod tests {
         assert_eq!(press(&mut app, "+"), vec![]);
         assert!(render(&mut app, 150, 24).contains("react"), "the picker takes the status line");
         let actions = press(&mut app, "7");
-        let [Action::React { emoji, on, note, .. }, _] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!((*emoji, *on, note.node.as_deref()), (Emoji::Rocket, true, Some("gid://gitlab/DiffNote/1")));
+        let [Action::React { emoji, change, note, .. }, _] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((*emoji, *change, note.node.as_deref()), (Emoji::Rocket, ReactionChange::Add, Some("gid://gitlab/DiffNote/1")));
         assert!(reactions_of(&app).contains(&crate::forge::Reaction { emoji: Emoji::Rocket, count: 1, mine: true }));
         assert!(app.react.is_none(), "one pick closes the picker");
         press(&mut app, "+");
         assert!(app.react.is_some(), "the picker opens again");
         let actions = press(&mut app, "2");
-        let [Action::React { emoji, on, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!((*emoji, *on), (Emoji::ThumbsUp, false), "a pick of my own reaction takes it off");
+        let [Action::React { emoji, change, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((*emoji, *change), (Emoji::ThumbsUp, ReactionChange::Remove), "a pick of my own reaction takes it off");
         assert_eq!(reactions_of(&app)[0], crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 1, mine: false });
     }
 
@@ -362,7 +363,7 @@ mod tests {
         assert_eq!(app.focus, Focus::Review, "the diff keeps the focus");
         assert!(render(&mut app, 150, 24).contains("react"), "zen shows the picker");
         let actions = press(&mut app, "7");
-        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Rocket, on: true, .. }, _]), "{actions:?}");
+        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Rocket, change: ReactionChange::Add, .. }, _]), "{actions:?}");
         let mut open = app.open.clone().unwrap();
         open.selected = open.rows.iter().position(|r| matches!(r, Row::Line { .. }) && !open.is_marked(r)).unwrap();
         app.open = Some(open);
@@ -379,8 +380,8 @@ mod tests {
         let screen = render(&mut app, 150, 24);
         assert!(screen.contains("/100▏") && screen.contains("💯"), "{screen}");
         let actions = app.handle_key(code(KeyCode::Enter));
-        let [Action::React { emoji, on, .. }, _] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!((emoji.gitlab(), *on), ("100", true));
+        let [Action::React { emoji, change, .. }, _] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((emoji.gitlab(), *change), ("100", ReactionChange::Add));
         assert!(reactions_of(&app).iter().any(|r| r.emoji.glyph() == "💯" && r.mine), "the count moves at once");
         press(&mut app, "+");
         press(&mut app, "/r");
@@ -420,7 +421,7 @@ mod tests {
         press(&mut app, "6");
         assert_eq!(reactions_of(&app).len(), 2);
         app.apply(Incoming::Failed {
-            what: react_failure("5ugg".into(), 0, Emoji::Hooray, true),
+            what: react_failure("5ugg".into(), 0, Emoji::Hooray, ReactionChange::Add),
             message: "GitLab refused the reaction".into(),
         });
         assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);
@@ -479,7 +480,7 @@ mod tests {
         let rows = picker_rows(&mut app, 50, 30);
         assert!(shows_every_choice(&rows), "{rows}");
         let actions = press(&mut app, "8");
-        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Eyes, on: true, .. }, _]), "{actions:?}");
+        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Eyes, change: ReactionChange::Add, .. }, _]), "{actions:?}");
     }
 
     fn on_a_thread_row() -> App {

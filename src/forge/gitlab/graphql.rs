@@ -4,7 +4,7 @@
 //! asking me score 185, mine 87 (the rules skip them, so they skip the fields) and a project's
 //! open MRs 124: each call stays under the limit, one query for all would not.
 use super::Client;
-use crate::forge::{MrKey, PipelineStatus, ProjectPath, Queue, QueueMr, ReviewState, ReviewerState};
+use crate::forge::{MrKey, PipelineStatus, ProjectPath, Queue, QueueMr, Readiness, ReviewState, ReviewerState};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -82,7 +82,8 @@ impl Client {
 
 impl Client {
     /// Marks the MR a draft, or ready; GitLab leaves an MR already there as it is.
-    pub async fn set_draft(&self, key: &MrKey, draft: bool) -> Result<()> {
+    pub async fn set_readiness(&self, key: &MrKey, readiness: Readiness) -> Result<()> {
+        let draft = readiness == Readiness::Draft;
         let variables = json!({"project": key.project, "iid": key.number.to_string(), "draft": draft});
         let answer = self.http.post_json::<Answer>(super::GRAPHQL, &json!({"query": SET_DRAFT, "variables": variables})).await?;
         let payload = data_of(answer)?.merge_request_set_draft.context("GraphQL answered without the merge request")?;
@@ -453,8 +454,8 @@ mod tests {
             .await;
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
-        client.set_draft(&MrKey::new("acme/widgets", 42), true).await.unwrap();
-        let err = client.set_draft(&MrKey::new("acme/widgets", 43), true).await.unwrap_err().to_string();
+        client.set_readiness(&MrKey::new("acme/widgets", 42), Readiness::Draft).await.unwrap();
+        let err = client.set_readiness(&MrKey::new("acme/widgets", 43), Readiness::Draft).await.unwrap_err().to_string();
         assert!(err.contains("no can do"), "{err}");
     }
 }

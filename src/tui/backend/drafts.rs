@@ -1,7 +1,7 @@
 //! Draft writes and publishing, one at a time per MR.
 use super::{Homes, write_cache};
 use crate::cache::keys;
-use crate::forge::{Draft as HeldDraft, MrKey};
+use crate::forge::{Draft as HeldDraft, MrKey, ReviewKind};
 use crate::review::Draft;
 use crate::tui::app::Incoming;
 use crate::tui::lanes::Lanes;
@@ -37,9 +37,9 @@ impl Drafts {
         self.homes.forge_of(key).delete_draft(key, id).await
     }
 
-    pub(in crate::tui) async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
+    pub(in crate::tui) async fn publish(&self, key: MrKey, kind: ReviewKind, count: usize) -> Result<Incoming> {
         let _lane = self.lanes.enter(&key).await;
-        let approval = self.homes.forge_of(&key).publish(&key, approve).await?;
+        let approval = self.homes.forge_of(&key).publish(&key, kind).await?;
         let wanted = key.clone();
         write_cache("caching the drafts", &self.homes, move |homes| {
             homes.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())
@@ -135,7 +135,9 @@ mod tests {
         let drafts = drafts(homes_on(&server, dir.path()));
         let held = vec![HeldDraft { id: 5, body: "nit".into(), position: None, reply_to: None, resolve: false }];
         drafts.homes.cache.write(&keys::drafts(&key()), &held).unwrap();
-        let Incoming::Published { approval, count: 1, .. } = drafts.publish(key(), true, 1).await.unwrap() else { panic!("not published") };
+        let Incoming::Published { approval, count: 1, .. } = drafts.publish(key(), ReviewKind::Approve, 1).await.unwrap() else {
+            panic!("not published")
+        };
         assert!(matches!(approval, crate::forge::Approval::Refused(_)), "{approval:?}");
         assert_eq!(drafts.homes.cache.read::<Vec<HeldDraft>>(&keys::drafts(&key())), Some(vec![]));
     }

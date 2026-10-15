@@ -1,5 +1,5 @@
 //! The palette: MRs, the open MR's files, or commands, typed instead of walked to.
-use super::{Action, App, Focus};
+use super::{Action, App, Focus, PinChange};
 use crate::forge::MrKey;
 use crate::fuzzy;
 use crate::query::Query;
@@ -162,8 +162,8 @@ impl App {
                 vec![]
             }
             Command::All => self.toggle_scope(),
-            Command::Pin => self.pin_command(true),
-            Command::Unpin => self.pin_command(false),
+            Command::Pin => self.pin_command(PinChange::Pin),
+            Command::Unpin => self.pin_command(PinChange::Unpin),
             Command::Set { key, value } => self.set(&key, &value),
             Command::View(argument) => self.view_command(&argument),
             Command::Outline => self.show_outline(),

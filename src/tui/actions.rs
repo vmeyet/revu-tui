@@ -59,8 +59,8 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     send(failed(Failure::Local, &e));
                 }
             }
-            Action::ChangePin { scope, key, on, order } => {
-                let saved = run_blocking(&backend.saves, move |saves| saves.change_pin(scope.as_ref(), &key, on, order)).await;
+            Action::ChangePin { scope, key, change, order } => {
+                let saved = run_blocking(&backend.saves, move |saves| saves.change_pin(scope.as_ref(), &key, change, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
@@ -136,8 +136,8 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 Ok(()) => Incoming::DraftChanged { key },
                 Err(e) => failed(Failure::DraftDelete { key, held }, &e),
             }),
-            Action::Publish { key, approve, count } => {
-                send(backend.drafts.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
+            Action::Publish { key, kind, count } => {
+                send(backend.drafts.publish(key, kind, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }
             Action::Post { key, to, body } => {
                 send(match post(backend.homes.forge_of(&key), &key, &to, &body).await {
@@ -155,9 +155,9 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.homes.forge_of(&key).file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, sha, text }));
             }
-            Action::React { key, thread, index, note, emoji, on } => {
-                if let Err(e) = backend.homes.forge_of(&key).react(&note, emoji, on).await {
-                    send(failed(app::react_failure(thread, index, emoji, on), &e));
+            Action::React { key, thread, index, note, emoji, change } => {
+                if let Err(e) = backend.homes.forge_of(&key).react(&note, emoji, change).await {
+                    send(failed(app::react_failure(thread, index, emoji, change), &e));
                 }
             }
             Action::CountReaction { host, emoji } => {
@@ -167,9 +167,9 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.homes.forge_of(&key).merge(&key, &head, plan).await;
                 send(outcome.map_or_else(|e| failed(Failure::Merge, &e), |()| Incoming::Merged { key }));
             }
-            Action::SetDraft { key, draft } => {
-                let outcome = backend.homes.forge_of(&key).set_draft(&key, draft).await;
-                send(outcome.map_or_else(|e| failed(Failure::SetDraft, &e), |()| Incoming::DraftSet { key, draft }));
+            Action::SetDraft { key, readiness } => {
+                let outcome = backend.homes.forge_of(&key).set_readiness(&key, readiness).await;
+                send(outcome.map_or_else(|e| failed(Failure::SetDraft, &e), |()| Incoming::DraftSet { key, readiness }));
             }
             Action::Apply { key, branch, suggestion } => {
                 let outcome = backend.homes.forge_of(&key).apply(&key, &branch, &suggestion).await;
@@ -196,15 +196,15 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     send(Incoming::Deployments { key, deployments });
                 }
             }
-            Action::Approve { key, approve } => {
-                let outcome = backend.homes.forge_of(&key).approve(&key, approve).await;
-                send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
+            Action::Approve { key, change } => {
+                let outcome = backend.homes.forge_of(&key).approve(&key, change).await;
+                send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, change }));
             }
             Action::View { key, path, sha, line, note } => {
                 let outcome = backend.files.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
-            Action::Ask { key, id, request, fresh, label, head } => backend.ai.ask(&key, id, &request, fresh, &label, &head, &send).await,
+            Action::Ask { key, id, request, source, label, head } => backend.ai.ask(&key, id, &request, source, &label, &head, &send).await,
             Action::LoadAnswers(key) => {
                 let wanted = key.clone();
                 let answers = read_cache(&backend.ai, move |ai| ai.past_answers(&wanted)).await;

@@ -5,7 +5,7 @@ use crate::ai::triage::{self, Verdict};
 use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
-use crate::tui::app::{self, Incoming, Part};
+use crate::tui::app::{self, AnswerSource, Incoming, Part};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -61,7 +61,7 @@ impl Ai {
         answers
     }
 
-    /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
+    /// Claude's answer, piece by piece as it streams, or at once from the cache when `source` allows.
     /// Only a finished answer is kept, so a cut or refused one is asked again next time.
     #[expect(clippy::too_many_arguments, reason = "the label and head only go into what is kept")]
     pub(in crate::tui) async fn ask(
@@ -69,7 +69,7 @@ impl Ai {
         key: &MrKey,
         id: u64,
         request: &Ask,
-        fresh: bool,
+        source: AnswerSource,
         label: &str,
         head: &Sha,
         send: &impl Fn(Incoming),
@@ -82,7 +82,7 @@ impl Ai {
         let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
         let (wanted, reading) = (key.clone(), cache_key.clone());
         let saved = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read::<SavedAnswer>(&reading)).await;
-        if let Some(saved) = saved.filter(|_| !fresh) {
+        if let Some(saved) = saved.filter(|_| source == AnswerSource::CacheFirst) {
             let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
             send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
             return;
@@ -239,9 +239,9 @@ mod tests {
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
         let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
-        ai.ask(&key(), 1, &request, false, "explain", &"b2".into(), &listen).await;
-        ai.ask(&key(), 2, &request, false, "explain", &"b2".into(), &listen).await;
-        ai.ask(&key(), 3, &request, true, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 1, &request, AnswerSource::CacheFirst, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 2, &request, AnswerSource::CacheFirst, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 3, &request, AnswerSource::Fresh, "explain", &"b2".into(), &listen).await;
         let heard = heard.into_inner().unwrap();
         let cached: Vec<_> = heard
             .iter()

@@ -3,18 +3,24 @@
 use super::{Action, App, Focus};
 use crate::forge::{MrKey, QueueMr};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PinChange {
+    Pin,
+    Unpin,
+}
+
 impl App {
     /// `b`: pins the MR under the cursor, or unpins it.
     pub(super) fn toggle_pin(&mut self) -> Vec<Action> {
         let Some(key) = self.pin_target() else { return vec![] };
-        let on = !self.pins.contains(&key);
-        self.set_pin(&key, on)
+        let change = if self.pins.contains(&key) { PinChange::Unpin } else { PinChange::Pin };
+        self.set_pin(&key, change)
     }
 
     /// `:pin`, `:unpin`.
-    pub(super) fn pin_command(&mut self, on: bool) -> Vec<Action> {
+    pub(super) fn pin_command(&mut self, change: PinChange) -> Vec<Action> {
         let Some(key) = self.pin_target() else { return vec![] };
-        self.set_pin(&key, on)
+        self.set_pin(&key, change)
     }
 
     /// The MR under the queue's cursor, or the open one outside the queue.
@@ -29,15 +35,18 @@ impl App {
         target
     }
 
-    fn set_pin(&mut self, key: &MrKey, on: bool) -> Vec<Action> {
-        self.toast(format!("{} {}{}", if on { "pinned" } else { "unpinned" }, self.hosts.kind_of(key).sigil(), key.number));
-        let changed = if on { self.pins.insert(key.clone()) } else { self.pins.remove(key) };
+    fn set_pin(&mut self, key: &MrKey, change: PinChange) -> Vec<Action> {
+        let (done, changed) = match change {
+            PinChange::Pin => ("pinned", self.pins.insert(key.clone())),
+            PinChange::Unpin => ("unpinned", self.pins.remove(key)),
+        };
+        self.toast(format!("{done} {}{}", self.hosts.kind_of(key).sigil(), key.number));
         if !changed {
             return vec![];
         }
         self.select_in_queue(key);
         self.queue_settle();
-        vec![self.save_pin(key, on)]
+        vec![self.save_pin(key, change)]
     }
 
     /// The queue found these pins merged or closed: they go, and the cache forgets them.
@@ -47,7 +56,7 @@ impl App {
             return vec![];
         }
         self.queue_settle();
-        dropped.iter().map(|key| self.save_pin(key, false)).collect()
+        dropped.iter().map(|key| self.save_pin(key, PinChange::Unpin)).collect()
     }
 
     /// Asked for every row on every draw: compared field by field, so no key is built.
@@ -55,9 +64,9 @@ impl App {
         self.pins.iter().any(|key| key.number == mr.number && key.project == mr.project && key.host == mr.host)
     }
 
-    fn save_pin(&mut self, key: &MrKey, on: bool) -> Action {
+    fn save_pin(&mut self, key: &MrKey, change: PinChange) -> Action {
         self.next_save += 1;
-        Action::ChangePin { scope: self.scope(), key: key.clone(), on, order: self.next_save }
+        Action::ChangePin { scope: self.scope(), key: key.clone(), change, order: self.next_save }
     }
 }
 
@@ -70,11 +79,11 @@ mod tests {
     }
 
     /// The pin changes `actions` save, without their order.
-    fn saved(actions: &[Action]) -> Vec<(u64, bool)> {
+    fn saved(actions: &[Action]) -> Vec<(u64, PinChange)> {
         actions
             .iter()
             .filter_map(|action| match action {
-                Action::ChangePin { scope: None, key, on, .. } => Some((key.number, *on)),
+                Action::ChangePin { scope: None, key, change, .. } => Some((key.number, *change)),
                 _ => None,
             })
             .collect()
@@ -97,11 +106,11 @@ mod tests {
         let mut app = with_queue();
         assert_eq!(shown(&app), ["TO REVIEW", "42", "MINE", "41", "WATCHING", "35", "DONE"]);
         press(&mut app, "jj");
-        assert_eq!(saved(&press(&mut app, "b")), [(35, true)]);
+        assert_eq!(saved(&press(&mut app, "b")), [(35, PinChange::Pin)]);
         assert_eq!(app.live_toast().unwrap().text, "pinned !35");
         assert_eq!(shown(&app), ["PINNED", "35", "TO REVIEW", "42", "MINE", "41", "WATCHING", "DONE"], "it leaves Watching");
         assert_eq!(app.selected_mr().unwrap().number, 35, "the cursor follows it");
-        assert_eq!(saved(&press(&mut app, "b")), [(35, false)]);
+        assert_eq!(saved(&press(&mut app, "b")), [(35, PinChange::Unpin)]);
         assert_eq!(app.live_toast().unwrap().text, "unpinned !35");
         assert_eq!(shown(&app), ["TO REVIEW", "42", "MINE", "41", "WATCHING", "35", "DONE"], "an empty PINNED hides");
     }
@@ -129,9 +138,9 @@ mod tests {
             press(&mut app, line);
             app.handle_key(code(KeyCode::Enter))
         };
-        assert_eq!(saved(&run(":pin")), [(42, true)]);
+        assert_eq!(saved(&run(":pin")), [(42, PinChange::Pin)]);
         assert_eq!(run(":pin"), vec![]);
-        assert_eq!(saved(&run(":unpin")), [(42, false)]);
+        assert_eq!(saved(&run(":unpin")), [(42, PinChange::Unpin)]);
         assert_eq!(run(":unpin"), vec![]);
     }
 
@@ -139,7 +148,7 @@ mod tests {
     fn colon_pin_in_the_review_pins_the_open_mr() {
         let mut app = with_review();
         press(&mut app, ":pin");
-        assert_eq!(saved(&app.handle_key(code(KeyCode::Enter))), [(42, true)]);
+        assert_eq!(saved(&app.handle_key(code(KeyCode::Enter))), [(42, PinChange::Pin)]);
     }
 
     #[test]
@@ -163,7 +172,7 @@ mod tests {
         app.apply(Incoming::PinsGone { scope: Some("acme/other".into()), gone: gone() });
         assert_eq!(app.take_actions(), vec![], "another scope's answer");
         app.apply(Incoming::PinsGone { scope: None, gone: gone() });
-        assert_eq!(saved(&app.take_actions()), [(42, false)], "only the gone pin is unpinned, 41 stays");
+        assert_eq!(saved(&app.take_actions()), [(42, PinChange::Unpin)], "only the gone pin is unpinned, 41 stays");
         app.apply(Incoming::PinsGone { scope: None, gone: gone() });
         assert_eq!(app.take_actions(), vec![], "an already dropped pin changes nothing");
     }

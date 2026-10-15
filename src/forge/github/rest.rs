@@ -340,8 +340,8 @@ impl Client {
             .map_err(merge_refused)
     }
 
-    pub async fn approve(&self, key: &MrKey, approve: bool) -> Result<()> {
-        if !approve {
+    pub async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
+        if change == forge::ApprovalChange::Unapprove {
             bail!("GitHub cannot unapprove; request changes or dismiss the review from the web");
         }
         let path = format!("{}/pulls/{}/reviews", repo_path(&key.project), key.number);
@@ -513,9 +513,9 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        let err = client.approve(&key(), true).await.unwrap_err().to_string();
+        let err = client.approve(&key(), forge::ApprovalChange::Approve).await.unwrap_err().to_string();
         assert!(err.contains("refused") && err.contains("your own pull request"), "{err}");
-        let err = client.approve(&key(), false).await.unwrap_err().to_string();
+        let err = client.approve(&key(), forge::ApprovalChange::Unapprove).await.unwrap_err().to_string();
         assert!(err.contains("cannot unapprove"), "{err}");
     }
     #[tokio::test]

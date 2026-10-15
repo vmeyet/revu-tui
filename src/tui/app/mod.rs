@@ -50,7 +50,7 @@ mod writes;
 mod zen;
 
 pub use apply::Confirm;
-pub use ask::{Answer, AnswerState, Part, PastAnswer};
+pub use ask::{Answer, AnswerSource, AnswerState, Part, PastAnswer};
 pub use brief::{Brief, ThreadRow};
 pub use feedback::Toast;
 pub use inbox::{Spot, progress_bar};
@@ -59,6 +59,7 @@ pub use mouse::{Areas, List, ListRow};
 pub use order::{QueueView, ViewChange, with_member};
 pub use outline::{Entry as OutlineEntry, Outline, PaneLine, Symbols};
 pub use pane::{ConversationList, Pane};
+pub use pin::PinChange;
 pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
 pub use pipeline::{Pipeline, Run};
 pub use prefetch::Ahead;
@@ -78,7 +79,9 @@ pub use write::Publish;
 
 use crate::diff::fold::FoldState;
 pub use crate::forge::MrKey;
-use crate::forge::{Discussion, Position, ProjectPath, QueueMr, Sections, Sha, ThreadId};
+use crate::forge::{
+    ApprovalChange, Discussion, Position, ProjectPath, QueueMr, ReactionChange, Readiness, ReviewKind, Sections, Sha, ThreadId,
+};
 use crate::review::{Draft, Review};
 pub use crate::review::{Entry, EntryKind};
 use chrono::{DateTime, Utc};
@@ -112,7 +115,7 @@ pub enum Action {
     ChangePin {
         scope: Option<ProjectPath>,
         key: MrKey,
-        on: bool,
+        change: PinChange,
         order: u64,
     },
     /// Paint from the cache at once, then fetch the MR, its diffs and its discussions.
@@ -183,7 +186,7 @@ pub enum Action {
     /// Every draft at once, then the approval when asked.
     Publish {
         key: MrKey,
-        approve: bool,
+        kind: ReviewKind,
         count: usize,
     },
     Resolve {
@@ -193,7 +196,7 @@ pub enum Action {
     },
     Approve {
         key: MrKey,
-        approve: bool,
+        change: ApprovalChange,
     },
     /// The whole file at the head commit, for the lines around a hunk (`+`).
     LoadFile {
@@ -214,14 +217,14 @@ pub enum Action {
         title: String,
         body: String,
     },
-    /// My reaction `emoji` on `note` (index `index` of `thread`), added when `on`, else taken off.
+    /// My reaction `emoji` on `note` (index `index` of `thread`), added or taken off.
     React {
         key: MrKey,
         thread: ThreadId,
         index: usize,
         note: Box<crate::forge::Note>,
         emoji: crate::forge::Emoji,
-        on: bool,
+        change: ReactionChange,
     },
     /// Count one more `emoji` given on `host`, so the picker there offers it sooner.
     CountReaction {
@@ -237,7 +240,7 @@ pub enum Action {
     /// Mark my MR a draft, or ready for review.
     SetDraft {
         key: MrKey,
-        draft: bool,
+        readiness: Readiness,
     },
     /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
     Apply {
@@ -277,12 +280,12 @@ pub enum Action {
     },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
-    /// Ask Claude; `id` names the answer the stream belongs to, `fresh` skips the cached answer.
+    /// Ask Claude; `id` names the answer the stream belongs to.
     Ask {
         key: MrKey,
         id: u64,
         request: Box<crate::ai::anthropic::Ask>,
-        fresh: bool,
+        source: AnswerSource,
         /// What the answer is kept under, so `a h` lists it: its title and the commit asked about.
         label: String,
         head: Sha,
@@ -405,7 +408,7 @@ pub enum Failure {
         thread: ThreadId,
         index: usize,
         emoji: crate::forge::Emoji,
-        on: bool,
+        change: ReactionChange,
     },
     /// The ready command failed; Ready keeps its last answer.
     Ready,
@@ -502,7 +505,7 @@ pub enum Incoming {
     },
     Approved {
         key: MrKey,
-        approve: bool,
+        change: ApprovalChange,
     },
     /// The forge merged the MR.
     Merged {
@@ -511,7 +514,7 @@ pub enum Incoming {
     /// The MR is a draft now, or ready for review.
     DraftSet {
         key: MrKey,
-        draft: bool,
+        readiness: Readiness,
     },
     /// The suggestion is a commit on `branch` now.
     Applied {
