@@ -14,8 +14,8 @@ revu login gitlab.acme.dev --token - < token.txt
 
 | Variable | Host it is sent to |
 |---|---|
-| `GITLAB_TOKEN` | `--host`, else `GITLAB_HOST`, else gitlab.com |
-| `GITHUB_TOKEN`, `GH_TOKEN` | `--host`, else `GITLAB_HOST`, else github.com |
+| `GITLAB_TOKEN` | `--host`, else `GITLAB_HOST`, else `host` in the config, when it is a GitLab host; else gitlab.com |
+| `GITHUB_TOKEN`, `GH_TOKEN` | `--host`, else `GITLAB_HOST`, else `host` in the config, when it is a GitHub host; else github.com |
 
 The other hosts of the queue use the token `revu login` stored for each.
 

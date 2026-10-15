@@ -58,14 +58,12 @@ impl Env {
         }
     }
 
-    /// A token variable goes to the primary host only: the one `named` by `--host` or `GITLAB_HOST`,
-    /// else its forge's default host. A CI token never reaches an extra host the config lists.
-    fn token_for(&self, host: &str, kind: Kind, named: Option<&str>) -> Option<&String> {
+    /// A token variable goes to its forge's primary host only, so a CI token never reaches an extra host.
+    fn token_for(&self, host: &str, kind: Kind, primary: &str) -> Option<&String> {
         let token = match kind {
             Kind::GitLab => self.gitlab_token.as_ref(),
             Kind::GitHub => self.github_token.as_ref(),
         };
-        let primary = named.or(self.host.as_deref()).unwrap_or(default_host(kind));
         token.filter(|_| host.eq_ignore_ascii_case(primary))
     }
 }
@@ -95,12 +93,18 @@ fn variable_hint(host: &str, kind: Kind) -> String {
     }
 }
 
-/// The primary host: its token variable wins, then its keychain entry.
+/// The host this run is for: its token variable wins when it is its forge's primary host, the one
+/// stated by `--host`, `GITLAB_HOST` or the config's `host`, else the forge's default host.
 pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<(Credentials, Source)> {
-    let has_token = |h: &str| env.token_for(h, Kind::for_host(h, config), named).is_some() || store.get(h).ok().flatten().is_some();
+    let stated = named.or(env.host.as_deref()).or(config.host.as_deref());
+    let token_for = |h: &str, kind: Kind| {
+        let primary = stated.filter(|s| Kind::for_host(s, config) == kind).unwrap_or(default_host(kind));
+        env.token_for(h, kind, primary)
+    };
+    let has_token = |h: &str| token_for(h, Kind::for_host(h, config)).is_some() || store.get(h).ok().flatten().is_some();
     let host = pick_host(env, config, named, has_token)?;
     let kind = Kind::for_host(&host, config);
-    if let Some(token) = env.token_for(&host, kind, named) {
+    if let Some(token) = token_for(&host, kind) {
         return Ok((Credentials { host, token: token.clone() }, Source::Env));
     }
     match store.get(&host)? {
@@ -205,11 +209,29 @@ mod tests {
     }
 
     #[test]
-    fn a_token_variable_skips_a_host_picked_from_the_config() {
+    fn a_token_variable_goes_to_the_host_the_config_states() {
         let config = Config { host: Some("gl.acme.dev".into()), ..Config::default() };
         let env = Env { gitlab_token: Some("glpat-xxxx".into()), ..Env::default() };
-        let err = resolve(&env, &MemoryStore::default(), &config, None).unwrap_err().to_string();
-        assert!(err.ends_with("or set GITLAB_TOKEN with --host gl.acme.dev"), "{err}");
+        let (creds, source) = resolve(&env, &MemoryStore::default(), &config, None).unwrap();
+        assert_eq!((creds.host.as_str(), source), ("gl.acme.dev", Source::Env));
+    }
+
+    #[test]
+    fn a_checkout_host_other_than_the_primary_never_gets_the_token_variable() {
+        let config = Config { host: Some("gl.acme.dev".into()), ..Config::default() };
+        let env = Env { gitlab_token: Some("glpat-acme".into()), origin: Some("gitlab.com".into()), ..Env::default() };
+        let store = MemoryStore::default();
+        assert_eq!(resolve(&env, &store, &config, None).unwrap().0.host, "gl.acme.dev", "no token for the checkout's host");
+        store.set("gitlab.com", "glpat-keychain").unwrap();
+        let (creds, source) = resolve(&env, &store, &config, None).unwrap();
+        assert_eq!((creds.host.as_str(), creds.token.as_str(), source), ("gitlab.com", "glpat-keychain", Source::Keychain));
+    }
+
+    #[test]
+    fn a_github_token_variable_keeps_github_com_when_the_stated_host_is_gitlab() {
+        let config = Config { host: Some("gl.acme.dev".into()), ..Config::default() };
+        let env = Env { github_token: Some("ghp_xxxx".into()), origin: Some("github.com".into()), ..Env::default() };
+        assert_eq!(resolve(&env, &MemoryStore::default(), &config, None).unwrap().0.host, "github.com");
     }
 
     #[test]
