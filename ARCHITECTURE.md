@@ -81,7 +81,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - One tokio multi-thread runtime (`#[tokio::main]`).
 - The loop is one task with a `tokio::select!` over terminal events, an unbounded `Incoming` channel and a tick; it never awaits the network.
 - Each `Action` runs in its own `tokio::spawn` task.
-- Blocking work goes to `spawn_blocking`: cache reads and writes (`Backend::off`, `tui::blocking`), outline parsing, agent sessions, usage saves.
+- Blocking work goes to `spawn_blocking` through `blocking::run` (or `Backend::off`, which hands the work the backend): cache reads and writes, outline parsing, agent sessions, usage saves.
 - Child programs that answer quickly use `tokio::process`; programs that own the terminal block the loop on purpose.
 
 State shared between tasks, and why:
@@ -106,6 +106,7 @@ The internals:
 
 - One folder per host under the platform cache folder (`dirs::cache_dir()/revu`, or `$REVU_CACHE_DIR`), one JSON file per key.
 - Folders are 0700, files 0600, written to a temp name then renamed.
+- A cache failure never stops the reader: `Backend::read_cache` turns a stopped task into a logged miss, `Backend::write_cache` logs a failed write, and an unreadable file is logged then removed.
 - `Cache::shared()` is the root, for what belongs to no host: the changelog position, reactions, usage, the last share, the prune stamp, the log.
 - Opening an MR paints the cached review at once, then fetches it again; when the head did not move, the diffs are not read again.
 - Diffs are keyed by head sha; a file at a sha is cached forever.
