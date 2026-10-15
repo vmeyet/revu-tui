@@ -26,7 +26,7 @@ When an MR changes a boundary or a flow, it updates `ARCHITECTURE.md` too.
 - Design a signature from the call site: a caller never needs to read the body to use it right.
 - One word per concept: the glossary in `ARCHITECTURE.md`.
 - Anything that can run twice (draft sync, cache writes, logout) is safe to run twice.
-- Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `src/forge/model.rs`.
+- Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `src/forge/model/`.
 
 ## Rust design rules
 

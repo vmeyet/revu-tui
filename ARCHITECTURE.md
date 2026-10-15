@@ -13,13 +13,13 @@ When a boundary or a flow changes, change this page in the same MR.
 | `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit` |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends; every method takes and returns the neutral model |
-| `forge/model.rs` | The neutral model: `MrKey`, `ProjectPath`, `Mr`, `DiffFile`, `Discussion`, `Note`, `Draft`, `Sha`, ... |
+| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `reaction.rs` |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and `graphql.rs`, shared shapes and conversion in `wire.rs` |
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
 | `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
-| `review/` | `Review`: the value the TUI edits; files, hunks, rows, folds, drafts, where threads hang |
+| `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, word highlighting inside lines, fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
 | `outline/` | The changed functions and classes of an MR and the calls between them (`O`) |
@@ -74,7 +74,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 
 ## Boundaries
 
-- Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `forge/model.rs`.
+- Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `forge/model/`.
 - Side effects live at the edges: `main.rs`, `commands/`, `tui/mod.rs` (the loop and the terminal), `tui/actions.rs` and `tui/backend/` (network, cache, processes).
 - `tui/app/` is pure: it reads time from `app.now` and `app.today`, set by the loop, and never does I/O; its tests drive it with keys and `Incoming` values.
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
@@ -125,7 +125,7 @@ The internals:
 
 - **A key**: an `Act` variant and its row in `act.rs` `ROWS`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `cargo run -- docs`.
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
-- **A forge field**: the field in `forge/model.rs`, filled by both backends in `forge/gitlab/` and `forge/github/`.
+- **A forge field**: the field in `forge/model/`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `cargo run -- docs`.
 - **A config key**: the field in `config.rs` or `config/` and a row in `docs::SETTINGS`; a test fails without it.
 - **A syntax language**: see `AGENTS.md`.
