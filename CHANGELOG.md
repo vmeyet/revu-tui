@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.9.0 - 2026-10-15
+
 ### New
 
 - **A binding on an action revu removed only warns.**
