@@ -1,7 +1,9 @@
 //! Opening an MR: painted from the cache, fetched again, built into a `Review`, and loaded ahead of time.
-use super::{Backend, warn_stopped};
+use super::saves::Saves;
+use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::cache::{Entry, keys};
 use crate::diff::fold::FoldState;
+use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Mr, MrKey, Sha};
 use crate::log::OrWarn as _;
 use crate::review::{Draft, Review};
@@ -10,6 +12,16 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[derive(Clone)]
+pub(in crate::tui) struct Reviews {
+    pub(super) homes: Arc<Homes>,
+    pub(super) saves: Saves,
+    pub(super) fold_globs: Vec<String>,
+    pub(super) inline: InlineRule,
+    /// MRs being opened right now, counted by every task: loading ahead waits while there are any.
+    pub(super) opening: Arc<AtomicUsize>,
+}
 
 /// What opening an MR fetches.
 struct Fetched {
@@ -29,7 +41,7 @@ impl Drop for Opening {
     }
 }
 
-impl Backend {
+impl Reviews {
     /// Counts an MR as being opened until the returned guard drops.
     pub(in crate::tui) fn start_opening(&self) -> Opening {
         self.opening.fetch_add(1, Ordering::SeqCst);
@@ -37,7 +49,7 @@ impl Backend {
     }
 
     pub(in crate::tui) fn open_cached(&self, key: &MrKey) -> Option<Incoming> {
-        let cache = self.cache_of(key);
+        let cache = self.homes.cache_of(key);
         let mr: Entry<Mr> = cache.read_entry(&keys::mr(key))?;
         let diffs: Vec<DiffFile> = cache.read(&keys::diffs(key, &mr.value.refs.head))?;
         let discussions: Vec<Discussion> = cache.read(&keys::discussions(key)).unwrap_or_default();
@@ -55,13 +67,13 @@ impl Backend {
     /// The MR alone while its head is still `head`: no diffs, threads or drafts fetched, nothing highlighted again.
     /// Once the head moved, the review is built again, with the new head's diffs from the cache when loading ahead put them there.
     pub(in crate::tui) async fn poll_review(&self, key: MrKey, head: &Sha) -> Result<Incoming> {
-        let forge = self.forge_of(&key);
+        let forge = self.homes.forge_of(&key);
         let mr = forge.mr(&key).await?;
         if &mr.refs.head == head {
             let (wanted, kept) = (key.clone(), mr.clone());
-            self.run_blocking(move |b| {
-                b.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept).or_warn("caching the MR");
-                b.mark_opened(&wanted);
+            run_blocking(self, move |reviews| {
+                reviews.homes.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept).or_warn("caching the MR");
+                reviews.saves.mark_opened(&wanted);
             })
             .await?;
             return Ok(Incoming::Mr { key, mr: Box::new(mr) });
@@ -74,15 +86,15 @@ impl Backend {
     /// Opening over a painted cache: the MR, its threads and drafts read at once. While the head is still the painted
     /// `head`, no diff is read and the painted one stays; once it moved, the review is built again.
     pub(in crate::tui) async fn reopen(&self, key: MrKey, head: &Sha) -> Result<Incoming> {
-        let forge = self.forge_of(&key);
+        let forge = self.homes.forge_of(&key);
         let (mr, discussions, drafts) = tokio::try_join!(forge.mr(&key), forge.discussions(&key), forge.drafts(&key))?;
         if &mr.refs.head != head {
             let diffs = self.diffs_at(&key, &mr.refs.head).await?;
             return self.reviewed(key, Fetched { mr, diffs, discussions, drafts }).await;
         }
-        self.run_blocking(move |b| {
-            b.keep_threads(&key, &mr, &discussions, &drafts);
-            b.mark_opened(&key);
+        run_blocking(self, move |reviews| {
+            reviews.keep_threads(&key, &mr, &discussions, &drafts);
+            reviews.saves.mark_opened(&key);
             let drafts = drafts.iter().map(Draft::from_held).collect();
             Incoming::Threads { key, mr: Box::new(mr), discussions, drafts }
         })
@@ -90,16 +102,17 @@ impl Backend {
     }
 
     pub(in crate::tui) async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
-        let discussions = self.forge_of(&key).discussions(&key).await?;
+        let discussions = self.homes.forge_of(&key).discussions(&key).await?;
         let (wanted, saved) = (key.clone(), discussions.clone());
-        self.write_cache("caching the threads", move |b| b.cache_of(&wanted).write(&keys::discussions(&wanted), &saved)).await;
+        write_cache("caching the threads", &self.homes, move |homes| homes.cache_of(&wanted).write(&keys::discussions(&wanted), &saved))
+            .await;
         Ok(Incoming::Discussions { key, discussions })
     }
 
     /// Sends where the reader left `key` last time, when a place was saved.
     pub(in crate::tui) async fn resume(&self, key: &MrKey, send: &impl Fn(Incoming)) {
         let wanted = key.clone();
-        if let Ok(Some(spot)) = self.run_blocking(move |b| b.state(&wanted).spot).await {
+        if let Ok(Some(spot)) = run_blocking(&self.saves, move |saves| saves.state(&wanted).spot).await {
             send(Incoming::Resume { key: key.clone(), spot });
         }
     }
@@ -107,20 +120,20 @@ impl Backend {
     /// The diffs of `head`, which never change once pushed: from the cache when it holds them.
     async fn diffs_at(&self, key: &MrKey, head: &Sha) -> Result<Vec<DiffFile>> {
         let (wanted, at) = (key.clone(), head.clone());
-        let cached = self.read_cache(move |b| b.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await;
+        let cached = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await;
         match cached {
             Some(diffs) => Ok(diffs),
-            None => self.forge_of(key).diffs(key).await,
+            None => self.homes.forge_of(key).diffs(key).await,
         }
     }
 
     /// What a fetch brought, kept in the cache and built into a review off the loop.
     async fn reviewed(&self, key: MrKey, fetched: Fetched) -> Result<Incoming> {
-        self.run_blocking(move |b| {
-            b.keep(&key, &fetched);
-            b.mark_opened(&key);
+        run_blocking(self, move |reviews| {
+            reviews.keep(&key, &fetched);
+            reviews.saves.mark_opened(&key);
             let Fetched { mr, diffs, discussions, drafts } = fetched;
-            let review = b.build(&key, mr, &diffs, discussions, &drafts);
+            let review = reviews.build(&key, mr, &diffs, discussions, &drafts);
             Incoming::Review { key, review: Box::new(review), cached: None }
         })
         .await
@@ -128,7 +141,7 @@ impl Backend {
 
     /// Everything opening an MR needs, from the forge.
     async fn fetch(&self, key: &MrKey) -> Result<Fetched> {
-        let forge = self.forge_of(key);
+        let forge = self.homes.forge_of(key);
         let (mr, diffs, discussions, drafts) =
             tokio::try_join!(forge.mr(key), forge.diffs(key), forge.discussions(key), forge.drafts(key))?;
         Ok(Fetched { mr, diffs, discussions, drafts })
@@ -136,13 +149,13 @@ impl Backend {
 
     /// Writes what a fetch brought where opening reads it; a failed write only costs a later fetch.
     fn keep(&self, key: &MrKey, fetched: &Fetched) {
-        self.cache_of(key).write(&keys::diffs(key, &fetched.mr.refs.head), &fetched.diffs).or_warn("caching the diffs");
+        self.homes.cache_of(key).write(&keys::diffs(key, &fetched.mr.refs.head), &fetched.diffs).or_warn("caching the diffs");
         self.keep_threads(key, &fetched.mr, &fetched.discussions, &fetched.drafts);
     }
 
     /// Writes what changes at a head the cache already holds the diffs of.
     fn keep_threads(&self, key: &MrKey, mr: &Mr, discussions: &[Discussion], drafts: &[HeldDraft]) {
-        let cache = self.cache_of(key);
+        let cache = self.homes.cache_of(key);
         cache.write_entry(&keys::mr(key), mr).or_warn("caching the MR");
         cache.write(&keys::discussions(key), discussions).or_warn("caching the threads");
         cache.write(&keys::drafts(key), drafts).or_warn("caching the drafts");
@@ -152,27 +165,28 @@ impl Backend {
     /// activity dot stays; it steps aside while an MR is being opened or requests run low.
     pub(in crate::tui) async fn load_ahead(&self, ahead: Ahead) {
         let busy = self.opening.load(Ordering::SeqCst) > 0;
-        let low = self.forge_of(&ahead.key).rate().remaining.is_some_and(|left| left < app::prefetch::SPARE);
+        let low = self.homes.forge_of(&ahead.key).rate().remaining.is_some_and(|left| left < app::prefetch::SPARE);
         let (wanted, seen) = (ahead.key.clone(), ahead.updated_at);
-        if busy || low || self.run_blocking(move |b| b.is_fresh(&wanted, seen)).await.inspect_err(warn_stopped).unwrap_or(true) {
+        if busy || low || run_blocking(self, move |reviews| reviews.is_fresh(&wanted, seen)).await.inspect_err(warn_stopped).unwrap_or(true)
+        {
             return;
         }
         if let Ok(fetched) = self.fetch(&ahead.key).await {
             let key = ahead.key;
-            self.run_blocking(move |b| b.keep(&key, &fetched)).await.or_warn("loading ahead");
+            run_blocking(self, move |reviews| reviews.keep(&key, &fetched)).await.or_warn("loading ahead");
         }
     }
 
     /// The cache already holds this MR as the queue last saw it, diff included.
     fn is_fresh(&self, key: &MrKey, seen: DateTime<Utc>) -> bool {
-        let cache = self.cache_of(key);
+        let cache = self.homes.cache_of(key);
         cache
             .read_entry::<Mr>(&keys::mr(key))
             .is_some_and(|mr| mr.value.updated_at >= seen && cache.has(&keys::diffs(key, &mr.value.refs.head)))
     }
 
     fn build(&self, key: &MrKey, mr: Mr, diffs: &[DiffFile], discussions: Vec<Discussion>, drafts: &[HeldDraft]) -> Review {
-        let state = self.state(key);
+        let state = self.saves.state(key);
         let review = Review::new(mr, diffs, discussions, &self.fold_globs);
         let fold = merged_fold(review.fold.clone(), state.fold);
         let viewed = review.still_viewed(&state.viewed_files);
@@ -198,10 +212,14 @@ fn merged_fold(initial: FoldState, saved: FoldState) -> FoldState {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::cache::Cache;
     use crate::diff::fold::Fold;
     use crate::forge::gitlab::fixture::key;
-    use crate::tui::backend::test_support::{backend_on, mount_mr};
+    use crate::tui::backend::test_support::{homes_on, mount_mr};
+
+    fn reviews(homes: Homes) -> Reviews {
+        let homes = Arc::new(homes);
+        Reviews { saves: Saves::new(homes.clone()), homes, fold_globs: vec![], inline: InlineRule::default(), opening: Arc::default() }
+    }
 
     fn ahead(updated: &str) -> Ahead {
         Ahead { key: key(), updated_at: updated.parse().unwrap() }
@@ -223,11 +241,11 @@ mod tests {
         let server = wiremock::MockServer::start().await;
         mount_mr(&server, "2026-09-22T09:00:00Z", [1; 5]).await;
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
-        let Some(Incoming::Review { cached, .. }) = backend.open_cached(&key()) else { panic!("opening paints from the cache") };
+        let reviews = reviews(homes_on(&server, dir.path()));
+        reviews.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        let Some(Incoming::Review { cached, .. }) = reviews.open_cached(&key()) else { panic!("opening paints from the cache") };
         assert!(cached.is_some());
-        assert_eq!(backend.state(&key()).opened_at, None, "loading ahead never hides the activity dot");
+        assert_eq!(reviews.saves.state(&key()).opened_at, None, "loading ahead never hides the activity dot");
     }
 
     #[tokio::test]
@@ -235,10 +253,10 @@ mod tests {
         let server = wiremock::MockServer::start().await;
         mount_mr(&server, "2026-09-22T09:00:00Z", [2; 5]).await;
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
-        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
-        backend.load_ahead(ahead("2026-09-22T10:00:00Z")).await;
+        let reviews = reviews(homes_on(&server, dir.path()));
+        reviews.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        reviews.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        reviews.load_ahead(ahead("2026-09-22T10:00:00Z")).await;
     }
 
     #[tokio::test]
@@ -246,12 +264,12 @@ mod tests {
         let server = wiremock::MockServer::start().await;
         mount_mr(&server, "2026-09-22T09:00:00Z", [2, 2, 0, 1, 1]).await;
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        let Ok(Incoming::Mr { mr, .. }) = backend.poll_review(key(), &"bbbb".into()).await else { panic!("the head did not move") };
+        let reviews = reviews(homes_on(&server, dir.path()));
+        let Ok(Incoming::Mr { mr, .. }) = reviews.poll_review(key(), &"bbbb".into()).await else { panic!("the head did not move") };
         assert_eq!(mr.refs.head.as_str(), "bbbb");
-        assert!(backend.state(&key()).opened_at.is_some());
-        backend.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
-        let Ok(Incoming::Review { review, cached: None, .. }) = backend.poll_review(key(), &"aaaa".into()).await else {
+        assert!(reviews.saves.state(&key()).opened_at.is_some());
+        reviews.homes.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
+        let Ok(Incoming::Review { review, cached: None, .. }) = reviews.poll_review(key(), &"aaaa".into()).await else {
             panic!("the head moved")
         };
         assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");
@@ -262,12 +280,12 @@ mod tests {
         let server = wiremock::MockServer::start().await;
         mount_mr(&server, "2026-09-22T09:00:00Z", [2, 2, 0, 2, 2]).await;
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        let Ok(Incoming::Threads { mr, .. }) = backend.reopen(key(), &"bbbb".into()).await else { panic!("the head did not move") };
+        let reviews = reviews(homes_on(&server, dir.path()));
+        let Ok(Incoming::Threads { mr, .. }) = reviews.reopen(key(), &"bbbb".into()).await else { panic!("the head did not move") };
         assert_eq!(mr.refs.head.as_str(), "bbbb");
-        assert!(backend.state(&key()).opened_at.is_some());
-        backend.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
-        let Ok(Incoming::Review { review, cached: None, .. }) = backend.reopen(key(), &"aaaa".into()).await else {
+        assert!(reviews.saves.state(&key()).opened_at.is_some());
+        reviews.homes.cache.write(&keys::diffs(&key(), &"bbbb".into()), &Vec::<DiffFile>::new()).unwrap();
+        let Ok(Incoming::Review { review, cached: None, .. }) = reviews.reopen(key(), &"aaaa".into()).await else {
             panic!("the head moved")
         };
         assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");
@@ -278,9 +296,9 @@ mod tests {
         let server = wiremock::MockServer::start().await;
         mount_mr(&server, "2026-09-22T09:00:00Z", [0; 5]).await;
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        let _opening = backend.start_opening();
-        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        let reviews = reviews(homes_on(&server, dir.path()));
+        let _opening = reviews.start_opening();
+        reviews.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
     }
 
     #[tokio::test]
@@ -299,8 +317,8 @@ mod tests {
             .await;
         mount_mr(&server, "2026-09-22T09:00:00Z", [0; 5]).await;
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on(&server) };
-        backend.forge.me().await.unwrap();
-        backend.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
+        let reviews = reviews(homes_on(&server, dir.path()));
+        reviews.homes.forge.me().await.unwrap();
+        reviews.load_ahead(ahead("2026-09-22T09:00:00Z")).await;
     }
 }

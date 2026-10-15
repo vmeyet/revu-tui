@@ -1,43 +1,30 @@
-//! Backends and fixtures the backend's tests share.
+//! Hosts and fixtures the backend's tests share.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
-use super::Backend;
+use super::Homes;
 use crate::cache::Cache;
-use crate::diff::words::InlineRule;
 use crate::forge::gitlab::Client;
 use crate::forge::{Forge, Queue};
-use crate::tui::lanes::Lanes;
+use std::path::Path;
 
-fn test_forge() -> Forge {
-    Forge::GitLab(Client::new(&crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() }).unwrap())
+fn credentials() -> crate::auth::Credentials {
+    crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() }
 }
 
-pub(super) fn backend_on(server: &wiremock::MockServer) -> Backend {
-    let creds = crate::auth::Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
-    let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", server.uri())).unwrap());
-    let dir = tempfile::tempdir().unwrap();
-    Backend { forge, cache: Cache::in_dir(dir.path()), ..backend_on_nothing() }
+/// One GitLab host that no request reaches, and no cache that can be written.
+pub(super) fn homes_on_nothing() -> Homes {
+    let forge = Forge::GitLab(Client::new(&credentials()).unwrap());
+    Homes { forge, cache: Cache::in_dir(Path::new("/nonexistent")), others: vec![] }
 }
 
-pub(super) fn backend_on_nothing() -> Backend {
-    Backend {
-        others: vec![],
-        forge: test_forge(),
-        cache: Cache::in_dir(std::path::Path::new("/nonexistent")),
-        fold_globs: vec![],
-        watch_labels: vec![],
-        rules: crate::forge::rules::Rules::disabled(),
-        ready_command: None,
-        inline: InlineRule::default(),
-        open: crate::config::Open::default(),
-        checkout: None,
-        jev: None,
-        claude: None,
-        agent: None,
-        opening: std::sync::Arc::default(),
-        saved: std::sync::Arc::default(),
-        changed: std::sync::Arc::default(),
-        draft_lanes: Lanes::default(),
-    }
+/// One host, no request reaching it, with its cache in `dir`.
+pub(super) fn homes_in(dir: &Path) -> Homes {
+    Homes { cache: Cache::in_dir(dir), ..homes_on_nothing() }
+}
+
+/// One GitLab host answered by `server`, with its cache in `dir`.
+pub(super) fn homes_on(server: &wiremock::MockServer, dir: &Path) -> Homes {
+    let forge = Forge::GitLab(Client::with_base(&credentials(), &format!("{}/api/v4/", server.uri())).unwrap());
+    Homes { forge, cache: Cache::in_dir(dir), others: vec![] }
 }
 
 pub(super) fn queue() -> Queue {

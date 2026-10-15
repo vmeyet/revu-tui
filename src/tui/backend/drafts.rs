@@ -1,38 +1,50 @@
 //! Draft writes and publishing, one at a time per MR.
-use super::Backend;
+use super::{Homes, write_cache};
 use crate::cache::keys;
 use crate::forge::{Draft as HeldDraft, MrKey};
 use crate::review::Draft;
 use crate::tui::app::Incoming;
+use crate::tui::lanes::Lanes;
 use anyhow::Result;
+use std::sync::Arc;
 
-impl Backend {
+#[derive(Clone)]
+pub(in crate::tui) struct Drafts {
+    pub(super) homes: Arc<Homes>,
+    /// Draft writes and publishing of one MR wait for each other across tasks: on GitHub each reads the pending review, then writes it.
+    pub(super) lanes: Lanes,
+}
+
+impl Drafts {
     /// Posts the draft unless the forge already lists it: a retry after a lost answer never doubles a note.
-    pub(in crate::tui) async fn save_draft(&self, key: MrKey, draft: Box<Draft>) -> Result<Incoming> {
-        let _lane = self.draft_lanes.enter(&key).await;
-        let held = self.forge_of(&key).drafts(&key).await?;
+    pub(in crate::tui) async fn save(&self, key: MrKey, draft: Box<Draft>) -> Result<Incoming> {
+        let _lane = self.lanes.enter(&key).await;
+        let held = self.homes.forge_of(&key).drafts(&key).await?;
         let saved = match held.into_iter().find(|note| draft.same_as(&Draft::from_held(note))) {
             Some(note) => note,
-            None => self.forge_of(&key).create_draft(&key, &draft.payload()).await?,
+            None => self.homes.forge_of(&key).create_draft(&key, &draft.payload()).await?,
         };
         Ok(Incoming::DraftSaved { key, draft, id: saved.id, body: saved.body })
     }
 
-    pub(in crate::tui) async fn update_draft(&self, key: &MrKey, id: u64, draft: &Draft) -> Result<()> {
-        let _lane = self.draft_lanes.enter(key).await;
-        self.forge_of(key).update_draft(key, id, &draft.payload()).await.map(|_| ())
+    pub(in crate::tui) async fn update(&self, key: &MrKey, id: u64, draft: &Draft) -> Result<()> {
+        let _lane = self.lanes.enter(key).await;
+        self.homes.forge_of(key).update_draft(key, id, &draft.payload()).await.map(|_| ())
     }
 
-    pub(in crate::tui) async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
-        let _lane = self.draft_lanes.enter(key).await;
-        self.forge_of(key).delete_draft(key, id).await
+    pub(in crate::tui) async fn delete(&self, key: &MrKey, id: u64) -> Result<()> {
+        let _lane = self.lanes.enter(key).await;
+        self.homes.forge_of(key).delete_draft(key, id).await
     }
 
     pub(in crate::tui) async fn publish(&self, key: MrKey, approve: bool, count: usize) -> Result<Incoming> {
-        let _lane = self.draft_lanes.enter(&key).await;
-        let approval = self.forge_of(&key).publish(&key, approve).await?;
+        let _lane = self.lanes.enter(&key).await;
+        let approval = self.homes.forge_of(&key).publish(&key, approve).await?;
         let wanted = key.clone();
-        self.write_cache("caching the drafts", move |b| b.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())).await;
+        write_cache("caching the drafts", &self.homes, move |homes| {
+            homes.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())
+        })
+        .await;
         Ok(Incoming::Published { key, approval, count })
     }
 }
@@ -43,8 +55,12 @@ mod tests {
     use super::*;
     use crate::forge::gitlab::fixture::key;
     use crate::forge::{Forge, LineRef, Position, Refs};
-    use crate::tui::backend::test_support::{backend_on, backend_on_nothing};
+    use crate::tui::backend::test_support::{homes_on, homes_on_nothing};
     use std::time::Duration;
+
+    fn drafts(homes: Homes) -> Drafts {
+        Drafts { homes: homes.into(), lanes: Lanes::default() }
+    }
 
     fn held_note(id: u64, note: &str, new_line: u32) -> serde_json::Value {
         serde_json::json!({
@@ -92,11 +108,11 @@ mod tests {
             .await;
         let creds = crate::auth::Credentials { host: "github.com".into(), token: "ghp_xxxx".into() };
         let forge = Forge::GitHub(crate::forge::github::Client::with_base(&creds, &server.uri()).unwrap());
-        let backend = Backend { forge, ..backend_on_nothing() };
+        let drafts = drafts(Homes { forge, ..homes_on_nothing() });
         let pr = MrKey::new("acme/widgets", 42);
         let (one, two) = tokio::join!(
-            backend.save_draft(pr.clone(), Box::new(Draft::new(None, "Also: docs"))),
-            backend.save_draft(pr.clone(), Box::new(Draft::new(None, "And tests")))
+            drafts.save(pr.clone(), Box::new(Draft::new(None, "Also: docs"))),
+            drafts.save(pr.clone(), Box::new(Draft::new(None, "And tests")))
         );
         assert!(one.is_ok() && two.is_ok(), "{one:?} {two:?}");
         let text = text.lock().unwrap().clone();
@@ -115,14 +131,13 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("POST")).and(path(format!("{base}/approve"))).respond_with(ResponseTemplate::new(401)).mount(&server).await;
-        let backend = backend_on(&server);
+        let dir = tempfile::tempdir().unwrap();
+        let drafts = drafts(homes_on(&server, dir.path()));
         let held = vec![HeldDraft { id: 5, body: "nit".into(), position: None, reply_to: None, resolve: false }];
-        backend.cache.write(&keys::drafts(&key()), &held).unwrap();
-        let Incoming::Published { approval, count: 1, .. } = backend.publish(key(), true, 1).await.unwrap() else {
-            panic!("not published")
-        };
+        drafts.homes.cache.write(&keys::drafts(&key()), &held).unwrap();
+        let Incoming::Published { approval, count: 1, .. } = drafts.publish(key(), true, 1).await.unwrap() else { panic!("not published") };
         assert!(matches!(approval, crate::forge::Approval::Refused(_)), "{approval:?}");
-        assert_eq!(backend.cache.read::<Vec<HeldDraft>>(&keys::drafts(&key())), Some(vec![]));
+        assert_eq!(drafts.homes.cache.read::<Vec<HeldDraft>>(&keys::drafts(&key())), Some(vec![]));
     }
 
     #[tokio::test]
@@ -141,15 +156,16 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let backend = backend_on(&server);
+        let dir = tempfile::tempdir().unwrap();
+        let drafts = drafts(homes_on(&server, dir.path()));
         let same = Box::new(draft_at(12, "nit"));
         assert_eq!(
-            backend.save_draft(key(), same.clone()).await.unwrap(),
+            drafts.save(key(), same.clone()).await.unwrap(),
             Incoming::DraftSaved { key: key(), draft: same, id: 5, body: "nit".into() }
         );
         let fresh = Box::new(draft_at(13, "other"));
         assert_eq!(
-            backend.save_draft(key(), fresh.clone()).await.unwrap(),
+            drafts.save(key(), fresh.clone()).await.unwrap(),
             Incoming::DraftSaved { key: key(), draft: fresh, id: 6, body: "other".into() }
         );
     }

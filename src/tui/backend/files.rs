@@ -1,5 +1,5 @@
 //! What the forge serves beside the diff: files at a commit, for the viewer, the outline and prose, and pictures in notes.
-use super::{Backend, warn_stopped};
+use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::blocking;
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
@@ -8,11 +8,20 @@ use crate::tui::app::{Incoming, Versions};
 use crate::tui::images;
 use anyhow::{Context as _, Result};
 use futures_util::{StreamExt, TryStreamExt};
+use std::sync::Arc;
 
 /// Files the outline reads from the forge at once, so a large MR does not burst into its rate limit.
 const OUTLINE_READS: usize = 8;
 
-impl Backend {
+#[derive(Clone)]
+pub(in crate::tui) struct Files {
+    pub(super) homes: Arc<Homes>,
+    pub(super) open: crate::config::Open,
+    /// The checkout `revu` runs in, when its origin is on this forge: `v` opens its real files.
+    pub(super) checkout: Option<crate::open::Checkout>,
+}
+
+impl Files {
     /// The file ready for the reader's program: the checkout's own when it sits on `sha`,
     /// else a private read-only copy of what the forge serves.
     pub(in crate::tui) async fn view(&self, key: MrKey, path: &str, sha: &Sha, line: u32, note: Option<String>) -> Result<Incoming> {
@@ -74,18 +83,18 @@ impl Backend {
     async fn file_text(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
         let cache_key = keys::file(key, sha, path);
         let (wanted, reading) = (key.clone(), cache_key.clone());
-        if let Some(text) = self.read_cache(move |b| b.cache_of(&wanted).read::<String>(&reading)).await {
+        if let Some(text) = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read::<String>(&reading)).await {
             return Ok(text);
         }
         let short = sha.as_str().get(..8).unwrap_or(sha.as_str());
-        let text = self.forge_of(key).file(key, path, sha).await.with_context(|| format!("{path} at {short} · v tries again"))?;
+        let text = self.homes.forge_of(key).file(key, path, sha).await.with_context(|| format!("{path} at {short} · v tries again"))?;
         anyhow::ensure!(
             text.len() <= crate::open::MAX_BYTES,
             "too large to open here ({} MB) · o opens it in the browser",
             text.len() / (1024 * 1024)
         );
         let (wanted, saved) = (key.clone(), text.clone());
-        self.write_cache("caching the file", move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
+        write_cache("caching the file", &self.homes, move |homes| homes.cache_of(&wanted).write(&cache_key, &saved)).await;
         Ok(text)
     }
 
@@ -93,18 +102,18 @@ impl Backend {
     /// Only a picture that decodes is kept, so a failed one is asked again next time.
     pub(in crate::tui) async fn image(&self, key: &MrKey, url: &str) -> Option<image::DynamicImage> {
         let (owner, name) = (key.clone(), keys::image(url));
-        let cached = self.read_cache(move |b| b.cache_of(&owner).read_bytes(&name)).await;
+        let cached = read_cache(&self.homes, move |homes| homes.cache_of(&owner).read_bytes(&name)).await;
         let fresh = cached.is_none();
         let bytes = match cached {
             Some(bytes) => bytes,
             // Not logged: the error carries the URL, whose query may hold a signed link's secret; the request line is logged already.
-            None => self.forge_of(key).image(key, url).await.ok()?,
+            None => self.homes.forge_of(key).image(key, url).await.ok()?,
         };
         let (owner, name) = (key.clone(), keys::image(url));
-        self.run_blocking(move |b| {
+        run_blocking(&self.homes, move |homes| {
             let picture = images::decode(&bytes)?;
             if fresh {
-                b.cache_of(&owner).write_bytes(&name, &bytes).or_warn("caching a picture");
+                homes.cache_of(&owner).write_bytes(&name, &bytes).or_warn("caching a picture");
             }
             Some(picture)
         })
@@ -124,7 +133,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture::key;
-    use crate::tui::backend::test_support::backend_on;
+    use crate::tui::backend::test_support::homes_on;
     use std::collections::BTreeMap;
 
     #[tokio::test]
@@ -140,9 +149,11 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let backend = Backend { open: crate::config::Open { default: Some("nvim".into()), files: BTreeMap::new() }, ..backend_on(&server) };
+        let dir = tempfile::tempdir().unwrap();
+        let open = crate::config::Open { default: Some("nvim".into()), files: BTreeMap::new() };
+        let files = Files { homes: homes_on(&server, dir.path()).into(), open, checkout: None };
         for _ in 0..2 {
-            let Incoming::ViewReady { view, .. } = backend.view(key(), "src/pay/charge.rs", &"bbbb".into(), 12, None).await.unwrap() else {
+            let Incoming::ViewReady { view, .. } = files.view(key(), "src/pay/charge.rs", &"bbbb".into(), 12, None).await.unwrap() else {
                 panic!("not ready")
             };
             let file = std::path::Path::new(&view.argv[3]);
@@ -151,7 +162,7 @@ mod tests {
             assert_eq!(std::fs::metadata(file).unwrap().permissions().mode() & 0o777, 0o400);
             assert_eq!(view.shown, "charge.rs:12");
         }
-        let refused = backend.view(key(), "../../etc/passwd", &"bbbb".into(), 1, None).await.unwrap_err();
+        let refused = files.view(key(), "../../etc/passwd", &"bbbb".into(), 1, None).await.unwrap_err();
         assert!(refused.to_string().contains("does not trust"), "{refused}");
     }
 }

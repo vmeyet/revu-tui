@@ -68,10 +68,8 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
     let others = ctx.others();
     let hosts = ctx.hosts(&others);
     let checkout = std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host()));
-    let backend = Backend {
-        forge: ctx.forge.clone(),
-        cache: ctx.cache.clone(),
-        others,
+    let homes = backend::Homes { forge: ctx.forge.clone(), cache: ctx.cache.clone(), others };
+    let setup = backend::Setup {
         fold_globs: ctx.config.review.fold.clone(),
         watch_labels: ctx.config.queue.watch_labels.clone(),
         rules: ctx.config.queue.rules.clone(),
@@ -82,19 +80,18 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
         checkout,
         jev: jev(&ctx.config.ai),
         claude: claude(&ctx.config.ai),
-        opening: std::sync::Arc::default(),
-        saved: std::sync::Arc::default(),
-        changed: std::sync::Arc::default(),
-        draft_lanes: lanes::Lanes::default(),
     };
+    let triage = setup.jev.is_some();
+    let ask = setup.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned());
+    let backend = Backend::new(homes, setup);
     let settings = Settings {
         theme,
         host: ctx.forge.host().to_owned(),
         me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
         project: ctx.project.clone(),
         ground,
-        triage: backend.jev.is_some(),
-        ask: backend.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned()),
+        triage,
+        ask,
         notify: ctx.config.notify.enabled,
         hosts,
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
@@ -122,7 +119,7 @@ pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
     };
     tokio::spawn({
         let backend = backend.clone();
-        async move { backend.prune_daily().await }
+        async move { backend.homes.prune_daily().await }
     });
     let (mut terminal, screen) = screen::Screen::enter();
     let outcome = event_loop(&mut terminal, &screen, &mut app, &backend, first).await;
@@ -169,13 +166,13 @@ async fn event_loop(
             Some(incoming) = rx.recv() => {
                 wake(app);
                 // A failure backs off by the wait its request was just told.
-                app.rate = backend.forge.rate();
+                app.rate = backend.homes.forge.rate();
                 app.apply_all(std::iter::once(incoming).chain(std::iter::from_fn(|| rx.try_recv().ok())))
             }
             () = tokio::time::sleep_until(next_tick.into()) => {
                 ticked = Instant::now();
                 wake(app);
-                app.rate = backend.forge.rate();
+                app.rate = backend.homes.forge.rate();
                 app.tick()
             }
         };

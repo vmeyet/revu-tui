@@ -27,7 +27,10 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
 | `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied |
 | `tui/actions.rs` | The action runner: one task per `Action`, answers sent back as `Incoming` |
-| `tui/backend.rs`, `tui/backend/`, `tui/lanes.rs` | `Backend`: the forge, the cache and the AI behind the runner, one file per concern (`saves`, `queue`, `reviews`, `drafts`, `ai`, `files`, `prune`); one lane per MR for draft writes |
+| `tui/backend.rs` | `Backend`: the parts behind the runner, one per concern, and `Homes`, each host's forge and cache |
+| `tui/backend/saves.rs`, `queue.rs`, `reviews.rs` | What the reader keeps (`state.json`, pins, queue view); the queue of every host; opening an MR and loading ahead |
+| `tui/backend/drafts.rs`, `tui/lanes.rs` | Draft writes and publishing; one lane per MR so they run one at a time |
+| `tui/backend/ai.rs`, `files.rs`, `prune.rs` | Claude's answers and Jev's marks; files at a commit and pictures; the daily cache prune |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/theme.rs`, `tui/screen.rs`, `tui/ground.rs` | The colour palette; the terminal in raw mode on the alternate screen; the terminal's background, asked once at startup |
 | `tui/field.rs`, `complete.rs`, `palette.rs`, `help.rs` | The input box, tab completion, the `ctrl-k` palette, the `?` overlay |
@@ -50,7 +53,7 @@ Reading an MR:
 
 1. A backend in `forge/<backend>/` fetches the MR, its diffs, its discussions and the reader's drafts.
 2. The backend turns the forge's JSON into the neutral model; nothing outside it sees the JSON.
-3. `Backend::build` makes a `Review` and adds what the cache remembers for this MR: folds, viewed files, side by side.
+3. `Reviews::build` makes a `Review` and adds what the cache remembers for this MR: folds, viewed files, side by side.
 4. The runner sends `Incoming::Review`; `App::apply` puts it in the state, and the last cursor spot follows as `Incoming::Resume`.
 5. `ui::draw` renders the state on each frame; heavy derived values are rebuilt only when their inputs change (`tui/app/kept.rs`).
 
@@ -81,17 +84,17 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - One tokio multi-thread runtime (`#[tokio::main]`).
 - The loop is one task with a `tokio::select!` over terminal events, an unbounded `Incoming` channel and a tick; it never awaits the network.
 - Each `Action` runs in its own `tokio::spawn` task.
-- Blocking work goes to `spawn_blocking` through `blocking::run` (or `Backend::run_blocking`, which hands the work the backend): cache reads and writes, outline parsing, agent sessions, usage saves.
+- Blocking work goes to `spawn_blocking` through `blocking::run` (or `backend::run_blocking`, which hands the work its own copy of the backend part it needs): cache reads and writes, outline parsing, agent sessions, usage saves.
 - Child programs that answer quickly use `tokio::process`; programs that own the terminal block the loop on purpose.
 
 State shared between tasks, and why:
 
 | What | Why |
 |---|---|
-| `Backend::opening: Arc<AtomicUsize>` | Loading ahead waits while the reader opens an MR |
-| `Backend::saved: Arc<Mutex<HashMap<MrKey, u64>>>` | The one lock every `state.json` write takes; saves finish out of order, and one older than the last is dropped |
-| `Backend::changed: Arc<Mutex<HashMap<String, u64>>>` | The same for pins and the queue view |
-| `Backend::draft_lanes: Lanes` | Draft writes and publishing of one MR run one at a time: on GitHub each reads the pending review, then writes it |
+| `Reviews::opening: Arc<AtomicUsize>` | Loading ahead waits while the reader opens an MR |
+| `Saves::saved: Arc<Mutex<HashMap<MrKey, u64>>>` | The one lock every `state.json` write takes, the reader's saves and the opened stamp alike; saves finish out of order, and one older than the last is dropped |
+| `Saves::changed: Arc<Mutex<HashMap<String, u64>>>` | The same for pins and the queue view |
+| `Drafts::lanes: Lanes` | Draft writes and publishing of one MR run one at a time: on GitHub each reads the pending review, then writes it |
 | `forge::budget::Budget` (atomics) | Every clone of a client shares the rate limit, so the loop shows what the tasks saw |
 | GitLab `Client::me: Arc<OnceCell<String>>` | The reader's username is asked once and shared by every clone of the client |
 | GitHub `Client::downloads: Arc<Downloads>` | Read only: the picture client is shared so the forge client stays cheap to clone |
@@ -106,7 +109,7 @@ The internals:
 
 - One folder per host under the platform cache folder (`dirs::cache_dir()/revu`, or `$REVU_CACHE_DIR`), one JSON file per key.
 - Folders are 0700, files 0600, written to a temp name then renamed.
-- A cache failure never stops the reader: `Backend::read_cache` turns a stopped task into a logged miss, `Backend::write_cache` logs a failed write, and an unreadable file is logged then removed.
+- A cache failure never stops the reader: `backend::read_cache` turns a stopped task into a logged miss, `backend::write_cache` logs a failed write, and an unreadable file is logged then removed.
 - `Cache::shared()` is the root, for what belongs to no host: the changelog position, reactions, usage, the last share, the prune stamp, the log.
 - Opening an MR paints the cached review at once, then fetches it again; when the head did not move, the diffs are not read again.
 - Diffs are keyed by head sha; a file at a sha is cached forever.
@@ -118,7 +121,7 @@ The internals:
 ## Where to add things
 
 - **A key**: an `Act` variant and its row in `act.rs` `ROWS`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `cargo run -- docs`.
-- **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in `Backend`, and an `Incoming` variant applied in `tui/app/incoming.rs`.
+- **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
 - **A forge field**: the field in `forge/model.rs`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `cargo run -- docs`.
 - **A config key**: the field in `config.rs` and a row in `docs::SETTINGS`; a test fails without it.

@@ -1,5 +1,6 @@
 //! The queue of every host I am logged in to, with the pins and the ready command's answer, merged into sections.
-use super::Backend;
+use super::saves::Saves;
+use super::{Homes, read_cache, run_blocking, write_cache};
 use crate::cache::keys;
 use crate::forge::{MrKey, ProjectPath, Queue, QueueMr, Sections};
 use crate::ready::Source as ReadySource;
@@ -7,24 +8,35 @@ use crate::tui::app::{self, Incoming};
 use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashSet;
+use std::sync::Arc;
 
-impl Backend {
+#[derive(Clone)]
+pub(in crate::tui) struct Queues {
+    pub(super) homes: Arc<Homes>,
+    pub(super) saves: Saves,
+    pub(super) watch_labels: Vec<String>,
+    pub(super) rules: crate::forge::rules::Rules,
+    /// `[queue.ready] command`: what prints the MRs ready for review.
+    pub(super) ready_command: Option<String>,
+}
+
+impl Queues {
     /// Every project's queue also asks the other hosts I am logged in to; one that fails to
     /// answer shows the rows it last answered rather than failing the whole queue. The ready command
     /// runs alongside; when it fails the queue still paints, with its last answer, and the reason comes
     /// back apart. What follows the answer: the pins found merged or closed, that reason, and the hosts
     /// that did not answer.
-    pub(in crate::tui) async fn load_queue(&self, scope: Option<ProjectPath>) -> Result<(Incoming, Vec<Incoming>)> {
+    pub(in crate::tui) async fn load(&self, scope: Option<ProjectPath>) -> Result<(Incoming, Vec<Incoming>)> {
         let others = async {
             if scope.is_some() {
                 return (vec![], vec![]);
             }
             self.other_queues().await
         };
-        let (queue, (others, silent), said) = tokio::join!(self.forge.queue(scope.as_ref()), others, self.ask_ready());
+        let (queue, (others, silent), said) = tokio::join!(self.homes.forge.queue(scope.as_ref()), others, self.ask_ready());
         let queue = queue?;
         let (wanted, saved) = (scope.clone(), queue.clone());
-        self.write_cache("caching the queue", move |b| b.cache.write_entry(&keys::queue(wanted.as_ref()), &saved)).await;
+        write_cache("caching the queue", &self.homes, move |homes| homes.cache.write_entry(&keys::queue(wanted.as_ref()), &saved)).await;
         let (ready, failure) = match said {
             Ok(Some(output)) => (Some(self.fresh_ready(scope.as_ref(), output, &queue, &others).await), None),
             Ok(None) => (None, None),
@@ -38,13 +50,13 @@ impl Backend {
             failure.map(|message| Incoming::Failed { what: app::Failure::Ready, message }),
             (!silent.is_empty()).then(|| Incoming::Failed { what: app::Failure::Host, message: silent_note(&silent) }),
         ];
-        let answer = self.run_blocking(move |b| b.queue_answer(scope, &queue, &others, ready.as_ref(), pinned, false)).await?;
+        let answer = run_blocking(self, move |queues| queues.answer(scope, &queue, &others, ready.as_ref(), pinned, false)).await?;
         Ok((answer, follow.into_iter().flatten().collect()))
     }
 
     /// Each other host's queue; one that does not answer gives the rows it last answered, and its name.
     async fn other_queues(&self) -> (Vec<Queue>, Vec<String>) {
-        let others = &self.others;
+        let others = &self.homes.others;
         let answers = futures_util::future::join_all(others.iter().map(crate::ctx::Home::queue)).await;
         let mut queues = vec![];
         let mut silent = vec![];
@@ -58,26 +70,27 @@ impl Backend {
             }
         }
         let wanted = silent.clone();
-        let kept = self.read_cache(move |b| {
-            b.others.iter().filter(|home| wanted.contains(&home.host)).filter_map(crate::ctx::Home::cached).collect::<Vec<_>>()
+        let kept = read_cache(&self.homes, move |homes| {
+            homes.others.iter().filter(|home| wanted.contains(&home.host)).filter_map(crate::ctx::Home::cached).collect::<Vec<_>>()
         });
         (queues.into_iter().chain(kept.await).collect(), silent)
     }
 
-    pub(in crate::tui) fn cached_queue(&self, scope: Option<ProjectPath>) -> Option<Incoming> {
-        let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_ref()))?.value;
-        let others: Vec<Queue> = if scope.is_none() { self.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
+    pub(in crate::tui) fn cached(&self, scope: Option<ProjectPath>) -> Option<Incoming> {
+        let queue: Queue = self.homes.cache.read_entry(&keys::queue(scope.as_ref()))?.value;
+        let others: Vec<Queue> =
+            if scope.is_none() { self.homes.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
         let ready = self.cached_ready(scope.as_ref());
-        Some(self.queue_answer(scope, &queue, &others, ready.as_ref(), vec![], true))
+        Some(self.answer(scope, &queue, &others, ready.as_ref(), vec![], true))
     }
 
     /// The pins of `scope` the queue does not hold yet, each asked of its forge: the open ones come
     /// back as rows, the merged or closed ones as gone. A pin the forge did not answer for stays.
     async fn pins_outside(&self, scope: Option<&ProjectPath>, listed: &HashSet<MrKey>) -> (Vec<QueueMr>, Vec<MrKey>) {
         let wanted = scope.cloned();
-        let pins = self.read_cache(move |b| b.pins(wanted.as_ref())).await;
+        let pins = read_cache(&self.saves, move |saves| saves.pins(wanted.as_ref())).await;
         let missing: Vec<MrKey> = pins.into_iter().filter(|key| !listed.contains(key)).collect();
-        let fetched = crate::ctx::fetch_each(&self.forge, &self.others, &missing).await;
+        let fetched = crate::ctx::fetch_each(&self.homes.forge, &self.homes.others, &missing).await;
         let mut rows = vec![];
         let mut gone = vec![];
         for (key, mr) in missing.into_iter().zip(fetched) {
@@ -97,19 +110,22 @@ impl Backend {
 
     fn cached_ready(&self, scope: Option<&ProjectPath>) -> Option<ReadySource> {
         self.ready_command.as_ref()?;
-        self.cache.read(&keys::ready(scope))
+        self.homes.cache.read(&keys::ready(scope))
     }
 
     async fn fresh_ready(&self, scope: Option<&ProjectPath>, output: String, queue: &Queue, others: &[Queue]) -> ReadySource {
         let queues: Vec<&Queue> = std::iter::once(queue).chain(others).collect();
-        let source = crate::ready::resolve(output, &self.forge, &self.others, scope, &queues).await;
+        let source = crate::ready::resolve(output, &self.homes.forge, &self.homes.others, scope, &queues).await;
         let (wanted, saved) = (scope.cloned(), source.clone());
-        self.write_cache("caching the ready command's answer", move |b| b.cache.write(&keys::ready(wanted.as_ref()), &saved)).await;
+        write_cache("caching the ready command's answer", &self.homes, move |homes| {
+            homes.cache.write(&keys::ready(wanted.as_ref()), &saved)
+        })
+        .await;
         source
     }
 
     /// `pinned` are the pinned MRs no list holds.
-    fn queue_answer(
+    fn answer(
         &self,
         scope: Option<ProjectPath>,
         queue: &Queue,
@@ -122,11 +138,11 @@ impl Backend {
         let parts = std::iter::once(queue).chain(others).map(|q| q.sections_with(&self.watch_labels, &self.rules, now)).collect();
         let sections = Sections::merge(parts);
         let sections = match ready {
-            Some(source) => source.apply(sections, self.forge.host(), &self.others, scope.as_ref(), &queue.me, &self.rules),
+            Some(source) => source.apply(sections, self.homes.forge.host(), &self.homes.others, scope.as_ref(), &queue.me, &self.rules),
             None => sections,
         };
         let sections = Sections { pinned, ..sections };
-        let opened = self.opened_at(&sections);
+        let opened = self.saves.opened_at(&sections);
         Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
     }
 }
@@ -143,8 +159,19 @@ mod tests {
     use crate::forge::Forge;
     use crate::forge::gitlab::Client;
     use crate::forge::gitlab::fixture::key;
-    use crate::tui::backend::test_support::{backend_on, backend_on_nothing, mount_mr, queue};
+    use crate::tui::backend::test_support::{homes_in, homes_on, mount_mr, queue};
     use std::collections::BTreeSet;
+
+    fn queues(homes: Homes) -> Queues {
+        let homes = Arc::new(homes);
+        Queues {
+            saves: Saves::new(homes.clone()),
+            homes,
+            watch_labels: vec![],
+            rules: crate::forge::rules::Rules::disabled(),
+            ready_command: None,
+        }
+    }
 
     #[test]
     fn an_mr_from_another_host_reaches_that_host_and_its_cache() {
@@ -155,39 +182,38 @@ mod tests {
             crate::ctx::Home { host: "github.com".into(), forge: Forge::GitHub(github), cache: Cache::in_dir(dir.path().join("gh")) };
         let queue = queue();
         other.cache.write_entry(&keys::queue(None), &queue.clone().on_host("github.com")).unwrap();
-        let backend = Backend { others: vec![other], cache: Cache::in_dir(dir.path().join("gl")), ..backend_on_nothing() };
-        backend.cache.write_entry(&keys::queue(None), &queue).unwrap();
+        let queues = queues(Homes { others: vec![other], ..homes_in(&dir.path().join("gl")) });
+        queues.homes.cache.write_entry(&keys::queue(None), &queue).unwrap();
         let there = MrKey { host: Some("github.com".into()), ..key() };
         assert_eq!(
-            (backend.forge_of(&there).kind(), backend.forge_of(&key()).kind()),
+            (queues.homes.forge_of(&there).kind(), queues.homes.forge_of(&key()).kind()),
             (crate::forge::Kind::GitHub, crate::forge::Kind::GitLab)
         );
-        let Some(Incoming::Queue { sections, .. }) = backend.cached_queue(None) else { panic!("both caches answer") };
+        let Some(Incoming::Queue { sections, .. }) = queues.cached(None) else { panic!("both caches answer") };
         assert_eq!(
             sections.to_review.iter().filter(|mr| mr.host.as_deref() == Some("github.com")).count(),
             queue.sections(&[]).to_review.len()
         );
-        assert!(backend.cached_queue(Some("acme/widgets".into())).is_none(), "a scoped queue keeps to its own host");
+        assert!(queues.cached(Some("acme/widgets".into())).is_none(), "a scoped queue keeps to its own host");
     }
 
     #[test]
     fn the_last_ready_answer_paints_ready_from_the_cache() {
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend {
-            cache: Cache::in_dir(dir.path()),
+        let queues = Queues {
             ready_command: Some("never-run".into()),
             rules: crate::forge::rules::Rules { stale_days: u32::MAX, ..crate::forge::rules::Rules::default() },
-            ..backend_on_nothing()
+            ..queues(homes_in(dir.path()))
         };
         let queue = crate::forge::gitlab::fixture::queue_in(include_str!("../../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets");
-        backend.cache.write_entry(&keys::queue(Some(&"acme/widgets".into())), &queue).unwrap();
-        let output = format!("ready: https://{}/acme/widgets/-/merge_requests/51", backend.forge.host());
-        backend.cache.write(&keys::ready(Some(&"acme/widgets".into())), &ReadySource { output, outside: vec![] }).unwrap();
-        let Some(Incoming::Queue { sections, .. }) = backend.cached_queue(Some("acme/widgets".into())) else { panic!("the cache answers") };
+        queues.homes.cache.write_entry(&keys::queue(Some(&"acme/widgets".into())), &queue).unwrap();
+        let output = format!("ready: https://{}/acme/widgets/-/merge_requests/51", queues.homes.forge.host());
+        queues.homes.cache.write(&keys::ready(Some(&"acme/widgets".into())), &ReadySource { output, outside: vec![] }).unwrap();
+        let Some(Incoming::Queue { sections, .. }) = queues.cached(Some("acme/widgets".into())) else { panic!("the cache answers") };
         assert_eq!(sections.ready.iter().map(|mr| mr.number).collect::<Vec<_>>(), [51]);
         assert!(sections.open.iter().all(|mr| mr.number != 51));
-        let without = Backend { ready_command: None, ..backend };
-        let Some(Incoming::Queue { sections, .. }) = without.cached_queue(Some("acme/widgets".into())) else { panic!("the cache answers") };
+        let without = Queues { ready_command: None, ..queues };
+        let Some(Incoming::Queue { sections, .. }) = without.cached(Some("acme/widgets".into())) else { panic!("the cache answers") };
         assert!(sections.ready.is_empty(), "no command, no Ready, whatever the cache kept");
     }
 
@@ -213,14 +239,15 @@ mod tests {
                 .mount(&server)
                 .await;
         }
-        let backend = backend_on(&server);
+        let dir = tempfile::tempdir().unwrap();
+        let queues = queues(homes_on(&server, dir.path()));
         let pins: BTreeSet<MrKey> = [42, 43, 44].map(|n| MrKey::new("acme/widgets", n)).into();
-        backend.cache.write(&keys::pins(None), &pins).unwrap();
-        assert_eq!(backend.pins(None), pins, "the pins round trip through the cache");
-        let (rows, gone) = backend.pins_outside(None, &HashSet::new()).await;
+        queues.homes.cache.write(&keys::pins(None), &pins).unwrap();
+        assert_eq!(queues.saves.pins(None), pins, "the pins round trip through the cache");
+        let (rows, gone) = queues.pins_outside(None, &HashSet::new()).await;
         assert_eq!(rows.iter().map(|mr| mr.number).collect::<Vec<_>>(), [42], "an open one shows");
         assert_eq!(gone, [MrKey::new("acme/widgets", 43)], "the merged one goes; 44 failed to fetch and stays");
-        let (rows, gone) = backend.pins_outside(None, &queue().listed().collect()).await;
+        let (rows, gone) = queues.pins_outside(None, &queue().listed().collect()).await;
         assert!(rows.is_empty() && gone == [MrKey::new("acme/widgets", 43)], "a listed pin is not fetched");
     }
 
@@ -236,10 +263,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let creds = crate::auth::Credentials { host: "git.acme.test".into(), token: "glpat-xxxx".into() };
         let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", silent.uri())).unwrap());
-        let other = crate::ctx::Home { host: "git.acme.test".into(), forge, cache: Cache::in_dir(dir.path()) };
+        let other = crate::ctx::Home { host: "git.acme.test".into(), forge, cache: Cache::in_dir(dir.path().join("other")) };
         other.cache.write_entry(&keys::queue(None), &queue().on_host("git.acme.test")).unwrap();
-        let backend = Backend { others: vec![other], ..backend_on(&main) };
-        let (Incoming::Queue { sections, .. }, follow) = backend.load_queue(None).await.unwrap() else { panic!("a queue") };
+        let queues = queues(Homes { others: vec![other], ..homes_on(&main, &dir.path().join("main")) });
+        let (Incoming::Queue { sections, .. }, follow) = queues.load(None).await.unwrap() else { panic!("a queue") };
         let there = sections.all().filter(|mr| mr.host.as_deref() == Some("git.acme.test")).count();
         assert_eq!(there, sections.all().count() / 2, "the silent host keeps the rows it last had");
         let [Incoming::Failed { what: app::Failure::Host, message }] = follow.as_slice() else { panic!("{follow:?}") };

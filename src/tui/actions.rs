@@ -1,8 +1,8 @@
 //! The action runner: each action the app asks for runs in its own task and answers through `Incoming`.
-use super::app::{self, Action, Failure, Incoming, Part, Post, QueueView};
-use super::backend::{Backend, MrState};
+use super::app::{self, Action, Failure, Incoming, Part, Post};
+use super::backend::{Backend, MrState, read_cache, run_blocking};
 use crate::blocking;
-use crate::cache::{Cache, keys};
+use crate::cache::Cache;
 use crate::forge::{Forge, MrKey};
 use crate::log::OrWarn as _;
 use anyhow::{Context as _, Result};
@@ -25,18 +25,18 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::LoadQueue { scope, from_cache } => {
                 if from_cache {
                     let wanted = scope.clone();
-                    if let Some(view) = backend.read_cache(move |b| b.cache.read::<QueueView>(&keys::queue_view(wanted.as_ref()))).await {
+                    if let Some(view) = read_cache(&backend.saves, move |saves| saves.queue_view(wanted.as_ref())).await {
                         send(Incoming::QueueView { scope: scope.clone(), view });
                     }
                     let wanted = scope.clone();
-                    let pins = backend.read_cache(move |b| b.pins(wanted.as_ref())).await;
+                    let pins = read_cache(&backend.saves, move |saves| saves.pins(wanted.as_ref())).await;
                     send(Incoming::Pins { scope: scope.clone(), pins });
                 }
                 let wanted = scope.clone();
-                if let Some(cached) = backend.read_cache(move |b| b.cached_queue(wanted)).await.filter(|_| from_cache) {
+                if let Some(cached) = read_cache(&backend.queues, move |queues| queues.cached(wanted)).await.filter(|_| from_cache) {
                     send(cached);
                 }
-                match backend.load_queue(scope).await {
+                match backend.queues.load(scope).await {
                     Ok((answer, follow)) => {
                         let counted = match &answer {
                             Incoming::Queue { sections, .. } => Some(sections.clone()),
@@ -44,7 +44,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                         };
                         send(answer);
                         if let Some(sections) = counted
-                            && let Ok(progress) = backend.run_blocking(move |b| b.progress(&sections)).await
+                            && let Ok(progress) = run_blocking(&backend.saves, move |saves| saves.progress(&sections)).await
                         {
                             send(Incoming::Progress(progress));
                         }
@@ -54,49 +54,51 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
             }
             Action::ChangeQueueView { scope, change, order } => {
-                let saved = backend.run_blocking(move |b| b.change_queue_view(scope.as_ref(), change, order)).await;
+                let saved = run_blocking(&backend.saves, move |saves| saves.change_queue_view(scope.as_ref(), change, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::ChangePin { scope, key, on, order } => {
-                let saved = backend.run_blocking(move |b| b.change_pin(scope.as_ref(), &key, on, order)).await;
+                let saved = run_blocking(&backend.saves, move |saves| saves.change_pin(scope.as_ref(), &key, on, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::Open(key) => {
-                let _opening = backend.start_opening();
+                let _opening = backend.reviews.start_opening();
                 let wanted = key.clone();
-                let cached = backend.read_cache(move |b| b.open_cached(&wanted)).await;
+                let cached = read_cache(&backend.reviews, move |reviews| reviews.open_cached(&wanted)).await;
                 let painted = cached.as_ref().and_then(painted_head);
                 if let Some(cached) = cached {
                     send(cached);
-                    backend.resume(&key, &send).await;
+                    backend.reviews.resume(&key, &send).await;
                 }
                 let fresh = match &painted {
-                    Some(head) => backend.reopen(key.clone(), head).await,
-                    None => backend.fetch_review(key.clone()).await,
+                    Some(head) => backend.reviews.reopen(key.clone(), head).await,
+                    None => backend.reviews.fetch_review(key.clone()).await,
                 };
                 let arrived = fresh.is_ok();
                 send(fresh.unwrap_or_else(|e| failed(Failure::Open { key: key.clone() }, &e)));
                 if arrived && painted.is_none() {
-                    backend.resume(&key, &send).await;
+                    backend.reviews.resume(&key, &send).await;
                 }
             }
-            Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.load_ahead(ahead).await }).await,
-            Action::RefreshMr(key) => send(backend.fetch_review(key.clone()).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e))),
+            Action::Prefetch(plan) => in_turn(plan, AHEAD, |ahead| async { backend.reviews.load_ahead(ahead).await }).await,
+            Action::RefreshMr(key) => {
+                send(backend.reviews.fetch_review(key.clone()).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
+            }
             Action::PollMr { key, head } => {
-                send(backend.poll_review(key.clone(), &head).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
+                send(backend.reviews.poll_review(key.clone(), &head).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
             }
             Action::RefreshDiscussions(key) => {
-                send(backend.fetch_discussions(key.clone()).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
+                send(backend.reviews.fetch_discussions(key.clone()).await.unwrap_or_else(|e| failed(Failure::Poll { key }, &e)));
             }
             Action::SaveState { key, order, fold, viewed, auto_folded, side_by_side, spot } => {
                 let chosen =
                     MrState { fold, viewed_files: viewed, auto_folded: (*auto_folded).clone(), side_by_side, spot, opened_at: None };
-                let save = move |b: &Backend| b.save_state(&key, order, chosen);
-                if let Err(e) = backend.run_blocking(save).await.and_then(|saved| saved) {
+                let save = run_blocking(&backend.saves, move |saves| saves.save_state(&key, order, chosen));
+                if let Err(e) = save.await.and_then(|saved| saved) {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -122,37 +124,39 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     .or_warn("remembering the share target");
             }
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
-            Action::SaveDraft { key, draft } => send(match backend.save_draft(key.clone(), draft).await {
+            Action::SaveDraft { key, draft } => send(match backend.drafts.save(key.clone(), draft).await {
                 Ok(saved) => saved,
                 Err(e) => failed(Failure::Draft { key }, &e),
             }),
-            Action::UpdateDraft { key, id, draft, held } => send(match backend.update_draft(&key, id, &draft).await {
+            Action::UpdateDraft { key, id, draft, held } => send(match backend.drafts.update(&key, id, &draft).await {
                 Ok(()) => Incoming::DraftChanged { key },
                 Err(e) => failed(Failure::DraftUpdate { key, held, wanted: draft.body }, &e),
             }),
-            Action::DeleteDraft { key, id, held } => send(match backend.delete_draft(&key, id).await {
+            Action::DeleteDraft { key, id, held } => send(match backend.drafts.delete(&key, id).await {
                 Ok(()) => Incoming::DraftChanged { key },
                 Err(e) => failed(Failure::DraftDelete { key, held }, &e),
             }),
             Action::Publish { key, approve, count } => {
-                send(backend.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
+                send(backend.drafts.publish(key, approve, count).await.unwrap_or_else(|e| failed(Failure::Publish, &e)));
             }
             Action::Post { key, to, body } => {
-                send(match post(backend.forge_of(&key), &key, &to, &body).await {
+                send(match post(backend.homes.forge_of(&key), &key, &to, &body).await {
                     Ok(()) => Incoming::Posted { key, to },
                     Err(e) => failed(Failure::Post { key, to }, &e),
                 });
             }
-            Action::Resolve { key, thread, resolved } => send(backend.forge_of(&key).resolve(&key, &thread, resolved).await.map_or_else(
-                |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
-                |()| Incoming::Resolved { key, thread: thread.clone(), resolved },
-            )),
+            Action::Resolve { key, thread, resolved } => {
+                send(backend.homes.forge_of(&key).resolve(&key, &thread, resolved).await.map_or_else(
+                    |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),
+                    |()| Incoming::Resolved { key, thread: thread.clone(), resolved },
+                ));
+            }
             Action::LoadFile { key, path, sha } => {
-                let outcome = backend.forge_of(&key).file(&key, &path, &sha).await;
+                let outcome = backend.homes.forge_of(&key).file(&key, &path, &sha).await;
                 send(outcome.map_or_else(|e| failed(Failure::Local, &e), |text| Incoming::File { key, path, sha, text }));
             }
             Action::React { key, thread, index, note, emoji, on } => {
-                if let Err(e) = backend.forge_of(&key).react(&note, emoji, on).await {
+                if let Err(e) = backend.homes.forge_of(&key).react(&note, emoji, on).await {
                     send(failed(app::react_failure(thread, index, emoji, on), &e));
                 }
             }
@@ -160,58 +164,59 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 blocking::run(move || crate::reactions::record(&Cache::shared(), &host, emoji)).await.or_warn("counting the reaction");
             }
             Action::Merge { key, head, plan } => {
-                let outcome = backend.forge_of(&key).merge(&key, &head, plan).await;
+                let outcome = backend.homes.forge_of(&key).merge(&key, &head, plan).await;
                 send(outcome.map_or_else(|e| failed(Failure::Merge, &e), |()| Incoming::Merged { key }));
             }
             Action::SetDraft { key, draft } => {
-                let outcome = backend.forge_of(&key).set_draft(&key, draft).await;
+                let outcome = backend.homes.forge_of(&key).set_draft(&key, draft).await;
                 send(outcome.map_or_else(|e| failed(Failure::SetDraft, &e), |()| Incoming::DraftSet { key, draft }));
             }
             Action::Apply { key, branch, suggestion } => {
-                let outcome = backend.forge_of(&key).apply(&key, &branch, &suggestion).await;
+                let outcome = backend.homes.forge_of(&key).apply(&key, &branch, &suggestion).await;
                 send(outcome.map_or_else(|e| failed(Failure::Apply, &e), |()| Incoming::Applied { key, branch }));
             }
             Action::LoadImage { key, url } => {
-                let image = backend.image(&key, &url).await;
+                let image = backend.files.image(&key, &url).await;
                 send(Incoming::Image { url, image });
             }
             Action::LoadChecks { key, head } => {
-                let outcome = backend.forge_of(&key).checks(&key, &head).await;
+                let outcome = backend.homes.forge_of(&key).checks(&key, &head).await;
                 send(outcome.map_or_else(|e| failed(Failure::Checks, &e), |checks| Incoming::Checks { key, checks }));
             }
             Action::LoadOutline { key, base, head, files } => {
-                let outcome = backend.outline(&key, &base, &head, files).await;
+                let outcome = backend.files.outline(&key, &base, &head, files).await;
                 send(outcome.map_or_else(|e| failed(Failure::Outline, &e), |reading| Incoming::Outline { key, reading }));
             }
             Action::LoadProse { key, base, head, sides } => {
-                let outcome = backend.prose(&key, &base, &head, sides.clone()).await;
+                let outcome = backend.files.prose(&key, &base, &head, sides.clone()).await;
                 send(outcome.map_or_else(|e| failed(Failure::Prose, &e), |versions| Incoming::Prose { key, sides, versions }));
             }
             Action::LoadDeployments { key, branch, head } => {
-                if let Ok(deployments) = backend.forge_of(&key).deployments(&key, &branch, &head).await {
+                if let Ok(deployments) = backend.homes.forge_of(&key).deployments(&key, &branch, &head).await {
                     send(Incoming::Deployments { key, deployments });
                 }
             }
             Action::Approve { key, approve } => {
-                let outcome = backend.forge_of(&key).approve(&key, approve).await;
+                let outcome = backend.homes.forge_of(&key).approve(&key, approve).await;
                 send(outcome.map_or_else(|e| failed(Failure::Approve, &e), |()| Incoming::Approved { key, approve }));
             }
             Action::View { key, path, sha, line, note } => {
-                let outcome = backend.view(key, &path, &sha, line, note).await;
+                let outcome = backend.files.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
-            Action::Ask { key, id, request, fresh, label, head } => backend.ask(&key, id, &request, fresh, &label, &head, &send).await,
+            Action::Ask { key, id, request, fresh, label, head } => backend.ai.ask(&key, id, &request, fresh, &label, &head, &send).await,
             Action::LoadAnswers(key) => {
                 let wanted = key.clone();
-                let answers = backend.read_cache(move |b| b.past_answers(&wanted)).await;
+                let answers = read_cache(&backend.ai, move |ai| ai.past_answers(&wanted)).await;
                 send(Incoming::PastAnswers { key, answers });
             }
             Action::Triage(mr) => {
-                send(backend.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
+                send(backend.ai.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
             }
             Action::Read { key, head, waits, files } => {
                 send(
                     backend
+                        .ai
                         .read(key, head, waits, files)
                         .await
                         .unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }),

@@ -1,13 +1,23 @@
 //! Claude's answers and Jev's verdicts and readings, each kept in the cache once given.
-use super::Backend;
-use crate::ai::anthropic::{self, Ask, Outcome, Stop, Usage};
+use super::{Homes, read_cache, write_cache};
+use crate::ai::anthropic::{self, Ask, Claude, Outcome, Stop, Usage};
 use crate::ai::triage::{self, Verdict};
-use crate::ai::typesafe::Unavailable;
+use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
 use crate::tui::app::{self, Incoming, Part};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub(in crate::tui) struct Ai {
+    pub(super) homes: Arc<Homes>,
+    /// Jev, when `[ai.typesafe]` is on and a key was found.
+    pub(super) jev: Option<TypeSafe>,
+    /// Claude, when `[ai.anthropic]` is on and a key was found.
+    pub(super) claude: Option<Claude>,
+}
 
 /// An answer kept in the cache: asking the same thing about the same diff paints it at once, and
 /// `a h` lists it. Answers kept before the label was saved have none and are not listed.
@@ -40,10 +50,10 @@ impl SavedAnswer {
     }
 }
 
-impl Backend {
+impl Ai {
     /// The answers kept for `key` that say what they were, newest first.
     pub(in crate::tui) fn past_answers(&self, key: &MrKey) -> Vec<app::PastAnswer> {
-        let cache = self.cache_of(key);
+        let cache = self.homes.cache_of(key);
         let (dir, prefix) = keys::answers(key);
         let mut answers: Vec<app::PastAnswer> =
             cache.keys_in(&dir, prefix).iter().filter_map(|entry| cache.read::<SavedAnswer>(entry)?.past()).collect();
@@ -71,7 +81,7 @@ impl Backend {
         };
         let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
         let (wanted, reading) = (key.clone(), cache_key.clone());
-        let saved = self.read_cache(move |b| b.cache_of(&wanted).read::<SavedAnswer>(&reading)).await;
+        let saved = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read::<SavedAnswer>(&reading)).await;
         if let Some(saved) = saved.filter(|_| !fresh) {
             let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
             send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
@@ -103,7 +113,8 @@ impl Backend {
                         request: Some(request.clone()),
                     };
                     let wanted = key.clone();
-                    self.write_cache("caching Claude's answer", move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
+                    write_cache("caching Claude's answer", &self.homes, move |homes| homes.cache_of(&wanted).write(&cache_key, &saved))
+                        .await;
                 }
                 send(part(Part::Done { outcome, cached_text: None }));
             }
@@ -115,14 +126,15 @@ impl Backend {
     pub(in crate::tui) async fn triage(&self, mr: &crate::forge::QueueMr) -> Result<Incoming, Unavailable> {
         let key = mr.key();
         let wanted = key.clone();
-        let cached: Option<Verdict> = self.read_cache(move |b| b.cache_of(&wanted).read(&keys::verdict(&wanted))).await;
+        let cached: Option<Verdict> = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read(&keys::verdict(&wanted))).await;
         let verdict = if let Some(verdict) = cached.filter(|v| v.fresh_for(mr)) {
             verdict
         } else {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let verdict = triage::judge_mr(jev, mr, Utc::now()).await?;
             let (wanted, saved) = (key.clone(), verdict.clone());
-            self.write_cache("caching the verdict", move |b| b.cache_of(&wanted).write(&keys::verdict(&wanted), &saved)).await;
+            write_cache("caching the verdict", &self.homes, move |homes| homes.cache_of(&wanted).write(&keys::verdict(&wanted), &saved))
+                .await;
             verdict
         };
         Ok(Incoming::Triaged { key, verdict })
@@ -137,14 +149,17 @@ impl Backend {
         files: Vec<(String, serde_json::Value)>,
     ) -> Result<Incoming, Unavailable> {
         let (wanted, at) = (key.clone(), head.clone());
-        let cached = self.read_cache(move |b| b.cache_of(&wanted).read(&keys::reading(&wanted, &at))).await;
+        let cached = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read(&keys::reading(&wanted, &at))).await;
         let reading = if let Some(reading) = cached {
             reading
         } else {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let reading = triage::judge_open(jev, waits, files).await?;
             let (wanted, at, saved) = (key.clone(), head.clone(), reading.clone());
-            self.write_cache("caching the reading", move |b| b.cache_of(&wanted).write(&keys::reading(&wanted, &at), &saved)).await;
+            write_cache("caching the reading", &self.homes, move |homes| {
+                homes.cache_of(&wanted).write(&keys::reading(&wanted, &at), &saved)
+            })
+            .await;
             reading
         };
         Ok(Incoming::Read { key, head, reading })
@@ -155,16 +170,18 @@ impl Backend {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::ai::anthropic::Claude;
-    use crate::cache::Cache;
     use crate::forge::gitlab::fixture::key;
-    use crate::tui::backend::test_support::{backend_on_nothing, queue};
+    use crate::tui::backend::test_support::{homes_in, queue};
     use std::collections::BTreeMap;
+
+    fn ai_in(dir: &std::path::Path) -> Ai {
+        Ai { homes: homes_in(dir).into(), jev: None, claude: None }
+    }
 
     #[test]
     fn kept_answers_list_newest_first_and_skip_those_saved_without_a_label() {
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        let ai = ai_in(dir.path());
         let mr = key();
         let saved = |label: Option<&str>, hours: i64| SavedAnswer {
             text: "text".into(),
@@ -175,28 +192,28 @@ mod tests {
             head: Some("b2".into()),
             request: Some(Ask { system: vec![], turns: vec![] }),
         };
-        let cache = backend.cache_of(&mr);
+        let cache = ai.homes.cache_of(&mr);
         cache.write(&keys::answer(&mr, "old"), &saved(Some("explain · a.rs"), 5)).unwrap();
         cache.write(&keys::answer(&mr, "new"), &saved(Some("summary"), 1)).unwrap();
         cache.write(&keys::answer(&mr, "before"), &serde_json::json!({"text": "t", "model": "m", "usage": Usage::default()})).unwrap();
-        let labels: Vec<String> = backend.past_answers(&mr).into_iter().map(|a| a.label).collect();
+        let labels: Vec<String> = ai.past_answers(&mr).into_iter().map(|a| a.label).collect();
         assert_eq!(labels, ["summary", "explain · a.rs"]);
     }
 
     #[tokio::test]
     async fn jev_is_asked_once_per_mr_state_and_answers_from_the_cache_after() {
         let dir = tempfile::tempdir().unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
+        let ai = ai_in(dir.path());
         let mr = queue().review_requested[0].clone();
         let verdict = Verdict { urgency: 2.8, size: triage::Size::Large, seen: mr.updated_at };
-        backend.cache.write(&keys::verdict(&mr.key()), &verdict).unwrap();
-        let Ok(Incoming::Triaged { verdict: cached, .. }) = backend.triage(&mr).await else { panic!("the cache answers") };
+        ai.homes.cache.write(&keys::verdict(&mr.key()), &verdict).unwrap();
+        let Ok(Incoming::Triaged { verdict: cached, .. }) = ai.triage(&mr).await else { panic!("the cache answers") };
         assert_eq!(cached, verdict);
         let moved = crate::forge::QueueMr { updated_at: mr.updated_at + chrono::TimeDelta::minutes(5), ..mr };
-        assert!(backend.triage(&moved).await.is_err(), "a moved MR needs Jev, which is off here");
+        assert!(ai.triage(&moved).await.is_err(), "a moved MR needs Jev, which is off here");
         let reading = triage::Reading { waits_on_me: true, risks: BTreeMap::new() };
-        backend.cache.write(&keys::reading(&key(), &"abc".into()), &reading).unwrap();
-        let Ok(Incoming::Read { reading: read, .. }) = backend.read(key(), "abc".into(), None, vec![]).await else { panic!("cached") };
+        ai.homes.cache.write(&keys::reading(&key(), &"abc".into()), &reading).unwrap();
+        let Ok(Incoming::Read { reading: read, .. }) = ai.read(key(), "abc".into(), None, vec![]).await else { panic!("cached") };
         assert!(read.waits_on_me);
     }
 
@@ -219,13 +236,13 @@ mod tests {
             .await;
         let dir = tempfile::tempdir().unwrap();
         let claude = Claude::with_base(&server.uri(), crate::ai::Secret::new("sk-ant-test"), "claude-opus-5").unwrap();
-        let backend = Backend { cache: Cache::in_dir(dir.path()), claude: Some(claude), ..backend_on_nothing() };
+        let ai = Ai { claude: Some(claude), ..ai_in(dir.path()) };
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
         let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
-        backend.ask(&key(), 1, &request, false, "explain", &"b2".into(), &listen).await;
-        backend.ask(&key(), 2, &request, false, "explain", &"b2".into(), &listen).await;
-        backend.ask(&key(), 3, &request, true, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 1, &request, false, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 2, &request, false, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 3, &request, true, "explain", &"b2".into(), &listen).await;
         let heard = heard.into_inner().unwrap();
         let cached: Vec<_> = heard
             .iter()

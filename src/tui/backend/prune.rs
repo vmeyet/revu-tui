@@ -1,5 +1,5 @@
 //! Once a day, the cache drops what it keeps for finished or long untouched MRs.
-use super::{Backend, warn_stopped};
+use super::{Homes, warn_stopped};
 use crate::blocking;
 use crate::cache::{Cache, keys};
 use crate::forge::{Forge, ProjectPath};
@@ -13,7 +13,7 @@ const PRUNE_EVERY: Duration = Duration::from_hours(24);
 /// An MR nobody opened for this long is dropped even when its forge could not say it is finished.
 const KEEP_UNTOUCHED: Duration = Duration::from_hours(30 * 24);
 
-impl Backend {
+impl Homes {
     /// At most once a day, what the cache keeps for merged, closed or long untouched MRs goes:
     /// their diffs, threads and Claude's answers. Safe to run twice; a failure leaves the cache as it is.
     pub(in crate::tui) async fn prune_daily(&self) {
@@ -63,7 +63,7 @@ async fn prune(forge: &Forge, cache: &Cache) {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
-    use crate::tui::backend::test_support::backend_on;
+    use crate::tui::backend::test_support::homes_on;
 
     #[tokio::test]
     async fn pruning_drops_the_merged_mrs_keeps_the_open_ones_and_runs_twice_without_harm() {
@@ -77,10 +77,9 @@ mod tests {
             .mount(&server)
             .await;
         let dir = tempfile::tempdir().unwrap();
-        let cache = Cache::in_dir(dir.path());
+        let Homes { forge, cache, .. } = homes_on(&server, dir.path());
         cache.write("mr/acme+widgets/40/ai/answer.1.json", &1).unwrap();
         cache.write("mr/acme+widgets/42/mr.json", &2).unwrap();
-        let forge = backend_on(&server).forge;
         prune(&forge, &cache).await;
         prune(&forge, &cache).await;
         let left: Vec<u64> = cache.kept_mrs().into_iter().map(|k| k.number).collect();
