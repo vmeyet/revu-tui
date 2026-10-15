@@ -1,5 +1,5 @@
 ---
-source: src/tui/diff_view.rs
+source: src/tui/diff_view/rows.rs
 expression: "drawn.map(|line| spans_text(&line.spans)).collect::<Vec<_>>().join(\"\\n\")"
 ---
       1    1  │ Plan │ Seats │ Notes       │

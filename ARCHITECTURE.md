@@ -33,6 +33,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/backend/drafts.rs`, `tui/lanes.rs` | Draft writes and publishing; one lane per MR so they run one at a time |
 | `tui/backend/ai.rs`, `files.rs`, `prune.rs` | Claude's answers and Jev's marks; files at a commit and pictures; the daily cache prune |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
+| `tui/diff_view.rs`, `tui/diff_view/` | The review pane: the visible window of rows in `diff_view.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
 | `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies as light markdown in `body.rs` |
 | `tui/theme.rs`, `tui/screen.rs`, `tui/ground.rs` | The colour palette; the terminal in raw mode on the alternate screen; the terminal's background, asked once at startup |
 | `tui/field.rs`, `complete.rs`, `palette.rs`, `help.rs` | The input box, tab completion, the `ctrl-k` palette, the `?` overlay |

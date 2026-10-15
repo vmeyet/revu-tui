@@ -499,6 +499,13 @@ mod tests {
         let sources = [
             ("ui.rs", include_str!("ui.rs")),
             ("diff_view.rs", include_str!("diff_view.rs")),
+            ("diff_view/anchors.rs", include_str!("diff_view/anchors.rs")),
+            ("diff_view/header.rs", include_str!("diff_view/header.rs")),
+            ("diff_view/line.rs", include_str!("diff_view/line.rs")),
+            ("diff_view/rows.rs", include_str!("diff_view/rows.rs")),
+            ("diff_view/select.rs", include_str!("diff_view/select.rs")),
+            ("diff_view/side_by_side.rs", include_str!("diff_view/side_by_side.rs")),
+            ("diff_view/wrap.rs", include_str!("diff_view/wrap.rs")),
             ("thread_view/mod.rs", include_str!("thread_view/mod.rs")),
             ("thread_view/body.rs", include_str!("thread_view/body.rs")),
             ("thread_view/conversation.rs", include_str!("thread_view/conversation.rs")),

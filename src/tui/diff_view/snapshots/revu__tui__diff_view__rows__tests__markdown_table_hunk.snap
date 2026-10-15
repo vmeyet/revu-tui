@@ -1,5 +1,5 @@
 ---
-source: src/tui/diff_view.rs
+source: src/tui/diff_view/rows.rs
 expression: "lines.join(\"\\n---\\n\")"
 ---
 Some(Rgb(86, 95, 137))/None "   1    1 "
