@@ -582,7 +582,7 @@ mod tests {
     fn bracket_n_stops_on_my_draft_reply_to_a_resolved_thread() {
         let mut app = with_review();
         let open = app.open.clone().unwrap();
-        let reply = crate::review::Draft::reply(&"c0ffee00c0ffee00".into(), "agreed");
+        let reply = crate::review::Draft::reply("c0ffee00c0ffee00".into(), "agreed");
         app.open = Some(open.relaid(|review| review.with_drafts(vec![reply])));
         assert_eq!(thread_stops(&mut app, "]n", 2), [LINE_13, Row::Header]);
     }

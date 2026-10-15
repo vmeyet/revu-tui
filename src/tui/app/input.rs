@@ -161,7 +161,7 @@ impl App {
         }
         match input {
             Input::Comment { position } => self.add_draft(Draft::on(*position, text)),
-            Input::Reply { thread } => self.add_draft(Draft::reply(&thread, text)),
+            Input::Reply { thread } => self.add_draft(Draft::reply(thread, text)),
             Input::EditDraft { draft } => self.change_draft(draft, text),
             question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
         }

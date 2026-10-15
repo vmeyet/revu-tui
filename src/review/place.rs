@@ -336,7 +336,7 @@ mod tests {
         let review = review().with_resolved(&"c0ffee00c0ffee00".into(), true);
         let markers = review.markers();
         assert_eq!(review.marker_of(&markers, &removed_line()).unwrap().mark, Mark::Resolved);
-        let replied = review.with_drafts(vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed").with_id(3)]);
+        let replied = review.with_drafts(vec![Draft::reply("c0ffee00c0ffee00".into(), "agreed").with_id(3)]);
         let markers = replied.markers();
         let marker = replied.marker_of(&markers, &removed_line()).unwrap();
         assert_eq!((marker.mark, marker.count, marker.unsaved), (Mark::Draft, 1, false), "a reply counts with its thread");
@@ -366,7 +366,7 @@ mod tests {
     fn the_pane_lists_unresolved_then_new_drafts_then_resolved() {
         let base = review().with_resolved(&"c0ffee00c0ffee00".into(), false);
         let new_draft = Draft::new(Some(old_13()), "why drop the default client?");
-        let review = base.with_drafts(vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"), new_draft]);
+        let review = base.with_drafts(vec![Draft::reply("c0ffee00c0ffee00".into(), "agreed"), new_draft]);
         let place = review.place_of(&removed_line()).unwrap();
         assert_eq!(place, Place::Line { file: 0, new: None, old: Some(13) });
         let listed = review.conversations(&place);
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn in_the_diff_a_folded_thread_is_one_stop_and_an_unfolded_one_stops_on_each_note_then_my_replies() {
-        let drafts = vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"), Draft::new(Some(old_13()), "nit")];
+        let drafts = vec![Draft::reply("c0ffee00c0ffee00".into(), "agreed"), Draft::new(Some(old_13()), "nit")];
         let review = review().with_drafts(drafts);
         let listed = review.conversations(&review.place_of(&removed_line()).unwrap());
         let stop = |conversation, kind| Entry { conversation, kind };
@@ -395,7 +395,7 @@ mod tests {
         let lock = Anchor { path: "Cargo.lock".into(), side: Side::New, line: 1 };
         let drafts = vec![
             Draft::new(Some(lock), "why a lock bump?"),
-            Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"),
+            Draft::reply("c0ffee00c0ffee00".into(), "agreed"),
             Draft::new(Some(old_13()), "why drop the default client?"),
             Draft::new(None, "one more thing"),
         ];
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn i_take_part_in_a_thread_i_wrote_in_or_answered_and_in_my_new_draft() {
-        let review = review().with_drafts(vec![Draft::reply(&"9f2c0aa1d4e5b6c7".into(), "agreed"), Draft::new(None, "one more thing")]);
+        let review = review().with_drafts(vec![Draft::reply("9f2c0aa1d4e5b6c7".into(), "agreed"), Draft::new(None, "one more thing")]);
         let mine: Vec<Conversation> = review.conversations(&Place::All).into_iter().filter(|c| review.takes_part(c, "nina")).collect();
         let thread = |id: &str, drafts: Vec<usize>| Conversation { thread: Some(id.into()), drafts };
         let expected =

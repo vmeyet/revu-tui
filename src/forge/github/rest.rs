@@ -4,7 +4,7 @@ use super::Client;
 use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::http::HttpError;
-use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position};
+use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, ThreadId};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
@@ -72,7 +72,7 @@ impl From<File> for DiffFile {
 #[derive(Deserialize)]
 struct PostedComment {
     id: u64,
-    node_id: String,
+    node_id: ThreadId,
     body: String,
     user: RestUser,
     created_at: DateTime<Utc>,
@@ -96,7 +96,7 @@ impl PostedComment {
             reactions: vec![],
             node: None,
         };
-        Discussion { id: self.node_id.into(), notes: vec![note] }
+        Discussion { id: self.node_id, notes: vec![note] }
     }
 }
 

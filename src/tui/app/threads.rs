@@ -257,7 +257,7 @@ mod tests {
         let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 1)]);
         let open = app.open.clone().unwrap();
         let line_13 = crate::review::Anchor { path: "src/pay/charge.rs".into(), side: crate::review::Side::New, line: 13 };
-        let drafts = vec![crate::review::Draft::reply(&"aaa".into(), "agreed"), crate::review::Draft::new(Some(line_13), "nit")];
+        let drafts = vec![crate::review::Draft::reply("aaa".into(), "agreed"), crate::review::Draft::new(Some(line_13), "nit")];
         app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
         let screen = render(&mut app, 138, 40);
         let rows = under(&screen, "+    let client = Client::with_key", 4);

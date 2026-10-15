@@ -45,8 +45,8 @@ impl Draft {
         }
     }
 
-    pub fn reply(thread: &ThreadId, body: impl Into<String>) -> Self {
-        Self { id: None, local_id: None, anchor: None, position: None, reply_to: Some(thread.clone()), body: body.into(), resolve: false }
+    pub fn reply(thread: ThreadId, body: impl Into<String>) -> Self {
+        Self { id: None, local_id: None, anchor: None, position: None, reply_to: Some(thread), body: body.into(), resolve: false }
     }
 
     /// One the forge already holds.
@@ -163,7 +163,7 @@ mod tests {
         assert!(on.same_as(&held(4, "nit", Some(position()), None, false)));
         assert!(!on.same_as(&on.clone().with_body("other")));
         assert_eq!(draft.with_id(3).id, Some(3));
-        assert_eq!(Draft::reply(&"t1".into(), "yes").reply_to, Some("t1".into()));
+        assert_eq!(Draft::reply("t1".into(), "yes").reply_to, Some("t1".into()));
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
     fn a_refresh_keeps_the_drafts_the_forge_does_not_hold_and_adopts_the_ones_it_now_lists() {
         let web = held(3, "from the web", None, None, false);
         let landed = Draft::on(position(), "nit").with_local_id(1);
-        let offline = Draft::reply(&"t1".into(), "agreed").with_local_id(2);
+        let offline = Draft::reply("t1".into(), "agreed").with_local_id(2);
         let saved = held(5, "typo", None, None, false);
         let fresh = [web.clone(), saved.clone(), held(7, "nit", Some(position()), None, false)];
         let carried = carry(&fresh, &[web.clone(), saved.clone().with_local_id(4), landed.clone(), offline.clone()]);

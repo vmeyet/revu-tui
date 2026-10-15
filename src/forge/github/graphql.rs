@@ -747,8 +747,8 @@ impl Client {
         Ok(if approve { forge::Approval::Given } else { forge::Approval::NotAsked })
     }
 
-    pub async fn resolve(&self, discussion: &str, resolved: bool) -> Result<()> {
-        if !discussion.starts_with("PRRT_") {
+    pub async fn resolve(&self, discussion: &ThreadId, resolved: bool) -> Result<()> {
+        if !discussion.as_str().starts_with("PRRT_") {
             bail!("only review threads resolve on GitHub; this is a comment on the pull request");
         }
         let verb = if resolved { "resolveReviewThread" } else { "unresolveReviewThread" };
@@ -758,8 +758,8 @@ impl Client {
 
     /// A public reply: on a review thread, in it; GitHub has no thread for any other comment, so
     /// the reply is a new comment on the PR.
-    pub async fn reply(&self, key: &MrKey, thread: &str, body: &str) -> Result<()> {
-        if !thread.starts_with("PRRT_") {
+    pub async fn reply(&self, key: &MrKey, thread: &ThreadId, body: &str) -> Result<()> {
+        if !thread.as_str().starts_with("PRRT_") {
             return self.comment(key, body, None).await.map(|_| ());
         }
         let query = "mutation($thread: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $thread, body: $body}) { clientMutationId } }";
@@ -958,9 +958,8 @@ mod tests {
     #[test]
     fn drafts_are_my_pending_comments_and_the_pending_review_text() {
         let drafts = threads().drafts();
-        let shape: Vec<(u64, Option<&str>, bool)> =
-            drafts.iter().map(|d| (d.id, d.reply_to.as_ref().map(ThreadId::as_str), d.position.is_some())).collect();
-        assert_eq!(shape, [(103, Some("PRRT_1"), false), (105, None, true), (209, None, false)]);
+        let shape: Vec<(u64, Option<ThreadId>, bool)> = drafts.iter().map(|d| (d.id, d.reply_to.clone(), d.position.is_some())).collect();
+        assert_eq!(shape, [(103, Some("PRRT_1".into()), false), (105, None, true), (209, None, false)]);
         assert_eq!(drafts[1].position.as_ref().unwrap().line, LineRef { old: None, new: Some(4) });
     }
 
@@ -1212,7 +1211,7 @@ mod tests {
         let prs = client(&server).threads(&key()).await.unwrap();
         let drafts: Vec<u64> = prs.drafts().iter().map(|d| d.id).collect();
         assert_eq!(drafts, [103, 106, 105, 108, 209]);
-        assert!(prs.discussions().iter().any(|d| d.id.as_str() == "IC_2"));
+        assert!(prs.discussions().iter().any(|d| d.id == "IC_2".into()));
     }
 
     #[tokio::test]
@@ -1268,8 +1267,8 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        client.resolve("PRRT_1", false).await.unwrap();
-        assert!(client.resolve("IC_1", true).await.unwrap_err().to_string().contains("only review threads"));
+        client.resolve(&"PRRT_1".into(), false).await.unwrap();
+        assert!(client.resolve(&"IC_1".into(), true).await.unwrap_err().to_string().contains("only review threads"));
     }
 
     #[tokio::test]
@@ -1296,8 +1295,8 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        client.reply(&key(), "PRRT_1", "agreed").await.unwrap();
-        client.reply(&key(), "IC_1", "agreed").await.unwrap();
+        client.reply(&key(), &"PRRT_1".into(), "agreed").await.unwrap();
+        client.reply(&key(), &"IC_1".into(), "agreed").await.unwrap();
     }
 
     fn draft_state_mock(is_draft: bool) -> Mock {

@@ -3,7 +3,7 @@ use super::Client;
 use super::wire::{self, Approvals, Discussion, DraftNote, NewDraft};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::http::{self, HttpError};
-use crate::forge::{self, DiffFile, MrKey};
+use crate::forge::{self, DiffFile, MrKey, ThreadId};
 use anyhow::{Context, Result, anyhow};
 use reqwest::{Method, StatusCode};
 use serde::Deserialize;
@@ -248,7 +248,7 @@ impl Client {
         Ok(self.approve(key, true).await.map_or_else(|e| forge::Approval::Refused(e.to_string()), |()| forge::Approval::Given))
     }
 
-    pub async fn resolve(&self, key: &MrKey, discussion: &str, resolved: bool) -> Result<()> {
+    pub async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
         let path = format!("{}/discussions/{discussion}", mr_path(key));
         self.http.put_json::<Discussion>(&path, &json!({"resolved": resolved})).await.map(|_| ())
     }
@@ -263,7 +263,7 @@ impl Client {
     }
 
     /// A public reply at the end of `discussion`.
-    pub async fn reply(&self, key: &MrKey, discussion: &str, body: &str) -> Result<()> {
+    pub async fn reply(&self, key: &MrKey, discussion: &ThreadId, body: &str) -> Result<()> {
         let path = format!("{}/discussions/{discussion}/notes", mr_path(key));
         self.http.post_json::<serde_json::Value>(&path, &json!({"body": body})).await.map(|_| ())
     }
@@ -581,8 +581,8 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        client.resolve(&key(), "6a9c1750", true).await.unwrap();
-        client.reply(&key(), "6a9c1750", "agreed").await.unwrap();
+        client.resolve(&key(), &"6a9c1750".into(), true).await.unwrap();
+        client.reply(&key(), &"6a9c1750".into(), "agreed").await.unwrap();
         let position = forge::Position { old_path: "x".into(), new_path: "x".into(), ..at_line(3) };
         assert_eq!(client.comment(&key(), "why?", Some(&position)).await.unwrap().id.as_str(), discussion["id"]);
     }

@@ -806,7 +806,7 @@ pub(crate) mod tests {
     #[test]
     fn where_threads_read_in_the_diff_a_marked_line_is_followed_by_a_row_per_cursor_stop() {
         let anchor = Anchor { path: "src/pay/charge.rs".into(), side: Side::Old, line: 13 };
-        let drafts = vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"), Draft::new(Some(anchor), "nit")];
+        let drafts = vec![Draft::reply("c0ffee00c0ffee00".into(), "agreed"), Draft::new(Some(anchor), "nit")];
         let review = review().with_drafts(drafts).with_threads_in_diff(true);
         let rows = review.rows();
         let line = rows.iter().position(|row| *row == Row::Line { file: 0, hunk: 0, index: 1 }).unwrap();
