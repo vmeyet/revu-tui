@@ -65,7 +65,7 @@ impl App {
 fn suggestion_here(open: &Open, stop: Option<Stop>) -> Result<Suggestion, &'static str> {
     let stop = stop.ok_or("open a thread first")?;
     let EntryKind::Note(index) = stop.kind else { return Err("a draft is not published yet: nothing to apply") };
-    let thread = stop.thread.as_deref().and_then(|id| open.review.thread(id)).ok_or("open a thread first")?;
+    let thread = stop.thread.as_ref().and_then(|id| open.review.thread(id)).ok_or("open a thread first")?;
     let note = thread.notes.get(index).ok_or("open a thread first")?;
     let proposal = suggestion::parse(&note.body).ok_or("this note has no suggestion")?;
     let anchor = thread.anchor.as_ref().ok_or("this thread is on the MR, not on a line")?;

@@ -96,7 +96,7 @@ impl PostedComment {
             reactions: vec![],
             node: None,
         };
-        Discussion { id: self.node_id, notes: vec![note] }
+        Discussion { id: self.node_id.into(), notes: vec![note] }
     }
 }
 

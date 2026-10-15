@@ -2,7 +2,7 @@
 //! review that holds my drafts until `publish` submits it.
 use super::wire::{self, Actor, Anchor, Label, Nodes, QueuePr, Review, ReviewRequest, user_of};
 use super::{Client, owner_and_name};
-use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, Queue, QueueMr, Refs, Sha};
+use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, Queue, QueueMr, Refs, Sha, ThreadId};
 use anyhow::{Context, Result, bail, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -315,7 +315,7 @@ pub(super) struct PrThreads {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Thread {
-    id: String,
+    id: ThreadId,
     is_resolved: bool,
     #[serde(flatten)]
     anchor: Anchor,
@@ -483,7 +483,8 @@ impl PrThreads {
             (!notes.is_empty()).then(|| Discussion { id: thread.id.clone(), notes })
         });
         let summaries = self.reviews.nodes.iter().filter(|r| !r.pending() && !r.body.trim().is_empty());
-        let loose = summaries.chain(&self.comments.nodes).map(|c| Discussion { id: c.id.clone(), notes: vec![c.note(false, false, None)] });
+        let loose =
+            summaries.chain(&self.comments.nodes).map(|c| Discussion { id: c.id.as_str().into(), notes: vec![c.note(false, false, None)] });
         let mut all: Vec<Discussion> = threads.chain(loose).collect();
         all.sort_by_key(|d| d.notes.first().map(|n| n.created_at));
         all
@@ -789,13 +790,13 @@ impl Client {
         Ok(Draft { id: comment.number(), body: comment.body.clone(), position: Some(position.clone()), reply_to: None, resolve: false })
     }
 
-    async fn reply_draft(&self, review: &str, thread: &str, body: &str) -> Result<Draft> {
+    async fn reply_draft(&self, review: &str, thread: &ThreadId, body: &str) -> Result<Draft> {
         let query = format!(
             "mutation($review: ID!, $thread: ID!, $body: String!) {{ addPullRequestReviewThreadReply(input: {{pullRequestReviewId: $review, pullRequestReviewThreadId: $thread, body: $body}}) {{ comment {{ {COMMENT_FIELDS} }} }} }}"
         );
         let created: Created = self.graphql(&query, json!({"review": review, "thread": thread, "body": body})).await?;
         let comment = created.add_pull_request_review_thread_reply.context("GitHub answered without the reply")?.comment()?;
-        Ok(Draft { id: comment.number(), body: comment.body, position: None, reply_to: Some(thread.to_owned()), resolve: false })
+        Ok(Draft { id: comment.number(), body: comment.body, position: None, reply_to: Some(thread.clone()), resolve: false })
     }
 
     /// The pending review's own text: the draft that sits on the PR itself.
@@ -957,7 +958,8 @@ mod tests {
     #[test]
     fn drafts_are_my_pending_comments_and_the_pending_review_text() {
         let drafts = threads().drafts();
-        let shape: Vec<(u64, Option<&str>, bool)> = drafts.iter().map(|d| (d.id, d.reply_to.as_deref(), d.position.is_some())).collect();
+        let shape: Vec<(u64, Option<&str>, bool)> =
+            drafts.iter().map(|d| (d.id, d.reply_to.as_ref().map(ThreadId::as_str), d.position.is_some())).collect();
         assert_eq!(shape, [(103, Some("PRRT_1"), false), (105, None, true), (209, None, false)]);
         assert_eq!(drafts[1].position.as_ref().unwrap().line, LineRef { old: None, new: Some(4) });
     }
@@ -1116,7 +1118,7 @@ mod tests {
             .create_draft(&key(), &NewDraft { body: "agreed".into(), reply_to: Some("PRRT_1".into()), ..NewDraft::default() })
             .await
             .unwrap();
-        assert_eq!((reply.id, reply.reply_to.as_deref()), (107, Some("PRRT_1")));
+        assert_eq!((reply.id, reply.reply_to), (107, Some("PRRT_1".into())));
         let summary = client.create_draft(&key(), &NewDraft { body: "Also: docs".into(), ..NewDraft::default() }).await.unwrap();
         assert_eq!(summary.id, 209);
     }
@@ -1210,7 +1212,7 @@ mod tests {
         let prs = client(&server).threads(&key()).await.unwrap();
         let drafts: Vec<u64> = prs.drafts().iter().map(|d| d.id).collect();
         assert_eq!(drafts, [103, 106, 105, 108, 209]);
-        assert!(prs.discussions().iter().any(|d| d.id == "IC_2"));
+        assert!(prs.discussions().iter().any(|d| d.id.as_str() == "IC_2"));
     }
 
     #[tokio::test]

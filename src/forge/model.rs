@@ -360,8 +360,38 @@ pub enum FileKind {
 /// A thread as the forge holds it: its notes in order, the first one carrying where it hangs.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Discussion {
-    pub id: String,
+    pub id: ThreadId,
     pub notes: Vec<Note>,
+}
+
+/// A thread's id as its forge names it: GitLab's discussion id, GitHub's review thread node id.
+/// Any text the forge sent; stored as a plain JSON string.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ThreadId(Arc<str>);
+
+impl ThreadId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for ThreadId {
+    fn from(id: &str) -> Self {
+        Self(id.into())
+    }
+}
+
+impl From<String> for ThreadId {
+    fn from(id: String) -> Self {
+        Self(id.into())
+    }
+}
+
+impl std::fmt::Display for ThreadId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -621,7 +651,7 @@ pub struct Draft {
     /// On a line; `None` on the MR itself or in a reply.
     pub position: Option<Position>,
     /// The thread it answers.
-    pub reply_to: Option<String>,
+    pub reply_to: Option<ThreadId>,
     /// Publishing it also resolves the thread it answers.
     pub resolve: bool,
 }
@@ -631,7 +661,7 @@ pub struct Draft {
 pub struct NewDraft {
     pub body: String,
     pub position: Option<Position>,
-    pub reply_to: Option<String>,
+    pub reply_to: Option<ThreadId>,
     pub resolve: bool,
 }
 

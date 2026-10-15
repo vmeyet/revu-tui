@@ -8,7 +8,7 @@ use super::table::table_lines;
 use super::theme::Theme;
 use super::ui::{rule_pane, short_age, side_pane};
 use crate::diff::LineKind;
-use crate::forge::Note;
+use crate::forge::{Note, ThreadId};
 use crate::review::image::{self, Image};
 use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
 use crate::syntax::{self, Language};
@@ -405,7 +405,7 @@ type StopRows = Vec<Line<'static>>;
 #[derive(Debug, PartialEq)]
 struct InlineInputs {
     review: ReviewInputs,
-    unfolded: BTreeSet<String>,
+    unfolded: BTreeSet<ThreadId>,
     width: usize,
     theme: Theme,
     ages: Vec<String>,
@@ -446,7 +446,7 @@ fn inline_stops(review: &Review, place: &Place, look: Look) -> Vec<StopRows> {
     let rows_of = |piece: Piece| lay_out(piece, &thumbs, look.width, look.theme, &str::to_owned).into_iter().map(|(line, _)| line);
     let mut stops = vec![vec![]; entries.len()];
     for (index, conversation) in conversations.iter().enumerate() {
-        let thread = conversation.thread.as_deref().and_then(|id| review.thread(id));
+        let thread = conversation.thread.as_ref().and_then(|id| review.thread(id));
         let pieces = match thread.filter(|thread| review.reads_folded(thread)) {
             Some(folded) => {
                 let first = entries.iter().find(|e| e.conversation == index).copied();
@@ -503,7 +503,7 @@ fn conversation_lines(
     let theme = look.theme;
     let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
     let mut lines = vec![];
-    if let Some(thread) = conversation.thread.as_deref().and_then(|id| review.thread(id)) {
+    if let Some(thread) = conversation.thread.as_ref().and_then(|id| review.thread(id)) {
         let shown = entries.iter().filter(|e| e.conversation == index && matches!(e.kind, EntryKind::Note(_))).count();
         lines.push((stop(EntryKind::Note(0)), Piece::Text(status(thread, shown, theme))));
         let replaced = Replaced::at(review, thread.first().position.as_ref());
@@ -519,7 +519,7 @@ fn conversation_lines(
             lines.push((entry, Piece::Text(Line::from(Span::styled("◇ draft", Style::default().fg(theme.accent))))));
         }
         let position = draft.position.as_ref().or_else(|| {
-            let thread = conversation.thread.as_deref().and_then(|id| review.thread(id))?;
+            let thread = conversation.thread.as_ref().and_then(|id| review.thread(id))?;
             thread.first().position.as_ref()
         });
         let replaced = Replaced::at(review, position);

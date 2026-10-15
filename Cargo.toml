@@ -31,7 +31,7 @@ ratatui-image = { version = "11", default-features = false, features = ["crosste
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 sha1_smol = "1"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 sha2 = "0.10"
 shell-words = "1.1"
 similar = "2"

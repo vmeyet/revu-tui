@@ -1,5 +1,5 @@
 //! GitLab's JSON as it comes and goes, and its conversion to and from the neutral model.
-use crate::forge::{self, LineRef, Refs, Sha};
+use crate::forge::{self, LineRef, Refs, Sha, ThreadId};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -178,7 +178,7 @@ fn nested_users<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<User>, D::Error> 
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Discussion {
-    pub id: String,
+    pub id: ThreadId,
     pub notes: Vec<Note>,
 }
 
@@ -332,7 +332,7 @@ pub struct DraftNote {
     pub id: u64,
     pub note: String,
     #[serde(default)]
-    pub discussion_id: Option<String>,
+    pub discussion_id: Option<ThreadId>,
     #[serde(default)]
     pub resolve_discussion: bool,
     #[serde(default)]
@@ -369,7 +369,7 @@ pub struct NewDraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<Position>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub in_reply_to_discussion_id: Option<String>,
+    pub in_reply_to_discussion_id: Option<ThreadId>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub resolve_discussion: bool,
 }
@@ -541,7 +541,7 @@ mod tests {
         assert_eq!(drafts[1].line_code.as_deref(), Some("2f1d_0_13"));
         let drafts: Vec<forge::Draft> = drafts.into_iter().map(forge::Draft::from).collect();
         assert_eq!(drafts[0].position, None);
-        assert_eq!(drafts[0].reply_to.as_deref(), Some("6a9c1750"));
+        assert_eq!(drafts[0].reply_to, Some("6a9c1750".into()));
         let anchored = drafts[1].position.as_ref().unwrap();
         assert_eq!((anchored.new_path.as_str(), anchored.line.new), ("src/pay/charge.rs", Some(13)));
     }

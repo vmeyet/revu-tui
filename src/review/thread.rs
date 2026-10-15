@@ -1,6 +1,6 @@
 //! A discussion as the review sees it: where it hangs in the diff, and whether it still can.
 pub use crate::forge::Side;
-use crate::forge::{Discussion, Note, Position};
+use crate::forge::{Discussion, Note, Position, ThreadId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Anchor {
@@ -11,7 +11,7 @@ pub struct Anchor {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Thread {
-    pub id: String,
+    pub id: ThreadId,
     pub resolvable: bool,
     pub resolved: bool,
     pub anchor: Option<Anchor>,

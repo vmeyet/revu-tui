@@ -2,6 +2,7 @@
 //! or every conversation of the MR, opened with `T`.
 use super::{Action, App, Focus, Open};
 use crate::act::{self, Act};
+use crate::forge::ThreadId;
 use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
 use crossterm::event::KeyEvent;
 use std::collections::BTreeSet;
@@ -16,7 +17,7 @@ pub struct Pane {
     pub note: usize,
     pub scroll: usize,
     /// Resolved threads the reader unfolded, by id; the others show their first note only.
-    pub unfolded: BTreeSet<String>,
+    pub unfolded: BTreeSet<ThreadId>,
     /// `m` in the list of every thread: only the conversations this user takes part in.
     pub only_with: Option<String>,
 }
@@ -34,10 +35,10 @@ impl Pane {
 
 /// Every stop of the cursor bar at `place`: all notes of an open thread and my replies after
 /// them, the first note alone of a folded resolved thread, my new draft on its own.
-pub fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTreeSet<String>) -> Vec<Entry> {
+pub fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTreeSet<ThreadId>) -> Vec<Entry> {
     let mut entries = vec![];
     for (index, conversation) in conversations.iter().enumerate() {
-        if let Some(thread) = conversation.thread.as_deref().and_then(|id| review.thread(id)) {
+        if let Some(thread) = conversation.thread.as_ref().and_then(|id| review.thread(id)) {
             let shown = if thread.resolved && !unfolded.contains(&thread.id) { 1 } else { thread.notes.len() };
             entries.extend((0..shown).map(|note| Entry { conversation: index, kind: EntryKind::Note(note) }));
         }
@@ -54,7 +55,7 @@ pub(super) fn focused(entries: &[Entry], pane: &Pane) -> Option<Entry> {
 /// What the thread keys act on: a note of a thread, one of my drafts in it, or my new draft.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Stop {
-    pub thread: Option<String>,
+    pub thread: Option<ThreadId>,
     pub kind: EntryKind,
 }
 
@@ -80,7 +81,7 @@ impl Open {
     }
 
     /// The thread under the pane's cursor.
-    pub fn focused_thread(&self) -> Option<String> {
+    pub fn focused_thread(&self) -> Option<ThreadId> {
         let (conversations, _, focused) = self.pane_view()?;
         conversations.get(focused?.conversation)?.thread.clone()
     }
@@ -477,7 +478,7 @@ mod tests {
         assert_eq!(app.focus, Focus::Side);
         let open = app.open.as_ref().unwrap();
         assert_eq!(open.pane.as_ref().map(|p| &p.place), Some(&Place::Line { file: 0, new: None, old: Some(13) }));
-        assert_eq!(open.focused_thread().as_deref(), Some("c0ffee00c0ffee00"));
+        assert_eq!(open.focused_thread(), Some("c0ffee00c0ffee00".into()));
         assert_eq!(press(&mut app, "u"), vec![], "no link in that thread");
         assert!(app.live_toast().is_some());
         assert_eq!(press(&mut app, "U"), vec![], "none to copy either");
@@ -493,7 +494,7 @@ mod tests {
         press(&mut app, "l");
         let open = app.open.as_ref().unwrap();
         assert_eq!(open.pane.as_ref().map(|p| &p.place), Some(&Place::Outdated { file: 0 }));
-        assert_eq!(open.focused_thread().as_deref(), Some("9f2c0aa1d4e5b6c7"));
+        assert_eq!(open.focused_thread(), Some("9f2c0aa1d4e5b6c7".into()));
         press(&mut app, "x");
         assert_eq!(app.open.as_ref().unwrap().pane, None);
         press(&mut app, "k");
@@ -564,7 +565,7 @@ mod tests {
     fn with_open_thread() -> App {
         let mut app = with_review();
         let open = app.open.clone().unwrap();
-        app.open = Some(open.relaid(|review| review.with_resolved("c0ffee00c0ffee00", false)));
+        app.open = Some(open.relaid(|review| review.with_resolved(&"c0ffee00c0ffee00".into(), false)));
         app
     }
 
@@ -581,7 +582,7 @@ mod tests {
     fn bracket_n_stops_on_my_draft_reply_to_a_resolved_thread() {
         let mut app = with_review();
         let open = app.open.clone().unwrap();
-        let reply = crate::review::Draft::reply("c0ffee00c0ffee00", "agreed");
+        let reply = crate::review::Draft::reply(&"c0ffee00c0ffee00".into(), "agreed");
         app.open = Some(open.relaid(|review| review.with_drafts(vec![reply])));
         assert_eq!(thread_stops(&mut app, "]n", 2), [LINE_13, Row::Header]);
     }
@@ -590,7 +591,7 @@ mod tests {
     fn bracket_n_skips_the_header_once_the_mr_thread_is_resolved() {
         let mut app = with_open_thread();
         let open = app.open.clone().unwrap();
-        app.open = Some(open.relaid(|review| review.with_resolved("6a9c1750b2d6e4f0", true)));
+        app.open = Some(open.relaid(|review| review.with_resolved(&"6a9c1750b2d6e4f0".into(), true)));
         assert_eq!(thread_stops(&mut app, "]n", 1), [LINE_13]);
     }
 
@@ -691,7 +692,7 @@ mod tests {
         let mut actions = press(&mut app, "r");
         actions.extend(type_text(&mut app, "agreed"));
         let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"), "resolving moved the outdated thread down");
+        assert_eq!(draft.reply_to, Some("c0ffee00c0ffee00".into()), "resolving moved the outdated thread down");
         assert_eq!(listed_place(&app), Some(Place::All));
     }
 
@@ -720,7 +721,7 @@ mod tests {
         let open = app.open.as_ref().unwrap();
         assert!(open.review.fold.file_is_open("src/pay/charge.rs"));
         assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
-        assert!(open.pane.as_ref().unwrap().unfolded.contains("c0ffee00c0ffee00"), "a resolved thread unfolds as well");
+        assert!(open.pane.as_ref().unwrap().unfolded.contains(&"c0ffee00c0ffee00".into()), "a resolved thread unfolds as well");
         assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side));
         walk_to_thread(&mut app, false);
         app.handle_key(code(KeyCode::Enter));
@@ -774,7 +775,7 @@ mod tests {
         let mut actions = press(&mut app, "r");
         actions.extend(type_text(&mut app, "agreed"));
         let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"));
+        assert_eq!(draft.reply_to, Some("c0ffee00c0ffee00".into()));
         press(&mut app, "m");
         assert_eq!(focused_thread(&app).as_deref(), Some("6a9c1750b2d6e4f0"), "m again lists every thread");
         press(&mut app, "mTT");

@@ -78,7 +78,7 @@ pub use write::Publish;
 
 use crate::diff::fold::FoldState;
 pub use crate::forge::MrKey;
-use crate::forge::{Discussion, Position, QueueMr, Sections, Sha};
+use crate::forge::{Discussion, Position, QueueMr, Sections, Sha, ThreadId};
 use crate::review::{Draft, Review};
 pub use crate::review::{Entry, EntryKind};
 use chrono::{DateTime, Utc};
@@ -188,7 +188,7 @@ pub enum Action {
     },
     Resolve {
         key: MrKey,
-        thread: String,
+        thread: ThreadId,
         resolved: bool,
     },
     Approve {
@@ -217,7 +217,7 @@ pub enum Action {
     /// My reaction `emoji` on `note` (index `index` of `thread`), added when `on`, else taken off.
     React {
         key: MrKey,
-        thread: String,
+        thread: ThreadId,
         index: usize,
         note: Box<crate::forge::Note>,
         emoji: crate::forge::Emoji,
@@ -321,7 +321,7 @@ impl Action {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Post {
     Thread(Box<Position>),
-    Reply(String),
+    Reply(ThreadId),
 }
 
 /// What the input row is for while it is open.
@@ -332,7 +332,7 @@ pub enum Input {
         position: Box<Position>,
     },
     Reply {
-        thread: String,
+        thread: ThreadId,
     },
     EditDraft {
         draft: crate::review::DraftId,
@@ -384,7 +384,7 @@ pub enum Failure {
     /// Jev could not answer; the views go on without its marks.
     Triage,
     Resolve {
-        thread: String,
+        thread: ThreadId,
         resolved: bool,
     },
     Approve,
@@ -402,7 +402,7 @@ pub enum Failure {
     SetDraft,
     /// The reaction did not reach the forge; its count goes back.
     React {
-        thread: String,
+        thread: ThreadId,
         index: usize,
         emoji: crate::forge::Emoji,
         on: bool,
@@ -497,7 +497,7 @@ pub enum Incoming {
     },
     Resolved {
         key: MrKey,
-        thread: String,
+        thread: ThreadId,
         resolved: bool,
     },
     Approved {

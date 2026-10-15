@@ -13,7 +13,7 @@ pub mod rules;
 pub use budget::RateLimit;
 pub use model::{
     Applicable, Approval, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod, MergePlan, Mr, MrKey,
-    MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Sha, Side, Suggestion, User, tally, toggled,
+    MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -269,10 +269,10 @@ impl Forge {
         }
     }
 
-    pub async fn resolve(&self, key: &MrKey, discussion: &str, resolved: bool) -> Result<()> {
+    pub async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
         match self {
-            Forge::GitLab(client) => client.resolve(key, discussion, resolved).await,
-            Forge::GitHub(client) => client.resolve(discussion, resolved).await,
+            Forge::GitLab(client) => client.resolve(key, discussion.as_str(), resolved).await,
+            Forge::GitHub(client) => client.resolve(discussion.as_str(), resolved).await,
         }
     }
 
@@ -318,10 +318,10 @@ impl Forge {
     }
 
     /// A public reply at the end of the thread `discussion`.
-    pub async fn reply(&self, key: &MrKey, discussion: &str, body: &str) -> Result<()> {
+    pub async fn reply(&self, key: &MrKey, discussion: &ThreadId, body: &str) -> Result<()> {
         match self {
-            Forge::GitLab(client) => client.reply(key, discussion, body).await,
-            Forge::GitHub(client) => client.reply(key, discussion, body).await,
+            Forge::GitLab(client) => client.reply(key, discussion.as_str(), body).await,
+            Forge::GitHub(client) => client.reply(key, discussion.as_str(), body).await,
         }
     }
 }

@@ -3,13 +3,14 @@
 //! under the cursor as they do in the pane. A comment written from the diff is written there too, in a box under
 //! the row it will land after.
 use super::{App, Focus, Input, Open};
+use crate::forge::ThreadId;
 use crate::review::{Anchor, Conversation, Entry, EntryKind, Place, Row, anchor_of};
 use std::collections::BTreeSet;
 
 /// What `enter` folds or unfolds: the thread of the row under the cursor, or every thread of its line.
 enum Here {
-    Thread(String),
-    Line(BTreeSet<String>),
+    Thread(ThreadId),
+    Line(BTreeSet<ThreadId>),
 }
 
 impl Open {
@@ -36,9 +37,9 @@ impl Open {
     }
 
     /// The row showing the first note of thread `id` under the line at `place`.
-    fn first_row_of(&self, place: &Place, id: &str) -> Option<usize> {
+    fn first_row_of(&self, place: &Place, id: &ThreadId) -> Option<usize> {
         let conversations = self.review.conversations(place);
-        let starts = |entry: &Entry| entry.kind == EntryKind::Note(0) && conversations[entry.conversation].thread.as_deref() == Some(id);
+        let starts = |entry: &Entry| entry.kind == EntryKind::Note(0) && conversations[entry.conversation].thread.as_ref() == Some(id);
         let first = self.review.stops(&conversations).iter().position(starts)?;
         let shows =
             |row: &Row| matches!(row, Row::Thread { stop, .. } if *stop == first) && self.review.place_of(row).as_ref() == Some(place);
@@ -58,7 +59,7 @@ impl Open {
     fn draft_row(&self, index: usize) -> Option<usize> {
         let review = self.review.reads_threads_in_diff().then_some(&self.review)?;
         let draft = review.drafts.get(index)?;
-        let anchor = draft.anchor.as_ref().or_else(|| review.thread(draft.reply_to.as_deref()?)?.anchor.as_ref())?;
+        let anchor = draft.anchor.as_ref().or_else(|| review.thread(draft.reply_to.as_ref()?)?.anchor.as_ref())?;
         let (line, _, entries) = self.hung_at(anchor)?;
         let stop = entries.iter().position(|entry| entry.kind == EntryKind::Draft(index))?;
         Some(line + 1 + stop)
@@ -75,7 +76,7 @@ impl Open {
             }
             Input::Reply { thread } => {
                 let (line, conversations, entries) = self.hung_at(review.thread(thread)?.anchor.as_ref()?)?;
-                let last = entries.iter().rposition(|entry| conversations[entry.conversation].thread.as_deref() == Some(thread))?;
+                let last = entries.iter().rposition(|entry| conversations[entry.conversation].thread.as_ref() == Some(thread))?;
                 Some(line + 1 + last)
             }
             Input::EditDraft { draft } => self.draft_row(review.drafts.iter().position(|d| d.is(*draft))?),
@@ -256,7 +257,7 @@ mod tests {
         let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 1)]);
         let open = app.open.clone().unwrap();
         let line_13 = crate::review::Anchor { path: "src/pay/charge.rs".into(), side: crate::review::Side::New, line: 13 };
-        let drafts = vec![crate::review::Draft::reply("aaa", "agreed"), crate::review::Draft::new(Some(line_13), "nit")];
+        let drafts = vec![crate::review::Draft::reply(&"aaa".into(), "agreed"), crate::review::Draft::new(Some(line_13), "nit")];
         app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
         let screen = render(&mut app, 138, 40);
         let rows = under(&screen, "+    let client = Client::with_key", 4);
@@ -331,7 +332,7 @@ mod tests {
         assert_eq!((app.input_label().as_str(), listed_place(&app), app.focus), ("reply to lea", None, Focus::Review));
         let actions = type_text(&mut app, "agreed");
         let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!(draft.reply_to.as_deref(), Some("aaa"));
+        assert_eq!(draft.reply_to, Some("aaa".into()));
         assert_eq!((stop_of(&app), app.draft_here()), (Some(3), Some(0)), "the cursor rests on my reply, the thread's last row");
         press(&mut app, "e");
         assert_eq!((app.input_label().as_str(), app.buffer.text()), ("edit draft", "agreed"));

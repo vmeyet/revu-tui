@@ -2,14 +2,14 @@
 //! both forges share, or on GitLab with any emoji found by name after `/`. The count moves at once;
 //! a refusal puts it back. The reactions I give most on the host lead the row.
 use super::{Action, App, EntryKind, Failure, MrKey};
-use crate::forge::{Emoji, Note};
+use crate::forge::{Emoji, Note, ThreadId};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// The picker open on note `note` of thread `thread`, `selected` the reaction `enter` gives.
 /// The choices are `row`, or with a `search` (GitLab only) the emoji whose name matches it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pick {
-    pub thread: String,
+    pub thread: ThreadId,
     pub note: usize,
     pub selected: usize,
     pub row: Vec<Emoji>,
@@ -78,7 +78,7 @@ impl App {
         true
     }
 
-    fn pick_on(&self, thread: String, note: usize) -> Pick {
+    fn pick_on(&self, thread: ThreadId, note: usize) -> Pick {
         Pick { thread, note, selected: 0, row: row(&self.most_used()), search: None }
     }
 
@@ -144,7 +144,7 @@ impl App {
     }
 
     /// The forge refused: the count goes back to what it was.
-    pub(super) fn react_failed(&mut self, thread: &str, index: usize, emoji: Emoji, on: bool, message: &str) {
+    pub(super) fn react_failed(&mut self, thread: &ThreadId, index: usize, emoji: Emoji, on: bool, message: &str) {
         self.update_open(|open| open.relaid(|review| review.with_reaction(thread, index, emoji, !on)));
         self.warn(format!("no reaction: {message}"));
     }
@@ -184,7 +184,7 @@ pub struct Prompt {
 }
 
 /// The reaction the failure was about, for `Failure::React`.
-pub fn failure(thread: String, index: usize, emoji: Emoji, on: bool) -> Failure {
+pub fn failure(thread: ThreadId, index: usize, emoji: Emoji, on: bool) -> Failure {
     Failure::React { thread, index, emoji, on }
 }
 
@@ -212,7 +212,7 @@ mod tests {
     }
 
     fn reactions_of(app: &App) -> Vec<crate::forge::Reaction> {
-        app.open.as_ref().unwrap().review.thread("5ugg").unwrap().notes[0].reactions.clone()
+        app.open.as_ref().unwrap().review.thread(&"5ugg".into()).unwrap().notes[0].reactions.clone()
     }
 
     fn hundred() -> Emoji {

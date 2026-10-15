@@ -4,7 +4,7 @@
 use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::forge::checks::JobState;
-use crate::forge::{MrKey, PipelineStatus, QueueMr, ReviewState};
+use crate::forge::{MrKey, PipelineStatus, QueueMr, ReviewState, ThreadId};
 use crate::review::{Place, Review, Row};
 use chrono::{DateTime, Utc};
 use crossterm::event::KeyEvent;
@@ -63,7 +63,7 @@ pub struct ReviewLine {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadRow {
-    pub id: String,
+    pub id: ThreadId,
     /// `path:line`, `path (outdated)` or `the MR`: the whole place, shown while the row is selected.
     pub place: String,
     /// The same place with the file name only, for the row's quiet second line.
@@ -142,7 +142,7 @@ impl Brief {
     }
 
     /// The threads the cursor walks, in the order they are drawn.
-    pub fn targets(&self) -> Vec<String> {
+    pub fn targets(&self) -> Vec<ThreadId> {
         self.threads.iter().flatten().map(|t| t.id.clone()).collect()
     }
 
@@ -266,7 +266,7 @@ impl App {
     }
 
     /// Puts the cursor on the thread's line, its file unfolded, and opens it in the pane.
-    fn show_thread(&mut self, id: &str) -> Vec<Action> {
+    fn show_thread(&mut self, id: &ThreadId) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(thread) = open.review.thread(id) else { return vec![] };
         let Some(anchor) = thread.anchor.clone() else {

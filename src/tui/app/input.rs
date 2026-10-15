@@ -1,5 +1,6 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
 use super::{Action, App, Input, MrKey, Open, Post};
+use crate::forge::ThreadId;
 use crate::review::{Draft, DraftId, Place, Review};
 use crate::tui::compose::Edited;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -260,7 +261,7 @@ fn place_of_position(review: &Review, position: &crate::forge::Position) -> Opti
 }
 
 /// Where a thread lives in the pane: its line, the file's outdated threads, or the MR.
-fn place_of_thread(review: &Review, id: &str) -> Place {
+fn place_of_thread(review: &Review, id: &ThreadId) -> Place {
     let Some(thread) = review.thread(id) else { return Place::Mr };
     let Some(anchor) = &thread.anchor else { return Place::Mr };
     let Some(file) = review.files.iter().position(|f| f.new_path == anchor.path || f.old_path == anchor.path) else { return Place::Mr };

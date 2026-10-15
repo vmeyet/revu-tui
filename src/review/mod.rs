@@ -15,7 +15,7 @@ use crate::diff::fold::{FileMeta, FoldState};
 use crate::diff::words::{self, InlineRule};
 use crate::diff::{self, Hunk, LineKind};
 pub use crate::forge::FileKind;
-use crate::forge::{DiffFile, Discussion, Mr};
+use crate::forge::{DiffFile, Discussion, Mr, ThreadId};
 use crate::syntax::{self, Spans};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -274,7 +274,7 @@ pub struct Review {
     /// Threads read under their lines rather than in the right pane: in zen and in a narrow window.
     pub threads_in_diff: bool,
     /// The threads whose every note shows in the diff, by id; the others read as one row.
-    pub unfolded: BTreeSet<String>,
+    pub unfolded: BTreeSet<ThreadId>,
 }
 
 /// The files read whole, and how many lines each hunk shows beyond its own.
@@ -340,7 +340,7 @@ impl Review {
         Self { threads_in_diff, ..self }
     }
 
-    pub fn with_unfolded(self, unfolded: BTreeSet<String>) -> Self {
+    pub fn with_unfolded(self, unfolded: BTreeSet<ThreadId>) -> Self {
         Self { unfolded, ..self }
     }
 
@@ -430,20 +430,20 @@ impl Review {
     }
 
     /// The thread flipped locally, ahead of the forge's answer.
-    pub fn with_resolved(self, id: &str, resolved: bool) -> Self {
-        let threads = self.threads.iter().map(|t| if t.id == id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
+    pub fn with_resolved(self, id: &ThreadId, resolved: bool) -> Self {
+        let threads = self.threads.iter().map(|t| if t.id == *id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
         Self { threads, ..self }
     }
 
     /// My reaction `emoji` on note `index` of thread `id` added or taken off, ahead of the forge's answer.
-    pub fn with_reaction(self, id: &str, index: usize, emoji: crate::forge::Emoji, on: bool) -> Self {
+    pub fn with_reaction(self, id: &ThreadId, index: usize, emoji: crate::forge::Emoji, on: bool) -> Self {
         let react =
             |note: &crate::forge::Note| crate::forge::Note { reactions: crate::forge::toggled(&note.reactions, emoji, on), ..note.clone() };
         let threads = self
             .threads
             .iter()
             .map(|t| {
-                if t.id != id {
+                if t.id != *id {
                     return t.clone();
                 }
                 let notes = t.notes.iter().enumerate().map(|(i, n)| if i == index { react(n) } else { n.clone() }).collect();
@@ -464,8 +464,8 @@ impl Review {
         self.threads.iter().filter(|t| t.unresolved()).count()
     }
 
-    pub fn thread(&self, id: &str) -> Option<&Thread> {
-        self.threads.iter().find(|t| t.id == id)
+    pub fn thread(&self, id: &ThreadId) -> Option<&Thread> {
+        self.threads.iter().find(|t| t.id == *id)
     }
 
     pub fn threads_at(&self, path: &str, side: Side, line: u32) -> Vec<&Thread> {
@@ -778,9 +778,9 @@ pub(crate) mod tests {
     #[test]
     fn a_thread_whose_line_left_the_diff_is_outdated() {
         let review = review();
-        let far = review.thread("9f2c0aa1d4e5b6c7").unwrap();
+        let far = review.thread(&"9f2c0aa1d4e5b6c7".into()).unwrap();
         assert!(far.outdated, "line 57 is not in the diff");
-        assert!(!review.thread("c0ffee00c0ffee00").unwrap().outdated);
+        assert!(!review.thread(&"c0ffee00c0ffee00".into()).unwrap().outdated);
         assert_eq!(review.outdated("src/pay/charge.rs").len(), 1);
         assert!(review.threads_at("src/pay/charge.rs", Side::New, 57).is_empty(), "outdated threads never hang on a line");
     }
@@ -806,14 +806,14 @@ pub(crate) mod tests {
     #[test]
     fn where_threads_read_in_the_diff_a_marked_line_is_followed_by_a_row_per_cursor_stop() {
         let anchor = Anchor { path: "src/pay/charge.rs".into(), side: Side::Old, line: 13 };
-        let drafts = vec![Draft::reply("c0ffee00c0ffee00", "agreed"), Draft::new(Some(anchor), "nit")];
+        let drafts = vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"), Draft::new(Some(anchor), "nit")];
         let review = review().with_drafts(drafts).with_threads_in_diff(true);
         let rows = review.rows();
         let line = rows.iter().position(|row| *row == Row::Line { file: 0, hunk: 0, index: 1 }).unwrap();
         let under = |stop| Row::Thread { file: 0, hunk: 0, new: None, old: Some(13), stop };
         assert_eq!(rows[line + 1..line + 4], [under(0), under(1), Row::Line { file: 0, hunk: 0, index: 2 }], "my draft, then the thread");
         assert_eq!(review.place_of(&under(1)), review.place_of(&rows[line]), "a thread row stands for its line");
-        let unfolded = review.clone().with_unfolded(BTreeSet::from(["c0ffee00c0ffee00".to_owned()]));
+        let unfolded = review.clone().with_unfolded(BTreeSet::from(["c0ffee00c0ffee00".into()]));
         assert_eq!(thread_stops(&unfolded), [(None, Some(13), 0), (None, Some(13), 1), (None, Some(13), 2)], "its note and my reply");
         let folded_hunk = review.clone().with_fold(review.fold.toggle_hunk("src/pay/charge.rs", 0));
         assert_eq!(thread_stops(&folded_hunk), [], "a folded hunk hides its threads with its lines");

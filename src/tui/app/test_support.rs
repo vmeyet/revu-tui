@@ -220,7 +220,7 @@ pub(super) fn cover_with_threads(count: usize) -> App {
     press(&mut app, "i");
     let threads = (0..count)
         .map(|i| ThreadRow {
-            id: format!("t{i}"),
+            id: format!("t{i}").into(),
             place: format!("apps/backend/src/domain/integration/slack/useCases/sync/syncSlackUsers.ts:{}", 10 + i),
             short_place: format!("syncSlackUsers.ts:{}", 10 + i),
             author: "nina".into(),
@@ -298,7 +298,7 @@ pub(super) fn ctrl_k() -> KeyEvent {
 /// Resolves the one unresolved thread on `charge.rs`.
 pub(super) fn resolve_the_diff_note(app: &mut App) {
     let open = app.open.clone().unwrap();
-    app.open = Some(Open { review: open.review.with_resolved("9f2c0aa1d4e5b6c7", true), ..open });
+    app.open = Some(Open { review: open.review.with_resolved(&"9f2c0aa1d4e5b6c7".into(), true), ..open });
 }
 
 pub(super) fn asking() -> App {
@@ -551,7 +551,7 @@ pub(super) fn listed_place(app: &App) -> Option<Place> {
 }
 
 pub(super) fn focused_thread(app: &App) -> Option<String> {
-    app.open.as_ref().unwrap().focused_thread()
+    app.open.as_ref().unwrap().focused_thread().map(|id| id.to_string())
 }
 
 pub(super) fn mouse(app: &mut App, kind: crossterm::event::MouseEventKind, (column, row): (u16, u16)) -> Vec<Action> {

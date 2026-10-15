@@ -584,7 +584,7 @@ mod tests {
         client.resolve(&key(), "6a9c1750", true).await.unwrap();
         client.reply(&key(), "6a9c1750", "agreed").await.unwrap();
         let position = forge::Position { old_path: "x".into(), new_path: "x".into(), ..at_line(3) };
-        assert_eq!(client.comment(&key(), "why?", Some(&position)).await.unwrap().id, discussion["id"]);
+        assert_eq!(client.comment(&key(), "why?", Some(&position)).await.unwrap().id.as_str(), discussion["id"]);
     }
 
     #[tokio::test]

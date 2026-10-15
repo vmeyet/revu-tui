@@ -806,7 +806,7 @@ fn on_the_mr_spans<'a>(review: &Review, theme: Theme) -> Vec<Span<'a>> {
     if listed.is_empty() {
         return vec![];
     }
-    let unresolved = listed.iter().filter_map(|c| c.thread.as_deref().and_then(|id| review.thread(id))).any(|t| !t.resolved);
+    let unresolved = listed.iter().filter_map(|c| c.thread.as_ref().and_then(|id| review.thread(id))).any(|t| !t.resolved);
     let (glyph, colour) = if unresolved { ("◆", theme.warn) } else { ("◇", theme.accent) };
     vec![
         Span::styled(format!("{glyph} {} on the MR", listed.len()), Style::default().fg(colour)),
@@ -1130,7 +1130,8 @@ mod tests {
         let base = crate::review::tests::review();
         let sample = base.threads.iter().find(|t| t.anchor.is_some() && !t.outdated).cloned().expect("a line thread");
         let others = base.threads.iter().filter(|t| t.id != sample.id).cloned();
-        let made = resolved.iter().enumerate().map(|(i, &r)| crate::review::Thread { id: format!("t{i}"), resolved: r, ..sample.clone() });
+        let made =
+            resolved.iter().enumerate().map(|(i, &r)| crate::review::Thread { id: format!("t{i}").into(), resolved: r, ..sample.clone() });
         Review { threads: others.chain(made).collect::<Vec<_>>().into(), ..base }
     }
 

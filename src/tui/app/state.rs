@@ -442,7 +442,7 @@ impl App {
         let review = &open.review;
         let bodies = conversations.iter().flat_map(|c| {
             let notes =
-                c.thread.as_deref().and_then(|id| review.thread(id)).into_iter().flat_map(|t| t.notes.iter().map(|n| n.body.as_str()));
+                c.thread.as_ref().and_then(|id| review.thread(id)).into_iter().flat_map(|t| t.notes.iter().map(|n| n.body.as_str()));
             notes.chain(c.drafts.iter().map(|&d| review.drafts[d].body.as_str()))
         });
         let urls: Vec<String> = bodies.flat_map(crate::review::image::images_in).map(|image| image.url).collect();

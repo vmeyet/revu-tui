@@ -1,7 +1,7 @@
 //! Everything that changes the MR: drafts, the publish modal, resolving, approving, merging, draft or ready.
 use super::{Action, App, EntryKind, Failure, Input, MrKey, Open};
 use crate::act::{self, Act, Pane};
-use crate::forge::{Approval, Position};
+use crate::forge::{Approval, Position, ThreadId};
 use crate::review::{Draft, Row, position, suggestion};
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -294,7 +294,7 @@ impl App {
     }
 
     /// The thread `R` acts on: the pane's or the thread row's, else the first open one on the cursor's line.
-    fn thread_to_resolve(&self) -> Option<String> {
+    fn thread_to_resolve(&self) -> Option<ThreadId> {
         let open = self.open.as_ref()?;
         if self.focus == super::Focus::Side || matches!(open.row(), Some(Row::Thread { .. })) {
             return self.stop_here()?.thread;
@@ -376,7 +376,7 @@ impl App {
         self.composed.extend(follow);
     }
 
-    pub(super) fn apply_resolved(&mut self, key: &MrKey, thread: &str, resolved: bool) {
+    pub(super) fn apply_resolved(&mut self, key: &MrKey, thread: &ThreadId, resolved: bool) {
         if self.open.as_ref().is_none_or(|o| &o.key != key) {
             return;
         }
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(app.input_label(), "reply to nina");
         let actions = type_text(&mut app, "agreed");
         let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!(draft.reply_to.as_deref(), Some("c0ffee00c0ffee00"));
+        assert_eq!(draft.reply_to, Some("c0ffee00c0ffee00".into()));
         assert_eq!(app.focus, Focus::Side);
         assert!(render(&mut app, 140, 24).contains("you · unsaved ◇"));
     }
@@ -539,7 +539,7 @@ mod tests {
         let mut app = with_review();
         walk_to_any_thread(&mut app, true);
         app.handle_key(code(KeyCode::Enter));
-        let id = "c0ffee00c0ffee00".to_owned();
+        let id: ThreadId = "c0ffee00c0ffee00".into();
         assert!(app.open.as_ref().unwrap().review.thread(&id).unwrap().resolved);
         let actions = press(&mut app, "R");
         assert_eq!(actions, vec![Action::Resolve { key: mr_key(), thread: id.clone(), resolved: false }]);

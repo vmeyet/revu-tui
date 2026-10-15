@@ -1,6 +1,7 @@
 //! Where conversations live: the anchor column's marks per line, and what the right pane lists
 //! for one place (a line, the MR itself, a file's outdated threads, or all of them).
 use super::{Anchor, Draft, Review, Row, Side, Thread};
+use crate::forge::ThreadId;
 use std::collections::BTreeMap;
 
 /// The most pressing thing on a line, in rising order: an unresolved thread outranks my draft,
@@ -64,7 +65,7 @@ pub enum Spot<'a> {
 /// One entry of the pane: a thread with my replies to it, or a draft that starts a new thread.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Conversation {
-    pub thread: Option<String>,
+    pub thread: Option<ThreadId>,
     /// Indexes into `Review::drafts`: my replies to `thread`, or the one new draft.
     pub drafts: Vec<usize>,
 }
@@ -95,7 +96,7 @@ impl Review {
     pub fn stops(&self, conversations: &[Conversation]) -> Vec<Entry> {
         let stops_of = |(index, conversation): (usize, &Conversation)| {
             let drafts = conversation.drafts.iter().map(|&draft| EntryKind::Draft(draft));
-            let kinds: Vec<EntryKind> = match conversation.thread.as_deref().and_then(|id| self.thread(id)) {
+            let kinds: Vec<EntryKind> = match conversation.thread.as_ref().and_then(|id| self.thread(id)) {
                 Some(thread) if self.reads_folded(thread) => vec![EntryKind::Note(0)],
                 Some(thread) => (0..thread.notes.len()).map(EntryKind::Note).chain(drafts).collect(),
                 None => drafts.collect(),
@@ -190,13 +191,13 @@ impl Review {
 
     /// Whether `user` wrote a note of the conversation; a draft counts too, since every draft is mine.
     pub fn takes_part(&self, conversation: &Conversation, user: &str) -> bool {
-        let thread = conversation.thread.as_deref().and_then(|id| self.thread(id));
+        let thread = conversation.thread.as_ref().and_then(|id| self.thread(id));
         !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.author.username == user))
     }
 
     /// Where a conversation hangs: its thread's anchor, or its new draft's.
     pub fn spot(&self, conversation: &Conversation) -> Spot<'_> {
-        let thread = conversation.thread.as_deref().and_then(|id| self.thread(id));
+        let thread = conversation.thread.as_ref().and_then(|id| self.thread(id));
         let anchor = match thread {
             Some(thread) => thread.anchor.as_ref(),
             None => conversation.drafts.first().and_then(|&index| self.drafts.get(index)?.anchor.as_ref()),
@@ -297,8 +298,8 @@ impl Review {
         }
     }
 
-    fn replies_to<'a>(&'a self, thread: &'a str) -> impl Iterator<Item = (usize, &'a Draft)> + 'a {
-        self.drafts.iter().enumerate().filter(move |(_, d)| d.reply_to.as_deref() == Some(thread))
+    fn replies_to<'a>(&'a self, thread: &'a ThreadId) -> impl Iterator<Item = (usize, &'a Draft)> + 'a {
+        self.drafts.iter().enumerate().filter(move |(_, d)| d.reply_to.as_ref() == Some(thread))
     }
 }
 
@@ -320,7 +321,7 @@ mod tests {
 
     #[test]
     fn a_line_shows_its_most_pressing_mark_and_counts_threads_and_new_drafts() {
-        let review = review().with_resolved("c0ffee00c0ffee00", false);
+        let review = review().with_resolved(&"c0ffee00c0ffee00".into(), false);
         let markers = review.markers();
         assert_eq!(review.marker_of(&markers, &removed_line()), Some(Marker { mark: Mark::Unresolved, count: 1, unsaved: false }));
         assert_eq!(review.marker_of(&markers, &Row::Line { file: 0, hunk: 0, index: 0 }), None);
@@ -332,10 +333,10 @@ mod tests {
 
     #[test]
     fn a_draft_outranks_resolved_threads_and_a_reply_marks_its_threads_line() {
-        let review = review().with_resolved("c0ffee00c0ffee00", true);
+        let review = review().with_resolved(&"c0ffee00c0ffee00".into(), true);
         let markers = review.markers();
         assert_eq!(review.marker_of(&markers, &removed_line()).unwrap().mark, Mark::Resolved);
-        let replied = review.with_drafts(vec![Draft::reply("c0ffee00c0ffee00", "agreed").with_id(3)]);
+        let replied = review.with_drafts(vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed").with_id(3)]);
         let markers = replied.markers();
         let marker = replied.marker_of(&markers, &removed_line()).unwrap();
         assert_eq!((marker.mark, marker.count, marker.unsaved), (Mark::Draft, 1, false), "a reply counts with its thread");
@@ -354,7 +355,7 @@ mod tests {
     fn the_mr_takes_the_most_pressing_mark_of_its_conversations() {
         let review = review();
         assert_eq!(review.mr_mark(), Some(Mark::Unresolved), "a plain comment is never resolved");
-        let resolved = review.clone().with_resolved("6a9c1750b2d6e4f0", true);
+        let resolved = review.clone().with_resolved(&"6a9c1750b2d6e4f0".into(), true);
         assert_eq!(resolved.mr_mark(), Some(Mark::Resolved));
         assert_eq!(resolved.with_drafts(vec![Draft::new(None, "one more thing")]).mr_mark(), Some(Mark::Draft));
         let anchored = review.threads.iter().filter(|t| t.anchor.is_some()).cloned().collect();
@@ -363,9 +364,9 @@ mod tests {
 
     #[test]
     fn the_pane_lists_unresolved_then_new_drafts_then_resolved() {
-        let base = review().with_resolved("c0ffee00c0ffee00", false);
+        let base = review().with_resolved(&"c0ffee00c0ffee00".into(), false);
         let new_draft = Draft::new(Some(old_13()), "why drop the default client?");
-        let review = base.with_drafts(vec![Draft::reply("c0ffee00c0ffee00", "agreed"), new_draft]);
+        let review = base.with_drafts(vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"), new_draft]);
         let place = review.place_of(&removed_line()).unwrap();
         assert_eq!(place, Place::Line { file: 0, new: None, old: Some(13) });
         let listed = review.conversations(&place);
@@ -373,18 +374,18 @@ mod tests {
             listed,
             [Conversation { thread: Some("c0ffee00c0ffee00".into()), drafts: vec![0] }, Conversation { thread: None, drafts: vec![1] },]
         );
-        let resolved = review.with_resolved("c0ffee00c0ffee00", true);
+        let resolved = review.with_resolved(&"c0ffee00c0ffee00".into(), true);
         assert_eq!(resolved.conversations(&place)[0].thread, None, "a resolved thread goes last");
     }
 
     #[test]
     fn in_the_diff_a_folded_thread_is_one_stop_and_an_unfolded_one_stops_on_each_note_then_my_replies() {
-        let drafts = vec![Draft::reply("c0ffee00c0ffee00", "agreed"), Draft::new(Some(old_13()), "nit")];
+        let drafts = vec![Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"), Draft::new(Some(old_13()), "nit")];
         let review = review().with_drafts(drafts);
         let listed = review.conversations(&review.place_of(&removed_line()).unwrap());
         let stop = |conversation, kind| Entry { conversation, kind };
         assert_eq!(review.stops(&listed), [stop(0, EntryKind::Draft(1)), stop(1, EntryKind::Note(0))], "my new draft, the resolved thread");
-        let unfolded = review.with_unfolded(std::collections::BTreeSet::from(["c0ffee00c0ffee00".to_owned()]));
+        let unfolded = review.with_unfolded(std::collections::BTreeSet::from(["c0ffee00c0ffee00".into()]));
         let stops = unfolded.stops(&listed);
         assert_eq!(stops[1..], [stop(1, EntryKind::Note(0)), stop(1, EntryKind::Draft(0))], "its one note, then my reply");
     }
@@ -394,11 +395,11 @@ mod tests {
         let lock = Anchor { path: "Cargo.lock".into(), side: Side::New, line: 1 };
         let drafts = vec![
             Draft::new(Some(lock), "why a lock bump?"),
-            Draft::reply("c0ffee00c0ffee00", "agreed"),
+            Draft::reply(&"c0ffee00c0ffee00".into(), "agreed"),
             Draft::new(Some(old_13()), "why drop the default client?"),
             Draft::new(None, "one more thing"),
         ];
-        let review = review().with_resolved("c0ffee00c0ffee00", false).with_drafts(drafts);
+        let review = review().with_resolved(&"c0ffee00c0ffee00".into(), false).with_drafts(drafts);
         let listed = review.conversations(&Place::All);
         let thread = |id: &str, drafts: Vec<usize>| Conversation { thread: Some(id.into()), drafts };
         let draft = |index: usize| Conversation { thread: None, drafts: vec![index] };
@@ -411,13 +412,13 @@ mod tests {
             draft(0),
         ];
         assert_eq!(listed, expected, "the MR, then charge.rs's line, then its outdated thread; the lock file last");
-        let resolved = review.with_resolved("c0ffee00c0ffee00", true).conversations(&Place::All);
+        let resolved = review.with_resolved(&"c0ffee00c0ffee00".into(), true).conversations(&Place::All);
         assert_eq!(resolved.last(), Some(&thread("c0ffee00c0ffee00", vec![1])), "a resolved thread goes last");
     }
 
     #[test]
     fn i_take_part_in_a_thread_i_wrote_in_or_answered_and_in_my_new_draft() {
-        let review = review().with_drafts(vec![Draft::reply("9f2c0aa1d4e5b6c7", "agreed"), Draft::new(None, "one more thing")]);
+        let review = review().with_drafts(vec![Draft::reply(&"9f2c0aa1d4e5b6c7".into(), "agreed"), Draft::new(None, "one more thing")]);
         let mine: Vec<Conversation> = review.conversations(&Place::All).into_iter().filter(|c| review.takes_part(c, "nina")).collect();
         let thread = |id: &str, drafts: Vec<usize>| Conversation { thread: Some(id.into()), drafts };
         let expected =
