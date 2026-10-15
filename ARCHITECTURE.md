@@ -37,7 +37,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/prose.rs`, `table.rs`, `images.rs` | Markdown files block by block, Markdown tables, pictures in the thread pane |
 | `tui/compose.rs`, `clipboard.rs`, `drag.rs`, `motion.rs` | `$EDITOR` for a comment, the clipboard through OSC 52, text selection by drag, how often the screen moves on its own |
 | `cache.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry |
-| `config.rs`, `config/ignored.rs` | `config.toml`: load and save; keys this revu does not read are warned, secrets refused |
+| `config.rs`, `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
 | `ai/` | Claude (`anthropic.rs`, questions with `a`; `context.rs`, what a question sends) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
 | `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
@@ -124,7 +124,7 @@ The internals:
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
 - **A forge field**: the field in `forge/model.rs`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `cargo run -- docs`.
-- **A config key**: the field in `config.rs` and a row in `docs::SETTINGS`; a test fails without it.
+- **A config key**: the field in `config.rs` or `config/` and a row in `docs::SETTINGS`; a test fails without it.
 - **A syntax language**: see `AGENTS.md`.
 
 ## Glossary

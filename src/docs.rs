@@ -20,7 +20,7 @@ pub(crate) struct Setting {
     pub(crate) example: &'static str,
 }
 
-/// Every key `config.toml` accepts; a test fails when `src/config.rs` gains a field missing here.
+/// Every key `config.toml` accepts; a test fails when `src/config.rs` or `src/config/` gains a field missing here.
 const SETTINGS: &[Setting] = &[
     Setting {
         table: "",
@@ -591,7 +591,9 @@ mod tests {
     /// Every `pub` field of the config structs has its row, so a new key cannot ship undocumented.
     #[test]
     fn every_config_field_is_documented() {
-        let source = include_str!("config.rs");
+        let source =
+            [include_str!("config.rs"), include_str!("config/queue.rs"), include_str!("config/tui.rs"), include_str!("config/programs.rs")]
+                .concat();
         let tables = [
             ("Config", ""),
             ("Keys", "keys"),
