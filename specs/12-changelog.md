@@ -54,7 +54,7 @@ A released binary carries an empty `Unreleased`, so its position is its version 
   The running process is the old binary, so it runs the installed one (`current_exe`, which brew and cargo both replaced in place) with the hidden `--after-update` and its own position as `--since`.
   A failure to show it only warns: the update itself worked.
 - The TUI toasts `revu 0.7.0 · 4 new things · :news` on the first start after the position moved, in the usual toast row, never as a modal.
-- `:news` opens the page over the panes, newest first, `● new since you` beside each section new to the reader; `j` `k`, `^d` `^u`, `^f` `^b`, `g` `G` scroll, `esc` or `q` close.
+- `:news` opens the page over the panes, newest first, `● new for you` beside each section new to the reader; `j` `k`, `^d` `^u`, `^f` `^b`, `g` `G` scroll, `esc` or `q` close.
 
 The position last seen is kept in the shared cache as `news.json`, never in the config.
 It is written at start, as soon as it is read: the toast shows once, and the mark on the page lasts for that session.

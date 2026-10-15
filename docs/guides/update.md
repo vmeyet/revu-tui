@@ -22,7 +22,7 @@ revu news --json           # for a script
 
 Inside revu, `:news` opens the same page.
 `j` `k` scroll it, and `esc` closes it.
-`● new since you` marks the versions that came after the one you last ran.
+`● new for you` marks the versions that came after the one you last ran.
 On the first start after an update, a line at the bottom says how much is new, once.
 
 A build from `main` has the number of the last release.

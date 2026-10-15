@@ -5,13 +5,13 @@ expression: "render(&mut app, 60, 20)"
 ╭ Queue · all ─────────────────────────────────────────────╮
 │  ╭ what's new · revu 0.6.0 ───────────────────────────╮─ │
 │ ▎│                                                    │  │
-│ ▎│  Unreleased  ● new since you                       │  │
+│ ▎│  Unreleased  ● new for you                         │  │
 │  │  NEW                                               │  │
 │  │  • Pick a row with the mouse.                      │─ │
 │  │    In the queue.                                   │  │
 │  │    Click a row to pick it.                         │D │
 │  │                                                    │  │
-│  │  0.6.0  2026-10-06  ● new since you                │─ │
+│  │  0.6.0  2026-10-06  ● new for you                  │─ │
 │  │  NEW                                               │  │
 │  │  • Read a Markdown file as a page.                 │⠋ │
 │  │    In the diff, on a Markdown file.                │  │

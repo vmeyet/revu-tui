@@ -17,7 +17,7 @@ const PAD_X: u16 = 2;
 const PAD_Y: u16 = 1;
 const BULLET: &str = "• ";
 const UNDER_BULLET: &str = "  ";
-const NEW_TO_YOU: &str = "  ● new since you";
+const NEW_TO_YOU: &str = "  ● new for you";
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;

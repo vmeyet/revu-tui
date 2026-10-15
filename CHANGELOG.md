@@ -24,6 +24,8 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **The news page marks a new version `● new for you`.**
+  On the page `:news` opens, beside each version that came after the one you last ran.
 - **Paging down at the end of a Markdown file no longer stops revu.**
   In the prose view (`v`), after `G`, with `^f` or PgDn.
 - **A letter pressed with ctrl no longer does what the letter alone does.**

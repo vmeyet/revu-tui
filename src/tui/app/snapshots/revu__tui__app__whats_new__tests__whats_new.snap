@@ -7,13 +7,13 @@ expression: "render(&mut app, 100, 34)"
 │ ▎ feat charge cards at ch…     ││                                                                │
 │ ▎ o╭ what's new · revu 0.6.0 ───────────────────────────────────────────────────────────────╮    │
 │    │                                                                                        │    │
-│   ─│  Unreleased  ● new since you                                                           │    │
+│   ─│  Unreleased  ● new for you                                                             │    │
 │   f│  NEW                                                                                   │    │
 │   n│  • Pick a row with the mouse.                                                          │    │
 │    │    In the queue.                                                                       │    │
 │   ─│    Click a row to pick it.                                                             │    │
 │   i│                                                                                        │    │
-│   o│  0.6.0  2026-10-06  ● new since you                                                    │    │
+│   o│  0.6.0  2026-10-06  ● new for you                                                      │    │
 │    │  NEW                                                                                   │    │
 │   ─│  • Read a Markdown file as a page.                                                     │    │
 │    │    In the diff, on a Markdown file.                                                    │    │
