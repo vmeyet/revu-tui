@@ -43,20 +43,25 @@ Some code predates these rules: fix what you touch, and do not copy it.
 - No shared mutable state across tasks when message passing works: the loop and its channel are the model.
 - State shared between tasks (`Arc<Mutex<_>>`, atomics) says in a one-line doc comment on its field why it is shared.
 - Prefer owned values passed by move, or `&` borrows, over clones; a `.clone()` of a large value on a hot path needs a reason.
-- Never block the runtime: `std::process`, `std::fs` and heavy CPU work go through `spawn_blocking` or their tokio form.
+- Never block the runtime while the TUI loop runs: anything it can reach sends `std::process`, `std::fs` and heavy CPU work through `spawn_blocking` or their tokio form.
+- Startup before the event loop and one-shot CLI commands may block: no event loop waits on them.
 - Never hold a `std::sync::Mutex` guard across an `.await`: take what you need and drop the guard.
-- Tests are deterministic: no sleep to make tasks overlap (use a barrier, `Notify` or a channel), no real network, no real clock.
+- Tests are deterministic: no real network, no real clock, and no real-time sleep to make tasks overlap.
+- To make tasks overlap, use a paused tokio clock (`start_paused`) or a barrier, `Notify` or a channel.
 - One behaviour per test, named as a sentence that says it.
 - `unsafe` only inside a safe function whose runtime checks make its `SAFETY:` comment true, not just a claim.
 - One crate per job: prefer std or a dependency already in `Cargo.toml`; a new one needs a line in the MR saying why.
-- A file over about 800 lines, or a type with more than one reason to change, gets split; a god struct is split by concern.
+- About 800 lines is the guideline for a file, not a hard limit; a file grown past it is split when next touched.
+- A type with more than one reason to change gets split; a god struct is split by concern.
 
 ## Releases
 
 - `CHANGELOG.md` is for users and ships in the binary (`revu news`, `:news`, the end of `revu update`).
 - An MR with a `feat` or `fix` a user can notice adds its entry under `## Unreleased` in the same MR.
 - Entries sit under `### New`, `### Fixed` or `### Removed`, in that order.
-- An entry is three lines, one sentence each: what it is in bold, where it applies, how to use it; a test parses the page and fails on anything else.
+- An entry is one sentence per line: what it is in bold, where it applies, then how to use it.
+- A `New` entry needs all three lines; a `Fixed` or `Removed` entry may stop at where it applies.
+- A test parses the page and fails on any other shape.
 - Bumping the version in `Cargo.toml` renames `## Unreleased` to `## <version> - <date>` and starts an empty `## Unreleased` above it; a test fails when a bump leaves entries behind.
 
 ## Adding a syntax language

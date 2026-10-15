@@ -14,11 +14,12 @@ When a boundary or a flow changes, change this page in the same MR.
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends; every method takes and returns the neutral model |
 | `forge/model.rs` | The neutral model: `MrKey`, `Mr`, `DiffFile`, `Discussion`, `Note`, `Draft`, `Sha`, ... |
-| `forge/gitlab/`, `forge/github/` | One backend each: calls and wire shapes in `rest.rs` and `graphql.rs`, shared shapes and conversion in `wire.rs` |
+| `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and `graphql.rs`, shared shapes and conversion in `wire.rs` |
+| `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host, no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `review/` | `Review`: the value the TUI edits; files, hunks, rows, folds, drafts, where threads hang |
-| `diff/` | Unified diff parsing, word highlighting inside lines, fold state |
+| `diff/` | Unified diff parsing, word highlighting inside lines, fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
 | `outline/` | The changed functions and classes of an MR and the calls between them (`O`) |
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |
@@ -28,11 +29,14 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/actions.rs` | The action runner: one task per `Action`, answers sent back as `Incoming` |
 | `tui/backend.rs`, `tui/lanes.rs` | `Backend`: the forge, the cache and the AI behind the runner; one lane per MR for draft writes |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
-| `tui/theme.rs`, `tui/screen.rs` | The colour palette; the terminal in raw mode on the alternate screen |
+| `tui/theme.rs`, `tui/screen.rs`, `tui/ground.rs` | The colour palette; the terminal in raw mode on the alternate screen; the terminal's background, asked once at startup |
+| `tui/field.rs`, `complete.rs`, `palette.rs`, `help.rs` | The input box, tab completion, the `ctrl-k` palette, the `?` overlay |
+| `tui/prose.rs`, `table.rs`, `images.rs` | Markdown files block by block, Markdown tables, pictures in the thread pane |
+| `tui/compose.rs`, `clipboard.rs`, `drag.rs`, `motion.rs` | `$EDITOR` for a comment, the clipboard through OSC 52, text selection by drag, how often the screen moves on its own |
 | `cache.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry |
 | `config.rs`, `config/ignored.rs` | `config.toml`: load and save; keys this revu does not read are warned, secrets refused |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
-| `ai/` | Claude (`anthropic.rs`, questions with `a`) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
+| `ai/` | Claude (`anthropic.rs`, questions with `a`; `context.rs`, what a question sends) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
 | `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
@@ -56,6 +60,7 @@ Handling a key:
 2. `keymap.rs` maps the user's keys to revu's own, then `act.rs` turns a key into an `Act` for the focused pane.
 3. The pane's handler in `tui/app/` changes the state and returns a list of `Action`s.
 4. The loop hands each `Action` to `actions::spawn`, which runs it in its own task through `Backend`; only `Action::Compose` runs in the loop, which hands the terminal to the editor.
+   `Action::Copy` also writes the terminal's clipboard from the loop before its task runs `pbcopy`.
 5. The answer comes back as an `Incoming`, applied like any other.
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `docs`, ...) at once.
@@ -66,8 +71,10 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `forge/model.rs`.
 - Side effects live at the edges: `main.rs`, `commands/`, `tui/mod.rs` (the loop and the terminal), `tui/actions.rs` and `tui/backend.rs` (network, cache, processes).
 - `tui/app/` is pure: it reads time from `app.now` and `app.today`, set by the loop, and never does I/O; its tests drive it with keys and `Incoming` values.
+- The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `Screen::lend`, with the key stream paused.
-- Secrets are read only in `auth/` and `ai/`, and sent only by `forge::http` and the AI clients.
+- Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands: `revu login` takes a token from `glab`, `gh` or stdin, and `revu ai` can copy slack-tui's key from the keychain.
+- Secrets are sent only by `forge::http`, the AI clients, and `revu ai`, which checks a new key against the Anthropic API before it stores it.
 
 ## Concurrency
 
@@ -86,7 +93,11 @@ State shared between tasks, and why:
 | `Backend::changed: Arc<Mutex<HashMap<String, u64>>>` | The same for pins and the queue view |
 | `Backend::draft_lanes: Lanes` | Draft writes and publishing of one MR run one at a time: on GitHub each reads the pending review, then writes it |
 | `forge::budget::Budget` (atomics) | Every clone of a client shares the rate limit, so the loop shows what the tasks saw |
-| `OnceLock` in `syntax`, `outline`, `review` | Grammars and hunk colours are built once, on first use |
+| GitLab `Client::me: Arc<OnceCell<String>>` | The reader's username is asked once and shared by every clone of the client |
+| GitHub `Client::downloads: Arc<Downloads>` | Read only: the picture client is shared so the forge client stays cheap to clone |
+| `TypeSafe::slots: Arc<Semaphore>` | At most 8 Jev requests run at once, across every task that asks |
+| `log` subscriber: `Mutex<File>` | Every task writes the one log file |
+| `OnceLock` in `syntax`, `outline`, `review`; `LazyLock` in `act`, `version` | Grammars, hunk colours, the default keys and the version label are built once, on first use |
 
 ## Caching
 
