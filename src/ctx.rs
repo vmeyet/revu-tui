@@ -88,11 +88,11 @@ impl Ctx {
     /// The other hosts the config remembers a login for, each with a token found for it.
     pub(crate) fn others(&self) -> Vec<Home> {
         let store = SecurityCli::new(auth::SERVICE);
-        others(&Env::from_process(), &store, &self.config, &self.credentials.host)
+        others(&store, &self.config, &self.credentials.host)
     }
 }
 
-pub(crate) fn others(env: &Env, store: &dyn SecretStore, config: &Config, current: &str) -> Vec<Home> {
+pub(crate) fn others(store: &dyn SecretStore, config: &Config, current: &str) -> Vec<Home> {
     let mut hosts: Vec<&String> = config.host.iter().chain(config.hosts.keys()).filter(|h| h.as_str() != current).collect();
     hosts.sort();
     hosts.dedup();
@@ -100,7 +100,7 @@ pub(crate) fn others(env: &Env, store: &dyn SecretStore, config: &Config, curren
         .into_iter()
         .filter_map(|host| {
             // A configured host without a token is one not logged in to yet: nothing went wrong.
-            let (credentials, _) = auth::resolve(env, store, config, Some(host)).ok()?;
+            let credentials = auth::resolve_extra(store, host).ok()?;
             Home::connect(host, config, &credentials).inspect_err(|e| tracing::warn!("leaving out {host}: {e:#}")).ok()
         })
         .collect()

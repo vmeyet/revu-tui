@@ -6,7 +6,7 @@ pub use store::{SecretStore, SecurityCli};
 
 use crate::config::Config;
 use crate::forge::Kind;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use std::fmt;
 
 pub const SERVICE: &str = "revu";
@@ -58,14 +58,22 @@ impl Env {
         }
     }
 
-    /// A token variable reaches only the host it was set for, so a CI token never goes to another
-    /// host the config lists.
-    fn token_for(&self, host: &str, kind: Kind) -> Option<&String> {
-        let (token, target) = match kind {
-            Kind::GitLab => (self.gitlab_token.as_ref(), self.host.as_deref().unwrap_or(DEFAULT_HOST)),
-            Kind::GitHub => (self.github_token.as_ref(), GITHUB_HOST),
+    /// A token variable goes to the primary host only: the one `named` by `--host` or `GITLAB_HOST`,
+    /// else its forge's default host. A CI token never reaches an extra host the config lists.
+    fn token_for(&self, host: &str, kind: Kind, named: Option<&str>) -> Option<&String> {
+        let token = match kind {
+            Kind::GitLab => self.gitlab_token.as_ref(),
+            Kind::GitHub => self.github_token.as_ref(),
         };
-        token.filter(|_| host.eq_ignore_ascii_case(target))
+        let primary = named.or(self.host.as_deref()).unwrap_or(default_host(kind));
+        token.filter(|_| host.eq_ignore_ascii_case(primary))
+    }
+}
+
+fn default_host(kind: Kind) -> &'static str {
+    match kind {
+        Kind::GitLab => DEFAULT_HOST,
+        Kind::GitHub => GITHUB_HOST,
     }
 }
 
@@ -80,26 +88,32 @@ pub fn token_variable(kind: Kind) -> &'static str {
 /// How to give `host` a token without the keychain, said after the login command; empty when no variable can.
 fn variable_hint(host: &str, kind: Kind) -> String {
     let variable = token_variable(kind);
-    match kind {
-        Kind::GitLab if host.eq_ignore_ascii_case(DEFAULT_HOST) => format!(" or set {variable}"),
-        Kind::GitLab => format!(" or set {variable} with GITLAB_HOST={host}"),
-        Kind::GitHub if host.eq_ignore_ascii_case(GITHUB_HOST) => format!(" or set {variable}"),
-        Kind::GitHub => String::new(),
+    if host.eq_ignore_ascii_case(default_host(kind)) {
+        format!(" or set {variable}")
+    } else {
+        format!(" or set {variable} with --host {host}")
     }
 }
 
-/// The token variable set for the chosen host wins, then the keychain entry for that host.
-pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, host: Option<&str>) -> Result<(Credentials, Source)> {
-    let has_token = |h: &str| env.token_for(h, Kind::for_host(h, config)).is_some() || store.get(h).ok().flatten().is_some();
-    let host = pick_host(env, config, host, has_token)?;
+/// The primary host: its token variable wins, then its keychain entry.
+pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<(Credentials, Source)> {
+    let has_token = |h: &str| env.token_for(h, Kind::for_host(h, config), named).is_some() || store.get(h).ok().flatten().is_some();
+    let host = pick_host(env, config, named, has_token)?;
     let kind = Kind::for_host(&host, config);
-    if let Some(token) = env.token_for(&host, kind) {
+    if let Some(token) = env.token_for(&host, kind, named) {
         return Ok((Credentials { host, token: token.clone() }, Source::Env));
     }
     match store.get(&host)? {
         Some(token) => Ok((Credentials { host, token }, Source::Keychain)),
         None => bail!("no token for {host}: run `revu login {host}`{}", variable_hint(&host, kind)),
     }
+}
+
+/// An extra host the config lists: its keychain entry only, since the token variables belong to the primary host.
+pub fn resolve_extra(store: &dyn SecretStore, host: &str) -> Result<Credentials> {
+    check_host(host)?;
+    let token = store.get(host)?.with_context(|| format!("no token for {host}: run `revu login {host}`"))?;
+    Ok(Credentials { host: host.to_owned(), token })
 }
 
 /// The flag, then `GITLAB_HOST`, then the checkout's own host when `usable` says a token is there
@@ -176,31 +190,34 @@ mod tests {
     }
 
     #[test]
-    fn a_gitlab_token_variable_never_reaches_another_host_than_gitlab_host() {
+    fn a_token_variable_goes_to_the_host_named_by_the_flag() {
+        let env = Env { gitlab_token: Some("glpat-corp".into()), ..Env::default() };
+        let (corp, source) = resolve(&env, &MemoryStore::default(), &Config::default(), Some("gitlab.corp.example")).unwrap();
+        assert_eq!((corp.token.as_str(), source), ("glpat-corp", Source::Env));
+    }
+
+    #[test]
+    fn an_extra_host_uses_its_keychain_entry_never_the_token_variable() {
         let store = MemoryStore::default();
+        assert!(resolve_extra(&store, "gitlab.com").is_err(), "no keychain entry, no token");
         store.set("gitlab.com", "glpat-keychain").unwrap();
-        let env = Env { gitlab_token: Some("glpat-corp".into()), host: Some("gitlab.corp.example".into()), ..Env::default() };
-        let (corp, _) = resolve(&env, &store, &Config::default(), Some("gitlab.corp.example")).unwrap();
-        assert_eq!(corp.token, "glpat-corp");
-        let (other, source) = resolve(&env, &store, &Config::default(), Some("gitlab.com")).unwrap();
-        assert_eq!((other.token.as_str(), source), ("glpat-keychain", Source::Keychain));
-        assert!(resolve(&env, &MemoryStore::default(), &Config::default(), Some("gitlab.com")).is_err(), "no keychain entry, no token");
+        assert_eq!(resolve_extra(&store, "gitlab.com").unwrap().token, "glpat-keychain");
     }
 
     #[test]
-    fn a_gitlab_token_variable_without_gitlab_host_is_for_gitlab_com_only() {
+    fn a_token_variable_skips_a_host_picked_from_the_config() {
+        let config = Config { host: Some("gl.acme.dev".into()), ..Config::default() };
         let env = Env { gitlab_token: Some("glpat-xxxx".into()), ..Env::default() };
-        let err = resolve(&env, &MemoryStore::default(), &Config::default(), Some("gl.acme.dev")).unwrap_err().to_string();
-        assert!(err.contains("GITLAB_HOST=gl.acme.dev"), "{err}");
+        let err = resolve(&env, &MemoryStore::default(), &config, None).unwrap_err().to_string();
+        assert!(err.ends_with("or set GITLAB_TOKEN with --host gl.acme.dev"), "{err}");
     }
 
     #[test]
-    fn a_github_token_variable_is_for_github_com_only() {
+    fn a_github_token_variable_goes_to_the_named_github_host() {
         let config =
             Config { hosts: [("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })].into(), ..Config::default() };
         let env = Env { github_token: Some("ghp_xxxx".into()), ..Env::default() };
-        let err = resolve(&env, &MemoryStore::default(), &config, Some("git.acme.dev")).unwrap_err().to_string();
-        assert_eq!(err, "no token for git.acme.dev: run `revu login git.acme.dev`");
+        assert_eq!(resolve(&env, &MemoryStore::default(), &config, Some("git.acme.dev")).unwrap().0.token, "ghp_xxxx");
     }
 
     #[test]
