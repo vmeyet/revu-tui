@@ -4,14 +4,12 @@ use super::Client;
 use crate::forge::{http, image};
 use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
-use reqwest::header::{ACCEPT, LOCATION};
+use reqwest::header::LOCATION;
 use url::Url;
 
 /// What fetching a comment picture needs besides the API client.
 #[derive(Clone, Debug)]
 pub struct Downloads {
-    /// The web host, where attachment links live: the token goes there for those links only.
-    web: Url,
     /// Signed links an attachment redirects to are fetched with this client, which has no token.
     client: reqwest::Client,
     /// Which redirect targets `client` may follow: GitHub's user content in real use.
@@ -25,8 +23,8 @@ impl Downloads {
         Self { follow: |_| true, ..self.clone() }
     }
 
-    pub(super) fn new(web: &str) -> Result<Self> {
-        Ok(Self { web: Url::parse(web).context("host is not a hostname")?, client: image::bare_client()?, follow: image::signed_host })
+    pub(super) fn new() -> Result<Self> {
+        Ok(Self { client: image::bare_client()?, follow: image::signed_host })
     }
 }
 
@@ -69,8 +67,7 @@ impl Client {
     /// The token goes to the web host only; the signed link it redirects to is fetched without it,
     /// since the main client refuses redirects so the token can never follow one.
     async fn attachment(&self, path: &str) -> Result<Vec<u8>> {
-        let url = self.downloads.web.join(path.trim_start_matches('/'))?;
-        let response = self.http.client().get(url).header(ACCEPT, "image/*").send().await.map_err(super::scrub)?;
+        let response = self.http.fetch_web(path, "image/*").await?;
         if !response.status().is_redirection() {
             return image::read(response).await;
         }

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
@@ -9,6 +9,8 @@ pub trait SecretStore {
 }
 
 /// macOS keychain through `/usr/bin/security`.
+/// Reads and deletes name the service and account in argv, which hold nothing secret; the secret
+/// comes back on a pipe. Writes go through `security -i`, so the secret never shows in argv.
 /// Items are owned by Apple's signed binary, so a rebuilt CLI never triggers an ACL prompt.
 pub struct SecurityCli {
     service: String,
@@ -43,6 +45,7 @@ impl SecretStore for SecurityCli {
     /// Written through `security -i` with hex data: the secret never appears in argv,
     /// and unlike a bare `-w` it is never read from the terminal.
     fn set(&self, account: &str, secret: &str) -> Result<()> {
+        let line = format!("add-generic-password -a {} -s {} -U -X {}\n", plain(account)?, self.service, hex(secret));
         let mut child = Command::new("/usr/bin/security")
             .arg("-i")
             .stdin(Stdio::piped())
@@ -50,7 +53,6 @@ impl SecretStore for SecurityCli {
             .stderr(Stdio::piped())
             .spawn()
             .context("running security")?;
-        let line = format!("add-generic-password -a {account} -s {} -U -X {}\n", self.service, hex(secret));
         child.stdin.take().context("security took no input")?.write_all(line.as_bytes())?;
         let output = child.wait_with_output()?;
         if !output.status.success() {
@@ -66,6 +68,14 @@ impl SecretStore for SecurityCli {
         }
         bail!("keychain delete failed: {}", String::from_utf8_lossy(&output.stderr).trim());
     }
+}
+
+/// `security -i` splits its line on spaces and quotes, so an account holds only what a host or a
+/// provider name does: nothing in it can end the account and start another option.
+fn plain(account: &str) -> Result<&str> {
+    let is_plain = !account.is_empty() && account.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':'));
+    ensure!(is_plain, "not a keychain account name: {account:?}");
+    Ok(account)
 }
 
 fn hex(s: &str) -> String {
@@ -111,6 +121,18 @@ mod tests {
         assert_eq!(s.get("a").unwrap().as_deref(), Some("2"));
         s.delete("a").unwrap();
         assert_eq!(s.get("a").unwrap(), None);
+    }
+
+    #[test]
+    fn a_keychain_account_with_a_space_or_a_quote_is_refused_before_security_runs() {
+        let store = SecurityCli::new("revu-test");
+        for account in ["gitlab.com -s other", "gitlab.com\"", "gitlab.com'", "gitlab.com\nlist-keychains", ""] {
+            let err = store.set(account, "glpat-xxxx").unwrap_err().to_string();
+            assert!(err.starts_with("not a keychain account name"), "{account:?}: {err}");
+        }
+        for account in ["gitlab.com", "gitlab.acme.dev:8443", "anthropic", "slack-cli_test"] {
+            assert_eq!(plain(account).unwrap(), account);
+        }
     }
 
     #[test]

@@ -21,8 +21,9 @@ const API_VERSION: &str = "2022-11-28";
 static FLAVOR: Flavor =
     Flavor { remaining: "x-ratelimit-remaining", reset: "x-ratelimit-reset", limits_with_403: true, error_message: wire::error_message };
 
-/// One GitHub host. The token goes to its API host only: `api.github.com` for github.com, the
-/// host itself for GitHub Enterprise; redirects are refused and every URL is checked first.
+/// One GitHub host. The token goes to its API host: `api.github.com` for github.com, the host itself
+/// for GitHub Enterprise. It also goes to the web host, for comment attachments only, since private
+/// ones answer nobody else. Redirects are refused and every URL is checked first.
 #[derive(Clone, Debug)]
 pub struct Client {
     http: Transport,
@@ -59,8 +60,8 @@ impl Client {
         headers.insert(AUTHORIZATION, token);
         headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
         headers.insert("X-GitHub-Api-Version", HeaderValue::from_static(API_VERSION));
-        let http = Transport::new(rest, headers, &FLAVOR)?;
-        let downloads = std::sync::Arc::new(attachment::Downloads::new(web)?);
+        let http = Transport::new(rest, headers, &FLAVOR)?.with_web(web)?;
+        let downloads = std::sync::Arc::new(attachment::Downloads::new()?);
         Ok(Self { http, host: credentials.host.clone(), graphql, downloads })
     }
 

@@ -1,8 +1,8 @@
 //! The HTTP transport both forges share: the token rides on a client that follows no redirect and
-//! reaches the origin of its base URL only; lists are read page by page and a rate limit is waited
+//! reaches the origin of its base URL, and of its web URL when a forge sets one; lists are read page by page and a rate limit is waited
 //! out once. What differs between forges is a `Flavor`.
 use super::budget::{self, Budget, RateLimit};
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{ACCEPT, HeaderMap, RETRY_AFTER};
 use reqwest::{Method, Response, StatusCode};
 use serde::de::DeserializeOwned;
@@ -58,6 +58,8 @@ pub fn status(err: &anyhow::Error) -> Option<StatusCode> {
 pub struct Transport {
     client: reqwest::Client,
     base: Url,
+    /// The forge's web origin, which `fetch_web` alone may reach.
+    web: Option<Url>,
     budget: Budget,
     flavor: &'static Flavor,
 }
@@ -75,12 +77,15 @@ impl Transport {
             .user_agent(concat!("revu/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let base = Url::parse(base).context("host is not a hostname")?;
-        Ok(Self { client, base, budget: Budget::default(), flavor })
+        Ok(Self { client, base, web: None, budget: Budget::default(), flavor })
     }
 
-    /// The token-carrying client, for a caller that checked its own URL.
-    pub fn client(&self) -> &reqwest::Client {
-        &self.client
+    /// Lets `fetch_web` take the token to `web` too; it keeps the base's scheme, so an `https` base
+    /// never sends the token in clear.
+    pub fn with_web(self, web: &str) -> Result<Self> {
+        let web = Url::parse(web).context("host is not a hostname")?;
+        ensure!(web.scheme() == self.base.scheme(), "refusing to send the token over {}", web.scheme());
+        Ok(Self { web: Some(web), ..self })
     }
 
     pub fn rate(&self) -> RateLimit {
@@ -89,7 +94,7 @@ impl Transport {
 
     /// `path` joined to the base, refused when it leaves the base's origin.
     pub fn url(&self, path: &str) -> Result<Url> {
-        self.guard(self.base.join(path.trim_start_matches('/'))?)
+        join_within(&self.base, path)
     }
 
     pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
@@ -105,6 +110,12 @@ impl Transport {
     /// A GET asking for `accept` instead of the client's default type.
     pub async fn fetch(&self, path: &str, accept: &'static str) -> Result<Response> {
         self.send_to(Method::GET, self.url(path)?, None, Some(accept)).await
+    }
+
+    /// One GET of `path` on the web origin, answered as is: a redirect comes back, never followed.
+    pub async fn fetch_web(&self, path: &str, accept: &'static str) -> Result<Response> {
+        let web = self.web.as_ref().context("no web host to send the token to")?;
+        self.send_once(Method::GET, join_within(web, path)?, None, Some(accept)).await
     }
 
     pub async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
@@ -137,7 +148,7 @@ impl Transport {
             let page: Vec<T> = response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable page"))?;
             items.extend(page);
             match next {
-                Some(link) => url = self.guard(Url::parse(&link).with_context(|| format!("bad link {link:?}"))?)?,
+                Some(link) => url = same_origin(&self.base, Url::parse(&link).with_context(|| format!("bad link {link:?}"))?)?,
                 None => return Ok(items),
             }
         }
@@ -228,14 +239,18 @@ impl Transport {
         budget::header_number(headers, self.flavor.reset)
             .map_or(Duration::from_secs(1), |reset| Duration::from_secs(reset.saturating_sub(budget::unix_now())))
     }
+}
 
-    /// Same origin as the base: a host alone would let an `http://` link or another port take the token.
-    fn guard(&self, url: Url) -> Result<Url> {
-        if url.origin() != self.base.origin() {
-            bail!("refusing to send the token to {}", url.origin().ascii_serialization());
-        }
-        Ok(url)
+fn join_within(origin: &Url, path: &str) -> Result<Url> {
+    same_origin(origin, origin.join(path.trim_start_matches('/'))?)
+}
+
+/// The origin, not the host alone: a host would let an `http://` link or another port take the token.
+fn same_origin(allowed: &Url, url: Url) -> Result<Url> {
+    if url.origin() != allowed.origin() {
+        bail!("refusing to send the token to {}", url.origin().ascii_serialization());
     }
+    Ok(url)
 }
 
 fn names_a_secondary_limit(message: &str) -> bool {
@@ -387,11 +402,43 @@ mod tests {
         let transport = transport("https://gitlab.com/api/v4/");
         assert_eq!(transport.url("/user").unwrap().as_str(), "https://gitlab.com/api/v4/user");
         for elsewhere in ["https://evil.example/api/v4/user", "http://gitlab.com/api/v4/user", "https://gitlab.com:8443/api/v4/user"] {
-            let err = transport.guard(Url::parse(elsewhere).unwrap()).unwrap_err().to_string();
+            let err = same_origin(&transport.base, Url::parse(elsewhere).unwrap()).unwrap_err().to_string();
             assert!(err.starts_with("refusing to send the token"), "{elsewhere}: {err}");
         }
         assert!(transport.url("https://evil.example/x").is_err());
-        assert!(transport.guard(Url::parse("https://gitlab.com:443/api/v4/user").unwrap()).is_ok());
+        assert!(same_origin(&transport.base, Url::parse("https://gitlab.com:443/api/v4/user").unwrap()).is_ok());
+    }
+
+    #[tokio::test]
+    async fn the_web_host_gets_the_token_through_fetch_web_only_and_its_redirect_is_not_followed() {
+        let (api, web, elsewhere) = (MockServer::start().await, MockServer::start().await, MockServer::start().await);
+        let away = format!("{}/stolen", elsewhere.uri());
+        Mock::given(method("GET"))
+            .and(path("/user-attachments/assets/1f2e"))
+            .and(wiremock::matchers::header("authorization", "Bearer ghp_xxxx"))
+            .respond_with(ResponseTemplate::new(302).insert_header("location", away.as_str()))
+            .mount(&web)
+            .await;
+        let token = [(reqwest::header::AUTHORIZATION, HeaderValue::from_static("Bearer ghp_xxxx"))].into_iter().collect();
+        let transport = Transport::new(&api.uri(), token, &PLAIN).unwrap().with_web(&web.uri()).unwrap();
+        let answer = transport.fetch_web("/user-attachments/assets/1f2e", "image/*").await.unwrap();
+        assert_eq!(answer.status(), StatusCode::FOUND);
+        assert!(transport.get_text(&format!("{}/user", web.uri())).await.is_err(), "the API calls stay on the API host");
+        assert!(transport.fetch_web(&away, "image/*").await.is_err(), "fetch_web stays on the web host");
+        assert_eq!(web.received_requests().await.unwrap().len(), 1);
+        assert!(elsewhere.received_requests().await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_web_host_on_another_scheme_than_the_base_is_refused() {
+        assert!(transport("https://api.github.com/").with_web("http://github.com/").is_err());
+        assert!(transport("https://api.github.com/").with_web("https://github.com/").is_ok());
+    }
+
+    #[tokio::test]
+    async fn without_a_web_host_fetch_web_sends_nothing() {
+        let err = transport("https://gitlab.com/api/v4/").fetch_web("x.png", "image/*").await.unwrap_err().to_string();
+        assert_eq!(err, "no web host to send the token to");
     }
 
     #[tokio::test]

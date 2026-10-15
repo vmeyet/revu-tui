@@ -12,6 +12,9 @@ Each entry says what changed, then where, then how to use it.
 - **Failures revu works around now show in the log.**
   A cache write that failed, a host left out of the queue or an unreadable key leaves a warning.
   Read `revu.log` in the cache folder when something looks off.
+- **A token from the environment goes only to the host it was set for.**
+  With `GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` set and several hosts in the config: the other hosts use their keychain token.
+  `GITLAB_TOKEN` is for `GITLAB_HOST`, else gitlab.com, and `GITHUB_TOKEN` is for github.com; run `revu login <host>` for any other.
 
 ## 0.9.0 - 2026-10-15
 

@@ -88,9 +88,10 @@ Fixtures are invented: `acme/widgets!42`, user `nina`, token `glpat-xxxx`.
 
 ## Security
 
-- The token lives in the keychain (service `revu`, account `<host>`), written and read through `/usr/bin/security -i`, never through `argv`.
-- `GITLAB_TOKEN`, `GITHUB_TOKEN` (or `GH_TOKEN`) and `GITLAB_HOST` override the keychain, for CI and scripts.
+- The token lives in the keychain (service `revu`, account `<host>`) through `/usr/bin/security`: written with `-i` so it never shows in `argv`, read back on a pipe; the account is checked to be a plain name first.
+- `GITLAB_TOKEN` overrides the keychain for the `GITLAB_HOST` host, else gitlab.com; `GITHUB_TOKEN` (or `GH_TOKEN`) for github.com; every other host uses its keychain entry.
 - The token reaches one host: `forge::http::Transport` refuses any other scheme, host or port, and follows no redirect.
+- The one exception is github.com attachments: `Transport::fetch_web` takes the token to the web host, same scheme, for that single request.
 - No token in config, cache, logs, fixtures or `Debug` output; `Credentials` prints `<redacted>`.
 - AI keys follow the same rules: keychain or environment only, never the config.
 - The cache holds MR content, so it is private to the user (`ARCHITECTURE.md` § Caching); `revu logout` wipes it.

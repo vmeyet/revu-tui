@@ -16,7 +16,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/model.rs` | The neutral model: `MrKey`, `Mr`, `DiffFile`, `Discussion`, `Note`, `Draft`, `Sha`, ... |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and `graphql.rs`, shared shapes and conversion in `wire.rs` |
 | `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
-| `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host, no redirects, TLS on rustls and ring |
+| `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `review/` | `Review`: the value the TUI edits; files, hunks, rows, folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, word highlighting inside lines, fold state; `arbitrary.rs` builds diffs for property tests |
@@ -74,7 +74,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `Screen::lend`, with the key stream paused.
 - Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands: `revu login` takes a token from `glab`, `gh` or stdin, and `revu ai` can copy slack-tui's key from the keychain.
-- Secrets are sent only by `forge::http`, the AI clients, and `revu ai`, which checks a new key against the Anthropic API before it stores it.
+- Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments), the AI clients, and `revu ai`, which checks a new key against the Anthropic API before it stores it.
 
 ## Concurrency
 

@@ -30,7 +30,8 @@ fn version_carries_the_commit() {
 #[test]
 fn whoami_with_a_bad_env_token_fails_before_any_prompt() {
     revu()
-        .args(["--host", "localhost:1", "whoami"])
+        .args(["whoami"])
+        .env("GITLAB_HOST", "localhost:1")
         .env("GITLAB_TOKEN", "glpat-xxxx")
         .assert()
         .failure()
@@ -55,7 +56,8 @@ fn list_help_mentions_the_cached_flag() {
 #[test]
 fn show_rejects_a_reference_before_touching_the_network() {
     revu()
-        .args(["--host", "localhost:1", "show", "nonsense"])
+        .args(["show", "nonsense"])
+        .env("GITLAB_HOST", "localhost:1")
         .env("GITLAB_TOKEN", "glpat-xxxx")
         .assert()
         .failure()
@@ -72,7 +74,13 @@ fn write_commands_explain_themselves() {
 
 #[test]
 fn comment_needs_a_text() {
-    revu().args(["--host", "localhost:1", "comment", "acme/widgets!42"]).env("GITLAB_TOKEN", "glpat-xxxx").assert().failure().code(2);
+    revu()
+        .args(["comment", "acme/widgets!42"])
+        .env("GITLAB_HOST", "localhost:1")
+        .env("GITLAB_TOKEN", "glpat-xxxx")
+        .assert()
+        .failure()
+        .code(2);
 }
 
 #[test]
@@ -101,7 +109,8 @@ fn ai_status_names_both_providers_without_a_key() {
 #[test]
 fn ai_ask_says_claude_is_off_before_touching_the_network() {
     revu()
-        .args(["--host", "localhost:1", "ai", "ask", "acme/widgets!42", "why?"])
+        .args(["ai", "ask", "acme/widgets!42", "why?"])
+        .env("GITLAB_HOST", "localhost:1")
         .env("GITLAB_TOKEN", "glpat-xxxx")
         .env("ANTHROPIC_API_KEY", "sk-ant-xxxx")
         .assert()
@@ -117,8 +126,9 @@ fn merge_help_mentions_yes() {
 #[test]
 fn a_bare_number_outside_a_checkout_fails_before_the_tui() {
     revu()
-        .args(["--host", "localhost:1", "42"])
+        .args(["42"])
         .current_dir(std::env::temp_dir())
+        .env("GITLAB_HOST", "localhost:1")
         .env("GITLAB_TOKEN", "glpat-xxxx")
         .assert()
         .failure()
@@ -128,7 +138,8 @@ fn a_bare_number_outside_a_checkout_fails_before_the_tui() {
 #[test]
 fn tui_rejects_a_reference_before_the_screen_changes() {
     revu()
-        .args(["--host", "localhost:1", "tui", "nonsense"])
+        .args(["tui", "nonsense"])
+        .env("GITLAB_HOST", "localhost:1")
         .env("GITLAB_TOKEN", "glpat-xxxx")
         .assert()
         .failure()
