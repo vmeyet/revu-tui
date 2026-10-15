@@ -13,7 +13,8 @@ pub mod rules;
 pub use budget::RateLimit;
 pub use model::{
     Applicable, Approval, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod, MergePlan, Mr, MrKey,
-    MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, Reaction, Refs, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
+    MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, Refs, Sha, Side, Suggestion, ThreadId, User, tally,
+    toggled,
 };
 pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
@@ -127,7 +128,7 @@ impl Forge {
     }
 
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
-    pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
+    pub async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
         match self {
             Forge::GitLab(client) => client.queue(project).await,
             Forge::GitHub(client) => client.queue(project).await,
@@ -135,7 +136,7 @@ impl Forge {
     }
 
     /// The path of a project the user named by its numeric id (`123!42`).
-    pub async fn project_path(&self, id: u64) -> Result<String> {
+    pub async fn project_path(&self, id: u64) -> Result<ProjectPath> {
         match self {
             Forge::GitLab(client) => client.project_path(id).await,
             Forge::GitHub(client) => client.project_path(id).await,
@@ -143,7 +144,7 @@ impl Forge {
     }
 
     /// The open MR whose source is `branch`, if any.
-    pub async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>> {
+    pub async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
         match self {
             Forge::GitLab(client) => client.mr_for_branch(project, branch).await,
             Forge::GitHub(client) => client.mr_for_branch(project, branch).await,
@@ -210,7 +211,7 @@ impl Forge {
     }
 
     /// Which of the MRs `numbers` of `project` are merged or closed.
-    pub async fn finished(&self, project: &str, numbers: &[u64]) -> Result<Vec<u64>> {
+    pub async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
         match self {
             Forge::GitLab(client) => client.finished(project, numbers).await,
             Forge::GitHub(client) => client.finished(project, numbers).await,

@@ -4,7 +4,7 @@ use super::Client;
 use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::http::HttpError;
-use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, ThreadId};
+use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, ProjectPath, ThreadId};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
@@ -14,7 +14,7 @@ use serde_json::json;
 
 #[derive(Deserialize)]
 struct Repo {
-    full_name: String,
+    full_name: ProjectPath,
 }
 
 #[derive(Deserialize)]
@@ -106,12 +106,12 @@ fn decode(content: &str) -> Result<String> {
     String::from_utf8(bytes).context("the file is not text")
 }
 
-fn repo_path(project: &str) -> String {
+fn repo_path(project: &ProjectPath) -> String {
     format!("repos/{project}")
 }
 
 /// A file of `project` for the contents API, each segment encoded so a `#`, `?` or space stays in its name.
-fn contents_path(project: &str, path: &str) -> String {
+fn contents_path(project: &ProjectPath, path: &str) -> String {
     let segments: Vec<String> = path.split('/').map(encode).collect();
     format!("{}/contents/{}", repo_path(project), segments.join("/"))
 }
@@ -285,21 +285,21 @@ impl Client {
     }
 
     /// The `owner/repo` of the repository with this numeric id.
-    pub async fn project_path(&self, id: u64) -> Result<String> {
+    pub async fn project_path(&self, id: u64) -> Result<ProjectPath> {
         let repo: Repo = self.http.get(&format!("repositories/{id}")).await.with_context(|| format!("repository {id}"))?;
         Ok(repo.full_name)
     }
 
     /// The open PR whose head is `branch` in the repository itself, if any.
-    pub async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>> {
-        let owner = project.split('/').next().unwrap_or_default();
+    pub async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
+        let (owner, _) = super::owner_and_name(project)?;
         let head = encode(&format!("{owner}:{branch}"));
         let found: Vec<PrNumber> = self.http.get(&format!("{}/pulls?state=open&head={head}", repo_path(project))).await?;
         Ok(found.first().map(|p| p.number))
     }
 
     /// The whole file at `sha`, raw, to show the lines around a hunk.
-    pub async fn file(&self, project: &str, path: &str, sha: &str) -> Result<String> {
+    pub async fn file(&self, project: &ProjectPath, path: &str, sha: &str) -> Result<String> {
         self.get_raw(&format!("{}?ref={}", contents_path(project, path), encode(sha))).await
     }
 
@@ -497,8 +497,8 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        assert_eq!(client.project_path(7).await.unwrap(), "acme/widgets");
-        assert_eq!(client.mr_for_branch("acme/widgets", "feat/checkout").await.unwrap(), Some(42));
+        assert_eq!(client.project_path(7).await.unwrap().as_str(), "acme/widgets");
+        assert_eq!(client.mr_for_branch(&"acme/widgets".into(), "feat/checkout").await.unwrap(), Some(42));
     }
 
     #[tokio::test]
@@ -529,7 +529,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string("fn main() {}\n"))
             .mount(&server)
             .await;
-        assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
+        assert_eq!(client(&server).file(&"acme/widgets".into(), "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
     }
 
     #[tokio::test]
@@ -541,7 +541,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string("ok\n"))
             .mount(&server)
             .await;
-        assert_eq!(client(&server).file("acme/widgets", "docs/a #1?.md", "fix/#123-login").await.unwrap(), "ok\n");
+        assert_eq!(client(&server).file(&"acme/widgets".into(), "docs/a #1?.md", "fix/#123-login").await.unwrap(), "ok\n");
     }
     #[tokio::test]
     async fn deployments_take_the_address_from_the_newest_successful_status() {

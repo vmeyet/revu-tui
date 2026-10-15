@@ -213,7 +213,7 @@ mod tests {
         app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
         let actions = press(&mut app, "s");
         let [Action::ChangeQueueView { scope, change, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!((scope.as_deref(), change), (Some("acme/widgets"), &ViewChange::Order(order::Order::Oldest)));
+        assert_eq!((scope.as_ref().map(ProjectPath::as_str), change), (Some("acme/widgets"), &ViewChange::Order(order::Order::Oldest)));
         press(&mut app, "ss");
         assert_eq!(app.queue_view.order, order::Order::Size);
         assert_eq!(app.queue_view_label().as_deref(), Some("smallest first"));

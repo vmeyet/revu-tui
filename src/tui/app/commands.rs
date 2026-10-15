@@ -207,7 +207,7 @@ impl App {
     fn resolve(&self, reference: &str) -> Option<MrKey> {
         let reference = reference.trim();
         if let Some((project, number)) = reference.rsplit_once(['!', '#']).filter(|(p, _)| !p.is_empty()) {
-            return Some(MrKey::new(project, number.parse().ok()?));
+            return Some(MrKey::new(crate::forge::ProjectPath::parse(project)?, number.parse().ok()?));
         }
         let number: u64 = reference.trim_start_matches(['!', '#']).parse().ok()?;
         self.queue_mrs().into_iter().find(|mr| mr.number == number).map(crate::forge::QueueMr::key)
@@ -258,7 +258,10 @@ mod tests {
         let actions = run_line(&mut app, "go !41");
         assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.number == 41), "{actions:?}");
         let actions = run_line(&mut app, "go other/thing!7");
-        assert!(matches!(actions.as_slice(), [Action::Open(key)] if key.project == "other/thing" && key.number == 7), "{actions:?}");
+        assert!(
+            matches!(actions.as_slice(), [Action::Open(key)] if key.project.as_str() == "other/thing" && key.number == 7),
+            "{actions:?}"
+        );
         assert_eq!(run_line(&mut app, "go !999"), vec![]);
         assert!(app.live_toast().unwrap().text.contains("no MR !999"));
     }

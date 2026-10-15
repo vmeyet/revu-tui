@@ -2,7 +2,7 @@
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::forge::{Forge, Kind, Mr, MrKey};
+use crate::forge::{Forge, Kind, Mr, MrKey, ProjectPath};
 use crate::log::OrWarn as _;
 use anyhow::Result;
 use serde::Serialize;
@@ -16,7 +16,7 @@ pub struct Ctx {
     pub(crate) cache: Cache,
     pub(crate) json: bool,
     /// The project of the checkout the command runs in: the queue shows only it unless `--all`.
-    pub(crate) project: Option<String>,
+    pub(crate) project: Option<ProjectPath>,
 }
 
 impl Ctx {

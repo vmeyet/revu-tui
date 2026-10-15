@@ -8,7 +8,7 @@ use crate::blocking;
 use crate::cache::{Cache, Entry, keys};
 use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
-use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, QueueMr, Sections, Sha};
+use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, ProjectPath, Queue, QueueMr, Sections, Sha};
 use crate::log::OrWarn as _;
 use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Progress, Review};
@@ -118,7 +118,7 @@ const KEEP_UNTOUCHED: Duration = Duration::from_hours(30 * 24);
 pub(super) async fn prune(forge: &Forge, cache: &Cache) {
     let listed = cache.clone();
     let Ok(kept) = blocking::run(move || Ok(listed.kept_mrs())).await else { return };
-    let mut by_project: BTreeMap<String, Vec<u64>> = BTreeMap::new();
+    let mut by_project: BTreeMap<ProjectPath, Vec<u64>> = BTreeMap::new();
     for mr in &kept {
         by_project.entry(mr.project.clone()).or_default().push(mr.number);
     }
@@ -128,7 +128,7 @@ pub(super) async fn prune(forge: &Forge, cache: &Cache) {
             finished.extend(done.into_iter().map(|number| (project.clone(), number)));
         }
     }
-    let gone: Vec<(String, u64)> = crate::cache::to_forget(&kept, &finished, std::time::SystemTime::now(), KEEP_UNTOUCHED)
+    let gone: Vec<(ProjectPath, u64)> = crate::cache::to_forget(&kept, &finished, std::time::SystemTime::now(), KEEP_UNTOUCHED)
         .into_iter()
         .map(|mr| (mr.project.clone(), mr.number))
         .collect();
@@ -287,25 +287,25 @@ impl Backend {
     /// runs alongside; when it fails the queue still paints, with its last answer, and the reason comes
     /// back apart. What follows the answer: the pins found merged or closed, that reason, and the hosts
     /// that did not answer.
-    pub(super) async fn load_queue(&self, scope: Option<String>) -> Result<(Incoming, Vec<Incoming>)> {
+    pub(super) async fn load_queue(&self, scope: Option<ProjectPath>) -> Result<(Incoming, Vec<Incoming>)> {
         let others = async {
             if scope.is_some() {
                 return (vec![], vec![]);
             }
             self.other_queues().await
         };
-        let (queue, (others, silent), said) = tokio::join!(self.forge.queue(scope.as_deref()), others, self.ask_ready());
+        let (queue, (others, silent), said) = tokio::join!(self.forge.queue(scope.as_ref()), others, self.ask_ready());
         let queue = queue?;
         let (wanted, saved) = (scope.clone(), queue.clone());
-        self.write_cache("caching the queue", move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
+        self.write_cache("caching the queue", move |b| b.cache.write_entry(&keys::queue(wanted.as_ref()), &saved)).await;
         let (ready, failure) = match said {
-            Ok(Some(output)) => (Some(self.fresh_ready(scope.as_deref(), output, &queue, &others).await), None),
+            Ok(Some(output)) => (Some(self.fresh_ready(scope.as_ref(), output, &queue, &others).await), None),
             Ok(None) => (None, None),
-            Err(e) => (self.cached_ready(scope.as_deref()), Some(format!("{e:#}"))),
+            Err(e) => (self.cached_ready(scope.as_ref()), Some(format!("{e:#}"))),
         };
         let held = ready.iter().flat_map(|source| &source.outside);
         let listed = std::iter::once(&queue).chain(&others).flat_map(Queue::listed).chain(held.map(QueueMr::key)).collect();
-        let (pinned, gone) = self.pins_outside(scope.as_deref(), &listed).await;
+        let (pinned, gone) = self.pins_outside(scope.as_ref(), &listed).await;
         let follow = [
             (!gone.is_empty()).then(|| Incoming::PinsGone { scope: scope.clone(), gone }),
             failure.map(|message| Incoming::Failed { what: app::Failure::Ready, message }),
@@ -336,22 +336,22 @@ impl Backend {
         (queues.into_iter().chain(kept.await).collect(), silent)
     }
 
-    pub(super) fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
-        let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_deref()))?.value;
+    pub(super) fn cached_queue(&self, scope: Option<ProjectPath>) -> Option<Incoming> {
+        let queue: Queue = self.cache.read_entry(&keys::queue(scope.as_ref()))?.value;
         let others: Vec<Queue> = if scope.is_none() { self.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
-        let ready = self.cached_ready(scope.as_deref());
+        let ready = self.cached_ready(scope.as_ref());
         Some(self.queue_answer(scope, &queue, &others, ready.as_ref(), vec![], true))
     }
 
-    pub(super) fn pins(&self, scope: Option<&str>) -> BTreeSet<MrKey> {
+    pub(super) fn pins(&self, scope: Option<&ProjectPath>) -> BTreeSet<MrKey> {
         self.cache.read(&keys::pins(scope)).unwrap_or_default()
     }
 
     /// The pins of `scope` the queue does not hold yet, each asked of its forge: the open ones come
     /// back as rows, the merged or closed ones as gone. A pin the forge did not answer for stays.
-    async fn pins_outside(&self, scope: Option<&str>, listed: &HashSet<MrKey>) -> (Vec<QueueMr>, Vec<MrKey>) {
-        let wanted = scope.map(str::to_owned);
-        let pins = self.read_cache(move |b| b.pins(wanted.as_deref())).await;
+    async fn pins_outside(&self, scope: Option<&ProjectPath>, listed: &HashSet<MrKey>) -> (Vec<QueueMr>, Vec<MrKey>) {
+        let wanted = scope.cloned();
+        let pins = self.read_cache(move |b| b.pins(wanted.as_ref())).await;
         let missing: Vec<MrKey> = pins.into_iter().filter(|key| !listed.contains(key)).collect();
         let fetched = crate::ctx::fetch_each(&self.forge, &self.others, &missing).await;
         let mut rows = vec![];
@@ -371,23 +371,23 @@ impl Backend {
         crate::ready::output(command).await.map(Some)
     }
 
-    fn cached_ready(&self, scope: Option<&str>) -> Option<ReadySource> {
+    fn cached_ready(&self, scope: Option<&ProjectPath>) -> Option<ReadySource> {
         self.ready_command.as_ref()?;
         self.cache.read(&keys::ready(scope))
     }
 
-    async fn fresh_ready(&self, scope: Option<&str>, output: String, queue: &Queue, others: &[Queue]) -> ReadySource {
+    async fn fresh_ready(&self, scope: Option<&ProjectPath>, output: String, queue: &Queue, others: &[Queue]) -> ReadySource {
         let queues: Vec<&Queue> = std::iter::once(queue).chain(others).collect();
         let source = crate::ready::resolve(output, &self.forge, &self.others, scope, &queues).await;
-        let (wanted, saved) = (scope.map(str::to_owned), source.clone());
-        self.write_cache("caching the ready command's answer", move |b| b.cache.write(&keys::ready(wanted.as_deref()), &saved)).await;
+        let (wanted, saved) = (scope.cloned(), source.clone());
+        self.write_cache("caching the ready command's answer", move |b| b.cache.write(&keys::ready(wanted.as_ref()), &saved)).await;
         source
     }
 
     /// `pinned` are the pinned MRs no list holds.
     fn queue_answer(
         &self,
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         queue: &Queue,
         others: &[Queue],
         ready: Option<&ReadySource>,
@@ -398,7 +398,7 @@ impl Backend {
         let parts = std::iter::once(queue).chain(others).map(|q| q.sections_with(&self.watch_labels, &self.rules, now)).collect();
         let sections = Sections::merge(parts);
         let sections = match ready {
-            Some(source) => source.apply(sections, self.forge.host(), &self.others, scope.as_deref(), &queue.me, &self.rules),
+            Some(source) => source.apply(sections, self.forge.host(), &self.others, scope.as_ref(), &queue.me, &self.rules),
             None => sections,
         };
         let sections = Sections { pinned, ..sections };
@@ -635,8 +635,7 @@ impl Backend {
             Some(checkout) => checkout.head().await.map(|head| (checkout, head)),
             None => None,
         };
-        let source =
-            crate::open::Source::pick(&key.project, sha.as_str(), checkout.as_ref().map(|(c, head)| (c.project.as_str(), head.as_str())));
+        let source = crate::open::Source::pick(&key.project, sha.as_str(), checkout.as_ref().map(|(c, head)| (&c.project, head.as_str())));
         let (file, dir, note) = if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
             (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
         } else {
@@ -746,12 +745,12 @@ impl Backend {
         Ok(())
     }
 
-    pub(super) fn change_pin(&self, scope: Option<&str>, key: &MrKey, on: bool, order: u64) -> Result<()> {
+    pub(super) fn change_pin(&self, scope: Option<&ProjectPath>, key: &MrKey, on: bool, order: u64) -> Result<()> {
         let change = |pins: BTreeSet<MrKey>| app::with_member(pins, key.clone(), on);
         self.change_entry(&keys::pins(scope), &format!("{key:?}"), order, change)
     }
 
-    pub(super) fn change_queue_view(&self, scope: Option<&str>, change: app::ViewChange, order: u64) -> Result<()> {
+    pub(super) fn change_queue_view(&self, scope: Option<&ProjectPath>, change: app::ViewChange, order: u64) -> Result<()> {
         self.change_entry(&keys::queue_view(scope), &change.target(), order, |view| change.apply(view))
     }
 
@@ -1235,9 +1234,9 @@ mod tests {
             ..backend_on_nothing()
         };
         let queue = crate::forge::gitlab::fixture::queue_in(include_str!("../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets");
-        backend.cache.write_entry(&keys::queue(Some("acme/widgets")), &queue).unwrap();
+        backend.cache.write_entry(&keys::queue(Some(&"acme/widgets".into())), &queue).unwrap();
         let output = format!("ready: https://{}/acme/widgets/-/merge_requests/51", backend.forge.host());
-        backend.cache.write(&keys::ready(Some("acme/widgets")), &ReadySource { output, outside: vec![] }).unwrap();
+        backend.cache.write(&keys::ready(Some(&"acme/widgets".into())), &ReadySource { output, outside: vec![] }).unwrap();
         let Some(Incoming::Queue { sections, .. }) = backend.cached_queue(Some("acme/widgets".into())) else { panic!("the cache answers") };
         assert_eq!(sections.ready.iter().map(|mr| mr.number).collect::<Vec<_>>(), [51]);
         assert!(sections.open.iter().all(|mr| mr.number != 51));

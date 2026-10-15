@@ -444,7 +444,7 @@ mod tests {
     #[test]
     fn in_a_checkout_the_queue_starts_on_its_project_and_star_widens_it() {
         let mut app = scoped_app();
-        let scope = Some("acme/widgets".to_owned());
+        let scope = Some("acme/widgets".into());
         assert_eq!(app.start(), vec![Action::LoadQueue { scope: scope.clone(), from_cache: true }]);
         app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
         assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Section { name: "OPEN", count: 1, .. })));

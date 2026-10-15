@@ -1,7 +1,7 @@
 //! Pictures in GitLab notes are uploads: `/uploads/<secret>/<file>` under a project. The web link
 //! needs a browser session on a private project, so revu asks the uploads API with the token.
 use super::Client;
-use crate::forge::image;
+use crate::forge::{ProjectPath, image};
 use anyhow::{Result, bail};
 use reqwest::Method;
 
@@ -9,7 +9,7 @@ use reqwest::Method;
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Owner {
     Mr,
-    Path(String),
+    Path(ProjectPath),
     Id(u64),
 }
 
@@ -22,7 +22,7 @@ struct Upload {
 
 impl Client {
     /// The bytes of a picture a note in `project` points at; only this host's uploads are fetched.
-    pub async fn image(&self, project: &str, url: &str) -> Result<Vec<u8>> {
+    pub async fn image(&self, project: &ProjectPath, url: &str) -> Result<Vec<u8>> {
         let Some(upload) = Upload::parse(url, &self.host) else { bail!("not an upload on {}", self.host) };
         let owner = match &upload.owner {
             Owner::Mr => super::rest::project_path(project),
@@ -58,7 +58,7 @@ impl Upload {
         let owner = match &parts[..at] {
             [] => Owner::Mr,
             ["-", "project", id] => Owner::Id(id.parse().ok()?),
-            project if project.iter().all(|p| !p.is_empty() && *p != "-" && *p != "..") => Owner::Path(project.join("/")),
+            project if !project.contains(&"-") => Owner::Path(ProjectPath::parse(&project.join("/"))?),
             _ => return None,
         };
         Some(Self { owner, secret: (*secret).to_owned(), file: (*file).to_owned() })
@@ -117,8 +117,8 @@ mod tests {
             .await;
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
-        let bytes = client.image("acme/widgets", &format!("/uploads/{SECRET}/chart.png")).await.unwrap();
+        let bytes = client.image(&"acme/widgets".into(), &format!("/uploads/{SECRET}/chart.png")).await.unwrap();
         assert_eq!(bytes, png.into_inner());
-        assert!(client.image("acme/widgets", "https://img.shields.io/badge.svg").await.is_err());
+        assert!(client.image(&"acme/widgets".into(), "https://img.shields.io/badge.svg").await.is_err());
     }
 }

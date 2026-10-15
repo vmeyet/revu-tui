@@ -3,7 +3,7 @@
 //! tracker, a label search, a script.
 use crate::ctx::Home;
 use crate::forge::rules::Rules;
-use crate::forge::{Forge, MrKey, Queue, QueueMr, Sections};
+use crate::forge::{Forge, MrKey, ProjectPath, Queue, QueueMr, Sections};
 use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Link {
     pub host: String,
-    pub project: String,
+    pub project: ProjectPath,
     pub number: u64,
 }
 
@@ -50,7 +50,8 @@ fn link_of(url: &str) -> Option<Link> {
     let digits: String = tail.chars().take_while(char::is_ascii_digit).collect();
     let number = digits.parse().ok()?;
     let project = project.trim_matches('/');
-    (!host.is_empty() && project.contains('/')).then(|| Link { host: host.to_owned(), project: project.to_owned(), number })
+    let project = ProjectPath::parse(project)?;
+    (!host.is_empty()).then(|| Link { host: host.to_owned(), project, number })
 }
 
 /// Runs `command` (split into words, never through a shell) and returns what it printed.
@@ -73,12 +74,20 @@ pub struct Source {
 impl Source {
     /// The MR keys the output names, on a host I am logged in to; inside a checkout (`scope`),
     /// only its project's on the main host.
-    pub fn named(&self, main_host: &str, others: &[Home], scope: Option<&str>) -> Vec<MrKey> {
+    pub fn named(&self, main_host: &str, others: &[Home], scope: Option<&ProjectPath>) -> Vec<MrKey> {
         named(&self.output, main_host, others, scope)
     }
 
     /// The sections with the named MRs moved to Ready.
-    pub fn apply(&self, sections: Sections, main_host: &str, others: &[Home], scope: Option<&str>, me: &str, rules: &Rules) -> Sections {
+    pub fn apply(
+        &self,
+        sections: Sections,
+        main_host: &str,
+        others: &[Home],
+        scope: Option<&ProjectPath>,
+        me: &str,
+        rules: &Rules,
+    ) -> Sections {
         sections.with_ready(&self.named(main_host, others, scope), self.outside.clone(), me, rules, Utc::now())
     }
 }
@@ -86,12 +95,12 @@ impl Source {
 /// At most this many named MRs outside my lists are fetched on each refresh.
 const MAX_OUTSIDE: usize = 30;
 
-fn named(output: &str, main_host: &str, others: &[Home], scope: Option<&str>) -> Vec<MrKey> {
+fn named(output: &str, main_host: &str, others: &[Home], scope: Option<&ProjectPath>) -> Vec<MrKey> {
     links(output)
         .into_iter()
         .filter_map(|link| {
             let host = if link.host == main_host { None } else { Some(others.iter().find(|home| home.host == link.host)?.host.clone()) };
-            let in_scope = scope.is_none_or(|project| host.is_none() && link.project == project);
+            let in_scope = scope.is_none_or(|project| host.is_none() && &link.project == project);
             in_scope.then(|| MrKey { host, ..MrKey::new(link.project, link.number) })
         })
         .collect()
@@ -99,7 +108,7 @@ fn named(output: &str, main_host: &str, others: &[Home], scope: Option<&str>) ->
 
 /// A source from a fresh output: the named MRs no list holds are fetched one by one (outside a
 /// checkout only: inside one, every open MR of the project is already listed).
-pub async fn resolve(output: String, main: &Forge, others: &[Home], scope: Option<&str>, queues: &[&Queue]) -> Source {
+pub async fn resolve(output: String, main: &Forge, others: &[Home], scope: Option<&ProjectPath>, queues: &[&Queue]) -> Source {
     let listed: HashSet<MrKey> = queues.iter().flat_map(|q| q.listed()).collect();
     let missing: Vec<MrKey> = if scope.is_some() {
         vec![]
@@ -124,7 +133,7 @@ mod tests {
     type Found = Vec<(String, String, u64)>;
 
     fn found(text: &str) -> Found {
-        links(text).into_iter().map(|l| (l.host, l.project, l.number)).collect()
+        links(text).into_iter().map(|l| (l.host, l.project.to_string(), l.number)).collect()
     }
 
     fn one(host: &str, project: &str, number: u64) -> Found {
@@ -164,7 +173,7 @@ mod tests {
             https://github.com/acme/widgets/pull/12 https://gitlab.example.com/x/y/-/merge_requests/1";
         let keys = |scope| named(output, "gitlab.com", &[], scope);
         assert_eq!(keys(None), [MrKey::new("acme/widgets", 42), MrKey::new("acme/billing", 9)], "unknown hosts are left out");
-        assert_eq!(keys(Some("acme/widgets")), [MrKey::new("acme/widgets", 42)], "a checkout keeps to its project");
+        assert_eq!(keys(Some(&"acme/widgets".into())), [MrKey::new("acme/widgets", 42)], "a checkout keeps to its project");
     }
 
     use crate::program::OUTPUT_CAP;

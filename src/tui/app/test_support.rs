@@ -211,7 +211,7 @@ pub(super) fn scoped_sections() -> Sections {
 }
 
 pub(super) fn queue_answer(scope: Option<&str>, sections: Sections, cached: bool) -> Incoming {
-    Incoming::Queue { scope: scope.map(str::to_owned), me: "nina".into(), sections, opened: HashMap::new(), cached }
+    Incoming::Queue { scope: scope.map(ProjectPath::from), me: "nina".into(), sections, opened: HashMap::new(), cached }
 }
 
 /// The cover over the review, its threads replaced by `count` threads on a deep path.

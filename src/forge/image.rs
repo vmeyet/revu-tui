@@ -62,7 +62,7 @@ pub fn signed_host(url: &Url) -> bool {
 
 /// The link a reader's browser opens for `url` as written in a note of `project` on `host`:
 /// GitLab writes uploads relative to the project, other relative links to the host.
-pub fn web_url(host: &str, project: &str, url: &str) -> String {
+pub fn web_url(host: &str, project: &super::ProjectPath, url: &str) -> String {
     if url.starts_with("http://") || url.starts_with("https://") {
         return url.to_owned();
     }
@@ -129,15 +129,15 @@ mod tests {
     #[test]
     fn relative_links_open_on_the_forge() {
         assert_eq!(
-            web_url("gitlab.com", "acme/widgets", "/uploads/ab12/chart.png"),
+            web_url("gitlab.com", &"acme/widgets".into(), "/uploads/ab12/chart.png"),
             "https://gitlab.com/acme/widgets/uploads/ab12/chart.png"
         );
         assert_eq!(
-            web_url("gitlab.com", "acme/widgets", "/-/project/7/uploads/ab12/c.png"),
+            web_url("gitlab.com", &"acme/widgets".into(), "/-/project/7/uploads/ab12/c.png"),
             "https://gitlab.com/-/project/7/uploads/ab12/c.png"
         );
         assert_eq!(
-            web_url("github.com", "acme/widgets", "https://github.com/user-attachments/assets/1f"),
+            web_url("github.com", &"acme/widgets".into(), "https://github.com/user-attachments/assets/1f"),
             "https://github.com/user-attachments/assets/1f"
         );
     }

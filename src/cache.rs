@@ -1,5 +1,6 @@
 //! Cached answers under `~/.cache/revu/<host>/`, one JSON file per key. The files hold MR
 //! content, so directories are 0700 and files 0600; writes go through a temp name then a rename.
+use crate::forge::ProjectPath;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
@@ -19,14 +20,14 @@ pub struct Cache {
 /// An MR the cache holds a folder for, and when anything in it was last written.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kept {
-    pub project: String,
+    pub project: ProjectPath,
     pub number: u64,
     pub touched: SystemTime,
 }
 
 /// The kept MRs to drop: those the forge says are merged or closed, and any untouched for `idle`,
 /// which also covers an MR on a project the forge could not answer for.
-pub fn to_forget<'a>(kept: &'a [Kept], finished: &HashSet<(String, u64)>, now: SystemTime, idle: Duration) -> Vec<&'a Kept> {
+pub fn to_forget<'a>(kept: &'a [Kept], finished: &HashSet<(ProjectPath, u64)>, now: SystemTime, idle: Duration) -> Vec<&'a Kept> {
     let old = |k: &Kept| now.duration_since(k.touched).is_ok_and(|age| age > idle);
     kept.iter().filter(|k| finished.contains(&(k.project.clone(), k.number)) || old(k)).collect()
 }
@@ -101,19 +102,19 @@ impl Cache {
         let Ok(projects) = std::fs::read_dir(&mrs) else { return vec![] };
         let mut kept = vec![];
         for project in projects.filter_map(Result::ok) {
-            let Some(slug) = project.file_name().to_str().map(str::to_owned) else { continue };
+            let Some(path) = project.file_name().to_str().and_then(|slug| ProjectPath::parse(&slug.replace('+', "/"))) else { continue };
             let Ok(numbers) = std::fs::read_dir(project.path()) else { continue };
             for folder in numbers.filter_map(Result::ok) {
                 let Some(number) = folder.file_name().to_str().and_then(|n| n.parse().ok()) else { continue };
                 let touched = newest_write(&folder.path()).unwrap_or(SystemTime::UNIX_EPOCH);
-                kept.push(Kept { project: slug.replace('+', "/"), number, touched });
+                kept.push(Kept { project: path.clone(), number, touched });
             }
         }
         kept
     }
 
     /// Drops everything kept for one MR; a folder already gone is fine.
-    pub fn forget_mr(&self, project: &str, number: u64) -> Result<()> {
+    pub fn forget_mr(&self, project: &ProjectPath, number: u64) -> Result<()> {
         let path = self.dir.join(keys::mr_dir(project, number));
         match std::fs::remove_dir_all(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e).with_context(|| format!("removing {}", path.display())),
@@ -246,29 +247,29 @@ fn root() -> PathBuf {
 
 /// The one place cache paths are spelled.
 pub mod keys {
-    use crate::forge::{MrKey, Sha};
+    use crate::forge::{MrKey, ProjectPath, Sha};
 
     /// One file per scope, so switching between a repo and every project never shows the other list.
-    pub fn queue(project: Option<&str>) -> String {
+    pub fn queue(project: Option<&ProjectPath>) -> String {
         scoped("queue", project)
     }
 
     /// The ready command's last output for a scope, and the MRs it named outside my lists.
-    pub fn ready(project: Option<&str>) -> String {
+    pub fn ready(project: Option<&ProjectPath>) -> String {
         scoped("ready", project)
     }
 
     /// How the queue of one scope is sorted and grouped, next to its list.
-    pub fn queue_view(project: Option<&str>) -> String {
+    pub fn queue_view(project: Option<&ProjectPath>) -> String {
         scoped("queue_view", project)
     }
 
     /// The MRs pinned in the queue of one scope.
-    pub fn pins(project: Option<&str>) -> String {
+    pub fn pins(project: Option<&ProjectPath>) -> String {
         scoped("pins", project)
     }
 
-    fn scoped(name: &str, project: Option<&str>) -> String {
+    fn scoped(name: &str, project: Option<&ProjectPath>) -> String {
         match project {
             Some(path) => format!("{name}.{}.json", slug(path)),
             None => format!("{name}.json"),
@@ -281,7 +282,7 @@ pub mod keys {
     }
 
     /// The folder everything about one MR sits in.
-    pub fn mr_dir(project: &str, number: u64) -> String {
+    pub fn mr_dir(project: &ProjectPath, number: u64) -> String {
         format!("mr/{}/{number}", slug(project))
     }
 
@@ -305,8 +306,8 @@ pub mod keys {
         "share.json".to_owned()
     }
 
-    fn slug(project: &str) -> String {
-        project.replace('/', "+")
+    fn slug(project: &ProjectPath) -> String {
+        project.as_str().replace('/', "+")
     }
 
     pub fn mr(key: &MrKey) -> String {
@@ -509,8 +510,8 @@ mod tests {
         let mut kept = cache.kept_mrs();
         kept.sort_by_key(|k| k.number);
         assert_eq!(kept.iter().map(|k| (k.project.as_str(), k.number)).collect::<Vec<_>>(), [("acme/widgets", 41), ("acme/widgets", 42)]);
-        cache.forget_mr("acme/widgets", 42).unwrap();
-        cache.forget_mr("acme/widgets", 42).unwrap();
+        cache.forget_mr(&"acme/widgets".into(), 42).unwrap();
+        cache.forget_mr(&"acme/widgets".into(), 42).unwrap();
         assert_eq!(cache.kept_mrs().len(), 1);
     }
 
@@ -520,7 +521,7 @@ mod tests {
         let day = Duration::from_hours(24);
         let kept = |number: u64, days: u64| Kept { project: "acme/widgets".into(), number, touched: now - day * days as u32 };
         let all = [kept(40, 2), kept(41, 2), kept(42, 45)];
-        let finished: HashSet<(String, u64)> = [("acme/widgets".to_owned(), 40)].into();
+        let finished: HashSet<(ProjectPath, u64)> = [("acme/widgets".into(), 40)].into();
         let gone: Vec<u64> = to_forget(&all, &finished, now, day * 30).into_iter().map(|k| k.number).collect();
         assert_eq!(gone, [40, 42], "41 is open and was read two days ago");
     }
@@ -589,8 +590,8 @@ mod tests {
     #[test]
     fn queue_keys_differ_per_scope() {
         assert_eq!(keys::queue(None), "queue.json");
-        assert_eq!(keys::queue(Some("acme/sub/widgets")), "queue.acme+sub+widgets.json");
+        assert_eq!(keys::queue(Some(&"acme/sub/widgets".into())), "queue.acme+sub+widgets.json");
         assert_eq!(keys::pins(None), "pins.json");
-        assert_eq!(keys::pins(Some("acme/widgets")), "pins.acme+widgets.json");
+        assert_eq!(keys::pins(Some(&"acme/widgets".into())), "pins.acme+widgets.json");
     }
 }

@@ -4,7 +4,7 @@
 //! asking me score 185, mine 87 (the rules skip them, so they skip the fields) and a project's
 //! open MRs 124: each call stays under the limit, one query for all would not.
 use super::Client;
-use crate::forge::{MrKey, PipelineStatus, Queue, QueueMr, ReviewState, ReviewerState};
+use crate::forge::{MrKey, PipelineStatus, ProjectPath, Queue, QueueMr, ReviewState, ReviewerState};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -66,7 +66,7 @@ fn project_query() -> String {
 
 impl Client {
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
-    pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
+    pub async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
         let (asking_body, authored_body) = (json!({"query": asking_query()}), json!({"query": authored_query()}));
         let asking = self.http.post_json::<Answer>(super::GRAPHQL, &asking_body);
         let authored = self.http.post_json::<Answer>(super::GRAPHQL, &authored_body);
@@ -94,13 +94,13 @@ impl Client {
 }
 
 /// `open` is the project answer and the path it was asked for, when the queue is scoped.
-fn queue_from(asking: Answer, authored: Answer, open: Option<(Answer, &str)>) -> Result<Queue> {
+fn queue_from(asking: Answer, authored: Answer, open: Option<(Answer, &ProjectPath)>) -> Result<Queue> {
     let user = data_of(asking)?.current_user.context("GraphQL answered without currentUser")?;
     let mine = data_of(authored)?.current_user.context("GraphQL answered without currentUser")?;
     let (project, open) = match open {
         Some((answer, path)) => {
             let found = data_of(answer)?.project.with_context(|| format!("project {path} not found, or not visible with this token"))?;
-            (Some(path.to_owned()), convert(found.merge_requests)?)
+            (Some(path.clone()), convert(found.merge_requests)?)
         }
         None => (None, vec![]),
     };
@@ -118,7 +118,7 @@ fn queue_from(asking: Answer, authored: Answer, open: Option<(Answer, &str)>) ->
 #[cfg(test)]
 pub(super) fn queue_from_json(body: &str, project: Option<&str>) -> Result<Queue> {
     let open = match project {
-        Some(path) => Some((serde_json::from_str(body)?, path)),
+        Some(path) => Some((serde_json::from_str(body)?, &path.into())),
         None => None,
     };
     queue_from(serde_json::from_str(body)?, serde_json::from_str(body)?, open)
@@ -263,7 +263,7 @@ struct WireMr {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WireProject {
-    full_path: String,
+    full_path: ProjectPath,
 }
 
 #[derive(Deserialize)]
@@ -411,8 +411,8 @@ mod tests {
         }
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
-        let queue = client.queue(Some("acme/widgets")).await.unwrap();
-        assert_eq!(queue.project.as_deref(), Some("acme/widgets"));
+        let queue = client.queue(Some(&"acme/widgets".into())).await.unwrap();
+        assert_eq!(queue.project.as_ref().map(ProjectPath::as_str), Some("acme/widgets"));
         assert_eq!(iids(&queue.open), [42, 50, 51]);
         assert_eq!(queue.open[1].description, "Adds the refund flow.");
     }

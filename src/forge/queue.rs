@@ -1,6 +1,6 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
 use super::rules::{self, Reason, Rules};
-use super::{MrKey, MrState, PipelineStatus};
+use super::{MrKey, MrState, PipelineStatus, ProjectPath};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -10,7 +10,7 @@ pub struct Queue {
     pub me: String,
     /// The project the queue is scoped to; `None` for every project.
     #[serde(default)]
-    pub project: Option<String>,
+    pub project: Option<ProjectPath>,
     pub review_requested: Vec<QueueMr>,
     pub authored: Vec<QueueMr>,
     pub assigned: Vec<QueueMr>,
@@ -26,7 +26,7 @@ pub struct QueueMr {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     pub number: u64,
-    pub project: String,
+    pub project: ProjectPath,
     pub title: String,
     #[serde(default)]
     pub description: String,

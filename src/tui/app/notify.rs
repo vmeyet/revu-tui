@@ -6,7 +6,7 @@ use std::collections::HashSet;
 /// What To review held, for the scope it was read in: the first answer of a scope only records.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Seen {
-    pub scope: Option<String>,
+    pub scope: Option<crate::forge::ProjectPath>,
     pub keys: HashSet<MrKey>,
 }
 

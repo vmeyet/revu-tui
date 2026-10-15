@@ -2,7 +2,7 @@
 //! review that holds my drafts until `publish` submits it.
 use super::wire::{self, Actor, Anchor, Label, Nodes, QueuePr, Review, ReviewRequest, user_of};
 use super::{Client, owner_and_name};
-use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, Queue, QueueMr, Refs, Sha, ThreadId};
+use crate::forge::{self, Approvals, Discussion, Draft, MrKey, NewDraft, Note, Pipeline, ProjectPath, Queue, QueueMr, Refs, Sha, ThreadId};
 use anyhow::{Context, Result, bail, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -99,7 +99,7 @@ fragment comment on Comment {
 const MAX_PAGES: usize = 50;
 
 /// The four searches of the queue, scoped to one repository when asked.
-fn searches(project: Option<&str>) -> Value {
+fn searches(project: Option<&ProjectPath>) -> Value {
     let scope = project.map(|p| format!(" repo:{p}")).unwrap_or_default();
     let query = |filter: &str| format!("is:pr is:open archived:false {filter}{scope}");
     json!({
@@ -137,7 +137,7 @@ fn prs(nodes: Nodes<Value>) -> Vec<QueueMr> {
 
 /// Reviewed and requested once more both land in `review_requested`, each MR once: the queue
 /// sorts them into To review or Done by my state.
-fn queue_from(data: QueueData, project: Option<&str>, open: Vec<QueueMr>) -> Queue {
+fn queue_from(data: QueueData, project: Option<&ProjectPath>, open: Vec<QueueMr>) -> Queue {
     let mut review_requested = prs(data.requested);
     for mr in prs(data.reviewed) {
         if !review_requested.iter().any(|r| r.key() == mr.key()) {
@@ -146,7 +146,7 @@ fn queue_from(data: QueueData, project: Option<&str>, open: Vec<QueueMr>) -> Que
     }
     Queue {
         me: data.viewer.login,
-        project: project.map(str::to_owned),
+        project: project.cloned(),
         review_requested,
         authored: prs(data.authored),
         assigned: prs(data.assigned),
@@ -215,7 +215,7 @@ struct Pr {
 }
 
 impl Pr {
-    fn into_model(self, project: &str, me: &str) -> forge::Mr {
+    fn into_model(self, project: &ProjectPath, me: &str) -> forge::Mr {
         let author = user_of(self.author.clone());
         let approvers: Vec<forge::User> =
             self.latest_reviews.nodes.iter().filter(|r| r.state == "APPROVED").map(|r| user_of(r.author.clone())).collect();
@@ -242,7 +242,7 @@ impl Pr {
         };
         let pipeline = wire::pipeline(&self.commits).map(|status| Pipeline { status, web_url: Some(format!("{}/checks", self.url)) });
         forge::Mr {
-            project: project.to_owned(),
+            project: project.clone(),
             number: self.number,
             title: self.title,
             description: self.body.unwrap_or_default(),
@@ -589,7 +589,7 @@ const COMMENT_FIELDS: &str = "id fullDatabaseId body createdAt updatedAt state a
 impl Client {
     /// Every PR waiting on me; with `project`, only that repository's, plus all its other open PRs.
     /// Two calls in parallel keep each query small.
-    pub async fn queue(&self, project: Option<&str>) -> Result<Queue> {
+    pub async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
         let (mine_query, open_query) = (format!("{QUEUE}{PR_FIELDS}"), format!("{OPEN}{PR_FIELDS}"));
         let mine = self.graphql::<QueueData>(&mine_query, searches(project));
         let Some(project) = project else { return Ok(queue_from(mine.await?, None, vec![])) };
@@ -633,7 +633,7 @@ impl Client {
     }
 
     /// Which of `numbers` in `project` are merged or closed: one query per fifty, each PR an alias.
-    pub async fn finished(&self, project: &str, numbers: &[u64]) -> Result<Vec<u64>> {
+    pub async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
         let (owner, name) = owner_and_name(project)?;
         let mut done = vec![];
         for chunk in numbers.chunks(50) {
@@ -816,7 +816,7 @@ pub(super) fn queue_from_json(mine: &str, open: Option<(&str, &str)>) -> Result<
     let mine: QueueData = serde_json::from_str::<wire::Answer<QueueData>>(mine)?.into_data()?;
     let Some((body, project)) = open else { return Ok(queue_from(mine, None, vec![])) };
     let open: OpenData = serde_json::from_str::<wire::Answer<OpenData>>(body)?.into_data()?;
-    Ok(queue_from(mine, Some(project), prs(open.repository.context("no repository")?.pull_requests)))
+    Ok(queue_from(mine, Some(&project.into()), prs(open.repository.context("no repository")?.pull_requests)))
 }
 
 #[cfg(test)]
@@ -930,7 +930,7 @@ mod tests {
 
     #[test]
     fn searches_are_scoped_with_repo() {
-        let scoped = searches(Some("acme/widgets"));
+        let scoped = searches(Some(&"acme/widgets".into()));
         assert_eq!(scoped["requested"], "is:pr is:open archived:false review-requested:@me repo:acme/widgets");
         assert_eq!(searches(None)["reviewed"], "is:pr is:open archived:false reviewed-by:@me -author:@me");
     }
@@ -1003,7 +1003,7 @@ mod tests {
             }}})))
             .mount(&server)
             .await;
-        assert_eq!(client(&server).finished("acme/widgets", &[7, 8, 9]).await.unwrap(), [7, 9]);
+        assert_eq!(client(&server).finished(&"acme/widgets".into(), &[7, 8, 9]).await.unwrap(), [7, 9]);
     }
 
     #[tokio::test]

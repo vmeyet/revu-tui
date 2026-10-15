@@ -3,7 +3,7 @@ use super::Client;
 use super::wire::{self, Approvals, Discussion, DraftNote, NewDraft};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::http::{self, HttpError};
-use crate::forge::{self, DiffFile, MrKey, ThreadId};
+use crate::forge::{self, DiffFile, MrKey, ProjectPath, ThreadId};
 use anyhow::{Context, Result, anyhow};
 use reqwest::{Method, StatusCode};
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use serde_json::json;
 
 #[derive(Deserialize)]
 struct Project {
-    path_with_namespace: String,
+    path_with_namespace: ProjectPath,
 }
 
 #[derive(Deserialize)]
@@ -26,8 +26,8 @@ struct MrIid {
 }
 
 /// GitLab takes the URL-encoded path wherever it takes a numeric project id.
-pub(super) fn project_path(project: &str) -> String {
-    format!("projects/{}", url_encode(project))
+pub(super) fn project_path(project: &ProjectPath) -> String {
+    format!("projects/{}", url_encode(project.as_str()))
 }
 
 fn mr_path(key: &MrKey) -> String {
@@ -136,13 +136,13 @@ impl From<JobWire> for Found {
 
 impl Client {
     /// The path of the project with this numeric id.
-    pub async fn project_path(&self, id: u64) -> Result<String> {
+    pub async fn project_path(&self, id: u64) -> Result<ProjectPath> {
         let project: Project = self.http.get(&format!("projects/{id}")).await.with_context(|| format!("project {id}"))?;
         Ok(project.path_with_namespace)
     }
 
     /// The open MR whose source is `branch`, if any.
-    pub async fn mr_for_branch(&self, project: &str, branch: &str) -> Result<Option<u64>> {
+    pub async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
         let path = format!("{}/merge_requests?state=opened&source_branch={}", project_path(project), url_encode(branch));
         let found: Vec<MrIid> = self.http.get(&path).await?;
         Ok(found.first().map(|m| m.iid))
@@ -161,7 +161,7 @@ impl Client {
     }
 
     /// The whole file at `sha`, to show the lines around a hunk.
-    pub async fn file(&self, project: &str, path: &str, sha: &str) -> Result<String> {
+    pub async fn file(&self, project: &ProjectPath, path: &str, sha: &str) -> Result<String> {
         self.http.get_text(&format!("{}/repository/files/{}/raw?ref={sha}", project_path(project), url_encode(path))).await
     }
 
@@ -195,7 +195,7 @@ impl Client {
     }
 
     /// Which of `numbers` in `project` are merged or closed, a hundred per request.
-    pub async fn finished(&self, project: &str, numbers: &[u64]) -> Result<Vec<u64>> {
+    pub async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
         let mut done = vec![];
         for chunk in numbers.chunks(100) {
             let iids: String = chunk.iter().map(|n| format!("&iids[]={n}")).collect();
@@ -376,8 +376,8 @@ mod tests {
             .mount(&server)
             .await;
         let client = client(&server);
-        assert_eq!(client.project_path(7).await.unwrap(), "acme/widgets");
-        assert_eq!(client.mr_for_branch("acme/widgets", "feat/checkout").await.unwrap(), Some(42));
+        assert_eq!(client.project_path(7).await.unwrap().as_str(), "acme/widgets");
+        assert_eq!(client.mr_for_branch(&"acme/widgets".into(), "feat/checkout").await.unwrap(), Some(42));
     }
 
     #[tokio::test]
@@ -418,9 +418,9 @@ mod tests {
         let mut mr = mr_json();
         mr["squash_on_merge"] = json!(true);
         mr["force_remove_source_branch"] = json!(true);
-        let plan = parse::<wire::Mr>(&mr.to_string()).into_model("acme/widgets").merge;
+        let plan = parse::<wire::Mr>(&mr.to_string()).into_model(&"acme/widgets".into()).merge;
         assert_eq!(plan, forge::MergePlan { method: forge::MergeMethod::Squash, remove_branch: true });
-        let plain = parse::<wire::Mr>(&mr_json().to_string()).into_model("acme/widgets").merge;
+        let plain = parse::<wire::Mr>(&mr_json().to_string()).into_model(&"acme/widgets".into()).merge;
         assert_eq!(plain, forge::MergePlan::default());
     }
 
@@ -627,7 +627,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string("fn main() {}\n"))
             .mount(&server)
             .await;
-        assert_eq!(client(&server).file("acme/widgets", "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
+        assert_eq!(client(&server).file(&"acme/widgets".into(), "src/pay/charge.rs", "abc123").await.unwrap(), "fn main() {}\n");
     }
     #[tokio::test]
     async fn checks_read_the_newest_pipeline_and_group_its_jobs_by_stage() {
@@ -706,7 +706,7 @@ mod tests {
             ])))
             .mount(&server)
             .await;
-        assert_eq!(client(&server).finished("acme/widgets", &[40, 41, 42]).await.unwrap(), [40, 42]);
+        assert_eq!(client(&server).finished(&"acme/widgets".into(), &[40, 41, 42]).await.unwrap(), [40, 42]);
         let asked = server.received_requests().await.unwrap();
         assert!(asked[0].url.query().unwrap_or_default().contains("41"), "the numbers go in the request");
     }

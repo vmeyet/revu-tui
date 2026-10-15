@@ -7,7 +7,7 @@ mod rest;
 mod wire;
 
 use super::http::{Flavor, Transport, scrub};
-use super::{LineRef, Side};
+use super::{LineRef, ProjectPath, Side};
 use crate::auth::Credentials;
 use anyhow::{Context, Result};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue};
@@ -98,11 +98,8 @@ pub fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
 }
 
 /// `owner/repo` split for GraphQL, which names a repository by its two halves.
-fn owner_and_name(project: &str) -> Result<(&str, &str)> {
-    project
-        .split_once('/')
-        .filter(|(o, n)| !o.is_empty() && !n.is_empty())
-        .with_context(|| format!("not a repository: {project} (owner/repo)"))
+fn owner_and_name(project: &ProjectPath) -> Result<(&str, &str)> {
+    project.as_str().split_once('/').with_context(|| format!("not a repository: {project} (owner/repo)"))
 }
 
 #[cfg(test)]
@@ -208,8 +205,6 @@ mod tests {
 
     #[test]
     fn repositories_split_into_owner_and_name() {
-        assert_eq!(owner_and_name("acme/widgets").unwrap(), ("acme", "widgets"));
-        assert!(owner_and_name("widgets").is_err());
-        assert!(owner_and_name("/widgets").is_err());
+        assert_eq!(owner_and_name(&"acme/widgets".into()).unwrap(), ("acme", "widgets"));
     }
 }

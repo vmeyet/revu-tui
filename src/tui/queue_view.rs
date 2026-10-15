@@ -23,7 +23,7 @@ const KINDS: [&str; 12] = ["feat", "fix", "docs", "refactor", "test", "chore", "
 
 pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let theme = app.theme;
-    let scope = app.scope().unwrap_or_else(|| "all".to_owned());
+    let scope = app.scope().map_or_else(|| "all".to_owned(), |project| project.to_string());
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
     let title = truncate(&format!("Queue · {scope}{view}"), area.width.saturating_sub(4) as usize);
     let block = pane(theme, &title, app.focus == Focus::Queue);

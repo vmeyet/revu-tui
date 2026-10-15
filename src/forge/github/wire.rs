@@ -1,5 +1,5 @@
 //! GitHub's shapes, as REST and GraphQL send them, and their turn into the neutral model.
-use crate::forge::{self, LineRef, PipelineStatus, Position, QueueMr, Refs, ReviewState, ReviewerState, Side};
+use crate::forge::{self, LineRef, PipelineStatus, Position, ProjectPath, QueueMr, Refs, ReviewState, ReviewerState, Side};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -179,7 +179,7 @@ pub struct QueuePr {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Repository {
-    pub name_with_owner: String,
+    pub name_with_owner: ProjectPath,
 }
 
 /// A review state as the queue sorts it: a pending request counts over any earlier review.

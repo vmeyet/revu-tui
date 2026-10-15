@@ -35,7 +35,7 @@ impl Fields {
             title: mr.title.clone(),
             url: mr.web_url.clone(),
             author: mr.author.clone(),
-            project: mr.project.clone(),
+            project: mr.project.to_string(),
             branch: mr.source_branch.clone(),
         }
     }
@@ -47,7 +47,7 @@ impl Fields {
             title: mr.title.clone(),
             url: mr.web_url.clone(),
             author: mr.author.username.clone(),
-            project: mr.project.clone(),
+            project: mr.project.to_string(),
             branch: mr.source_branch.clone(),
         }
     }

@@ -57,9 +57,9 @@ pub struct Mr {
 
 impl Mr {
     /// The REST answer does not name its project's path; the caller asked by it and knows it.
-    pub fn into_model(self, project: &str) -> forge::Mr {
+    pub fn into_model(self, project: &forge::ProjectPath) -> forge::Mr {
         forge::Mr {
-            project: project.to_owned(),
+            project: project.clone(),
             number: self.iid,
             title: self.title,
             description: self.description.unwrap_or_default(),
@@ -412,8 +412,8 @@ pub(crate) mod fixture {
     /// An MR from its REST answer; the project path comes from its `web_url`.
     pub fn mr(json: &str) -> forge::Mr {
         let wire: Mr = parse(json);
-        let project = wire.web_url.split("/-/merge_requests/").next().and_then(|u| u.splitn(4, '/').nth(3)).unwrap_or("").to_owned();
-        wire.into_model(&project)
+        let project = wire.web_url.split("/-/merge_requests/").next().and_then(|u| u.splitn(4, '/').nth(3)).map(forge::ProjectPath::from);
+        wire.into_model(&project.expect("the web_url names the project"))
     }
 
     pub fn discussion(json: &str) -> forge::Discussion {

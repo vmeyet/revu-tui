@@ -845,7 +845,7 @@ mod tests {
     #[test]
     fn a_picture_that_cannot_be_drawn_reads_as_its_alt_and_links_to_the_forge() {
         let thumbs = Thumbs::off();
-        let web = |url: &str| crate::forge::image::web_url("gitlab.com", "acme/widgets", url);
+        let web = |url: &str| crate::forge::image::web_url("gitlab.com", &"acme/widgets".into(), url);
         let image = Image { alt: "the chart".into(), url: "/uploads/ab12/chart.png".into() };
         let rows = lay_out(Piece::Picture(image), &thumbs, 40, Theme::default(), &web);
         assert_eq!(text(&[rows[0].0.clone()]), ["[image: the chart]"]);

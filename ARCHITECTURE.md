@@ -13,7 +13,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit` |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends; every method takes and returns the neutral model |
-| `forge/model.rs` | The neutral model: `MrKey`, `Mr`, `DiffFile`, `Discussion`, `Note`, `Draft`, `Sha`, ... |
+| `forge/model.rs` | The neutral model: `MrKey`, `ProjectPath`, `Mr`, `DiffFile`, `Discussion`, `Note`, `Draft`, `Sha`, ... |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and `graphql.rs`, shared shapes and conversion in `wire.rs` |
 | `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |

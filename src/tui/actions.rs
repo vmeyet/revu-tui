@@ -25,11 +25,11 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::LoadQueue { scope, from_cache } => {
                 if from_cache {
                     let wanted = scope.clone();
-                    if let Some(view) = backend.read_cache(move |b| b.cache.read::<QueueView>(&keys::queue_view(wanted.as_deref()))).await {
+                    if let Some(view) = backend.read_cache(move |b| b.cache.read::<QueueView>(&keys::queue_view(wanted.as_ref()))).await {
                         send(Incoming::QueueView { scope: scope.clone(), view });
                     }
                     let wanted = scope.clone();
-                    let pins = backend.read_cache(move |b| b.pins(wanted.as_deref())).await;
+                    let pins = backend.read_cache(move |b| b.pins(wanted.as_ref())).await;
                     send(Incoming::Pins { scope: scope.clone(), pins });
                 }
                 let wanted = scope.clone();
@@ -54,13 +54,13 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
             }
             Action::ChangeQueueView { scope, change, order } => {
-                let saved = backend.off(move |b| b.change_queue_view(scope.as_deref(), change, order)).await;
+                let saved = backend.off(move |b| b.change_queue_view(scope.as_ref(), change, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }
             }
             Action::ChangePin { scope, key, on, order } => {
-                let saved = backend.off(move |b| b.change_pin(scope.as_deref(), &key, on, order)).await;
+                let saved = backend.off(move |b| b.change_pin(scope.as_ref(), &key, on, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {
                     send(failed(Failure::Local, &e));
                 }

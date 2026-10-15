@@ -407,7 +407,7 @@ fn agent(config: &crate::config::Agent, compact_width: u16, checkout: Option<&cr
         tmux: std::env::var_os("TMUX").is_some_and(|socket| !socket.is_empty()),
         terminal: crate::agent::Terminal::detect(|name| std::env::var(name).ok()),
         compact_width,
-        started_in: checkout.map(|checkout| (checkout.project.clone(), checkout.root.clone())),
+        started_in: checkout.map(|checkout| (checkout.project.to_string(), checkout.root.clone())),
     };
     Some(crate::agent::Agent::new(config, machine, std::sync::Arc::new(crate::agent::Programs)))
 }

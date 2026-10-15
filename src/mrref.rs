@@ -1,12 +1,13 @@
 //! How a merge request is named on the command line: `group/project!42`, `owner/repo#42`, `42`, `!42`
 //! or `#42`, an MR or PR URL, or nothing.
+use crate::forge::ProjectPath;
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectRef {
-    Path(String),
+    Path(ProjectPath),
     Id(u64),
 }
 
@@ -20,7 +21,7 @@ pub struct MrRef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Mr(MrRef),
-    Branch { project: String, branch: String },
+    Branch { project: ProjectPath, branch: String },
 }
 
 impl Target {
@@ -36,7 +37,7 @@ impl Target {
 }
 
 /// `local_project` is only asked for the bare `42`, `!42` and `#42` forms.
-pub fn parse(text: &str, local_project: impl FnOnce() -> Option<String>) -> Result<MrRef> {
+pub fn parse(text: &str, local_project: impl FnOnce() -> Option<ProjectPath>) -> Result<MrRef> {
     let text = text.trim();
     if let Some(url) = text.strip_prefix("https://").or_else(|| text.strip_prefix("http://")) {
         return parse_url(url).with_context(|| format!("not a merge request URL: {text}"));
@@ -51,7 +52,7 @@ pub fn parse(text: &str, local_project: impl FnOnce() -> Option<String>) -> Resu
             local_project().context("`42`, `!42` and `#42` need a checkout with an origin remote: name the MR as group/project!42")?,
         ),
         digits if digits.bytes().all(|b| b.is_ascii_digit()) => ProjectRef::Id(digits.parse()?),
-        path => ProjectRef::Path(path.to_owned()),
+        path => ProjectRef::Path(ProjectPath::parse(path).with_context(|| format!("not a project path: {path}"))?),
     };
     Ok(MrRef { project, iid })
 }
@@ -62,11 +63,11 @@ fn parse_url(without_scheme: &str) -> Option<MrRef> {
     let (_, rest) = path.split_once('/')?;
     let (project, tail) = rest.split_once("/-/merge_requests/").or_else(|| rest.split_once("/pull/"))?;
     let iid = tail.split('/').next()?.parse().ok()?;
-    Some(MrRef { project: ProjectRef::Path(project.trim_matches('/').to_owned()), iid })
+    Some(MrRef { project: ProjectRef::Path(ProjectPath::parse(project.trim_matches('/'))?), iid })
 }
 
 /// `git@host:group/project.git` or `https://host/group/project(.git)` → `group/project`.
-pub fn project_from_remote(url: &str) -> Option<String> {
+pub fn project_from_remote(url: &str) -> Option<ProjectPath> {
     let url = url.trim();
     let path = if let Some((_, rest)) = url.split_once("://") {
         rest.split_once('/')?.1
@@ -76,10 +77,10 @@ pub fn project_from_remote(url: &str) -> Option<String> {
         return None;
     };
     let path = path.trim_matches('/').strip_suffix(".git").unwrap_or(path.trim_matches('/'));
-    (path.matches('/').count() >= 1).then(|| path.to_owned())
+    ProjectPath::parse(path)
 }
 
-fn local_project(dir: &Path) -> Option<String> {
+fn local_project(dir: &Path) -> Option<ProjectPath> {
     project_from_remote(&git(dir, ["remote", "get-url", "origin"])?)
 }
 
@@ -89,7 +90,7 @@ pub fn origin_host(dir: &Path) -> Option<String> {
 }
 
 /// The project of the checkout under `dir`, when its origin lives on `host`.
-pub fn checkout_project(dir: &Path, host: &str) -> Option<String> {
+pub fn checkout_project(dir: &Path, host: &str) -> Option<ProjectPath> {
     let remote = git(dir, ["remote", "get-url", "origin"])?;
     (remote_host(&remote)? == host).then(|| project_from_remote(&remote)).flatten()
 }
@@ -121,7 +122,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    fn no_local() -> Option<String> {
+    fn no_local() -> Option<ProjectPath> {
         None
     }
 
@@ -188,7 +189,7 @@ mod tests {
             ("/local/path", None),
         ];
         for (url, expected) in cases {
-            assert_eq!(project_from_remote(url).as_deref(), expected, "{url}");
+            assert_eq!(project_from_remote(url).as_ref().map(ProjectPath::as_str), expected, "{url}");
         }
     }
 

@@ -2,6 +2,7 @@
 //! Everything here but [`run`], [`write_private`] and [`Checkout`] is pure.
 use crate::config;
 use crate::diff::{Hunk, Line};
+use crate::forge::ProjectPath;
 use crate::review::{Anchor, Review, Row, Side};
 use anyhow::{Context, Result, bail};
 use glob::{MatchOptions, Pattern};
@@ -172,7 +173,7 @@ pub enum Source {
 
 impl Source {
     /// `checkout` is the project of the checkout and the commit its `HEAD` points at.
-    pub fn pick(project: &str, sha: &str, checkout: Option<(&str, &str)>) -> Self {
+    pub fn pick(project: &ProjectPath, sha: &str, checkout: Option<(&ProjectPath, &str)>) -> Self {
         match checkout {
             Some((there, head)) if there == project && head == sha => Source::Checkout,
             _ => Source::Forge,
@@ -184,7 +185,7 @@ impl Source {
 #[derive(Clone, Debug)]
 pub struct Checkout {
     pub root: PathBuf,
-    pub project: String,
+    pub project: ProjectPath,
 }
 
 impl Checkout {
@@ -394,10 +395,11 @@ mod tests {
 
     #[test]
     fn the_checkout_is_used_only_on_the_very_commit() {
-        assert_eq!(Source::pick("acme/widgets", "b1", Some(("acme/widgets", "b1"))), Source::Checkout);
-        assert_eq!(Source::pick("acme/widgets", "b1", Some(("acme/widgets", "c2"))), Source::Forge);
-        assert_eq!(Source::pick("acme/widgets", "b1", Some(("acme/other", "b1"))), Source::Forge);
-        assert_eq!(Source::pick("acme/widgets", "b1", None), Source::Forge);
+        let (widgets, other) = (ProjectPath::from("acme/widgets"), ProjectPath::from("acme/other"));
+        assert_eq!(Source::pick(&widgets, "b1", Some((&widgets, "b1"))), Source::Checkout);
+        assert_eq!(Source::pick(&widgets, "b1", Some((&widgets, "c2"))), Source::Forge);
+        assert_eq!(Source::pick(&widgets, "b1", Some((&other, "b1"))), Source::Forge);
+        assert_eq!(Source::pick(&widgets, "b1", None), Source::Forge);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::cache::keys;
 use crate::cli::ListArgs;
 use crate::ctx::{Ctx, Home};
-use crate::forge::{Hosts, Queue, QueueMr, Sections};
+use crate::forge::{Hosts, ProjectPath, Queue, QueueMr, Sections};
 use crate::log::OrWarn as _;
 use crate::ready;
 use crate::render::{self, Cell, Style, Theme, cell, right};
@@ -23,13 +23,13 @@ pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     let sections = Sections::merge(parts);
     let queues: Vec<&Queue> = std::iter::once(&queue).chain(&other_queues).collect();
     let sections = match ready(ctx, &others, &queues, args.cached).await {
-        Some(source) => source.apply(sections, ctx.forge.host(), &others, ctx.project.as_deref(), &queue.me, rules),
+        Some(source) => source.apply(sections, ctx.forge.host(), &others, ctx.project.as_ref(), &queue.me, rules),
         None => sections,
     };
     if ctx.json {
         return crate::ctx::emit(&sections);
     }
-    print!("{}", text(&ctx.hosts(&others), &sections, ctx.project.as_deref(), Theme::detect(), Utc::now()));
+    print!("{}", text(&ctx.hosts(&others), &sections, ctx.project.as_ref(), Theme::detect(), Utc::now()));
     Ok(())
 }
 
@@ -37,14 +37,14 @@ pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
 /// the last one kept for this scope.
 async fn ready(ctx: &Ctx, others: &[Home], queues: &[&Queue], cached: bool) -> Option<ready::Source> {
     let command = ctx.config.queue.ready.command.as_ref()?;
-    let key = keys::ready(ctx.project.as_deref());
+    let key = keys::ready(ctx.project.as_ref());
     let kept = || ctx.cache.read::<ready::Source>(&key);
     if cached {
         return kept();
     }
     match ready::output(command).await {
         Ok(output) => {
-            let source = ready::resolve(output, &ctx.forge, others, ctx.project.as_deref(), queues).await;
+            let source = ready::resolve(output, &ctx.forge, others, ctx.project.as_ref(), queues).await;
             ctx.cache.write(&key, &source).or_warn("caching the ready command's answer");
             Some(source)
         }
@@ -64,18 +64,18 @@ async fn other_queues(others: &[Home], cached: bool) -> Vec<Queue> {
 }
 
 fn cached(ctx: &Ctx) -> Result<Queue> {
-    let key = keys::queue(ctx.project.as_deref());
+    let key = keys::queue(ctx.project.as_ref());
     ctx.cache.read_entry::<Queue>(&key).map(|e| e.value).context("nothing cached yet: run `revu list` without --cached")
 }
 
 async fn fetched(ctx: &Ctx) -> Result<Queue> {
-    let queue = ctx.forge.queue(ctx.project.as_deref()).await?;
-    ctx.cache.write_entry(&keys::queue(ctx.project.as_deref()), &queue)?;
+    let queue = ctx.forge.queue(ctx.project.as_ref()).await?;
+    ctx.cache.write_entry(&keys::queue(ctx.project.as_ref()), &queue)?;
     Ok(queue)
 }
 
 /// `project` is the scope, named on a first line so a short list never reads as "nothing else is open".
-pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, theme: Theme, now: DateTime<Utc>) -> String {
+pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&ProjectPath>, theme: Theme, now: DateTime<Utc>) -> String {
     let scope = project.map(|p| format!("{}\n\n", theme.paint(&format!("{p} · --all for every project"), Style::Dim))).unwrap_or_default();
     let groups = [
         ("TO REVIEW", &sections.to_review),
@@ -106,7 +106,7 @@ pub(crate) fn text(hosts: &Hosts, sections: &Sections, project: Option<&str>, th
 fn row(hosts: &Hosts, mr: &QueueMr, mixed: bool, now: DateTime<Utc>) -> Vec<Cell> {
     let key = mr.key();
     let tag = hosts.tag(&key).filter(|_| mixed);
-    let project = tag.map_or_else(|| mr.project.clone(), |tag| format!("{tag}:{}", mr.project));
+    let project = tag.map_or_else(|| mr.project.to_string(), |tag| format!("{tag}:{}", mr.project));
     let title = if mr.draft { format!("Draft: {}", mr.title) } else { mr.title.clone() };
     vec![
         cell(format!("  {}{}", hosts.kind_of(&key).sigil(), mr.number), Style::Accent),
@@ -178,7 +178,13 @@ mod tests {
     #[test]
     fn a_scoped_list_names_its_project_and_shows_the_open_section() {
         let sections = fixture::queue_in(include_str!("../forge/gitlab/fixtures/queue_scoped.json"), "acme/widgets").sections(&[]);
-        let out = text(&Hosts::one("gitlab.com", crate::forge::Kind::GitLab), &sections, Some("acme/widgets"), Theme::plain(), Utc::now());
+        let out = text(
+            &Hosts::one("gitlab.com", crate::forge::Kind::GitLab),
+            &sections,
+            Some(&"acme/widgets".into()),
+            Theme::plain(),
+            Utc::now(),
+        );
         assert!(out.starts_with("acme/widgets · --all for every project\n\nTO REVIEW 1\n"), "{out}");
         let open = out.find("\nOPEN 1\n").expect("an OPEN section");
         let drafts = out.find("\nDRAFTS 1\n").expect("a DRAFTS section");

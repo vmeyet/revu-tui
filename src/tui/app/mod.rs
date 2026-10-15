@@ -78,7 +78,7 @@ pub use write::Publish;
 
 use crate::diff::fold::FoldState;
 pub use crate::forge::MrKey;
-use crate::forge::{Discussion, Position, QueueMr, Sections, Sha, ThreadId};
+use crate::forge::{Discussion, Position, ProjectPath, QueueMr, Sections, Sha, ThreadId};
 use crate::review::{Draft, Review};
 pub use crate::review::{Entry, EntryKind};
 use chrono::{DateTime, Utc};
@@ -99,18 +99,18 @@ pub enum Action {
     /// The queue for `scope` (a project path, or `None` for every project); `from_cache` paints
     /// the last answer for that scope first, so a switch never shows the other list.
     LoadQueue {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         from_cache: bool,
     },
     /// Remember one change to how the queue of `scope` is sorted and grouped; `order` counts the changes made.
     ChangeQueueView {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         change: ViewChange,
         order: u64,
     },
     /// Remember `key` pinned, or unpinned, in the queue of `scope`; `order` counts the changes made.
     ChangePin {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         key: MrKey,
         on: bool,
         order: u64,
@@ -415,7 +415,7 @@ pub enum Failure {
 pub enum Incoming {
     /// `cached` answers only paint while the fresh one is on its way.
     Queue {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         /// Who the forge says I am: it names me when no login stored my name, as with a token variable.
         me: String,
         sections: Sections,
@@ -424,17 +424,17 @@ pub enum Incoming {
     },
     /// How the queue of `scope` was last sorted and grouped.
     QueueView {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         view: QueueView,
     },
     /// The MRs pinned in the queue of `scope`, as the cache kept them.
     Pins {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         pins: BTreeSet<MrKey>,
     },
     /// The forge says these pins of `scope` are merged or closed.
     PinsGone {
-        scope: Option<String>,
+        scope: Option<ProjectPath>,
         gone: Vec<MrKey>,
     },
     /// `cached` is how old the cache entry was; `None` means it just came from GitLab.

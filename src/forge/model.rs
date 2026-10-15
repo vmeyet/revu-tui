@@ -4,6 +4,38 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// Display, serde as a plain JSON string, and a test-only `From<&str>` for a text newtype whose
+/// `parse` keeps its invariant: reading JSON goes through `parse` too.
+macro_rules! parsed_text {
+    ($name:ident, $what:literal) => {
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(&self.0)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let text = String::deserialize(deserializer)?;
+                $name::parse(&text).ok_or_else(|| serde::de::Error::custom(format!("`{text}` is not {}", $what)))
+            }
+        }
+
+        #[cfg(test)]
+        impl From<&str> for $name {
+            fn from(text: &str) -> Self {
+                $name::parse(text).unwrap_or_else(|| panic!("`{text}` is not {}", $what))
+            }
+        }
+    };
+}
+
 /// The one way an MR is addressed: the path of its project (`group/sub/project`, `owner/repo`)
 /// and its number there.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -11,15 +43,36 @@ pub struct MrKey {
     /// The host it lives on, when that is not the one `revu` started with: a queue can hold several.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
-    pub project: String,
+    pub project: ProjectPath,
     pub number: u64,
 }
 
 impl MrKey {
-    pub fn new(project: impl Into<String>, number: u64) -> Self {
+    pub fn new(project: impl Into<ProjectPath>, number: u64) -> Self {
         Self { host: None, project: project.into(), number }
     }
 }
+
+/// A project's path on its forge: `group/sub/project` on GitLab, `owner/repo` on GitHub.
+/// Two or more `/`-separated names of ASCII letters, digits, `-`, `_` and `.`, none of them `.`
+/// or `..`, so it can name a cache folder. Stored as a plain JSON string.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ProjectPath(Arc<str>);
+
+impl ProjectPath {
+    pub fn parse(text: &str) -> Option<Self> {
+        let name = |part: &str| {
+            !matches!(part, "" | "." | "..") && part.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        };
+        (text.contains('/') && text.split('/').all(name)).then(|| Self(text.into()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+parsed_text!(ProjectPath, "a project path");
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
@@ -31,7 +84,7 @@ pub struct User {
 /// One merge request, with what the header and the approvals need.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Mr {
-    pub project: String,
+    pub project: ProjectPath,
     pub number: u64,
     pub title: String,
     pub description: String,
@@ -162,31 +215,7 @@ impl Sha {
     }
 }
 
-impl std::fmt::Display for Sha {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Serialize for Sha {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'de> Deserialize<'de> for Sha {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        Sha::parse(&text).ok_or_else(|| serde::de::Error::custom(format!("`{text}` is not a commit sha")))
-    }
-}
-
-#[cfg(test)]
-impl From<&str> for Sha {
-    fn from(text: &str) -> Self {
-        Sha::parse(text).unwrap_or_else(|| panic!("`{text}` is not a commit sha"))
-    }
-}
+parsed_text!(Sha, "a commit sha");
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pipeline {
@@ -782,6 +811,28 @@ mod tests {
             assert_eq!(Sha::parse(bad), None, "{bad:?}");
         }
         assert!(serde_json::from_str::<Refs>(r#"{"base": "aaaa", "start": "aaaa", "head": "../../x"}"#).is_err());
+    }
+
+    #[test]
+    fn a_project_path_holds_plain_names_only_so_no_cache_path_climbs_out() {
+        for good in ["acme/widgets", "acme/sub.group/My_Widgets-2"] {
+            assert_eq!(ProjectPath::parse(good).map(|path| path.to_string()).as_deref(), Some(good));
+        }
+        for bad in [
+            "",
+            "solo",
+            "acme/",
+            "/acme/widgets",
+            "acme//widgets",
+            "acme/..",
+            "./widgets",
+            "acme/wid gets",
+            "acme+widgets",
+            "acme\\widgets",
+        ] {
+            assert_eq!(ProjectPath::parse(bad), None, "{bad:?}");
+        }
+        assert!(serde_json::from_str::<MrKey>(r#"{"project": "../../etc", "number": 1}"#).is_err());
     }
 
     #[test]

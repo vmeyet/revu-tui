@@ -1,5 +1,5 @@
 use super::{Action, Brief, Focus, Input, MrKey, Open, Publish, Toast};
-use crate::forge::Sections;
+use crate::forge::{ProjectPath, Sections};
 use crate::tui::field::Field;
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
@@ -19,7 +19,7 @@ pub struct Settings {
     pub host: String,
     pub me: String,
     /// The project of the checkout `revu` runs in; `None` outside one or with `--all`.
-    pub project: Option<String>,
+    pub project: Option<ProjectPath>,
     /// The terminal's own background, when it said: `:set theme=` tints the new theme from it.
     pub ground: Option<u32>,
     /// Jev is switched on and holds a key: the queue and the files get its marks.
@@ -81,7 +81,7 @@ pub struct App {
     pub me: String,
     pub focus: Focus,
     /// The checkout's project; the queue shows only it unless `everywhere`.
-    pub project: Option<String>,
+    pub project: Option<ProjectPath>,
     pub everywhere: bool,
     pub sections: Option<Sections>,
     /// When each MR was last opened here, so the queue can mark what moved since.
@@ -407,7 +407,7 @@ impl App {
     }
 
     /// The project the queue is limited to, `None` for every project.
-    pub fn scope(&self) -> Option<String> {
+    pub fn scope(&self) -> Option<ProjectPath> {
         self.project.clone().filter(|_| !self.everywhere)
     }
 
