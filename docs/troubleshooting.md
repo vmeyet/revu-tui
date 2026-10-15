@@ -15,7 +15,7 @@ Find your problem in the left column, then apply the fix.
 | `o` opens the browser on another machine | Over ssh or mosh, copy the link instead: `y`, `U` on a thread, or `:copy` |
 | A copy does not reach my clipboard over ssh or mosh | Use a terminal that takes OSC 52 copies; in tmux, add `set -g set-clipboard on` |
 | `no token for gitlab.com` | Run `revu login --from-glab`, or set `GITLAB_TOKEN` |
-| `no token for gitlab.acme.dev` | Run `revu login gitlab.acme.dev`, or set `GITLAB_TOKEN` and pass `--host gitlab.acme.dev` |
+| `no token for gitlab.acme.dev` | Run `revu login gitlab.acme.dev`, or set `GITLAB_TOKEN` and `GITLAB_HOST=gitlab.acme.dev` |
 | `no token for github.com` | Run `revu login --from-gh github.com`, or set `GITHUB_TOKEN` (`GH_TOKEN` works too) |
 | `token rejected` at login | The token expired or lacks a scope: GitLab needs `api`, GitHub needs `repo` |
 | My config seems ignored | It moved to `~/.config/revu/config.toml`; revu moves an old one there once |

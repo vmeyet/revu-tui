@@ -70,10 +70,11 @@ impl SecretStore for SecurityCli {
     }
 }
 
-/// `security -i` splits its line on spaces and quotes, so an account holds only what a host or a
-/// provider name does: nothing in it can end the account and start another option.
+/// `security -i` splits its line on spaces and quotes, so an account holds only what a host (an IPv6
+/// one in brackets too) or a provider name does: nothing in it can end the account and start another option.
 fn plain(account: &str) -> Result<&str> {
-    let is_plain = !account.is_empty() && account.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':'));
+    let is_plain =
+        !account.is_empty() && account.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '[' | ']'));
     ensure!(is_plain, "not a keychain account name: {account:?}");
     Ok(account)
 }
@@ -128,7 +129,7 @@ mod tests {
             let err = store.set(account, "glpat-xxxx").unwrap_err().to_string();
             assert!(err.starts_with("not a keychain account name"), "{account:?}: {err}");
         }
-        for account in ["gitlab.com", "gitlab.acme.dev:8443", "anthropic", "slack-cli_test"] {
+        for account in ["gitlab.com", "gitlab.acme.dev:8443", "[fd00::1]:8443", "anthropic", "slack-cli_test"] {
             assert_eq!(plain(account).unwrap(), account);
         }
     }

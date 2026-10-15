@@ -91,7 +91,7 @@ Fixtures are invented: `acme/widgets!42`, user `nina`, token `glpat-xxxx`.
 ## Security
 
 - The token lives in the keychain (service `revu`, account `<host>`) through `/usr/bin/security`: written with `-i` so it never shows in `argv`, read back on a pipe; the account is checked to be a plain name first.
-- `GITLAB_TOKEN`, `GITHUB_TOKEN` (or `GH_TOKEN`) override the keychain for the main host of their forge only: `--host`, else `GITLAB_HOST`, else the config's `host`, else the forge's default host; the extra hosts of the queue use their keychain entry.
+- `GITLAB_TOKEN`, `GITHUB_TOKEN` (or `GH_TOKEN`) override the keychain for one host of their forge only: `--host`, else `GITLAB_HOST`, else the forge's default host; the config's `host` and the extra hosts of the queue use their keychain entry.
 - The token reaches one host: `forge::http::Transport` refuses any other scheme, host or port, and follows no redirect.
 - The one exception is github.com attachments: `Transport::fetch_web` takes the token to the web host, same scheme, for that single request.
 - No token in config, cache, logs, fixtures or `Debug` output; `Credentials` prints `<redacted>`.

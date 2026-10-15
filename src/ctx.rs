@@ -94,7 +94,7 @@ impl Ctx {
 }
 
 pub(crate) fn others(store: &dyn SecretStore, config: &Config, current: &str) -> Vec<Home> {
-    let mut hosts: Vec<&String> = config.host.iter().chain(config.hosts.keys()).filter(|h| h.as_str() != current).collect();
+    let mut hosts: Vec<&String> = config.host.iter().chain(config.hosts.keys()).filter(|h| !h.eq_ignore_ascii_case(current)).collect();
     hosts.sort();
     hosts.dedup();
     hosts
@@ -111,4 +111,22 @@ pub(crate) fn others(store: &dyn SecretStore, config: &Config, current: &str) ->
 pub(crate) fn emit<T: Serialize>(value: &T) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::MemoryStore;
+    use crate::config::Host;
+
+    #[test]
+    fn the_current_host_is_left_out_of_the_others_whatever_its_case() {
+        let store = MemoryStore::default();
+        store.set("GitLab.com", "glpat-xxxx").unwrap();
+        store.set("gl.acme.dev", "glpat-xxxx").unwrap();
+        let config =
+            Config { host: Some("GitLab.com".into()), hosts: [("gl.acme.dev".into(), Host::default())].into(), ..Config::default() };
+        let hosts: Vec<String> = others(&store, &config, "gitlab.com").into_iter().map(|home| home.host).collect();
+        assert_eq!(hosts, ["gl.acme.dev"]);
+    }
 }

@@ -12,9 +12,13 @@ Each entry says what changed, then where, then how to use it.
 - **Failures revu works around now show in the log.**
   A cache write that failed, a host left out of the queue or an unreadable key leaves a warning.
   Read `revu.log` in the cache folder when something looks off.
-- **A token from the environment goes only to the main host.**
-  With `GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` set and several hosts in the queue: the other hosts use their keychain token.
-  The main host is `--host`, else `GITLAB_HOST`, else `host` in the config, else gitlab.com or github.com; run `revu login <host>` for each other host.
+- **A token from the environment goes only to the host it names.**
+  With `GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` set: it goes to `--host`, else `GITLAB_HOST`, else gitlab.com or github.com, and every other host uses its keychain token.
+  `host` in the config no longer gets it; set `GITLAB_HOST` to that host as well, or run `revu login <host>`.
+- **`revu login` takes an IPv6 host.**
+  A host such as `[fd00::1]:8443` now stores its token in the keychain.
+- **A host written with capitals is asked once.**
+  When `host` in the config differs from the host in use only by case, the queue no longer fetches it twice.
 
 ## 0.9.0 - 2026-10-15
 

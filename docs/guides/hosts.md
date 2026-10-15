@@ -10,14 +10,15 @@ revu login github.com --from-gh           # github.com
 revu login gitlab.acme.dev --token - < token.txt
 ```
 
-`GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` override the keychain for scripts, on the main host only.
+`GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` override the keychain for scripts, on one host only.
 
 | Variable | Host it is sent to |
 |---|---|
-| `GITLAB_TOKEN` | `--host`, else `GITLAB_HOST`, else `host` in the config, when it is a GitLab host; else gitlab.com |
-| `GITHUB_TOKEN`, `GH_TOKEN` | `--host`, else `GITLAB_HOST`, else `host` in the config, when it is a GitHub host; else github.com |
+| `GITLAB_TOKEN` | `--host`, else `GITLAB_HOST`, when it is a GitLab host; else gitlab.com |
+| `GITHUB_TOKEN`, `GH_TOKEN` | `--host`, else `GITLAB_HOST`, when it is a GitHub host; else github.com |
 
-The other hosts of the queue use the token `revu login` stored for each.
+`host` in the config never gets a token variable: to send one to `gitlab.acme.dev`, set `GITLAB_HOST=gitlab.acme.dev` too.
+Every other host uses the token `revu login` stored for it.
 
 ## Which host revu uses
 
