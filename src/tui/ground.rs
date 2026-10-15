@@ -48,14 +48,18 @@ fn read_answer() -> Option<u32> {
 }
 
 /// `select(2)`, not `poll(2)`: macOS answers `poll` on a tty device at once, whatever is there.
+/// A descriptor `select` cannot hold reads as never readable.
 fn readable(tty: &std::fs::File, within: Duration) -> bool {
     let fd = tty.as_raw_fd();
+    if !usize::try_from(fd).is_ok_and(|slot| slot < libc::FD_SETSIZE) {
+        return false;
+    }
     #[allow(clippy::unnecessary_fallible_conversions, reason = "suseconds_t is i64 on Linux but i32 on macOS")]
     let mut timeout = libc::timeval {
         tv_sec: libc::time_t::try_from(within.as_secs()).unwrap_or(libc::time_t::MAX),
         tv_usec: libc::suseconds_t::try_from(within.subsec_micros()).unwrap_or(0),
     };
-    // SAFETY: the set is zeroed then holds one open descriptor below FD_SETSIZE, and select only
+    // SAFETY: the set is zeroed then holds one open descriptor, checked above to be below FD_SETSIZE, and select only
     // writes into the set and the timeout it is handed.
     unsafe {
         let mut set: libc::fd_set = std::mem::zeroed();

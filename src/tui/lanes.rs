@@ -41,7 +41,7 @@ mod tests {
         most.load(Ordering::SeqCst)
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn one_mr_runs_one_at_a_time_and_two_mrs_run_side_by_side() {
         let one = MrKey::new("acme/widgets", 42);
         assert_eq!(most_at_once([one.clone(), one.clone(), one]).await, 1);

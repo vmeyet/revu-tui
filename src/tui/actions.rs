@@ -318,7 +318,7 @@ mod tests {
         future(copy("text"));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn in_turn_runs_at_most_the_cap_at_once() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let (running, most) = (AtomicUsize::new(0), AtomicUsize::new(0));
