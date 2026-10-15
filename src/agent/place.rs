@@ -93,7 +93,7 @@ impl Place {
         pane: Option<&str>,
         reference: &str,
     ) -> Placed {
-        let said = show::said(ready, reference);
+        let said = show::session_notice(ready, reference);
         if let Some(pane) = pane.filter(|pane| terminal.focus(run, pane)) {
             return Placed { outcome: Outcome::Shown(format!("{said} · already open beside revu")), pane: Some(pane.to_owned()) };
         }
@@ -108,7 +108,7 @@ impl Place {
 
     /// The reader's command opens the pane; revu cannot tell later whether it is still there.
     fn by_command(&self, run: &dyn Run, command: &str, ready: &Ready, reference: &str) -> Placed {
-        let said = show::said(ready, reference);
+        let said = show::session_notice(ready, reference);
         if !self.is_beside(run) {
             return Placed::lent(ready, said);
         }

@@ -1,5 +1,5 @@
 //! The review pane: rows from `Review::rows()` turned into styled lines, only for the visible window.
-use super::app::{App, Entry, EntryKind, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
+use super::app::{App, ConversationList, EntryKind, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
 use super::drag::{self, TextRow};
 use super::table::{self, TableLine};
 use super::theme::Theme;
@@ -8,7 +8,7 @@ use super::ui::{DEPLOYED, draw_empty, pane, settle_scroll, short_age, truncate, 
 use crate::diff::words::{Segment, same_but_whitespace, segments};
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::forge::{Deployment, Kind, PipelineStatus};
-use crate::review::{Conversation, File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
+use crate::review::{File, FileKind, Mark, Marker, Markers, Place, Review, Row, Side};
 use crate::syntax::{self, Token};
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -155,8 +155,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     }
     let thread_rows = &mut app.thread_rows;
     let on_row = open.row_view();
-    let on_row = on_row.as_ref().map(|(conversations, entries, focused)| (conversations.as_slice(), entries.as_slice(), *focused));
-    let stretch = focused_range(&open.review, on_row.or_else(|| app.kept.pane_view(open)));
+    let stretch = focused_range(&open.review, on_row.as_ref().or_else(|| app.kept.pane_view(open)));
     let anchors = Anchors { markers: app.kept.markers(open), stretch };
     let height = body.height as usize;
     let width = body.width as usize;
@@ -719,7 +718,7 @@ fn with_table_lines<'a>(
     overflow: Overflow,
     theme: Theme,
 ) -> Vec<Span<'a>> {
-    let Some(line) = TableLine::of(text).filter(|_| syntax::is_markdown(&file.new_path)) else { return spans };
+    let Some(line) = TableLine::parse(text).filter(|_| syntax::is_markdown(&file.new_path)) else { return spans };
     let text_spans = spans.split_off(2.min(spans.len()));
     let pad = text_spans.last().filter(|span| is_blank(span)).cloned();
     let rows = match overflow {
@@ -764,10 +763,10 @@ impl Stretch {
 }
 
 /// The range of the thread or draft under the pane's cursor, when it spans several lines.
-fn focused_range(review: &Review, pane: Option<(&[Conversation], &[Entry], Option<Entry>)>) -> Option<Stretch> {
-    let (conversations, _, focused) = pane?;
-    let focused = focused?;
-    let position = match (&conversations.get(focused.conversation)?.thread, focused.kind) {
+fn focused_range(review: &Review, pane: Option<&ConversationList>) -> Option<Stretch> {
+    let pane = pane?;
+    let focused = pane.focused?;
+    let position = match (&pane.conversations.get(focused.conversation)?.thread, focused.kind) {
         (Some(id), _) => review.thread(id)?.first().position.clone()?,
         (None, EntryKind::Draft(index)) => review.drafts.get(index)?.position.clone()?,
         (None, EntryKind::Note(_)) => return None,

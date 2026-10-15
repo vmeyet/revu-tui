@@ -198,16 +198,16 @@ impl Checkout {
     /// Asked each time: the reader may have checked out another commit since `revu` started.
     pub async fn head(&self) -> Option<String> {
         let output = tokio::process::Command::new("git").arg("-C").arg(&self.root).args(["rev-parse", "HEAD"]).output().await.ok()?;
-        said(output)
+        printed_text(output)
     }
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
-    said(Command::new("git").arg("-C").arg(dir).args(args).output().ok()?)
+    printed_text(Command::new("git").arg("-C").arg(dir).args(args).output().ok()?)
 }
 
 /// What a successful git command printed, trimmed; nothing when it failed or printed nothing.
-fn said(output: std::process::Output) -> Option<String> {
+fn printed_text(output: std::process::Output) -> Option<String> {
     let text = String::from_utf8(output.stdout).ok()?.trim().to_owned();
     (output.status.success() && !text.is_empty()).then_some(text)
 }

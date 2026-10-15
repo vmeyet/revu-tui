@@ -1,5 +1,5 @@
 //! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
-use super::app::{App, Entry, EntryKind, Focus, List, ListRow, Open, Pane, ReviewInputs};
+use super::app::{App, ConversationList, Entry, EntryKind, Focus, List, ListRow, Open, Pane, ReviewInputs};
 use super::diff_view::{coloured, paint};
 use super::drag::{self, TextRow};
 use super::field::Field;
@@ -86,11 +86,11 @@ struct PaneInputs {
 }
 
 impl PaneInputs {
-    fn of(app: &App, width: usize) -> Option<Self> {
+    fn from_app(app: &App, width: usize) -> Option<Self> {
         let open = app.open.as_ref()?;
         let pane = open.pane.as_ref()?;
         Some(Self {
-            review: ReviewInputs::of(open),
+            review: ReviewInputs::from_open(open),
             pane: pane.unmoved(),
             here: at_cursor(open, pane),
             width,
@@ -106,11 +106,11 @@ impl PaneInputs {
 /// The last frame's layout while nothing it was made from changed.
 fn cached(app: &App, width: usize) -> Option<&Laid> {
     let last = app.pane_layout.as_ref()?;
-    PaneInputs::of(app, width).is_some_and(|inputs| inputs == last.inputs).then_some(&last.laid)
+    PaneInputs::from_app(app, width).is_some_and(|inputs| inputs == last.inputs).then_some(&last.laid)
 }
 
 fn fresh_layout(app: &App, width: usize) -> Option<PaneLayout> {
-    Some(PaneLayout { inputs: PaneInputs::of(app, width)?, laid: lay_out_pane(app, width)? })
+    Some(PaneLayout { inputs: PaneInputs::from_app(app, width)?, laid: lay_out_pane(app, width)? })
 }
 
 /// The pane, and the pictures it made room for: the caller paints them last, above the fades.
@@ -136,7 +136,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
     };
     let height = inner.height as usize;
     let (entries, current) =
-        app.open.as_ref().and_then(|open| app.kept.pane_view(open)).map(|(_, entries, current)| (entries, current)).unwrap_or_default();
+        app.open.as_ref().and_then(|open| app.kept.pane_view(open)).map(|view| (view.entries.as_slice(), view.focused)).unwrap_or_default();
     let on = |entry: &Option<Entry>| entry.is_some() && *entry == current;
     let first = rows.iter().position(|(entry, _)| on(entry)).unwrap_or(0);
     let last = rows.iter().rposition(|(entry, _)| on(entry)).unwrap_or(0);
@@ -200,7 +200,7 @@ pub fn rows_needed(app: &App, width: u16) -> u16 {
 fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
     let theme = app.theme;
     let open = app.open.as_ref()?;
-    let (conversations, entries, _) = open.pane_view()?;
+    let ConversationList { conversations, entries, .. } = open.pane_view()?;
     let pane = open.pane.as_ref()?;
     let web = |url: &str| app.web_url(open, url);
     let here = at_cursor(open, pane);
@@ -417,7 +417,7 @@ impl InlineLayout {
     /// Forgets the rows laid out from anything but what `open` and `look` show now.
     pub(super) fn fit(&mut self, open: &Open, look: Look) {
         let inputs = InlineInputs {
-            review: ReviewInputs::of(open),
+            review: ReviewInputs::from_open(open),
             unfolded: open.review.unfolded.clone(),
             width: look.width,
             theme: look.theme,
@@ -442,7 +442,7 @@ impl InlineLayout {
 fn inline_stops(review: &Review, place: &Place, look: Look) -> Vec<StopRows> {
     let conversations = review.conversations(place);
     let entries = review.stops(&conversations);
-    let thumbs = Thumbs::off();
+    let thumbs = Thumbs::disabled();
     let rows_of = |piece: Piece| lay_out(piece, &thumbs, look.width, look.theme, &str::to_owned).into_iter().map(|(line, _)| line);
     let mut stops = vec![vec![]; entries.len()];
     for (index, conversation) in conversations.iter().enumerate() {
@@ -844,7 +844,7 @@ mod tests {
 
     #[test]
     fn a_picture_that_cannot_be_drawn_reads_as_its_alt_and_links_to_the_forge() {
-        let thumbs = Thumbs::off();
+        let thumbs = Thumbs::disabled();
         let web = |url: &str| crate::forge::image::web_url("gitlab.com", &"acme/widgets".into(), url);
         let image = Image { alt: "the chart".into(), url: "/uploads/ab12/chart.png".into() };
         let rows = lay_out(Piece::Picture(image), &thumbs, 40, Theme::default(), &web);
@@ -864,7 +864,7 @@ mod tests {
         assert_eq!(rows.len(), 5, "200x100 pixels at a 10x20 font is 20x5 cells");
         assert!(matches!(&rows[0].1, Some(Mark::Picture { size, .. }) if size.width == 20 && size.height == 5));
         assert!(rows[1..].iter().all(|(_, mark)| mark.is_none()));
-        thumbs.wanted(["https://x/b.png".to_owned()]);
+        thumbs.request_new(["https://x/b.png".to_owned()]);
         let loading =
             lay_out(Piece::Picture(Image { url: "https://x/b.png".into(), ..image }), &thumbs, 40, Theme::default(), &|u: &str| {
                 u.to_owned()

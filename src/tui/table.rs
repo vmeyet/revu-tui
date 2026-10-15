@@ -166,7 +166,7 @@ pub(super) enum TableLine {
 }
 
 impl TableLine {
-    pub(super) fn of(text: &str) -> Option<Self> {
+    pub(super) fn parse(text: &str) -> Option<Self> {
         let text = text.trim();
         if !text.starts_with('|') {
             return None;
@@ -361,7 +361,7 @@ mod tests {
     }
 
     fn boxed_text(text: &str) -> Option<String> {
-        let line = TableLine::of(text)?;
+        let line = TableLine::parse(text)?;
         let spans = boxed(vec![Span::raw(text.to_owned())], line, Theme::default());
         Some(spans.iter().map(|s| s.content.as_ref()).collect())
     }
@@ -382,9 +382,9 @@ mod tests {
 
     #[test]
     fn lines_that_do_not_start_with_a_pipe_are_no_table() {
-        assert_eq!(TableLine::of("a | b"), None);
-        assert_eq!(TableLine::of("---"), None);
-        assert_eq!(TableLine::of(""), None);
+        assert_eq!(TableLine::parse("a | b"), None);
+        assert_eq!(TableLine::parse("---"), None);
+        assert_eq!(TableLine::parse(""), None);
     }
 
     #[test]
@@ -400,7 +400,7 @@ mod tests {
     }
 
     fn wrapped_text(text: &str, width: usize) -> Option<Vec<String>> {
-        let rows = wrapped(&[Span::raw(text.to_owned())], TableLine::of(text)?, width, Style::default(), Theme::default())?;
+        let rows = wrapped(&[Span::raw(text.to_owned())], TableLine::parse(text)?, width, Style::default(), Theme::default())?;
         Some(rows.iter().map(|row| row.iter().map(|s| s.content.as_ref()).collect()).collect())
     }
 

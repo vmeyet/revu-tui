@@ -119,7 +119,7 @@ impl Direction {
 }
 
 impl Branch {
-    fn of(item: Item) -> Self {
+    fn new(item: Item) -> Self {
         Self { item, unsure: false, site: None, children: vec![] }
     }
 }
@@ -240,12 +240,12 @@ impl Walk<'_> {
                 None if bridges < BRIDGES => {
                     let children = self.children(link.to, bridges + 1, &[path, &[link.to]].concat());
                     if !children.is_empty() {
-                        found.push(linked(Branch { children, ..Branch::of(Item::Bridge(graph.name(link.to))) }));
+                        found.push(linked(Branch { children, ..Branch::new(Item::Bridge(graph.name(link.to))) }));
                     }
                 }
                 None => {
                     for (node, hops) in graph.beyond(link.to, path) {
-                        found.push(linked(Branch { children: vec![self.changed(node, path)], ..Branch::of(Item::Fold(hops)) }));
+                        found.push(linked(Branch { children: vec![self.changed(node, path)], ..Branch::new(Item::Fold(hops)) }));
                     }
                 }
             }
@@ -256,26 +256,26 @@ impl Walk<'_> {
     /// A change, whose node is its index: in full the first time, a reference after, a cycle when it is above.
     fn changed(&mut self, change: usize, path: &[usize]) -> Branch {
         if path.contains(&change) {
-            return Branch::of(Item::Cycle(self.graph.name(change)));
+            return Branch::new(Item::Cycle(self.graph.name(change)));
         }
         if self.seen[change] {
-            return Branch::of(Item::Seen(change));
+            return Branch::new(Item::Seen(change));
         }
         self.seen[change] = true;
-        Branch { children: self.children(change, 0, &[path, &[change]].concat()), ..Branch::of(Item::Changed(change)) }
+        Branch { children: self.children(change, 0, &[path, &[change]].concat()), ..Branch::new(Item::Changed(change)) }
     }
 
     /// In the whole stack, an unchanged function: in full the first time, bare after, a cycle when it is above.
     fn unchanged(&mut self, node: usize, path: &[usize]) -> Branch {
         let name = self.graph.name(node);
         if path.contains(&node) {
-            return Branch::of(Item::Cycle(name));
+            return Branch::new(Item::Cycle(name));
         }
         if self.seen[node] {
-            return Branch::of(Item::Bridge(name));
+            return Branch::new(Item::Bridge(name));
         }
         self.seen[node] = true;
-        Branch { children: self.children(node, 0, &[path, &[node]].concat()), ..Branch::of(Item::Bridge(name)) }
+        Branch { children: self.children(node, 0, &[path, &[node]].concat()), ..Branch::new(Item::Bridge(name)) }
     }
 }
 

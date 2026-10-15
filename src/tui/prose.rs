@@ -138,7 +138,7 @@ fn sides(change: &BlockChange, changed: bool, look: &Look) -> (Option<Marked>, O
     match change {
         BlockChange::Same { old, new } => {
             let faded = faded.filter(|_| changed);
-            (Some(same(old, faded)), Some(same(new, faded)))
+            (Some(marked_same(old, faded)), Some(marked_same(new, faded)))
         }
         BlockChange::Added(block) => (None, Some(Marked { bar: added, lines: marked(block, None, &[], identity) })),
         BlockChange::Removed(block) => (Some(Marked { bar: removed, lines: marked(block, faded, &[], identity) }), None),
@@ -158,7 +158,7 @@ fn shows_old_inline(change: &BlockChange) -> bool {
     }
 }
 
-fn same(block: &SourceBlock, faded: Option<Rgb>) -> Marked {
+fn marked_same(block: &SourceBlock, faded: Option<Rgb>) -> Marked {
     Marked { bar: None, lines: marked(block, faded, &[], identity) }
 }
 
@@ -283,7 +283,7 @@ mod tests {
         source(text).remove(0)
     }
 
-    fn same(text: &str) -> BlockChange {
+    fn same_block(text: &str) -> BlockChange {
         BlockChange::Same { old: block(text), new: block(text) }
     }
 
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn a_long_unchanged_run_folds_to_its_ends_unless_unfolded() {
-        let mut changes: Vec<BlockChange> = ["One.", "Two.", "Three.", "Four.", "Five."].into_iter().map(same).collect();
+        let mut changes: Vec<BlockChange> = ["One.", "Two.", "Three.", "Four.", "Five."].into_iter().map(same_block).collect();
         changes.push(BlockChange::Added(block("Six.")));
         assert_eq!(
             plain(&rows(&changes, false, Layout::Inline, &look())),

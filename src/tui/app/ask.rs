@@ -115,7 +115,7 @@ impl App {
             self.toast("a then a asks anything · h answers kept · g agent session");
             return vec![];
         }
-        let scope = here(open);
+        let scope = scope_at_cursor(open);
         self.question_box(Input::Ask { scope: Box::new(scope), target: Box::new(self.lines_target()) })
     }
 
@@ -137,7 +137,7 @@ impl App {
             self.toast("open an MR first");
             return vec![];
         };
-        let scope = here(open);
+        let scope = scope_at_cursor(open);
         let target = self.lines_target();
         self.ask(&scope, &Prompt::Free(question), target)
     }
@@ -324,7 +324,7 @@ impl App {
 }
 
 /// What `a e` and `a a` are about: the hunk under the cursor, its file on a file row, else the MR.
-fn here(open: &Open) -> Scope {
+fn scope_at_cursor(open: &Open) -> Scope {
     match open.row() {
         Some(Row::Line { file, hunk, .. } | Row::Pair { file, hunk, .. } | Row::Hunk { file, index: hunk, .. }) => {
             Scope::Hunk(open.review.files[*file].new_path.clone(), *hunk)

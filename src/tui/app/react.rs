@@ -43,7 +43,7 @@ impl Pick {
 
 impl Search {
     /// Equally good matches keep the order they are listed in, so my most used come first among them.
-    fn of(query: String, most_used: &[Emoji]) -> Self {
+    fn ranked(query: String, most_used: &[Emoji]) -> Self {
         let rest = Emoji::ALL.into_iter().chain(Emoji::others()).filter(|e| !most_used.contains(e));
         let names = most_used.iter().copied().chain(rest).map(|e| (e.gitlab().to_owned(), e));
         let found = crate::fuzzy::rank(&query, names).into_iter().map(|(_, e)| e).collect();
@@ -102,7 +102,7 @@ impl App {
         let Some(pick) = self.react.take() else { return vec![] };
         let last = pick.choices().len().saturating_sub(1);
         let moved = |selected: usize| Some(Pick { selected, ..pick.clone() });
-        let find = |query: String| Search::of(query, &self.most_used());
+        let find = |query: String| Search::ranked(query, &self.most_used());
         let (next, chosen) = match (key.code, &pick.search) {
             (KeyCode::Enter, _) => (None, pick.choices().get(pick.selected).copied()),
             (KeyCode::Right, _) | (KeyCode::Char('l'), None) => (moved((pick.selected + 1).min(last)), None),

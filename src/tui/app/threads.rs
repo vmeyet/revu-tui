@@ -2,7 +2,7 @@
 //! under it. A thread is one row until `enter` unfolds it into a row per note, and the thread keys act on the row
 //! under the cursor as they do in the pane. A comment written from the diff is written there too, in a box under
 //! the row it will land after.
-use super::{App, Focus, Input, Open};
+use super::{App, ConversationList, Focus, Input, Open};
 use crate::forge::ThreadId;
 use crate::review::{Anchor, Conversation, Entry, EntryKind, Place, Row, anchor_of};
 use std::collections::BTreeSet;
@@ -15,12 +15,12 @@ enum Here {
 
 impl Open {
     /// On a thread row: the conversations of its line, their cursor stops in the diff, and the row's own.
-    pub fn row_view(&self) -> Option<(Vec<Conversation>, Vec<Entry>, Option<Entry>)> {
+    pub fn row_view(&self) -> Option<ConversationList> {
         let row @ Row::Thread { stop, .. } = self.row()? else { return None };
         let conversations = self.review.conversations(&self.review.place_of(row)?);
         let entries = self.review.stops(&conversations);
         let focused = entries.get(*stop).copied();
-        Some((conversations, entries, focused))
+        Some(ConversationList { conversations, entries, focused })
     }
 
     /// Whether the pane shows `place`: not a line whose threads read in the diff.
@@ -31,7 +31,7 @@ impl Open {
     /// What `enter` folds or unfolds with the cursor at `place`; nothing on the row of my new draft.
     fn threads_here(&self, place: &Place) -> Option<Here> {
         match self.row_view() {
-            Some(view) => super::pane::stop_of(view)?.thread.map(Here::Thread),
+            Some(view) => super::pane::stop_of(&view)?.thread.map(Here::Thread),
             None => Some(Here::Line(self.review.conversations(place).into_iter().filter_map(|c| c.thread).collect())),
         }
     }

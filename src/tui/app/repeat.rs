@@ -59,13 +59,13 @@ mod tests {
             .collect()
     }
 
-    fn held(until: u64) -> Vec<u64> {
-        (0..=until).step_by(30).collect()
+    fn held_until(ms: u64) -> Vec<u64> {
+        (0..=ms).step_by(30).collect()
     }
 
     #[test]
     fn a_held_key_moves_one_row_then_two_then_four() {
-        let steps = steps(KeyCode::Char('j'), &held(1200));
+        let steps = steps(KeyCode::Char('j'), &held_until(1200));
         assert_eq!(steps.first(), Some(&1));
         assert_eq!(steps[300 / 30], 2);
         assert_eq!(steps.last(), Some(&4), "four is the most");
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn a_pause_starts_over() {
-        let mut times = held(600);
+        let mut times = held_until(600);
         times.push(900);
         assert_eq!(steps(KeyCode::Char('j'), &times).last(), Some(&1));
     }
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn another_key_starts_over() {
         let start = Instant::now();
-        let run = held(600).iter().fold(None, |run, &ms| Some(Repeat::after(run, KeyCode::Down, start + Duration::from_millis(ms))));
+        let run = held_until(600).iter().fold(None, |run, &ms| Some(Repeat::after(run, KeyCode::Down, start + Duration::from_millis(ms))));
         assert_eq!(run.map(Repeat::step), Some(2));
         assert_eq!(Repeat::after(run, KeyCode::Up, start + Duration::from_millis(630)).step(), 1);
     }

@@ -1,4 +1,4 @@
-use super::{Action, Brief, Focus, Input, MrKey, Open, Publish, Toast};
+use super::{Action, Brief, ConversationList, Focus, Input, MrKey, Open, Publish, Toast};
 use crate::forge::{ProjectPath, Sections};
 use crate::tui::field::Field;
 use crate::tui::theme::Theme;
@@ -366,7 +366,7 @@ impl App {
             kept: super::Kept::default(),
             pane_layout: None,
             thread_rows: crate::tui::thread_view::InlineLayout::default(),
-            thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::off, crate::tui::images::Thumbs::with),
+            thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::disabled, crate::tui::images::Thumbs::with_picker),
             viewing: None,
             agent: settings.agent,
             session_pick: None,
@@ -438,7 +438,7 @@ impl App {
     /// The pictures of the conversations the right pane shows that were never asked for.
     fn picture_requests(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let Some((conversations, _, _)) = self.kept.pane_view(open) else { return vec![] };
+        let Some(ConversationList { conversations, .. }) = self.kept.pane_view(open) else { return vec![] };
         let review = &open.review;
         let bodies = conversations.iter().flat_map(|c| {
             let notes =
@@ -447,7 +447,7 @@ impl App {
         });
         let urls: Vec<String> = bodies.flat_map(crate::review::image::images_in).map(|image| image.url).collect();
         let key = open.key.clone();
-        self.thumbs.wanted(urls).into_iter().map(|url| Action::LoadImage { key: key.clone(), url }).collect()
+        self.thumbs.request_new(urls).into_iter().map(|url| Action::LoadImage { key: key.clone(), url }).collect()
     }
 
     pub(super) fn schedule_queue(&mut self) {

@@ -155,7 +155,7 @@ struct Tails {
 }
 
 impl Tails {
-    fn of(app: &App, marks: Vec<Span<'static>>) -> Self {
+    fn for_layout(app: &App, marks: Vec<Span<'static>>) -> Self {
         if app.compact {
             return Self { title: vec![], under: [vec![Span::raw(" ")], marks].concat() };
         }
@@ -171,7 +171,7 @@ fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: us
     let (kind, rest) = conventional(&mr.title);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
     let marks = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
-    let Tails { title: tail, under } = Tails::of(app, marks);
+    let Tails { title: tail, under } = Tails::for_layout(app, marks);
     let used = BAR_W + indent + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
     let title = truncate(rest, width.saturating_sub(used));
     let pad = width.saturating_sub(used + title.width()) + 1;
@@ -256,7 +256,7 @@ fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: u
     let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
     match app.row_layout() {
         QueueLayout::Comfortable => {
-            let Tails { title: tail, under } = Tails::of(app, tail);
+            let Tails { title: tail, under } = Tails::for_layout(app, tail);
             let used = BAR_W + 2 + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
             let title = truncate(&title, width.saturating_sub(used));
             let pad = width.saturating_sub(used + title.width()) + 1;

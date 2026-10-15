@@ -225,7 +225,7 @@ enum Case {
 }
 
 impl Case {
-    fn said(self, reference: &str) -> String {
+    fn describe(self, reference: &str) -> String {
         match self {
             Case::Remembered => format!("the session revu remembered for {reference}"),
             Case::Opener => format!("the session that opened {reference}"),

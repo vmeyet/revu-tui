@@ -19,7 +19,7 @@ pub fn plan(sections: &Sections, me: &str, open: Option<&MrKey>, limit: usize) -
     let needs_me = sections.ready.iter().chain(&sections.to_review).filter(|mr| !mr.approved_by.iter().any(|who| who == me));
     let mut picked: Vec<Ahead> = vec![];
     for mr in needs_me.chain(&sections.mine) {
-        let ahead = ahead(mr);
+        let ahead = Ahead::from_mr(mr);
         if picked.len() == limit {
             break;
         }
@@ -30,8 +30,10 @@ pub fn plan(sections: &Sections, me: &str, open: Option<&MrKey>, limit: usize) -
     picked
 }
 
-fn ahead(mr: &QueueMr) -> Ahead {
-    Ahead { key: mr.key(), updated_at: mr.updated_at }
+impl Ahead {
+    fn from_mr(mr: &QueueMr) -> Self {
+        Self { key: mr.key(), updated_at: mr.updated_at }
+    }
 }
 
 impl App {

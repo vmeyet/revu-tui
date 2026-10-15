@@ -146,7 +146,7 @@ impl App {
 
     fn run_command(&mut self, command: Command) -> Vec<Action> {
         match command {
-            Command::Go(reference) => self.go(&reference),
+            Command::Go(reference) => self.open_reference(&reference),
             Command::Open => self.link_here().map(|url| vec![Action::OpenUrl(url)]).unwrap_or_default(),
             Command::Copy => self.link_here().map(|url| vec![Action::copy_link(url)]).unwrap_or_default(),
             Command::Approve => self.toggle_approval(),
@@ -196,7 +196,7 @@ impl App {
     }
 
     /// `!42`, `#42` or `42` pick the MR of that number in the queue; `group/project!42` names one anywhere.
-    fn go(&mut self, reference: &str) -> Vec<Action> {
+    fn open_reference(&mut self, reference: &str) -> Vec<Action> {
         let Some(key) = self.resolve(reference) else {
             self.warn(format!("no MR {reference} in the queue · name it in full: group/project!42"));
             return vec![];

@@ -690,7 +690,7 @@ pub fn bindable() -> impl Iterator<Item = (&'static str, &'static str)> {
 }
 
 /// `names` in their order, each kept once: `m` and `zv` are both `viewed`.
-fn once(names: impl Iterator<Item = &'static str>) -> Vec<&'static str> {
+fn without_repeats(names: impl Iterator<Item = &'static str>) -> Vec<&'static str> {
     names.fold(vec![], |mut kept, name| {
         if !kept.contains(&name) {
             kept.push(name);
@@ -701,12 +701,12 @@ fn once(names: impl Iterator<Item = &'static str>) -> Vec<&'static str> {
 
 /// Every action name `revu usage` lists, bindable ones first.
 pub fn listed_names() -> Vec<&'static str> {
-    once(ROWS.iter().filter_map(|row| row.name.counted()))
+    without_repeats(ROWS.iter().filter_map(|row| row.name.counted()))
 }
 
 /// The names `revu usage` lists under `section`, in table order.
 pub fn listed_in(section: Section) -> Vec<&'static str> {
-    once(ROWS.iter().filter(|row| row.section == Some(section)).filter_map(|row| row.name.counted()))
+    without_repeats(ROWS.iter().filter(|row| row.section == Some(section)).filter_map(|row| row.name.counted()))
 }
 
 #[cfg(test)]

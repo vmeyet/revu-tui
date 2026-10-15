@@ -80,14 +80,14 @@ impl ViewChange {
     pub fn apply(self, view: QueueView) -> QueueView {
         match self {
             ViewChange::Order(order) => QueueView { order, ..view },
-            ViewChange::Section { name, closed } => QueueView { closed_sections: with(view.closed_sections, name, closed), ..view },
-            ViewChange::Stack { id, open } => QueueView { open_stacks: with(view.open_stacks, id, open), ..view },
+            ViewChange::Section { name, closed } => QueueView { closed_sections: with_member(view.closed_sections, name, closed), ..view },
+            ViewChange::Stack { id, open } => QueueView { open_stacks: with_member(view.open_stacks, id, open), ..view },
         }
     }
 }
 
 /// `set` holding `item` when `on`, without it otherwise.
-pub fn with<T: Ord>(mut set: std::collections::BTreeSet<T>, item: T, on: bool) -> std::collections::BTreeSet<T> {
+pub fn with_member<T: Ord>(mut set: std::collections::BTreeSet<T>, item: T, on: bool) -> std::collections::BTreeSet<T> {
     if on {
         set.insert(item);
     } else {

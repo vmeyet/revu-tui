@@ -35,7 +35,7 @@ impl Key {
 
     /// `None` for keys bindings cannot name, which pass through as they came: ⌘ and friends
     /// among them, or ⌘K would reach the app as a plain `k`.
-    fn of(event: KeyEvent) -> Option<Self> {
+    fn from_event(event: KeyEvent) -> Option<Self> {
         if event.modifiers.intersects(KeyModifiers::SUPER | KeyModifiers::HYPER | KeyModifiers::META) {
             return None;
         }
@@ -250,21 +250,21 @@ impl Keymap {
     /// One key from the terminal, with the key held since the last call, if any. A held key
     /// whose second key matches nothing is handed over as itself, so `z` then `a` stays `za`.
     pub fn feed(&self, held: Option<KeyEvent>, event: KeyEvent) -> Feed {
-        let Some(key) = Key::of(event) else { return Feed::Keys(held.into_iter().chain([event]).collect()) };
-        if let Some(first) = held.and_then(Key::of) {
+        let Some(key) = Key::from_event(event) else { return Feed::Keys(held.into_iter().chain([event]).collect()) };
+        if let Some(first) = held.and_then(Key::from_event) {
             return match self.aliases.get(&vec![first, key]) {
                 Some(target) => Feed::Keys(events(target)),
-                None => Feed::Keys([self.one(first), self.one(key)].concat()),
+                None => Feed::Keys([self.one_key(first), self.one_key(key)].concat()),
             };
         }
         if self.aliases.keys().any(|b| b.len() == 2 && b[0] == key) {
             return Feed::Hold(event);
         }
-        Feed::Keys(self.one(key))
+        Feed::Keys(self.one_key(key))
     }
 
     /// A single key through the one-key bindings.
-    fn one(&self, key: Key) -> Vec<KeyEvent> {
+    fn one_key(&self, key: Key) -> Vec<KeyEvent> {
         self.aliases.get(&vec![key]).map_or_else(|| vec![key.event()], |target| events(target))
     }
 
@@ -357,7 +357,7 @@ mod tests {
 
     fn chars(feed: &Feed) -> String {
         match feed {
-            Feed::Keys(events) => events.iter().map(|e| Key::of(*e).unwrap().label()).collect(),
+            Feed::Keys(events) => events.iter().map(|e| Key::from_event(*e).unwrap().label()).collect(),
             Feed::Hold(_) => "…".into(),
         }
     }

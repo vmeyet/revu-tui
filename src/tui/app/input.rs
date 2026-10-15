@@ -104,7 +104,7 @@ impl App {
     /// `⌘enter`, `ctrl-s`: a new thread or a reply goes public at once; any other box saves as
     /// `enter` does. The text waits under its target until the forge takes it, so a failure loses nothing.
     fn post_input(&mut self) -> Vec<Action> {
-        let Some(to) = self.input.as_ref().and_then(Post::of) else { return self.submit_input() };
+        let Some(to) = self.input.as_ref().and_then(Post::from_input) else { return self.submit_input() };
         let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
         let body = self.buffer.text().trim().to_owned();
         if body.is_empty() {
@@ -238,7 +238,7 @@ impl App {
 }
 
 impl Post {
-    fn of(input: &Input) -> Option<Self> {
+    fn from_input(input: &Input) -> Option<Self> {
         match input {
             Input::Comment { position } => Some(Post::Thread(position.clone())),
             Input::Reply { thread } => Some(Post::Reply(thread.clone())),

@@ -345,7 +345,7 @@ impl<T> Page<T> {
     }
 
     /// An empty page past the end keeps the cursor where it was: a null one would start the list over.
-    fn and(self, next: Page<T>) -> Page<T> {
+    fn followed_by(self, next: Page<T>) -> Page<T> {
         let end_cursor = next.page_info.end_cursor.or(self.page_info.end_cursor);
         Page {
             nodes: self.nodes.into_iter().chain(next.nodes).collect(),
@@ -450,11 +450,11 @@ impl PrThreads {
         })
     }
 
-    fn and(self, next: PrThreads) -> PrThreads {
+    fn followed_by(self, next: PrThreads) -> PrThreads {
         PrThreads {
-            review_threads: self.review_threads.and(next.review_threads),
-            reviews: self.reviews.and(next.reviews),
-            comments: self.comments.and(next.comments),
+            review_threads: self.review_threads.followed_by(next.review_threads),
+            reviews: self.reviews.followed_by(next.reviews),
+            comments: self.comments.followed_by(next.comments),
             ..self
         }
     }
@@ -651,7 +651,7 @@ impl Client {
         let mut prs = self.threads_page(key, After::default()).await?;
         for _ in 0..MAX_PAGES {
             let Some(resume) = prs.resume() else { break };
-            prs = prs.and(self.threads_page(key, resume).await?);
+            prs = prs.followed_by(self.threads_page(key, resume).await?);
         }
         let threads = futures_util::future::try_join_all(prs.review_threads.nodes.into_iter().map(|t| self.whole_thread(t))).await?;
         Ok(PrThreads { review_threads: Page { nodes: threads, page_info: PageInfo::default() }, ..prs })
@@ -674,7 +674,7 @@ impl Client {
         for _ in 0..MAX_PAGES {
             let Some(after) = comments.next().map(str::to_owned) else { break };
             let data: ThreadCommentsData = self.graphql(&query, json!({"id": thread.id, "after": after})).await?;
-            comments = comments.and(data.node.with_context(|| format!("thread {} is gone", thread.id))?.comments);
+            comments = comments.followed_by(data.node.with_context(|| format!("thread {} is gone", thread.id))?.comments);
         }
         Ok(Thread { comments, ..thread })
     }

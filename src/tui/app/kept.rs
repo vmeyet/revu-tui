@@ -1,8 +1,9 @@
 //! What frames read from the open review, built again only when what it is built from changed:
 //! moving a cursor or scrolling rebuilds nothing.
-use super::{Entry, Open, Pane, Versions};
+use super::pane::ConversationList;
+use super::{Open, Pane, Versions};
 use crate::review::tree::{self, TreeFolds, TreeRow};
-use crate::review::{Conversation, Draft, File, Markers, Thread};
+use crate::review::{Draft, File, Markers, Thread};
 use crate::tui::prose_view::{self, Rows};
 use crate::tui::theme::Theme;
 use std::sync::Arc;
@@ -10,15 +11,15 @@ use std::sync::Arc;
 /// A shared slice compared by identity: a review keeps it until a fetch replaces it, and the held
 /// copy stops its memory from being reused by the next one.
 #[derive(Debug)]
-pub struct Same<T: ?Sized>(Arc<T>);
+pub struct ByIdentity<T: ?Sized>(Arc<T>);
 
-impl<T: ?Sized> Same<T> {
-    pub fn of(shared: &Arc<T>) -> Self {
+impl<T: ?Sized> ByIdentity<T> {
+    pub fn new(shared: &Arc<T>) -> Self {
         Self(Arc::clone(shared))
     }
 }
 
-impl<T: ?Sized> PartialEq for Same<T> {
+impl<T: ?Sized> PartialEq for ByIdentity<T> {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
@@ -27,69 +28,74 @@ impl<T: ?Sized> PartialEq for Same<T> {
 /// The parts of the review the marks and the pane's conversations are made of.
 #[derive(Debug, PartialEq)]
 pub struct ReviewInputs {
-    threads: Same<[Thread]>,
-    files: Same<[File]>,
+    threads: ByIdentity<[Thread]>,
+    files: ByIdentity<[File]>,
     drafts: Vec<Draft>,
 }
 
 impl ReviewInputs {
-    pub fn of(open: &Open) -> Self {
-        Self { threads: Same::of(&open.review.threads), files: Same::of(&open.review.files), drafts: open.review.drafts.clone() }
+    pub fn from_open(open: &Open) -> Self {
+        Self {
+            threads: ByIdentity::new(&open.review.threads),
+            files: ByIdentity::new(&open.review.files),
+            drafts: open.review.drafts.clone(),
+        }
     }
 }
 
 /// A value and what it was built from, built again when asked with anything else.
 #[derive(Debug)]
-struct Memo<K, V>(Option<(K, V)>);
+struct KeptValue<K, V>(Option<(K, V)>);
 
-impl<K, V> Default for Memo<K, V> {
+impl<K, V> Default for KeptValue<K, V> {
     fn default() -> Self {
         Self(None)
     }
 }
 
-impl<K: PartialEq, V> Memo<K, V> {
-    fn get(&mut self, from: K, build: impl FnOnce() -> V) -> &V {
+impl<K: PartialEq, V> KeptValue<K, V> {
+    fn get_or_build(&mut self, from: K, build: impl FnOnce() -> V) -> &mut V {
         if self.0.as_ref().is_some_and(|(built_from, _)| *built_from != from) {
             self.0 = None;
         }
-        &self.0.get_or_insert_with(|| (from, build())).1
+        &mut self.0.get_or_insert_with(|| (from, build())).1
     }
 }
 
 #[derive(Debug, Default)]
 pub struct Kept {
-    markers: Memo<ReviewInputs, Markers>,
-    listed: Memo<(ReviewInputs, Pane), (Vec<Conversation>, Vec<Entry>)>,
-    tree: Memo<(Same<[File]>, TreeFolds), Vec<TreeRow>>,
+    markers: KeptValue<ReviewInputs, Markers>,
+    pane_view: KeptValue<(ReviewInputs, Pane), ConversationList>,
+    tree: KeptValue<(ByIdentity<[File]>, TreeFolds), Vec<TreeRow>>,
     /// One per layout, so `D` in the prose view goes back and forth without rendering again.
-    prose: Memo<(Same<Versions>, usize, Theme), Rows>,
-    prose_beside: Memo<(Same<Versions>, usize, Theme), Rows>,
+    prose: KeptValue<(ByIdentity<Versions>, usize, Theme), Rows>,
+    prose_beside: KeptValue<(ByIdentity<Versions>, usize, Theme), Rows>,
 }
 
 impl Kept {
     /// What the anchor column of every line shows.
     pub fn markers(&mut self, open: &Open) -> &Markers {
-        self.markers.get(ReviewInputs::of(open), || open.review.markers())
+        self.markers.get_or_build(ReviewInputs::from_open(open), || open.review.markers())
     }
 
     /// `Open::pane_view`, kept while the review and the pane stay the same; its cursor only picks the focused stop.
-    pub fn pane_view(&mut self, open: &Open) -> Option<(&[Conversation], &[Entry], Option<Entry>)> {
+    pub fn pane_view(&mut self, open: &Open) -> Option<&ConversationList> {
         let pane = open.pane.as_ref()?;
-        let (conversations, entries) = self.listed.get((ReviewInputs::of(open), pane.unmoved()), || open.listed(pane));
-        Some((conversations, entries, super::pane::focused(entries, pane)))
+        let view = self.pane_view.get_or_build((ReviewInputs::from_open(open), pane.unmoved()), || open.pane_view_of(pane));
+        view.focused = super::pane::focused(&view.entries, pane);
+        Some(view)
     }
 
     /// The rows of the file tree; none while it is closed.
     pub fn tree_rows(&mut self, open: &Open) -> &[TreeRow] {
         let Some(folds) = open.tree.as_ref().map(|t| &t.folds) else { return &[] };
-        self.tree.get((Same::of(&open.review.files), folds.clone()), || tree::rows(&open.review.files, folds))
+        self.tree.get_or_build((ByIdentity::new(&open.review.files), folds.clone()), || tree::rows(&open.review.files, folds))
     }
 
     /// The prose view's rows in `width` columns, inline or `beside`, rendered again only for other texts, width or theme.
     pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, beside: bool, theme: Theme) -> &Rows {
-        let memo = if beside { &mut self.prose_beside } else { &mut self.prose };
-        memo.get((Same::of(versions), width, theme), || prose_view::rows(versions, width, beside, theme))
+        let kept = if beside { &mut self.prose_beside } else { &mut self.prose };
+        kept.get_or_build((ByIdentity::new(versions), width, theme), || prose_view::rows(versions, width, beside, theme))
     }
 }
 
@@ -100,11 +106,11 @@ mod tests {
     use crate::tui::app::test_support::*;
 
     #[test]
-    fn a_memo_builds_once_per_input() {
-        let mut memo = Memo::default();
+    fn a_kept_value_builds_once_per_input() {
+        let mut memo = KeptValue::default();
         let mut builds = 0;
-        let mut get = |memo: &mut Memo<u8, u8>, from: u8| {
-            *memo.get(from, || {
+        let mut get = |memo: &mut KeptValue<u8, u8>, from: u8| {
+            *memo.get_or_build(from, || {
                 builds += 1;
                 from * 2
             })
@@ -116,8 +122,8 @@ mod tests {
     #[test]
     fn shared_slices_compare_by_identity_not_by_value() {
         let (a, b): (Arc<[u8]>, Arc<[u8]>) = (Arc::from([1]), Arc::from([1]));
-        assert_eq!(Same::of(&a), Same::of(&a));
-        assert_ne!(Same::of(&a), Same::of(&b), "equal contents from another fetch still count as new");
+        assert_eq!(ByIdentity::new(&a), ByIdentity::new(&a));
+        assert_ne!(ByIdentity::new(&a), ByIdentity::new(&b), "equal contents from another fetch still count as new");
     }
 
     #[test]
@@ -133,12 +139,10 @@ mod tests {
     }
 
     /// The kept pane view and the one built afresh, owned so they compare.
-    fn both_pane_views(app: &mut App) -> (Option<PaneView>, Option<PaneView>) {
+    fn both_pane_views(app: &mut App) -> (Option<ConversationList>, Option<ConversationList>) {
         let open = app.open.as_ref().unwrap();
-        (app.kept.pane_view(open).map(|(c, e, f)| (c.to_vec(), e.to_vec(), f)), open.pane_view())
+        (app.kept.pane_view(open).cloned(), open.pane_view())
     }
-
-    type PaneView = (Vec<Conversation>, Vec<Entry>, Option<Entry>);
 
     #[test]
     fn the_pane_view_follows_its_cursor_and_its_filter() {
@@ -149,7 +153,7 @@ mod tests {
         press(&mut app, "j");
         let (moved, fresh) = both_pane_views(&mut app);
         assert_eq!(moved, fresh);
-        assert_ne!(moved.map(|v| v.2), kept.map(|v| v.2), "the cursor moved to the next stop");
+        assert_ne!(moved.map(|v| v.focused), kept.map(|v| v.focused), "the cursor moved to the next stop");
         press(&mut app, "m");
         let (kept, fresh) = both_pane_views(&mut app);
         assert_eq!(kept, fresh, "only mine");

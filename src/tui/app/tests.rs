@@ -370,7 +370,7 @@ fn a_picture_arriving_after_the_pane_was_drawn_is_painted_on_the_next_frame() {
     let mut app = with_note("Look:\n![chart](/uploads/0123456789abcdef0123456789abcdef/chart.png)");
     app.thumbs = crate::tui::images::tests::test_thumbs();
     let url = "/uploads/0123456789abcdef0123456789abcdef/chart.png".to_owned();
-    app.thumbs.wanted([url.clone()]);
+    app.thumbs.request_new([url.clone()]);
     assert!(render(&mut app, 150, 30).contains("… loading image"));
     app.apply(Incoming::Image { url, image: Some(image::DynamicImage::new_rgb8(200, 100)) });
     let screen = render(&mut app, 150, 30);

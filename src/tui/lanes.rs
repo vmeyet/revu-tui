@@ -10,10 +10,10 @@ pub(super) struct Lanes(Arc<Mutex<HashMap<MrKey, Arc<AsyncMutex<()>>>>>);
 impl Lanes {
     /// Waits until the lane of `key` is free; it stays taken until the guard drops.
     pub(super) async fn enter(&self, key: &MrKey) -> OwnedMutexGuard<()> {
-        self.lane(key).lock_owned().await
+        self.lane_of(key).lock_owned().await
     }
 
-    fn lane(&self, key: &MrKey) -> Arc<AsyncMutex<()>> {
+    fn lane_of(&self, key: &MrKey) -> Arc<AsyncMutex<()>> {
         let mut lanes = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         Arc::clone(lanes.entry(key.clone()).or_default())
     }

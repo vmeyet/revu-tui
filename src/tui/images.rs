@@ -35,16 +35,16 @@ impl fmt::Debug for Thumbs {
 
 impl Default for Thumbs {
     fn default() -> Self {
-        Self::off()
+        Self::disabled()
     }
 }
 
 impl Thumbs {
-    pub fn off() -> Self {
+    pub fn disabled() -> Self {
         Self { picker: None, slots: HashMap::new(), changes: 0 }
     }
 
-    pub fn with(picker: Picker) -> Self {
+    pub fn with_picker(picker: Picker) -> Self {
         Self { picker: Some(picker), slots: HashMap::new(), changes: 0 }
     }
 
@@ -67,7 +67,7 @@ impl Thumbs {
     }
 
     /// Links not asked for yet, marked loading so each is fetched once.
-    pub fn wanted(&mut self, urls: impl IntoIterator<Item = String>) -> Vec<String> {
+    pub fn request_new(&mut self, urls: impl IntoIterator<Item = String>) -> Vec<String> {
         if !self.enabled() {
             return vec![];
         }
@@ -138,20 +138,20 @@ pub mod tests {
 
     /// A half-block picker with a 10x20 font: it draws into a plain buffer, so tests can see it.
     pub fn test_thumbs() -> Thumbs {
-        Thumbs::with(Picker::halfblocks())
+        Thumbs::with_picker(Picker::halfblocks())
     }
 
     #[test]
     fn each_picture_is_asked_once_and_settles_ready_or_failed() {
         let mut thumbs = test_thumbs();
         let urls = || vec!["https://x/a.png".to_owned(), "https://x/b.png".to_owned()];
-        assert_eq!(thumbs.wanted(urls()), urls());
-        assert_eq!(thumbs.wanted(urls()), [] as [String; 0]);
+        assert_eq!(thumbs.request_new(urls()), urls());
+        assert_eq!(thumbs.request_new(urls()), [] as [String; 0]);
         thumbs.arrived("https://x/a.png", decode(&png(8, 8)));
         thumbs.arrived("https://x/b.png", None);
         assert!(matches!(thumbs.get("https://x/a.png"), Some(Thumb::Ready(_, (8, 8)))));
         assert!(matches!(thumbs.get("https://x/b.png"), Some(Thumb::Failed)));
-        assert!(Thumbs::off().wanted(urls()).is_empty(), "a terminal without pictures asks for none");
+        assert!(Thumbs::disabled().request_new(urls()).is_empty(), "a terminal without pictures asks for none");
     }
 
     #[test]

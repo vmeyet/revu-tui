@@ -39,12 +39,12 @@ enum Size {
 impl Query {
     /// Every term must make sense, or the error says which does not: saved views are checked this way.
     pub fn parse(text: &str) -> Result<Self, String> {
-        tokens(text).into_iter().try_fold(Self::default(), |query, token| query.with(&token))
+        tokens(text).into_iter().try_fold(Self::default(), |query, token| query.with_token(&token))
     }
 
     /// What is being typed: a term that does not make sense yet (`draft:`, a lone `@`) is left out.
     pub fn lenient(text: &str) -> Self {
-        tokens(text).into_iter().fold(Self::default(), |query, token| query.clone().with(&token).unwrap_or(query))
+        tokens(text).into_iter().fold(Self::default(), |query, token| query.clone().with_token(&token).unwrap_or(query))
     }
 
     /// The MR passes every term but the free words, which callers match their own way.
@@ -78,7 +78,7 @@ impl Query {
         self.keeps(mr, me) && self.words_found(mr)
     }
 
-    fn with(mut self, token: &str) -> Result<Self, String> {
+    fn with_token(mut self, token: &str) -> Result<Self, String> {
         let lower = token.to_lowercase();
         if let Some(name) = lower.strip_prefix('@') {
             return nonempty(name, token, "an author, like @nina or @me").map(|name| {

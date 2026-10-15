@@ -19,13 +19,13 @@ pub(super) struct Tmux {
 }
 
 /// Which session this is and how it was found, for the toast.
-pub(super) fn said(ready: &Ready, reference: &str) -> String {
+pub(super) fn session_notice(ready: &Ready, reference: &str) -> String {
     let notice = ready.notice.as_ref().map(|notice| format!(" · {notice}")).unwrap_or_default();
-    format!("{} · {}{notice}", ready.case.said(reference), ready.kept.name)
+    format!("{} · {}{notice}", ready.case.describe(reference), ready.kept.name)
 }
 
 pub(super) fn show(run: &dyn Run, tmux: Option<Tmux>, ready: &Ready, reference: &str) -> Result<Outcome> {
-    let said = said(ready, reference);
+    let said = session_notice(ready, reference);
     let Some(tmux) = tmux else {
         return Ok(Outcome::Handoff(Handoff { call: ready.call.clone(), said }));
     };

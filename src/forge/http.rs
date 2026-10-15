@@ -67,10 +67,10 @@ pub struct Transport {
 impl Transport {
     /// `headers` carry the token: every request goes to `base`'s scheme, host and port or not at all.
     pub fn new(base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
-        Self::over(crate::http::client().timeout(REQUEST_TIMEOUT), base, headers, flavor)
+        Self::from_builder(crate::http::client().timeout(REQUEST_TIMEOUT), base, headers, flavor)
     }
 
-    fn over(client: reqwest::ClientBuilder, base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
+    fn from_builder(client: reqwest::ClientBuilder, base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
         let client = client
             .default_headers(headers)
             .redirect(reqwest::redirect::Policy::none())
@@ -458,7 +458,7 @@ mod tests {
     async fn a_forge_that_never_answers_fails_the_request_instead_of_holding_it() {
         let base = crate::http::tests::silent_server().await;
         let quick = crate::http::client().read_timeout(Duration::from_millis(200));
-        let transport = Transport::over(quick, &base, HeaderMap::new(), &PLAIN).unwrap();
+        let transport = Transport::from_builder(quick, &base, HeaderMap::new(), &PLAIN).unwrap();
         let answer = tokio::time::timeout(Duration::from_secs(5), transport.get_text("user")).await.expect("the request ended");
         let err = answer.unwrap_err().to_string();
         assert!(err.contains("timed out"), "{err}");

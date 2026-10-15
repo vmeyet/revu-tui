@@ -344,7 +344,7 @@ impl App {
 
     fn apply_fold(&mut self, fold: FoldState) -> Vec<Action> {
         let Some(open) = self.open.take() else { return vec![] };
-        self.keep(open.with_fold(fold))
+        self.show_and_save(open.with_fold(fold))
     }
 
     /// `D`: changed words inline, or the old file beside the new one.
@@ -359,7 +359,7 @@ impl App {
             (true, false) => TOO_NARROW,
             (false, _) => "inline diff",
         });
-        self.keep(next)
+        self.show_and_save(next)
     }
 
     /// `>` and `<`: the diff, the code after, the code before, each key the other way round.
@@ -429,7 +429,7 @@ impl App {
     }
 
     /// Shows `next` and saves what the reader chose in it: folds, viewed files, side by side.
-    pub(super) fn keep(&mut self, next: Open) -> Vec<Action> {
+    pub(super) fn show_and_save(&mut self, next: Open) -> Vec<Action> {
         self.count_viewed(&next.key, &next.review);
         self.open = Some(next);
         self.save_state(None).into_iter().collect()

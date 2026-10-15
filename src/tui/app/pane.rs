@@ -59,17 +59,24 @@ pub(super) struct Stop {
     pub kind: EntryKind,
 }
 
+/// Conversations as a list shows them: the pane, or the thread rows under a line of the diff.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConversationList {
+    pub conversations: Vec<Conversation>,
+    /// Every stop of the cursor through the conversations.
+    pub entries: Vec<Entry>,
+    /// The stop under the cursor.
+    pub focused: Option<Entry>,
+}
+
 impl Open {
-    /// The conversations the pane lists, its cursor stops, and the one under the cursor.
-    pub fn pane_view(&self) -> Option<(Vec<Conversation>, Vec<Entry>, Option<Entry>)> {
-        let pane = self.pane.as_ref()?;
-        let (conversations, entries) = self.listed(pane);
-        let focused = focused(&entries, pane);
-        Some((conversations, entries, focused))
+    /// What the pane lists and the stop under its cursor.
+    pub fn pane_view(&self) -> Option<ConversationList> {
+        Some(self.pane_view_of(self.pane.as_ref()?))
     }
 
-    /// The conversations `pane` lists and its cursor stops.
-    pub(super) fn listed(&self, pane: &Pane) -> (Vec<Conversation>, Vec<Entry>) {
+    /// The conversations `pane` lists, its cursor stops and the one under its cursor.
+    pub(super) fn pane_view_of(&self, pane: &Pane) -> ConversationList {
         let conversations: Vec<Conversation> = self
             .review
             .conversations(&pane.place)
@@ -77,13 +84,13 @@ impl Open {
             .filter(|conversation| pane.only_with.as_deref().is_none_or(|user| self.review.takes_part(conversation, user)))
             .collect();
         let entries = entries(&self.review, &conversations, &pane.unfolded);
-        (conversations, entries)
+        let focused = focused(&entries, pane);
+        ConversationList { conversations, entries, focused }
     }
 
     /// The thread under the pane's cursor.
     pub fn focused_thread(&self) -> Option<ThreadId> {
-        let (conversations, _, focused) = self.pane_view()?;
-        conversations.get(focused?.conversation)?.thread.clone()
+        stop_of(&self.pane_view()?)?.thread
     }
 
     /// The pane lists every conversation of the MR, not those of one place.
@@ -109,9 +116,9 @@ impl Open {
 }
 
 /// The stop under the cursor of a view of conversations.
-pub(super) fn stop_of((conversations, _, focused): (Vec<Conversation>, Vec<Entry>, Option<Entry>)) -> Option<Stop> {
-    let focused = focused?;
-    Some(Stop { thread: conversations.get(focused.conversation)?.thread.clone(), kind: focused.kind })
+pub(super) fn stop_of(view: &ConversationList) -> Option<Stop> {
+    let focused = view.focused?;
+    Some(Stop { thread: view.conversations.get(focused.conversation)?.thread.clone(), kind: focused.kind })
 }
 
 impl App {
@@ -137,7 +144,7 @@ impl App {
     pub(super) fn stop_here(&self) -> Option<Stop> {
         let open = self.open.as_ref()?;
         let on_row = if self.focus == Focus::Review { open.row_view() } else { None };
-        stop_of(on_row.or_else(|| open.pane_view())?)
+        stop_of(&on_row.or_else(|| open.pane_view())?)
     }
 
     /// `l` on a file row with outdated threads opens them.
@@ -212,7 +219,7 @@ impl App {
     /// zen shows the diff there when the list takes its place.
     fn jump_to_focused(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let Some((conversations, _, Some(focused))) = open.pane_view() else { return vec![] };
+        let Some(ConversationList { conversations, focused: Some(focused), .. }) = open.pane_view() else { return vec![] };
         let Some(target) = row_of(&open.review, open.review.spot(&conversations[focused.conversation])) else {
             self.toast("its line is not in the diff");
             return vec![];
@@ -233,7 +240,7 @@ impl App {
         let index = laid.rows.iter().position(|row| super::review::same_place(row, target)).unwrap_or(laid.selected);
         let next = laid.move_to(index);
         let actions = if changed {
-            self.keep(next)
+            self.show_and_save(next)
         } else {
             self.open = Some(next);
             vec![]
@@ -316,7 +323,7 @@ impl App {
 
     fn pane_move(&mut self, delta: isize) {
         let Some(open) = &self.open else { return };
-        let Some((_, entries, _)) = self.kept.pane_view(open) else { return };
+        let Some(ConversationList { entries, .. }) = self.kept.pane_view(open) else { return };
         let Some(pane) = &open.pane else { return };
         let last = entries.len().saturating_sub(1) as isize;
         let note = (pane.note as isize).saturating_add(delta).clamp(0, last) as usize;
