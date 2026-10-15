@@ -4,7 +4,7 @@ use crate::review::{Draft, DraftId};
 
 /// The draft writes of one MR the forge has not answered, and whether it refused one since the drafts were last read.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct DraftWrites {
+pub(crate) struct DraftWrites {
     running: usize,
     refused: bool,
 }

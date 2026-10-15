@@ -18,7 +18,7 @@ const PARALLEL_REQUESTS: usize = 8;
 
 /// Why TypeSafe could not answer: no key, quota, outage, bad request.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Unavailable(pub String);
+pub(crate) struct Unavailable(pub(crate) String);
 
 impl fmt::Display for Unavailable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -30,13 +30,13 @@ impl std::error::Error for Unavailable {}
 
 impl Unavailable {
     /// The one line shown when a caller falls back.
-    pub fn notice(&self) -> String {
+    pub(crate) fn notice(&self) -> String {
         format!("⚠ typesafe unavailable: {}", self.0)
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum Question {
+pub(crate) enum Question {
     /// Yes or no, answered as the probability of yes.
     Noul(&'static str),
     /// One of the named options, each with what it means.
@@ -68,19 +68,19 @@ struct Answer {
 /// The answers of one request, by question id.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(transparent)]
-pub struct Answers(HashMap<String, Answer>);
+pub(crate) struct Answers(HashMap<String, Answer>);
 
 impl Answers {
-    pub fn noul(&self, id: &str) -> Result<f64, Unavailable> {
+    pub(super) fn noul(&self, id: &str) -> Result<f64, Unavailable> {
         self.get(id)?.noul.ok_or_else(|| missing(id))
     }
 
-    pub fn choice(&self, id: &str) -> Result<&str, Unavailable> {
+    pub(crate) fn choice(&self, id: &str) -> Result<&str, Unavailable> {
         self.get(id)?.choice.as_deref().ok_or_else(|| missing(id))
     }
 
     /// The probability-weighted level, from 0 for the first one.
-    pub fn score(&self, id: &str) -> Result<f64, Unavailable> {
+    pub(crate) fn score(&self, id: &str) -> Result<f64, Unavailable> {
         self.get(id)?.score.ok_or_else(|| missing(id))
     }
 
@@ -94,12 +94,12 @@ fn missing(id: &str) -> Unavailable {
 }
 
 /// Asks typed questions about a state; the real client, or a stub in tests.
-pub trait Judge {
+pub(crate) trait Judge {
     fn ask(&self, state: &Value, questions: &[(&str, Question)]) -> impl Future<Output = Result<Answers, Unavailable>> + Send;
 }
 
 #[derive(Clone)]
-pub struct TypeSafe {
+pub(crate) struct TypeSafe {
     http: reqwest::Client,
     url: String,
     key: String,
@@ -114,7 +114,7 @@ impl fmt::Debug for TypeSafe {
 
 impl TypeSafe {
     /// Fails fast when TypeSafe is switched off by the environment, before anything is sent.
-    pub fn connect(key: &super::Secret) -> Result<Self, Unavailable> {
+    pub(crate) fn connect(key: &super::Secret) -> Result<Self, Unavailable> {
         if let Some(reason) = disabled_reason() {
             return Err(Unavailable(reason.into()));
         }
@@ -210,11 +210,11 @@ pub(crate) fn disabled_reason() -> Option<&'static str> {
 }
 
 #[cfg(test)]
-pub mod stub {
+pub(crate) mod stub {
     use super::*;
 
     /// Answers every request from the state alone, with no network.
-    pub struct Stub(pub fn(&Value) -> Result<Value, Unavailable>);
+    pub(crate) struct Stub(pub(crate) fn(&Value) -> Result<Value, Unavailable>);
 
     impl Judge for Stub {
         fn ask(&self, state: &Value, _questions: &[(&str, Question)]) -> impl Future<Output = Result<Answers, Unavailable>> + Send {

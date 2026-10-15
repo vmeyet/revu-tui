@@ -9,20 +9,20 @@ use std::collections::BTreeMap;
 /// The reactions I gave, by host.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct History(BTreeMap<String, Vec<Given>>);
+pub(crate) struct History(BTreeMap<String, Vec<Given>>);
 
 /// One reaction I gave on a host: how many times, and `last`, which rises each time any reaction is given there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Given {
-    pub emoji: Emoji,
-    pub count: u32,
-    pub last: u64,
+pub(crate) struct Given {
+    pub(crate) emoji: Emoji,
+    pub(crate) count: u32,
+    pub(crate) last: u64,
 }
 
 impl History {
     /// The same history with `emoji` given once more on `host`.
     #[must_use]
-    pub fn with(&self, host: &str, emoji: Emoji) -> Self {
+    pub(crate) fn with(&self, host: &str, emoji: Emoji) -> Self {
         let given = self.0.get(host).cloned().unwrap_or_default();
         let last = given.iter().map(|g| g.last).max().unwrap_or_default() + 1;
         let count = given.iter().find(|g| g.emoji == emoji).map_or(0, |g| g.count) + 1;
@@ -33,7 +33,7 @@ impl History {
     }
 
     /// Every reaction given on `host`, the most given first, then the latest given.
-    pub fn most_used(&self, host: &str) -> Vec<Emoji> {
+    pub(crate) fn most_used(&self, host: &str) -> Vec<Emoji> {
         let mut given = self.0.get(host).cloned().unwrap_or_default();
         given.sort_by_key(|g| Reverse((g.count, g.last)));
         given.into_iter().map(|g| g.emoji).collect()
@@ -41,12 +41,12 @@ impl History {
 }
 
 /// The history kept in the cache; none when the file is missing or broken.
-pub fn read(cache: &Cache) -> History {
+pub(crate) fn read(cache: &Cache) -> History {
     cache.read(&keys::reactions()).unwrap_or_default()
 }
 
 /// Counts `emoji` given once more on `host` in the cache, whatever other revu processes wrote meanwhile.
-pub fn record(cache: &Cache, host: &str, emoji: Emoji) -> Result<History> {
+pub(crate) fn record(cache: &Cache, host: &str, emoji: Emoji) -> Result<History> {
     cache.update(&keys::reactions(), |history: History| history.with(host, emoji))
 }
 

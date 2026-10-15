@@ -5,22 +5,22 @@ use std::collections::HashMap;
 
 /// A section's rows once chains are found: lone MRs, and stacks of two or more.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Item<'a> {
+pub(crate) enum Item<'a> {
     Single(&'a QueueMr),
     Stack(Stack<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Stack<'a> {
+pub(crate) struct Stack<'a> {
     /// The base MR's key, stable while the chain lives: what the queue state remembers unfolded.
-    pub id: String,
+    pub(crate) id: String,
     /// Base first, each MR after the one it targets.
-    pub mrs: Vec<&'a QueueMr>,
+    pub(crate) mrs: Vec<&'a QueueMr>,
 }
 
 /// `mrs` with every chain folded into one item, at the place its first member held. A chain only
 /// joins MRs of one author in one project; a fork (two MRs on one base) stays one stack.
-pub fn group<'a>(mrs: &[&'a QueueMr]) -> Vec<Item<'a>> {
+pub(crate) fn group<'a>(mrs: &[&'a QueueMr]) -> Vec<Item<'a>> {
     let parents = parents(mrs);
     let roots: Vec<usize> = (0..mrs.len()).map(|i| root(&parents, i)).collect();
     let mut sizes: HashMap<usize, usize> = HashMap::new();

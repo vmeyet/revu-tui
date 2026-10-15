@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// except To review, which Jev ranks by urgency when it is on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Order {
+pub(crate) enum Order {
     #[default]
     Updated,
     Oldest,
@@ -18,7 +18,7 @@ pub enum Order {
 
 impl Order {
     /// The next order `s` moves to; urgency only when Jev can rank.
-    pub fn next(self, triaged: bool) -> Self {
+    pub(crate) fn next(self, triaged: bool) -> Self {
         match self {
             Order::Updated => Order::Oldest,
             Order::Oldest => Order::Author,
@@ -29,7 +29,7 @@ impl Order {
     }
 
     /// The words the queue title carries; nothing for the default order.
-    pub fn label(self) -> Option<&'static str> {
+    pub(crate) fn label(self) -> Option<&'static str> {
         match self {
             Order::Updated => None,
             Order::Oldest => Some("oldest first"),
@@ -42,15 +42,15 @@ impl Order {
 
 /// What `s` chose for one scope, which stacks are unfolded and which sections folded.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QueueView {
+pub(crate) struct QueueView {
     #[serde(default)]
-    pub order: Order,
+    pub(crate) order: Order,
     /// Stacks shown MR by MR, by their base MR's key; every other stack is one folded row.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
-    pub open_stacks: std::collections::BTreeSet<String>,
+    pub(crate) open_stacks: std::collections::BTreeSet<String>,
     /// Sections shown as their header alone, by name.
     #[serde(default = "folded_at_first")]
-    pub closed_sections: std::collections::BTreeSet<String>,
+    pub(crate) closed_sections: std::collections::BTreeSet<String>,
 }
 
 impl Default for QueueView {
@@ -61,7 +61,7 @@ impl Default for QueueView {
 
 /// One choice in the queue view, saved over the view the cache holds so a choice made in another revu stays.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ViewChange {
+pub(crate) enum ViewChange {
     Order(Order),
     Section { name: String, closed: bool },
     Stack { id: String, open: bool },
@@ -69,7 +69,7 @@ pub enum ViewChange {
 
 impl ViewChange {
     /// What the change sets: of two changes to one target, the later one made wins.
-    pub fn target(&self) -> String {
+    pub(crate) fn target(&self) -> String {
         match self {
             ViewChange::Order(_) => "order".into(),
             ViewChange::Section { name, .. } => format!("section {name}"),
@@ -77,7 +77,7 @@ impl ViewChange {
         }
     }
 
-    pub fn apply(self, view: QueueView) -> QueueView {
+    pub(crate) fn apply(self, view: QueueView) -> QueueView {
         match self {
             ViewChange::Order(order) => QueueView { order, ..view },
             ViewChange::Section { name, closed } => QueueView { closed_sections: with_member(view.closed_sections, name, closed), ..view },
@@ -87,7 +87,7 @@ impl ViewChange {
 }
 
 /// `set` holding `item` when `on`, without it otherwise.
-pub fn with_member<T: Ord>(mut set: std::collections::BTreeSet<T>, item: T, on: bool) -> std::collections::BTreeSet<T> {
+pub(crate) fn with_member<T: Ord>(mut set: std::collections::BTreeSet<T>, item: T, on: bool) -> std::collections::BTreeSet<T> {
     if on {
         set.insert(item);
     } else {
@@ -103,7 +103,7 @@ fn folded_at_first() -> std::collections::BTreeSet<String> {
 
 /// `rows` in `order`; `urgency` scores an MR when Jev ranked it. Sorts are stable, so rows that
 /// tie keep the forge's order: newest activity first.
-pub fn sorted(mut rows: Vec<&QueueMr>, order: Order, urgency: impl Fn(&QueueMr) -> f64) -> Vec<&QueueMr> {
+pub(crate) fn sorted(mut rows: Vec<&QueueMr>, order: Order, urgency: impl Fn(&QueueMr) -> f64) -> Vec<&QueueMr> {
     match order {
         Order::Updated => {}
         Order::Oldest => rows.sort_by_key(|mr| mr.created_at),

@@ -92,7 +92,7 @@ impl App {
     }
 
     /// Taken by the loop, which gives the terminal to the program.
-    pub fn take_view(&mut self) -> Option<open::View> {
+    pub(crate) fn take_view(&mut self) -> Option<open::View> {
         self.viewing.take()
     }
 

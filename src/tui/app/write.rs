@@ -7,11 +7,11 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 /// The publish modal: the cursor walks the drafts and ends on the publish row.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Publish {
-    pub selected: usize,
-    pub approve: bool,
+pub(crate) struct Publish {
+    pub(crate) selected: usize,
+    pub(crate) approve: bool,
     /// Sent, waiting for GitLab: keys are ignored until it answers.
-    pub busy: bool,
+    pub(crate) busy: bool,
 }
 
 impl App {
@@ -213,7 +213,7 @@ impl App {
         self.open.as_ref().map_or(0, |o| o.review.drafts.len())
     }
 
-    pub fn unsaved_drafts(&self) -> usize {
+    pub(crate) fn unsaved_drafts(&self) -> usize {
         self.open.as_ref().map_or(0, |o| o.review.drafts.iter().filter(|d| d.id.is_none()).count())
     }
 

@@ -7,7 +7,7 @@ const FALLBACK: &str = "vi";
 
 /// What the editor gave back.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Edited {
+pub(crate) enum Edited {
     /// The file came back untouched or empty: the user backed out.
     Cancelled,
     Done(String),
@@ -16,7 +16,7 @@ pub enum Edited {
 }
 
 /// Opens the draft in the user's editor and gives back what came of it. The temp file is gone either way.
-pub fn edit(draft: &str) -> Result<Edited> {
+pub(crate) fn edit(draft: &str) -> Result<Edited> {
     let file = tempfile::Builder::new().prefix("mr-").suffix(".md").tempfile()?;
     std::fs::write(file.path(), draft)?;
     let status = Editor::from_env().open(file.path())?;

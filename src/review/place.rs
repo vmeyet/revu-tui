@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 /// The most pressing thing on a line, in rising order: an unresolved thread outranks my draft,
 /// which outranks threads that are all resolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Mark {
+pub(crate) enum Mark {
     Resolved,
     Draft,
     Unresolved,
@@ -15,12 +15,12 @@ pub enum Mark {
 
 /// What the anchor column shows for one line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Marker {
-    pub mark: Mark,
+pub(crate) struct Marker {
+    pub(crate) mark: Mark,
     /// Threads and new drafts on the line; replies in a thread count with their thread.
-    pub count: usize,
+    pub(crate) count: usize,
     /// One of my drafts on the line has not reached the forge yet.
-    pub unsaved: bool,
+    pub(crate) unsaved: bool,
 }
 
 impl Marker {
@@ -31,10 +31,10 @@ impl Marker {
 
 /// Markers by path, then by `(side, line)`, built once per review; drawn rows look them up by a borrowed path.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Markers(BTreeMap<String, BTreeMap<(Side, u32), Marker>>);
+pub(crate) struct Markers(BTreeMap<String, BTreeMap<(Side, u32), Marker>>);
 
 impl Markers {
-    pub fn at(&self, path: &str, side: Side, line: u32) -> Option<Marker> {
+    pub(crate) fn at(&self, path: &str, side: Side, line: u32) -> Option<Marker> {
         self.0.get(path)?.get(&(side, line)).copied()
     }
 
@@ -47,7 +47,7 @@ impl Markers {
 /// Where the pane looks: a line of a file (both numbers of a context line), the MR, a file's outdated
 /// threads, or every conversation of the MR.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Place {
+pub(crate) enum Place {
     Line { file: usize, new: Option<u32>, old: Option<u32> },
     Mr,
     Outdated { file: usize },
@@ -56,7 +56,7 @@ pub enum Place {
 
 /// Where one conversation hangs: on the MR, on a line of the diff, or on a line the diff no longer has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Spot<'a> {
+pub(crate) enum Spot<'a> {
     Mr,
     Line(&'a Anchor),
     Outdated(&'a Anchor),
@@ -64,21 +64,21 @@ pub enum Spot<'a> {
 
 /// One entry of the pane: a thread with my replies to it, or a draft that starts a new thread.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Conversation {
-    pub thread: Option<ThreadId>,
+pub(crate) struct Conversation {
+    pub(crate) thread: Option<ThreadId>,
     /// Indexes into `Review::drafts`: my replies to `thread`, or the one new draft.
-    pub drafts: Vec<usize>,
+    pub(crate) drafts: Vec<usize>,
 }
 
 /// One stop of the cursor among the conversations of a place: a note of a thread, or one of my drafts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Entry {
-    pub conversation: usize,
-    pub kind: EntryKind,
+pub(crate) struct Entry {
+    pub(crate) conversation: usize,
+    pub(crate) kind: EntryKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EntryKind {
+pub(crate) enum EntryKind {
     /// The note at this index of the thread.
     Note(usize),
     /// The draft at this index of `Review::drafts`.
@@ -87,13 +87,13 @@ pub enum EntryKind {
 
 impl Review {
     /// A thread reads as one row in the diff until it is unfolded.
-    pub fn reads_folded(&self, thread: &Thread) -> bool {
+    pub(crate) fn reads_folded(&self, thread: &Thread) -> bool {
         !self.unfolded.contains(&thread.id)
     }
 
     /// The cursor stops of `conversations` where they read in the diff: a folded thread is one stop on its first
     /// note, an unfolded one each of its notes then my replies, my new draft its own.
-    pub fn stops(&self, conversations: &[Conversation]) -> Vec<Entry> {
+    pub(crate) fn stops(&self, conversations: &[Conversation]) -> Vec<Entry> {
         let stops_of = |(index, conversation): (usize, &Conversation)| {
             let drafts = conversation.drafts.iter().map(|&draft| EntryKind::Draft(draft));
             let kinds: Vec<EntryKind> = match conversation.thread.as_ref().and_then(|id| self.thread(id)) {
@@ -107,7 +107,7 @@ impl Review {
     }
 
     /// Every line carrying a thread or one of my drafts, with what its anchor column shows.
-    pub fn markers(&self) -> Markers {
+    pub(crate) fn markers(&self) -> Markers {
         let mut markers = Markers::default();
         for thread in self.threads.iter().filter(|t| !t.outdated) {
             let Some(anchor) = &thread.anchor else { continue };
@@ -128,14 +128,14 @@ impl Review {
     }
 
     /// The most pressing mark among the conversations on the MR itself, by the anchor column's rule.
-    pub fn mr_mark(&self) -> Option<Mark> {
+    pub(crate) fn mr_mark(&self) -> Option<Mark> {
         let threads = self.threads_in(&Place::Mr).into_iter().map(|t| self.marker_of_thread(t).mark);
         let drafts = self.new_drafts_in(&Place::Mr).into_iter().map(|_| Mark::Draft);
         threads.chain(drafts).max()
     }
 
     /// The marker a row shows: both sides of a context line, both lines of an inline pair.
-    pub fn marker_of(&self, markers: &Markers, row: &Row) -> Option<Marker> {
+    pub(crate) fn marker_of(&self, markers: &Markers, row: &Row) -> Option<Marker> {
         let Place::Line { file, new, old } = self.place_of(row)? else { return None };
         let file = &self.files[file];
         let new = new.and_then(|n| markers.at(&file.new_path, Side::New, n));
@@ -147,7 +147,7 @@ impl Review {
     }
 
     /// The place a row stands for in the pane, a thread row the place of its line; the header is the MR itself.
-    pub fn place_of(&self, row: &Row) -> Option<Place> {
+    pub(crate) fn place_of(&self, row: &Row) -> Option<Place> {
         match row {
             Row::Line { file, hunk, index } => {
                 let line = &self.files[*file].hunks[*hunk].lines[*index];
@@ -166,7 +166,7 @@ impl Review {
 
     /// What the pane lists at `place`: unresolved threads, then my new drafts, then resolved
     /// threads; oldest first inside each group, or in diff order when the pane lists them all.
-    pub fn conversations(&self, place: &Place) -> Vec<Conversation> {
+    pub(crate) fn conversations(&self, place: &Place) -> Vec<Conversation> {
         let threads = self.threads_in(place);
         let (resolved, open): (Vec<&Thread>, Vec<&Thread>) = threads.into_iter().partition(|t| t.resolved);
         let with_replies =
@@ -190,13 +190,13 @@ impl Review {
     }
 
     /// Whether `user` wrote a note of the conversation; a draft counts too, since every draft is mine.
-    pub fn takes_part(&self, conversation: &Conversation, user: &str) -> bool {
+    pub(crate) fn takes_part(&self, conversation: &Conversation, user: &str) -> bool {
         let thread = conversation.thread.as_ref().and_then(|id| self.thread(id));
         !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.author.username == user))
     }
 
     /// Where a conversation hangs: its thread's anchor, or its new draft's.
-    pub fn spot(&self, conversation: &Conversation) -> Spot<'_> {
+    pub(crate) fn spot(&self, conversation: &Conversation) -> Spot<'_> {
         let thread = conversation.thread.as_ref().and_then(|id| self.thread(id));
         let anchor = match thread {
             Some(thread) => thread.anchor.as_ref(),
@@ -210,7 +210,7 @@ impl Review {
     }
 
     /// The file whose side of the change the anchor names.
-    pub fn file_of(&self, anchor: &Anchor) -> Option<usize> {
+    pub(crate) fn file_of(&self, anchor: &Anchor) -> Option<usize> {
         self.files.iter().position(|file| match anchor.side {
             Side::New => file.new_path == anchor.path,
             Side::Old => file.old_path == anchor.path,
@@ -218,12 +218,12 @@ impl Review {
     }
 
     /// The code on the anchor's line, when the diff shows it.
-    pub fn line_text(&self, anchor: &Anchor) -> Option<&str> {
+    pub(crate) fn line_text(&self, anchor: &Anchor) -> Option<&str> {
         self.files.iter().find_map(|file| file.line_at(anchor)).map(|line| line.text.as_str())
     }
 
     /// Whether the row shows the anchor's line.
-    pub fn row_holds(&self, row: &Row, anchor: &Anchor) -> bool {
+    pub(crate) fn row_holds(&self, row: &Row, anchor: &Anchor) -> bool {
         let Some(Place::Line { file, new, old }) = self.place_of(row) else { return false };
         let number = match anchor.side {
             Side::New => new,
@@ -233,7 +233,7 @@ impl Review {
     }
 
     /// Threads anchored in the diff that `place` does not show: the footer's "n more in this file".
-    pub fn others_in_file(&self, place: &Place) -> usize {
+    pub(crate) fn others_in_file(&self, place: &Place) -> usize {
         let Place::Line { file, .. } = place else { return 0 };
         let here: Vec<&str> = self.threads_in(place).iter().map(|t| t.id.as_str()).collect();
         let file = &self.files[*file];
@@ -246,7 +246,7 @@ impl Review {
 
     /// The text of the lines a note covers, first to last, on the side it hangs on:
     /// what a suggestion in that note replaces.
-    pub fn text_at(&self, position: &crate::forge::Position) -> Vec<String> {
+    pub(crate) fn text_at(&self, position: &crate::forge::Position) -> Vec<String> {
         let Some(file) = self.files.iter().find(|f| f.new_path == position.new_path || f.old_path == position.old_path) else {
             return vec![];
         };

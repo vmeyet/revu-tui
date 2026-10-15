@@ -5,13 +5,13 @@ use std::io::Write as _;
 
 /// OSC 52: the terminal puts `text` on its own clipboard. Inside tmux it goes out twice, since tmux hands on
 /// the plain one only with `set-clipboard on` and the wrapped one only with `allow-passthrough on`.
-pub fn escape(text: &str, in_tmux: bool) -> String {
+pub(crate) fn escape(text: &str, in_tmux: bool) -> String {
     let plain = format!("\x1b]52;c;{}\x07", base64::engine::general_purpose::STANDARD.encode(text));
     if in_tmux { format!("\x1bPtmux;{}\x1b\\{plain}", plain.replace('\x1b', "\x1b\x1b")) } else { plain }
 }
 
 /// Written from the loop, between two frames, so the escape never lands inside one.
-pub fn print(text: &str) {
+pub(crate) fn print(text: &str) {
     let mut out = std::io::stdout();
     let escaped = escape(text, std::env::var_os("TMUX").is_some());
     out.write_all(escaped.as_bytes()).and_then(|()| out.flush()).or_warn("copying to the clipboard");

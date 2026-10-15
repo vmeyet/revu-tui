@@ -12,7 +12,7 @@ use unicode_width::UnicodeWidthStr;
 const WIDTH: u16 = 64;
 const CHROME_ROWS: u16 = 9;
 
-pub fn draw(f: &mut Frame<'_>, app: &App, publish: &Publish, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &App, publish: &Publish, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let drafts = &open.review.drafts;

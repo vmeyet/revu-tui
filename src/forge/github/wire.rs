@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 /// A GraphQL answer: `data`, or the `errors` that stopped it.
 #[derive(Deserialize)]
-pub struct Answer<T> {
+pub(crate) struct Answer<T> {
     data: Option<T>,
     #[serde(default)]
     errors: Option<Vec<Message>>,
@@ -18,7 +18,7 @@ struct Message {
 }
 
 impl<T> Answer<T> {
-    pub fn into_data(self) -> Result<T> {
+    pub(super) fn into_data(self) -> Result<T> {
         if let Some(errors) = self.errors.filter(|e| !e.is_empty()) {
             bail!("GraphQL: {}", errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join("; "));
         }
@@ -27,7 +27,7 @@ impl<T> Answer<T> {
 }
 
 /// GitHub errors are `{"message": …, "errors": [{"message": …}]}`; anything else is shown as is.
-pub fn error_message(body: &str) -> String {
+pub(crate) fn error_message(body: &str) -> String {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else { return body.trim().to_owned() };
     let head = value.get("message").and_then(serde_json::Value::as_str).unwrap_or_default();
     let details: Vec<&str> = value
@@ -46,11 +46,11 @@ pub fn error_message(body: &str) -> String {
 
 /// A REST user: `/user`, a PR author.
 #[derive(Deserialize)]
-pub struct RestUser {
-    pub id: u64,
-    pub login: String,
+pub(super) struct RestUser {
+    pub(crate) id: u64,
+    pub(crate) login: String,
     #[serde(default)]
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
 }
 
 impl From<RestUser> for forge::User {
@@ -63,23 +63,23 @@ impl From<RestUser> for forge::User {
 /// A GraphQL actor: a user (with a name and an id) or a bot (without); `None` once deleted.
 #[derive(Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Actor {
-    pub login: String,
+pub(super) struct Actor {
+    pub(crate) login: String,
     #[serde(default)]
-    pub name: Option<String>,
+    pub(crate) name: Option<String>,
     #[serde(default)]
-    pub database_id: Option<u64>,
+    pub(crate) database_id: Option<u64>,
 }
 
-pub fn user_of(actor: Option<Actor>) -> forge::User {
+pub(super) fn user_of(actor: Option<Actor>) -> forge::User {
     let actor = actor.unwrap_or_else(|| Actor { login: "ghost".into(), ..Actor::default() });
     let name = actor.name.filter(|n| !n.is_empty()).unwrap_or_else(|| actor.login.clone());
     forge::User { id: actor.database_id.unwrap_or_default(), username: actor.login, name }
 }
 
 #[derive(Deserialize)]
-pub struct Nodes<T> {
-    pub nodes: Vec<T>,
+pub(crate) struct Nodes<T> {
+    pub(crate) nodes: Vec<T>,
 }
 
 impl<T> Default for Nodes<T> {
@@ -89,101 +89,101 @@ impl<T> Default for Nodes<T> {
 }
 
 #[derive(Deserialize)]
-pub struct Count {
+pub(crate) struct Count {
     #[serde(rename = "totalCount")]
-    pub total: u32,
+    pub(crate) total: u32,
 }
 
 #[derive(Deserialize)]
-pub struct Label {
-    pub name: String,
+pub(super) struct Label {
+    pub(crate) name: String,
 }
 
 #[derive(Deserialize)]
-pub struct Review {
+pub(crate) struct Review {
     #[serde(default)]
-    pub author: Option<Actor>,
-    pub state: String,
+    pub(crate) author: Option<Actor>,
+    pub(crate) state: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReviewRequest {
+pub(super) struct ReviewRequest {
     #[serde(default)]
-    pub requested_reviewer: Option<Actor>,
+    pub(crate) requested_reviewer: Option<Actor>,
 }
 
 #[derive(Deserialize)]
-pub struct CommitNode {
-    pub commit: Commit,
+pub(super) struct CommitNode {
+    pub(crate) commit: Commit,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Commit {
+pub(crate) struct Commit {
     #[serde(default)]
-    pub status_check_rollup: Option<Rollup>,
+    pub(crate) status_check_rollup: Option<Rollup>,
 }
 
 #[derive(Deserialize)]
-pub struct Rollup {
-    pub state: String,
+pub(crate) struct Rollup {
+    pub(crate) state: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResolvedFlag {
-    pub is_resolved: bool,
+pub(crate) struct ResolvedFlag {
+    pub(crate) is_resolved: bool,
 }
 
 /// A pull request as the queue fragment asks for it.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QueuePr {
-    pub number: u64,
-    pub title: String,
+pub(super) struct QueuePr {
+    pub(crate) number: u64,
+    pub(crate) title: String,
     #[serde(default)]
-    pub body: Option<String>,
-    pub is_draft: bool,
-    pub url: String,
-    pub updated_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub head_ref_name: String,
-    pub base_ref_name: String,
+    pub(crate) body: Option<String>,
+    pub(crate) is_draft: bool,
+    pub(crate) url: String,
+    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) head_ref_name: String,
+    pub(crate) base_ref_name: String,
     #[serde(default)]
-    pub mergeable: Option<String>,
-    pub repository: Repository,
+    pub(crate) mergeable: Option<String>,
+    pub(crate) repository: Repository,
     #[serde(default)]
-    pub author: Option<Actor>,
+    pub(crate) author: Option<Actor>,
     #[serde(default)]
-    pub review_decision: Option<String>,
+    pub(crate) review_decision: Option<String>,
     #[serde(default)]
-    pub latest_reviews: Nodes<Review>,
+    pub(crate) latest_reviews: Nodes<Review>,
     #[serde(default)]
-    pub review_requests: Nodes<ReviewRequest>,
+    pub(crate) review_requests: Nodes<ReviewRequest>,
     #[serde(default)]
-    pub commits: Nodes<CommitNode>,
-    pub additions: u32,
-    pub deletions: u32,
-    pub changed_files: u32,
+    pub(crate) commits: Nodes<CommitNode>,
+    pub(crate) additions: u32,
+    pub(crate) deletions: u32,
+    pub(crate) changed_files: u32,
     #[serde(default)]
-    pub review_threads: Nodes<ResolvedFlag>,
+    pub(crate) review_threads: Nodes<ResolvedFlag>,
     #[serde(default)]
-    pub labels: Nodes<Label>,
-    pub comments: Count,
+    pub(crate) labels: Nodes<Label>,
+    pub(crate) comments: Count,
     /// Everyone who took part: the author, reviewers and commenters.
     #[serde(default)]
-    pub participants: Nodes<Actor>,
+    pub(crate) participants: Nodes<Actor>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Repository {
-    pub name_with_owner: ProjectPath,
+pub(super) struct Repository {
+    pub(crate) name_with_owner: ProjectPath,
 }
 
 /// A review state as the queue sorts it: a pending request counts over any earlier review.
-pub fn review_state(state: &str) -> ReviewState {
+pub(crate) fn review_state(state: &str) -> ReviewState {
     match state {
         "APPROVED" => ReviewState::Approved,
         "CHANGES_REQUESTED" => ReviewState::RequestedChanges,
@@ -195,7 +195,7 @@ pub fn review_state(state: &str) -> ReviewState {
 }
 
 /// Every reviewer once: whoever is asked again reads as unreviewed, whatever they said before.
-pub fn reviewers(requests: &Nodes<ReviewRequest>, reviews: &Nodes<Review>) -> Vec<ReviewerState> {
+pub(crate) fn reviewers(requests: &Nodes<ReviewRequest>, reviews: &Nodes<Review>) -> Vec<ReviewerState> {
     let asked = requests.nodes.iter().filter_map(|r| r.requested_reviewer.as_ref()).map(|a| (a.login.clone(), ReviewState::Unreviewed));
     let answered = reviews.nodes.iter().filter_map(|r| r.author.as_ref().map(|a| (a.login.clone(), review_state(&r.state))));
     let mut states: Vec<ReviewerState> = vec![];
@@ -217,7 +217,7 @@ fn approvals_left(decision: Option<&str>) -> Option<u32> {
 }
 
 /// The check-run rollup of the newest commit, as a pipeline status.
-pub fn pipeline(commits: &Nodes<CommitNode>) -> Option<PipelineStatus> {
+pub(crate) fn pipeline(commits: &Nodes<CommitNode>) -> Option<PipelineStatus> {
     let state = commits.nodes.last()?.commit.status_check_rollup.as_ref()?.state.as_str();
     Some(match state {
         "SUCCESS" => PipelineStatus::Success,
@@ -269,12 +269,12 @@ impl From<QueuePr> for QueueMr {
 }
 
 /// A diff line on one side, as GitHub names it (`LEFT` is the old file, `RIGHT` the new one).
-pub fn line_on(side: &str, line: u32) -> LineRef {
+fn line_on(side: &str, line: u32) -> LineRef {
     if side == "LEFT" { LineRef { old: Some(line), new: None } } else { LineRef { old: None, new: Some(line) } }
 }
 
 /// The side and number GitHub wants for a neutral line: the new file whenever the line is there.
-pub fn side_of(line: LineRef) -> Option<(&'static str, u32)> {
+pub(super) fn side_of(line: LineRef) -> Option<(&'static str, u32)> {
     let number = line.number()?;
     Some((if line.side() == Side::New { "RIGHT" } else { "LEFT" }, number))
 }
@@ -282,24 +282,24 @@ pub fn side_of(line: LineRef) -> Option<(&'static str, u32)> {
 /// A review thread's anchor, on `refs`; outdated threads fall back to where they were written.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Anchor {
-    pub path: String,
+pub(crate) struct Anchor {
+    pub(crate) path: String,
     #[serde(default)]
-    pub line: Option<u32>,
+    pub(crate) line: Option<u32>,
     #[serde(default)]
-    pub original_line: Option<u32>,
+    pub(crate) original_line: Option<u32>,
     #[serde(default)]
-    pub start_line: Option<u32>,
+    pub(crate) start_line: Option<u32>,
     #[serde(default)]
-    pub original_start_line: Option<u32>,
+    pub(crate) original_start_line: Option<u32>,
     #[serde(default)]
-    pub diff_side: Option<String>,
+    pub(crate) diff_side: Option<String>,
     #[serde(default)]
-    pub start_diff_side: Option<String>,
+    pub(crate) start_diff_side: Option<String>,
 }
 
 impl Anchor {
-    pub fn position(&self, refs: &Refs) -> Option<Position> {
+    pub(crate) fn position(&self, refs: &Refs) -> Option<Position> {
         let side = self.diff_side.as_deref().unwrap_or("RIGHT");
         let line = line_on(side, self.line.or(self.original_line)?);
         let start = self

@@ -1,7 +1,7 @@
 # Architecture
 
 `revu` is one binary: a TUI (`revu`) and scriptable commands (`revu list`, `revu show`, ...).
-`src/lib.rs` holds everything; `src/main.rs` only parses the command line and calls a command.
+`src/lib.rs` holds everything and exports only `cli`, `commands`, `ctx` and `log` to `src/main.rs`, which parses the command line and calls a command.
 This page says how the code is laid out today.
 When a boundary or a flow changes, change this page in the same MR.
 

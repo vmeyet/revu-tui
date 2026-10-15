@@ -5,7 +5,7 @@ use crate::forge::{PipelineStatus, QueueMr, Sections};
 
 /// The one glyph at the right edge of a queue row, most pressing first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Badge {
+pub(crate) enum Badge {
     Failed,
     Running,
     Activity,
@@ -13,7 +13,7 @@ pub enum Badge {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum QueueRow<'a> {
+pub(crate) enum QueueRow<'a> {
     Section {
         name: &'static str,
         count: usize,
@@ -32,7 +32,7 @@ pub enum QueueRow<'a> {
 
 impl QueueRow<'_> {
     /// The cursor may land on it: an MR, a stack, or a folded section's header.
-    pub fn selectable(&self) -> bool {
+    pub(crate) fn selectable(&self) -> bool {
         matches!(self, Self::Mr(_) | Self::Stack { .. } | Self::Stacked(_) | Self::Section { open: false, .. })
     }
 }
@@ -41,7 +41,7 @@ impl App {
     /// Sections and their rows after the filter, in the chosen order; a section with no match
     /// still shows its header, except the ones that only exist when they hold something. A pinned
     /// MR leaves its section for PINNED, on top.
-    pub fn queue_rows(&self) -> Vec<QueueRow<'_>> {
+    pub(crate) fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
         let groups: [(&'static str, &Vec<QueueMr>); 8] = [
             ("TO REVIEW", &sections.to_review),
@@ -110,7 +110,7 @@ impl App {
     }
 
     /// Why the selected MR sits where it does, when a "needs me" rule placed it: the status line says it.
-    pub fn selected_reason(&self) -> Option<String> {
+    pub(crate) fn selected_reason(&self) -> Option<String> {
         self.selected_mr()?.reason.as_ref().map(ToString::to_string)
     }
 
@@ -128,14 +128,14 @@ impl App {
     }
 
     /// What the queue title says after the scope: the filter (or the view that set it) and the order.
-    pub fn queue_view_label(&self) -> Option<String> {
+    pub(crate) fn queue_view_label(&self) -> Option<String> {
         let filter = if self.filter.is_empty() { None } else { Some(self.view.clone().unwrap_or_else(|| self.filter.clone())) };
         let order = self.queue_view.order.label().map(str::to_owned);
         let words: Vec<String> = filter.into_iter().chain(order).collect();
         (!words.is_empty()).then(|| words.join(", "))
     }
 
-    pub fn queue_is_empty(&self) -> bool {
+    pub(crate) fn queue_is_empty(&self) -> bool {
         self.sections.as_ref().is_some_and(|s| s == &Sections::default())
     }
 
@@ -160,13 +160,13 @@ impl App {
     }
 
     /// What `'` offers while it waits for its letter: `f front · b backlog`.
-    pub fn views_hint(&self) -> String {
+    pub(crate) fn views_hint(&self) -> String {
         let listed: Vec<String> =
             self.views.iter().filter_map(|(name, _)| name.chars().next().map(|first| format!("{first} {name}"))).collect();
         if listed.is_empty() { "no saved views: [queue.views] in the config".into() } else { format!("views: {}", listed.join(" · ")) }
     }
 
-    pub fn selected_mr(&self) -> Option<&QueueMr> {
+    pub(super) fn selected_mr(&self) -> Option<&QueueMr> {
         match self.queue_rows().get(self.queue_selected) {
             Some(QueueRow::Mr(mr) | QueueRow::Stacked(mr)) => Some(mr),
             _ => None,
@@ -174,27 +174,27 @@ impl App {
     }
 
     /// A stack's badge: the most pressing of its MRs' badges.
-    pub fn stack_badge(&self, mrs: &[&QueueMr]) -> Option<Badge> {
+    pub(crate) fn stack_badge(&self, mrs: &[&QueueMr]) -> Option<Badge> {
         mrs.iter().filter_map(|mr| self.badge(mr)).min()
     }
 
     /// A stack carries the approval mark when every one of its MRs does.
-    pub fn stack_approved(&self, mrs: &[&QueueMr]) -> bool {
+    pub(crate) fn stack_approved(&self, mrs: &[&QueueMr]) -> bool {
         !mrs.is_empty() && mrs.iter().all(|mr| self.approved(mr))
     }
 
     /// The approval mark, beside the badge: on my MR, the forge would let it merge; on anyone
     /// else's, I approved it. An MR no rule guards counts as approved, so mine also needs an approver.
-    pub fn approved(&self, mr: &QueueMr) -> bool {
+    pub(crate) fn approved(&self, mr: &QueueMr) -> bool {
         if mr.author == self.me { mr.approved && !mr.approved_by.is_empty() } else { mr.approved_by.contains(&self.me) }
     }
 
     /// The row's host, named only when rows from several hosts share the queue.
-    pub fn host_tag(&self, mr: &QueueMr) -> Option<String> {
+    pub(crate) fn host_tag(&self, mr: &QueueMr) -> Option<String> {
         self.sections.as_ref().filter(|s| s.mixes_hosts()).and_then(|_| self.hosts.tag(&mr.key()))
     }
 
-    pub fn badge(&self, mr: &QueueMr) -> Option<Badge> {
+    pub(crate) fn badge(&self, mr: &QueueMr) -> Option<Badge> {
         let failed = mr.conflicts || mr.pipeline == Some(PipelineStatus::Failed);
         let running = mr.pipeline.is_some_and(PipelineStatus::is_running);
         let activity = self.opened.get(&mr.key()).is_some_and(|opened| mr.updated_at > *opened);

@@ -18,35 +18,35 @@ const LONGEST_WAIT: Duration = Duration::from_secs(30);
 
 /// One block of the system prompt; `cached` ones end a cache breakpoint, so the stable parts are paid once.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Block {
-    pub text: String,
-    pub cached: bool,
+pub(crate) struct Block {
+    pub(crate) text: String,
+    pub(crate) cached: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Role {
+pub(crate) enum Role {
     User,
     Assistant,
 }
 
 /// One turn of the conversation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Turn {
-    pub role: Role,
-    pub text: String,
+pub(crate) struct Turn {
+    pub(crate) role: Role,
+    pub(crate) text: String,
 }
 
 /// Everything one call sends: the system blocks, then the turns so far, the question last.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Ask {
-    pub system: Vec<Block>,
-    pub turns: Vec<Turn>,
+pub(crate) struct Ask {
+    pub(crate) system: Vec<Block>,
+    pub(crate) turns: Vec<Turn>,
 }
 
 /// What the stream says as it goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Event {
+pub(crate) enum Event {
     Text(String),
     /// A refused model's partial answer is void: another model starts over.
     Restart,
@@ -54,7 +54,7 @@ pub enum Event {
 
 /// Why the answer stopped.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Stop {
+pub(crate) enum Stop {
     Done,
     /// Cut at the token limit: the answer is partial.
     Cut,
@@ -64,24 +64,24 @@ pub enum Stop {
 
 /// Tokens of one call, the cache reads included, so the pane can show what caching saved.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Usage {
-    pub input: u64,
-    pub output: u64,
-    pub cache_read: u64,
-    pub cache_write: u64,
+pub(crate) struct Usage {
+    pub(crate) input: u64,
+    pub(crate) output: u64,
+    pub(crate) cache_read: u64,
+    pub(crate) cache_write: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Outcome {
-    pub stop: Stop,
-    pub usage: Usage,
+pub(crate) struct Outcome {
+    pub(crate) stop: Stop,
+    pub(crate) usage: Usage,
     /// The model that answered: the configured one, or its fallback.
-    pub model: String,
+    pub(crate) model: String,
 }
 
 /// Why a call failed, in words for a toast; never carries the key.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Failure(pub String);
+pub(crate) struct Failure(pub(crate) String);
 
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -90,7 +90,7 @@ impl fmt::Display for Failure {
 }
 
 #[derive(Clone)]
-pub struct Claude {
+pub(crate) struct Claude {
     http: reqwest::Client,
     base: String,
     key: Secret,
@@ -104,11 +104,11 @@ impl fmt::Debug for Claude {
 }
 
 impl Claude {
-    pub fn new(key: Secret, model: &str) -> anyhow::Result<Self> {
+    pub(crate) fn new(key: Secret, model: &str) -> anyhow::Result<Self> {
         Self::with_base(API_URL, key, model)
     }
 
-    pub fn model(&self) -> &str {
+    pub(crate) fn model(&self) -> &str {
         &self.model
     }
 
@@ -120,7 +120,7 @@ impl Claude {
 
     /// Streams the answer to `on`, text as it comes, and says how it ended.
     /// A busy API (429, 5xx, 529) is tried once more after the wait it asks for.
-    pub async fn stream(&self, ask: &Ask, mut on: impl FnMut(Event)) -> Result<Outcome, Failure> {
+    pub(crate) async fn stream(&self, ask: &Ask, mut on: impl FnMut(Event)) -> Result<Outcome, Failure> {
         let body = body(&self.model, ask);
         let mut response = self.send(&body).await?;
         if RETRYABLE.contains(&response.status().as_u16()) {
@@ -157,7 +157,7 @@ impl Claude {
 }
 
 /// The request body: the system blocks with a cache breakpoint on each stable one, then the turns.
-pub fn body(model: &str, ask: &Ask) -> Value {
+pub(crate) fn body(model: &str, ask: &Ask) -> Value {
     let system: Vec<Value> = ask
         .system
         .iter()

@@ -3,7 +3,7 @@ use crate::forge::{ApprovalChange, Discussion};
 use crate::review::{Draft, Review, draft};
 
 impl App {
-    pub fn apply(&mut self, incoming: Incoming) {
+    pub(crate) fn apply(&mut self, incoming: Incoming) {
         match incoming {
             Incoming::Queue { scope, .. }
             | Incoming::QueueView { scope, .. }
@@ -120,7 +120,7 @@ impl App {
     }
 
     /// Every answer that is waiting applied in one go, so the loop draws once per batch and not once per piece of a stream.
-    pub fn apply_all(&mut self, waiting: impl IntoIterator<Item = Incoming>) -> Vec<super::Action> {
+    pub(crate) fn apply_all(&mut self, waiting: impl IntoIterator<Item = Incoming>) -> Vec<super::Action> {
         waiting
             .into_iter()
             .flat_map(|incoming| {
@@ -131,7 +131,7 @@ impl App {
     }
 
     /// Actions an `Incoming` produced, taken by the loop right after `apply`.
-    pub fn take_actions(&mut self) -> Vec<super::Action> {
+    pub(crate) fn take_actions(&mut self) -> Vec<super::Action> {
         let actions = std::mem::take(&mut self.composed);
         self.sending(actions)
     }

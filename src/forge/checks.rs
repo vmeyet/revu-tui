@@ -4,30 +4,30 @@ use serde::{Deserialize, Serialize};
 
 /// Every job of the run, and where the forge shows the whole of it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Checks {
-    pub web_url: Option<String>,
-    pub stages: Vec<Stage>,
+pub(crate) struct Checks {
+    pub(crate) web_url: Option<String>,
+    pub(crate) stages: Vec<Stage>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Stage {
-    pub name: String,
-    pub jobs: Vec<Job>,
+pub(crate) struct Stage {
+    pub(crate) name: String,
+    pub(crate) jobs: Vec<Job>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Job {
-    pub name: String,
-    pub state: JobState,
+pub(crate) struct Job {
+    pub(crate) name: String,
+    pub(crate) state: JobState,
     /// How long it ran, once it started.
-    pub seconds: Option<u64>,
-    pub web_url: String,
+    pub(crate) seconds: Option<u64>,
+    pub(crate) web_url: String,
     /// A failure the forge does not count against the run.
-    pub allowed_to_fail: bool,
+    pub(crate) allowed_to_fail: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum JobState {
+pub(crate) enum JobState {
     Failed,
     Running,
     Pending,
@@ -39,15 +39,15 @@ pub enum JobState {
 
 /// One job as a backend found it, with the stage it belongs to and when it started, so stages
 /// line up in the order they ran whatever order the forge listed the jobs in.
-pub struct Found {
-    pub stage: String,
-    pub order: String,
-    pub job: Job,
+pub(crate) struct Found {
+    pub(crate) stage: String,
+    pub(crate) order: String,
+    pub(crate) job: Job,
 }
 
 impl Checks {
     /// Jobs grouped by stage; stages ordered by their earliest job, failed jobs first inside each.
-    pub fn from_jobs(web_url: Option<String>, found: Vec<Found>) -> Self {
+    pub(crate) fn from_jobs(web_url: Option<String>, found: Vec<Found>) -> Self {
         let mut found = found;
         found.sort_by(|a, b| a.order.cmp(&b.order));
         let mut stages: Vec<Stage> = vec![];
@@ -63,12 +63,12 @@ impl Checks {
         Self { web_url, stages }
     }
 
-    pub fn jobs(&self) -> impl Iterator<Item = &Job> {
+    pub(crate) fn jobs(&self) -> impl Iterator<Item = &Job> {
         self.stages.iter().flat_map(|s| s.jobs.iter())
     }
 
     /// How the run stands as a whole: a counted failure wins, then anything still to finish.
-    pub fn state(&self) -> JobState {
+    pub(crate) fn state(&self) -> JobState {
         let counted = || self.jobs().filter(|j| !(j.allowed_to_fail && j.state == JobState::Failed));
         if counted().any(|j| j.state == JobState::Failed) {
             JobState::Failed
@@ -81,7 +81,7 @@ impl Checks {
         }
     }
 
-    pub fn count(&self, state: JobState) -> usize {
+    pub(crate) fn count(&self, state: JobState) -> usize {
         self.jobs().filter(|j| j.state == state).count()
     }
 }

@@ -4,14 +4,14 @@ use crate::diff::{Line, LineKind};
 use crate::forge::{LineRef, Position};
 
 /// A note on one line. `None` when the indexes point outside the diff.
-pub fn for_line(review: &Review, file: usize, hunk: usize, line: usize) -> Option<Position> {
+pub(crate) fn for_line(review: &Review, file: usize, hunk: usize, line: usize) -> Option<Position> {
     let target = review.files.get(file)?;
     let end = target.hunks.get(hunk)?.lines.get(line)?;
     Some(position(review, file, end, None))
 }
 
 /// A note on the lines from `start` to `end`, each `(file, hunk, line)`, inside one file.
-pub fn for_range(review: &Review, start: (usize, usize, usize), end: (usize, usize, usize)) -> Option<Position> {
+pub(crate) fn for_range(review: &Review, start: (usize, usize, usize), end: (usize, usize, usize)) -> Option<Position> {
     if start.0 != end.0 {
         return None;
     }

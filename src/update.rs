@@ -7,23 +7,23 @@ use std::path::Path;
 use std::process::Command;
 
 /// Where `revu update` installs from.
-pub const REPO: &str = "https://github.com/vmeyet/revu-tui";
+pub(crate) const REPO: &str = "https://github.com/vmeyet/revu-tui";
 
 /// The Homebrew formula `revu update` upgrades when brew installed the running binary.
-pub const FORMULA: &str = "vmeyet/tap/revu";
+pub(crate) const FORMULA: &str = "vmeyet/tap/revu";
 
 /// cargo's build folder, kept in the cache between updates so only revu recompiles.
 /// Hosts are the other names at the cache root and always hold a dot, so this one cannot collide.
 const BUILD_FOLDER: &str = "cargo_target";
 
 /// The newest commit of the repo.
-pub fn latest() -> Result<String> {
+pub(crate) fn latest() -> Result<String> {
     let listing = git(&["ls-remote", REPO, "HEAD"])?;
     listing.split_whitespace().next().map(str::to_owned).with_context(|| format!("{REPO} has no HEAD"))
 }
 
 /// Rebuilds and installs from the repo with cargo, reusing the dependencies built last time.
-pub fn install() -> Result<()> {
+pub(crate) fn install() -> Result<()> {
     let build = Cache::shared().folder(BUILD_FOLDER)?;
     forget_revu(&build)?;
     let status = Command::new("cargo")
@@ -38,7 +38,7 @@ pub fn install() -> Result<()> {
 }
 
 /// Whether brew installed the running binary, so brew is the one to upgrade it.
-pub fn installed_by_brew() -> bool {
+pub(crate) fn installed_by_brew() -> bool {
     std::env::current_exe().and_then(std::fs::canonicalize).is_ok_and(|exe| is_in_brew_cellar(&exe))
 }
 
@@ -47,7 +47,7 @@ fn is_in_brew_cellar(exe: &Path) -> bool {
 }
 
 /// Upgrades the formula with brew, or reinstalls it when `force` asks to install the same version again.
-pub fn brew(force: bool) -> Result<()> {
+pub(crate) fn brew(force: bool) -> Result<()> {
     let action = if force { "reinstall" } else { "upgrade" };
     let status = Command::new("brew").args([action, FORMULA]).status().context("running brew")?;
     if !status.success() {
@@ -57,7 +57,7 @@ pub fn brew(force: bool) -> Result<()> {
 }
 
 /// Lets the binary now installed print what is new past `had`: the running one only holds its own changelog.
-pub fn show_news(had: Position) -> Result<()> {
+pub(crate) fn show_news(had: Position) -> Result<()> {
     let installed = std::env::current_exe().context("finding the installed revu")?;
     Command::new(installed).args(news_args(had)).status().context("running the installed revu")?;
     Ok(())
@@ -83,13 +83,13 @@ fn forget_revu(build: &Path) -> Result<()> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Decision {
+pub(crate) enum Decision {
     Install,
     UpToDate,
 }
 
 /// Only a commit we know we already run spares the rebuild; anything unanswered installs.
-pub fn decide(installed: &str, latest: Option<&str>, force: bool) -> Decision {
+pub(crate) fn decide(installed: &str, latest: Option<&str>, force: bool) -> Decision {
     match latest {
         Some(latest) if !force && installed != version::UNKNOWN && latest == installed => Decision::UpToDate,
         _ => Decision::Install,

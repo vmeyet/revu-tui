@@ -89,7 +89,7 @@ impl App {
     }
 
     /// The zen switch line, while it is fresh.
-    pub fn zen_banner(&self, now: Instant) -> Option<&str> {
+    pub(crate) fn zen_banner(&self, now: Instant) -> Option<&str> {
         let (since, text) = self.zen_switch.as_ref()?;
         (now.duration_since(*since) < ZEN_BANNER).then_some(text.as_str())
     }

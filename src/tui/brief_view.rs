@@ -22,7 +22,7 @@ const PAD_Y: u16 = 1;
 /// Lines each thread takes: what it says, then where it is.
 const THREAD_ROWS: usize = 2;
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let today = app.today;
     let from_review = app.open.as_ref().is_some_and(|o| app.brief.as_ref().is_some_and(|b| b.key == o.key));

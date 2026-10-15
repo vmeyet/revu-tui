@@ -20,25 +20,25 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// How one forge speaks HTTP where the two differ.
 #[derive(Debug)]
-pub struct Flavor {
+pub(super) struct Flavor {
     /// The header counting the requests left in the window.
-    pub remaining: &'static str,
+    pub(crate) remaining: &'static str,
     /// The header giving the unix time the window starts again.
-    pub reset: &'static str,
+    pub(crate) reset: &'static str,
     /// Whether a 403 can be a rate limit rather than a refusal: with no request left, a
     /// `Retry-After`, or a message naming a secondary rate limit.
-    pub limits_with_403: bool,
+    pub(crate) limits_with_403: bool,
     /// The forge's error body, in one line.
-    pub error_message: fn(&str) -> String,
+    pub(crate) error_message: fn(&str) -> String,
 }
 
 /// An answer outside 2xx, kept typed so callers sort it by status.
 #[derive(Debug)]
-pub struct HttpError {
+pub(super) struct HttpError {
     /// `GET /api/v4/user`: the method and path, never the query or host.
-    pub request: String,
-    pub status: StatusCode,
-    pub message: String,
+    pub(crate) request: String,
+    pub(crate) status: StatusCode,
+    pub(crate) message: String,
 }
 
 impl fmt::Display for HttpError {
@@ -50,12 +50,12 @@ impl fmt::Display for HttpError {
 impl std::error::Error for HttpError {}
 
 /// The status of an `HttpError` anywhere in `err`'s chain.
-pub fn status(err: &anyhow::Error) -> Option<StatusCode> {
+pub(crate) fn status(err: &anyhow::Error) -> Option<StatusCode> {
     err.downcast_ref::<HttpError>().map(|e| e.status)
 }
 
 #[derive(Clone, Debug)]
-pub struct Transport {
+pub(super) struct Transport {
     client: reqwest::Client,
     base: Url,
     /// The forge's web origin, which `fetch_web` alone may reach.
@@ -66,7 +66,7 @@ pub struct Transport {
 
 impl Transport {
     /// `headers` carry the token: every request goes to `base`'s scheme, host and port or not at all.
-    pub fn new(base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
+    pub(crate) fn new(base: &str, headers: HeaderMap, flavor: &'static Flavor) -> Result<Self> {
         Self::from_builder(crate::http::client().timeout(REQUEST_TIMEOUT), base, headers, flavor)
     }
 
@@ -82,63 +82,63 @@ impl Transport {
 
     /// Lets `fetch_web` take the token to `web` too; it keeps the base's scheme, so an `https` base
     /// never sends the token in clear.
-    pub fn with_web(self, web: &str) -> Result<Self> {
+    pub(super) fn with_web(self, web: &str) -> Result<Self> {
         let web = Url::parse(web).context("host is not a hostname")?;
         ensure!(web.scheme() == self.base.scheme(), "refusing to send the token over {}", web.scheme());
         Ok(Self { web: Some(web), ..self })
     }
 
-    pub fn rate(&self) -> RateLimit {
+    pub(crate) fn rate(&self) -> RateLimit {
         self.budget.now()
     }
 
     /// `path` joined to the base, refused when it leaves the base's origin.
-    pub fn url(&self, path: &str) -> Result<Url> {
+    pub(crate) fn url(&self, path: &str) -> Result<Url> {
         join_within(&self.base, path)
     }
 
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+    pub(crate) async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let response = self.send(Method::GET, path, None).await?;
         response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
     }
 
-    pub async fn get_text(&self, path: &str) -> Result<String> {
+    pub(super) async fn get_text(&self, path: &str) -> Result<String> {
         let response = self.send(Method::GET, path, None).await?;
         response.text().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
     }
 
     /// A GET asking for `accept` instead of the client's default type.
-    pub async fn fetch(&self, path: &str, accept: &'static str) -> Result<Response> {
+    pub(crate) async fn fetch(&self, path: &str, accept: &'static str) -> Result<Response> {
         self.send_to(Method::GET, self.url(path)?, None, Some(accept)).await
     }
 
     /// One GET of `path` on the web origin, answered as is: a redirect comes back, never followed.
-    pub async fn fetch_web(&self, path: &str, accept: &'static str) -> Result<Response> {
+    pub(super) async fn fetch_web(&self, path: &str, accept: &'static str) -> Result<Response> {
         let web = self.web.as_ref().context("no web host to send the token to")?;
         self.send_once(Method::GET, join_within(web, path)?, None, Some(accept)).await
     }
 
-    pub async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+    pub(super) async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(Method::POST, path, Some(body)).await?;
         response.json().await.map_err(scrub).with_context(|| format!("POST {path}: unreadable answer"))
     }
 
-    pub async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
+    pub(super) async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(Method::PUT, path, Some(body)).await?;
         response.json().await.map_err(scrub).with_context(|| format!("PUT {path}: unreadable answer"))
     }
 
     /// A request whose answer body does not matter: `204`s, publishes, approvals.
-    pub async fn send_empty(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<()> {
+    pub(super) async fn send_empty(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<()> {
         self.send(method, path, body).await.map(|_| ())
     }
 
-    pub async fn delete(&self, path: &str) -> Result<()> {
+    pub(crate) async fn delete(&self, path: &str) -> Result<()> {
         self.send_empty(Method::DELETE, path, None).await
     }
 
     /// Every page of a list, following `Link: rel="next"` until it stops.
-    pub async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
+    pub(super) async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
         let mut url = self.url(path)?;
         url.query_pairs_mut().append_pair("per_page", PAGE_SIZE);
         let mut items = Vec::new();
@@ -155,7 +155,7 @@ impl Transport {
     }
 
     /// One request with the token; a non-2xx answer is an `HttpError`.
-    pub async fn send(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<Response> {
+    pub(crate) async fn send(&self, method: Method, path: &str, body: Option<&serde_json::Value>) -> Result<Response> {
         self.send_to(method, self.url(path)?, body, None).await
     }
 
@@ -274,7 +274,7 @@ fn next_link(header: &str) -> Option<&str> {
 
 /// reqwest errors carry the URL, never the header, but the chain is cut here anyway so nothing
 /// above the transport can leak a request. A timeout says so, which the cut chain would hide.
-pub fn scrub(err: reqwest::Error) -> anyhow::Error {
+pub(super) fn scrub(err: reqwest::Error) -> anyhow::Error {
     let timed_out = if err.is_timeout() { ": timed out" } else { "" };
     anyhow::anyhow!("{}{timed_out}", err.without_url())
 }

@@ -9,51 +9,51 @@ use toml_edit::{DocumentMut, Item, Table, Value};
 mod ignored;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Config {
+pub(crate) struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
+    pub(crate) host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
+    pub(crate) username: Option<String>,
     #[serde(default, skip_serializing_if = "Queue::is_default")]
-    pub queue: Queue,
+    pub(crate) queue: Queue,
     #[serde(default, skip_serializing_if = "Review::is_default")]
-    pub review: Review,
+    pub(crate) review: Review,
     #[serde(default, skip_serializing_if = "Tui::is_default")]
-    pub tui: Tui,
+    pub(crate) tui: Tui,
     #[serde(default, skip_serializing_if = "Ai::is_default")]
-    pub ai: Ai,
+    pub(crate) ai: Ai,
     #[serde(default, skip_serializing_if = "Open::is_default")]
-    pub open: Open,
+    pub(crate) open: Open,
     #[serde(default, skip_serializing_if = "Notify::is_default")]
-    pub notify: Notify,
+    pub(crate) notify: Notify,
     /// What revu counts about how it is used, on this machine only; off by default.
     #[serde(default, skip_serializing_if = "Usage::is_default")]
-    pub usage: Usage,
+    pub(crate) usage: Usage,
     #[serde(default, skip_serializing_if = "Keys::is_default")]
-    pub keys: Keys,
+    pub(crate) keys: Keys,
     /// `[share]`: where `Y` posts an MR, through a command of the user's choosing.
     #[serde(default, skip_serializing_if = "Share::is_default")]
-    pub share: Share,
+    pub(crate) share: Share,
     /// `[agent]`: the coding-agent session `a g` opens on an MR.
     #[serde(default, skip_serializing_if = "Agent::is_default")]
-    pub agent: Agent,
+    pub(crate) agent: Agent,
     /// Per-host settings, for a host whose name does not say which forge it runs.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub hosts: BTreeMap<String, Host>,
+    pub(crate) hosts: BTreeMap<String, Host>,
 }
 
 /// `[keys]`: keys the user adds on top of revu's own.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Keys {
+pub(crate) struct Keys {
     /// `azerty`: `(` and `)` do what `[` and `]` do, which a Mac French keyboard types with ⌥⇧.
     #[serde(default, skip_serializing_if = "Layout::is_default")]
-    pub layout: Layout,
+    pub(crate) layout: Layout,
     /// An action name (`next_thread`) to one key or a list: `"n"`, `")n"`, `"ctrl-p"`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub bind: BTreeMap<String, Bind>,
+    pub(crate) bind: BTreeMap<String, Bind>,
     /// `q` and `ctrl-c` need a second press; `false` quits on the first.
     #[serde(default = "on")]
-    pub quit_confirm: bool,
+    pub(crate) quit_confirm: bool,
 }
 
 impl Default for Keys {
@@ -70,7 +70,7 @@ impl Keys {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Layout {
+pub(crate) enum Layout {
     #[default]
     Qwerty,
     Azerty,
@@ -86,13 +86,13 @@ impl Layout {
 /// One key, or several for the same action.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Bind {
+pub(crate) enum Bind {
     One(String),
     Many(Vec<String>),
 }
 
 impl Bind {
-    pub fn all(&self) -> &[String] {
+    pub(crate) fn all(&self) -> &[String] {
         match self {
             Bind::One(key) => std::slice::from_ref(key),
             Bind::Many(keys) => keys,
@@ -102,32 +102,32 @@ impl Bind {
 
 /// `[hosts."git.acme.dev"] forge = "github"`: a GitHub Enterprise host, which the name alone cannot tell.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Host {
+pub(crate) struct Host {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub forge: Option<Kind>,
+    pub(crate) forge: Option<Kind>,
     /// Who I am there, from the last login.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
+    pub(crate) username: Option<String>,
 }
 
 /// Which MRs the queue shows beyond the ones GitLab lists for me.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Queue {
+pub(crate) struct Queue {
     /// MRs carrying one of these labels land in Watching.
     #[serde(default)]
-    pub watch_labels: Vec<String>,
+    pub(crate) watch_labels: Vec<String>,
     /// Saved filters: `'` then a view's first letter, or `1`–`9` in name order, applies it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub views: BTreeMap<String, String>,
+    pub(crate) views: BTreeMap<String, String>,
     /// The "needs me" rules: what leaves To review, Watching and Open, and at which thresholds.
     #[serde(default, skip_serializing_if = "crate::forge::rules::Rules::is_default")]
-    pub rules: crate::forge::rules::Rules,
+    pub(crate) rules: crate::forge::rules::Rules,
     /// Where "ready for review" comes from: a command printing MR links.
     #[serde(default, skip_serializing_if = "Ready::is_default")]
-    pub ready: Ready,
+    pub(crate) ready: Ready,
     /// How many MRs that need me are loaded ahead, so opening them needs no network; 0 turns it off.
     #[serde(default = "default_prefetch", skip_serializing_if = "is_default_prefetch")]
-    pub prefetch: usize,
+    pub(crate) prefetch: usize,
 }
 
 const PREFETCH: usize = 5;
@@ -155,10 +155,10 @@ fn is_default_prefetch(n: &usize) -> bool {
 
 /// `[queue.ready]`: a command whose output names the MRs ready for review.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Ready {
+pub(crate) struct Ready {
     /// Run as words, never through a shell; every MR link it prints counts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
+    pub(crate) command: Option<String>,
 }
 
 impl Ready {
@@ -192,16 +192,16 @@ impl Queue {
 
 /// How a diff opens.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Review {
+pub(crate) struct Review {
     /// Glob patterns of files that open folded: lockfiles, snapshots, generated code.
     #[serde(default)]
-    pub fold: Vec<String>,
+    pub(crate) fold: Vec<String>,
     /// A changed pair reads as one row when each side changes at most this many words…
     #[serde(default = "inline_max_words")]
-    pub inline_max_words: usize,
+    pub(crate) inline_max_words: usize,
     /// …and both lines keep at least this share of their text, in percent.
     #[serde(default = "inline_min_same")]
-    pub inline_min_same: u8,
+    pub(crate) inline_min_same: u8,
 }
 
 impl Default for Review {
@@ -223,16 +223,16 @@ impl Review {
         *self == Self::default()
     }
 
-    pub fn inline(&self) -> InlineRule {
+    pub(crate) fn inline(&self) -> InlineRule {
         InlineRule { max_words: self.inline_max_words, min_same: self.inline_min_same }
     }
 }
 
 /// `[notify]`: a macOS notification when an MR lands in To review while the TUI runs. On by default.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Notify {
+pub(crate) struct Notify {
     #[serde(default = "on")]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 impl Default for Notify {
@@ -249,10 +249,10 @@ impl Notify {
 
 /// `[usage]`: count the actions used and the time per screen, into the cache, for `revu usage`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Usage {
+pub(crate) struct Usage {
     /// Off by default: nothing is counted until this is true.
     #[serde(default)]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 impl Usage {
@@ -266,34 +266,34 @@ fn on() -> bool {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Tui {
+pub(crate) struct Tui {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub theme: Option<String>,
+    pub(crate) theme: Option<String>,
     #[serde(default)]
-    pub ascii: bool,
+    pub(crate) ascii: bool,
     /// Pictures in comments, drawn in the thread pane where the terminal can; `false` shows their `[image: …]` line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub images: Option<bool>,
+    pub(crate) images: Option<bool>,
     #[serde(default, skip_serializing_if = "QueueLayout::is_default")]
-    pub queue: QueueLayout,
+    pub(crate) queue: QueueLayout,
     /// How wide the diff reads in zen, `zz`, in columns; unset, it grows with the screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub zen_width: Option<u16>,
+    pub(crate) zen_width: Option<u16>,
     /// Whether the compact layout follows the width, always shows or never does.
     #[serde(default, skip_serializing_if = "ScreenLayout::is_default")]
-    pub layout: ScreenLayout,
+    pub(crate) layout: ScreenLayout,
     /// Below this many columns the window is compact; unset, `Widths::default` says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact_width: Option<u16>,
+    pub(crate) compact_width: Option<u16>,
     /// Below this many columns the window is narrow; unset, `Widths::default` says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub narrow_width: Option<u16>,
+    pub(crate) narrow_width: Option<u16>,
     /// From this many columns the queue, the diff and the right pane sit side by side; unset, `Widths::default` says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wide_width: Option<u16>,
+    pub(crate) wide_width: Option<u16>,
     /// The compact layout ends on a row of labels to tap; `false` gives the row back to the page.
     #[serde(default = "on")]
-    pub tap_bar: bool,
+    pub(crate) tap_bar: bool,
 }
 
 impl Default for Tui {
@@ -319,7 +319,7 @@ const MIN_ZEN_WIDTH: u16 = 60;
 /// `[tui] layout`: the compact layout below `compact_width`, at any width, or never.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum ScreenLayout {
+pub(crate) enum ScreenLayout {
     #[default]
     Auto,
     Compact,
@@ -338,10 +338,10 @@ impl ScreenLayout {
 /// its own and the diff shows one line number; from `wide` the queue, the diff and the right pane
 /// sit side by side.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Widths {
-    pub compact: u16,
-    pub narrow: u16,
-    pub wide: u16,
+pub(crate) struct Widths {
+    pub(crate) compact: u16,
+    pub(crate) narrow: u16,
+    pub(crate) wide: u16,
 }
 
 impl Default for Widths {
@@ -352,7 +352,7 @@ impl Default for Widths {
 
 impl Tui {
     /// `layout` moves the compact limit past every window, or under every one; unset, it never passes the narrow one.
-    pub fn widths(&self) -> Widths {
+    pub(crate) fn widths(&self) -> Widths {
         let default = Widths::default();
         let narrow = self.narrow_width.unwrap_or(default.narrow);
         let compact = match self.layout {
@@ -391,7 +391,7 @@ impl Tui {
 /// How a queue row reads: two lines (the title, then number, author, age and size), or one.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum QueueLayout {
+pub(crate) enum QueueLayout {
     #[default]
     Comfortable,
     Compact,
@@ -413,11 +413,11 @@ impl Tui {
 /// `[ai]`: each provider is switched on by itself, and both are off until then, because enabling
 /// one sends MR content to it. Keys are never here: they live in the keychain (`revu ai login`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Ai {
+pub(crate) struct Ai {
     #[serde(default, skip_serializing_if = "Typesafe::is_default")]
-    pub typesafe: Typesafe,
+    pub(crate) typesafe: Typesafe,
     #[serde(default, skip_serializing_if = "Anthropic::is_default")]
-    pub anthropic: Anthropic,
+    pub(crate) anthropic: Anthropic,
 }
 
 impl Ai {
@@ -428,9 +428,9 @@ impl Ai {
 
 /// `[ai.typesafe]`: Jev ranks the queue and the files of an MR.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Typesafe {
+pub(crate) struct Typesafe {
     #[serde(default)]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 impl Typesafe {
@@ -441,22 +441,22 @@ impl Typesafe {
 
 /// `[ai.anthropic]`: Claude answers questions about the MR.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Anthropic {
+pub(crate) struct Anthropic {
     #[serde(default)]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     /// `claude-opus-5` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    pub(crate) model: Option<String>,
 }
 
 impl Anthropic {
-    pub const DEFAULT_MODEL: &str = "claude-opus-5";
+    const DEFAULT_MODEL: &str = "claude-opus-5";
 
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
 
-    pub fn model(&self) -> &str {
+    pub(crate) fn model(&self) -> &str {
         self.model.as_deref().unwrap_or(Self::DEFAULT_MODEL)
     }
 }
@@ -464,26 +464,26 @@ impl Anthropic {
 /// `[share]`: `Y` posts an MR by piping a message to a command, so revu knows no chat tool.
 /// A bare `command` is the one target; `[share.targets.<name>]` adds named ones, and `Y` asks which.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Share {
+pub(crate) struct Share {
     /// Run as words, never through a shell; the message arrives on its stdin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
+    pub(crate) command: Option<String>,
     /// The message, with placeholders like `{ref}` and `{title}`; also the template of named targets that set none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub template: Option<String>,
+    pub(crate) template: Option<String>,
     /// Named destinations, each with its own command and, optionally, its own template.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub targets: BTreeMap<String, ShareTarget>,
+    pub(crate) targets: BTreeMap<String, ShareTarget>,
 }
 
 /// `[share.targets.<name>]`: one more place `Y` can post to.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ShareTarget {
+pub(crate) struct ShareTarget {
     /// Run as words, never through a shell; the message arrives on its stdin.
-    pub command: String,
+    pub(crate) command: String,
     /// This target's message; `[share] template`, then the built-in one, when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub template: Option<String>,
+    pub(crate) template: Option<String>,
 }
 
 impl Share {
@@ -512,31 +512,31 @@ impl Share {
 /// `[agent]`: `a g` opens a coding-agent session that belongs to the MR, in a worktree on its branch.
 /// Claude Code is the agent unless `start` names another program.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Agent {
+pub(crate) struct Agent {
     /// Off by default: nothing runs until this is true.
     #[serde(default)]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     /// Another agent than Claude Code: the command that starts its session, run as words in the MR's worktree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub start: Option<String>,
+    pub(crate) start: Option<String>,
     /// The command that opens again the session `start` made; `start` runs again without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub open: Option<String>,
+    pub(crate) open: Option<String>,
     /// Project path → its checkout on this machine, for MRs of a project revu was not started in.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub checkouts: BTreeMap<String, String>,
+    pub(crate) checkouts: BTreeMap<String, String>,
     /// Where the session opens: beside revu when it fits, always beside, or never.
     #[serde(default, skip_serializing_if = "AgentShow::is_default")]
-    pub show: AgentShow,
+    pub(crate) show: AgentShow,
     /// For a terminal revu cannot split itself: the command that opens a pane beside revu and runs `{command}` there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub split: Option<String>,
+    pub(crate) split: Option<String>,
 }
 
 /// `[agent] show`: a pane beside revu when revu is wide enough for both, at any width, or never.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AgentShow {
+pub(crate) enum AgentShow {
     #[default]
     Auto,
     Split,
@@ -577,7 +577,7 @@ impl Agent {
     }
 
     /// The checkouts as folders, `~/` standing for `home`.
-    pub fn folders(&self, home: &Path) -> BTreeMap<String, PathBuf> {
+    pub(crate) fn folders(&self, home: &Path) -> BTreeMap<String, PathBuf> {
         let folder = |written: &String| written.strip_prefix("~/").map_or_else(|| PathBuf::from(written), |rest| home.join(rest));
         self.checkouts.iter().map(|(project, written)| (project.clone(), folder(written))).collect()
     }
@@ -585,13 +585,13 @@ impl Agent {
 
 /// `^v`: which program opens a file, by glob on its path, as in `"*.md" = "glow -p"`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Open {
+pub(crate) struct Open {
     /// For every file no glob in `files` matches; `$VISUAL`, `$EDITOR`, then `less` without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default: Option<String>,
+    pub(crate) default: Option<String>,
     /// Glob → command; the longest matching glob wins.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub files: BTreeMap<String, String>,
+    pub(crate) files: BTreeMap<String, String>,
 }
 
 impl Open {
@@ -614,20 +614,20 @@ impl Open {
 
 /// A config as read from its file.
 #[derive(Debug, Default)]
-pub struct Loaded {
-    pub config: Config,
+pub(crate) struct Loaded {
+    pub(crate) config: Config,
     /// One line for each key the file holds that this revu ignores.
-    pub warnings: Vec<String>,
+    pub(crate) warnings: Vec<String>,
 }
 
 /// What the config file holds that this revu ignores; nothing when it does not load, since the command then says why.
-pub fn warnings() -> Vec<String> {
+pub(crate) fn warnings() -> Vec<String> {
     Config::read(&Config::path()).map(|loaded| loaded.warnings).unwrap_or_default()
 }
 
 /// `$XDG_CONFIG_HOME/revu`, else `~/.config/revu`: where terminal tools keep their config on
 /// every system, macOS included, so it sits next to gh, helix and a dotfiles repo.
-pub fn dir() -> PathBuf {
+pub(crate) fn dir() -> PathBuf {
     dir_from(std::env::var_os("XDG_CONFIG_HOME"), dirs::home_dir())
 }
 
@@ -638,25 +638,25 @@ fn dir_from(xdg: Option<std::ffi::OsString>, home: Option<PathBuf>) -> PathBuf {
 
 impl Config {
     /// Who I am on `host`: its own entry, else the top-level name when it is the configured host.
-    pub fn username_for(&self, host: &str) -> Option<String> {
+    pub(crate) fn username_for(&self, host: &str) -> Option<String> {
         let own = self.hosts.get(host).and_then(|h| h.username.clone());
         own.or_else(|| (self.host.as_deref() == Some(host)).then(|| self.username.clone()).flatten())
     }
 
-    pub fn path() -> PathBuf {
+    pub(crate) fn path() -> PathBuf {
         dir().join("config.toml")
     }
 
-    pub fn load() -> Result<Self> {
+    pub(crate) fn load() -> Result<Self> {
         Self::load_from(&Self::path())
     }
 
-    pub fn load_from(path: &Path) -> Result<Self> {
+    pub(crate) fn load_from(path: &Path) -> Result<Self> {
         Self::read(path).map(|loaded| loaded.config)
     }
 
     /// The config at `path`, with a warning for each key in it this revu ignores.
-    pub fn read(path: &Path) -> Result<Loaded> {
+    pub(crate) fn read(path: &Path) -> Result<Loaded> {
         if !path.exists() {
             return Ok(Loaded::default());
         }
@@ -676,13 +676,13 @@ impl Config {
         crate::keymap::Keymap::new(&self.keys).map(drop)
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub(crate) fn save(&self) -> Result<()> {
         self.save_to(&Self::path())
     }
 
     /// Rewrites only the keys that changed since the file was read, so the user's comments and layout
     /// stay; a crash mid-write leaves the old file whole.
-    pub fn save_to(&self, path: &Path) -> Result<()> {
+    fn save_to(&self, path: &Path) -> Result<()> {
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
         let text = match std::fs::read_to_string(&path) {
             Ok(kept) => self.written_over(&kept)?,

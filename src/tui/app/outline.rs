@@ -3,7 +3,7 @@ use super::{Action, App, Focus, Open};
 use crate::diff::fold::FoldState;
 mod rows;
 
-pub use rows::{Entry, PaneLine, Rows};
+pub(crate) use rows::{Entry, PaneLine, Rows};
 
 use crate::act::{Act, Pane};
 use crate::outline::{Direction, Reading, Section, Shape};
@@ -15,24 +15,24 @@ use std::sync::Arc;
 
 /// The pane while it is open: what was read, the row under the cursor, how it shows, and the rows that makes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Outline {
-    pub symbols: Symbols,
-    pub selected: usize,
+pub(crate) struct Outline {
+    pub(crate) symbols: Symbols,
+    pub(crate) selected: usize,
     /// Private symbols too, `a`.
-    pub all: bool,
+    pub(crate) all: bool,
     /// The list of changes instead of the tree, `t`.
-    pub flat: bool,
+    pub(crate) flat: bool,
     /// Every unchanged function called too, `s`.
-    pub stack: bool,
-    pub direction: Direction,
+    pub(crate) stack: bool,
+    pub(crate) direction: Direction,
     /// The tree's folded branches, each by its child indexes from the top.
     folded: BTreeSet<Vec<usize>>,
     /// Built whenever the rest changes, so drawing only slices it.
-    pub rows: Arc<Rows>,
+    pub(crate) rows: Arc<Rows>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Symbols {
+pub(crate) enum Symbols {
     Waiting,
     /// Shared, so moving the cursor copies none of it.
     Ready(Arc<Reading>),

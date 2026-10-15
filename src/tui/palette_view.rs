@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) {
     let theme = app.theme;
     let width = (area.width * 3 / 5).clamp(40.min(area.width), area.width);
     let height = (super::palette::MAX_SHOWN as u16 + 4).min(area.height);

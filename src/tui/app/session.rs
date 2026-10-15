@@ -8,9 +8,9 @@ use crate::tui::palette::{Candidate, MAX_SHOWN, Mode, Target};
 
 /// The sessions the reader picks among, and the MR they are for.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SessionPick {
-    pub mr: Mr,
-    pub sessions: Vec<Session>,
+pub(crate) struct SessionPick {
+    pub(crate) mr: Mr,
+    pub(crate) sessions: Vec<Session>,
 }
 
 impl App {
@@ -80,7 +80,7 @@ impl App {
     }
 
     /// Taken by the loop, which lends the terminal to the session.
-    pub fn take_handoff(&mut self) -> Option<crate::agent::Handoff> {
+    pub(crate) fn take_handoff(&mut self) -> Option<crate::agent::Handoff> {
         self.handoff.take()
     }
 

@@ -14,67 +14,67 @@ const HALF_PAGE: usize = 10;
 const FIRST_WORDS: usize = 40;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Brief {
-    pub key: MrKey,
+pub(crate) struct Brief {
+    pub(crate) key: MrKey,
     /// `!` or `#`, as the MR's forge names it.
-    pub sigil: char,
-    pub number: u64,
-    pub title: String,
-    pub author: String,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub labels: Vec<String>,
-    pub description: String,
-    pub web_url: String,
-    pub updated_at: DateTime<Utc>,
-    pub checks: Checks,
-    pub review: ReviewLine,
+    pub(crate) sigil: char,
+    pub(crate) number: u64,
+    pub(crate) title: String,
+    pub(crate) author: String,
+    pub(crate) source_branch: String,
+    pub(crate) target_branch: String,
+    pub(crate) labels: Vec<String>,
+    pub(crate) description: String,
+    pub(crate) web_url: String,
+    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) checks: Checks,
+    pub(crate) review: ReviewLine,
     /// The open threads; `None` from the queue, which only counts them.
-    pub threads: Option<Vec<ThreadRow>>,
+    pub(crate) threads: Option<Vec<ThreadRow>>,
     /// The review app to try; known only from an open MR.
-    pub deployments: Vec<crate::forge::Deployment>,
+    pub(crate) deployments: Vec<crate::forge::Deployment>,
     /// Open threads as the queue counts them, shown when `threads` is `None`.
-    pub unresolved: usize,
+    pub(crate) unresolved: usize,
     /// The thread the cursor is on; `None` while reading above them, after `g` or `k` past the first.
-    pub selected: Option<usize>,
+    pub(crate) selected: Option<usize>,
     /// First line shown; the view clamps it and keeps the cursor on screen while it moves.
-    pub scroll: usize,
+    pub(crate) scroll: usize,
     /// The cursor moved since the last frame, so the view brings it into sight.
-    pub follow: bool,
+    pub(crate) follow: bool,
 }
 
 /// The pipeline in one line: its status, and the names of the jobs that failed once fetched.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Checks {
-    pub status: Option<PipelineStatus>,
-    pub failed: Vec<String>,
+pub(crate) struct Checks {
+    pub(crate) status: Option<PipelineStatus>,
+    pub(crate) failed: Vec<String>,
 }
 
 /// Approvals and reviewers, and where I stand.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ReviewLine {
-    pub approved_by: Vec<String>,
-    pub approvals_left: Option<u32>,
+pub(crate) struct ReviewLine {
+    pub(crate) approved_by: Vec<String>,
+    pub(crate) approvals_left: Option<u32>,
     /// Reviewers with their state when the forge gave it (the queue does, one MR's page does not).
-    pub reviewers: Vec<(String, Option<ReviewState>)>,
-    pub i_approved: bool,
-    pub i_review: bool,
+    pub(crate) reviewers: Vec<(String, Option<ReviewState>)>,
+    pub(crate) i_approved: bool,
+    pub(crate) i_review: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ThreadRow {
-    pub id: ThreadId,
+pub(crate) struct ThreadRow {
+    pub(crate) id: ThreadId,
     /// `path:line`, `path (outdated)` or `the MR`: the whole place, shown while the row is selected.
-    pub place: String,
+    pub(crate) place: String,
     /// The same place with the file name only, for the row's quiet second line.
-    pub short_place: String,
-    pub author: String,
-    pub first_words: String,
-    pub replies: usize,
+    pub(crate) short_place: String,
+    pub(crate) author: String,
+    pub(crate) first_words: String,
+    pub(crate) replies: usize,
 }
 
 impl Brief {
-    pub fn of_queue(mr: &QueueMr, sigil: char, me: &str) -> Self {
+    fn of_queue(mr: &QueueMr, sigil: char, me: &str) -> Self {
         let reviewers = mr.reviewers.iter().map(|r| (r.username.clone(), Some(r.state))).collect();
         Self {
             key: mr.key(),
@@ -106,7 +106,7 @@ impl Brief {
     }
 
     /// `checks` are the jobs when the pipeline pane already fetched them.
-    pub fn of_review(key: MrKey, review: &Review, sigil: char, me: &str, checks: Option<&crate::forge::checks::Checks>) -> Self {
+    fn of_review(key: MrKey, review: &Review, sigil: char, me: &str, checks: Option<&crate::forge::checks::Checks>) -> Self {
         let mr = &review.mr;
         let failed = checks.map_or_else(Vec::new, |c| {
             c.jobs().filter(|j| j.state == JobState::Failed && !j.allowed_to_fail).map(|j| j.name.clone()).collect()
@@ -142,12 +142,12 @@ impl Brief {
     }
 
     /// The threads the cursor walks, in the order they are drawn.
-    pub fn targets(&self) -> Vec<ThreadId> {
+    pub(crate) fn targets(&self) -> Vec<ThreadId> {
         self.threads.iter().flatten().map(|t| t.id.clone()).collect()
     }
 
     /// The selected thread, for its full place and for `enter`.
-    pub fn selected_thread(&self) -> Option<&ThreadRow> {
+    pub(crate) fn selected_thread(&self) -> Option<&ThreadRow> {
         self.threads.as_ref()?.get(self.selected?)
     }
 

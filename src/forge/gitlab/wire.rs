@@ -4,10 +4,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct User {
-    pub id: u64,
-    pub username: String,
-    pub name: String,
+pub(crate) struct User {
+    pub(crate) id: u64,
+    pub(crate) username: String,
+    pub(crate) name: String,
 }
 
 impl From<User> for forge::User {
@@ -18,46 +18,46 @@ impl From<User> for forge::User {
 
 /// One merge request as `GET /projects/:id/merge_requests/:iid` returns it, plus its approvals.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct Mr {
-    pub iid: u64,
-    pub title: String,
+pub(crate) struct Mr {
+    pub(crate) iid: u64,
+    pub(crate) title: String,
     #[serde(default)]
-    pub description: Option<String>,
-    pub state: String,
-    pub draft: bool,
-    pub author: User,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub web_url: String,
-    pub updated_at: DateTime<Utc>,
-    pub diff_refs: DiffRefs,
+    pub(crate) description: Option<String>,
+    pub(crate) state: String,
+    pub(crate) draft: bool,
+    pub(crate) author: User,
+    pub(crate) source_branch: String,
+    pub(crate) target_branch: String,
+    pub(crate) web_url: String,
+    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) diff_refs: DiffRefs,
     #[serde(default)]
-    pub head_pipeline: Option<Pipeline>,
+    pub(crate) head_pipeline: Option<Pipeline>,
     /// GitLab sends this count as a string, `"9"` or `"1000+"`.
     #[serde(default)]
-    pub changes_count: Option<String>,
+    pub(crate) changes_count: Option<String>,
     #[serde(default)]
-    pub has_conflicts: bool,
+    pub(crate) has_conflicts: bool,
     #[serde(default)]
-    pub reviewers: Vec<User>,
+    pub(crate) reviewers: Vec<User>,
     #[serde(default)]
-    pub labels: Vec<String>,
+    pub(crate) labels: Vec<String>,
     #[serde(default)]
-    pub approvals: Approvals,
+    pub(crate) approvals: Approvals,
     /// The project's squash setting as it applies to this MR.
     #[serde(default)]
-    pub squash_on_merge: bool,
+    pub(crate) squash_on_merge: bool,
     #[serde(default)]
-    pub squash: bool,
+    pub(crate) squash: bool,
     #[serde(default)]
-    pub force_remove_source_branch: Option<bool>,
+    pub(crate) force_remove_source_branch: Option<bool>,
     #[serde(default)]
-    pub should_remove_source_branch: Option<bool>,
+    pub(crate) should_remove_source_branch: Option<bool>,
 }
 
 impl Mr {
     /// The REST answer does not name its project's path; the caller asked by it and knows it.
-    pub fn into_model(self, project: &forge::ProjectPath) -> forge::Mr {
+    pub(crate) fn into_model(self, project: &forge::ProjectPath) -> forge::Mr {
         forge::Mr {
             project: project.clone(),
             number: self.iid,
@@ -91,10 +91,10 @@ impl Mr {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DiffRefs {
-    pub base_sha: Sha,
-    pub head_sha: Sha,
-    pub start_sha: Sha,
+pub(crate) struct DiffRefs {
+    pub(crate) base_sha: Sha,
+    pub(crate) head_sha: Sha,
+    pub(crate) start_sha: Sha,
 }
 
 impl From<DiffRefs> for Refs {
@@ -105,22 +105,22 @@ impl From<DiffRefs> for Refs {
 
 /// One file of `GET …/merge_requests/:iid/diffs`.
 #[derive(Deserialize)]
-pub struct DiffFile {
-    pub diff: String,
-    pub old_path: String,
-    pub new_path: String,
+pub(crate) struct DiffFile {
+    pub(crate) diff: String,
+    pub(crate) old_path: String,
+    pub(crate) new_path: String,
     #[serde(default)]
-    pub a_mode: String,
+    pub(crate) a_mode: String,
     #[serde(default)]
-    pub b_mode: String,
+    pub(crate) b_mode: String,
     #[serde(default)]
-    pub new_file: bool,
+    pub(crate) new_file: bool,
     #[serde(default)]
-    pub renamed_file: bool,
+    pub(crate) renamed_file: bool,
     #[serde(default)]
-    pub deleted_file: bool,
+    pub(crate) deleted_file: bool,
     #[serde(default)]
-    pub too_large: bool,
+    pub(crate) too_large: bool,
 }
 
 impl From<DiffFile> for forge::DiffFile {
@@ -137,23 +137,23 @@ impl From<DiffFile> for forge::DiffFile {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct Pipeline {
-    pub status: forge::PipelineStatus,
+pub(crate) struct Pipeline {
+    pub(crate) status: forge::PipelineStatus,
     #[serde(default)]
-    pub web_url: Option<String>,
+    pub(crate) web_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
-pub struct Approvals {
-    pub approved: bool,
+pub(crate) struct Approvals {
+    pub(crate) approved: bool,
     #[serde(default)]
-    pub approvals_left: u32,
+    pub(crate) approvals_left: u32,
     #[serde(default)]
-    pub user_has_approved: bool,
+    pub(crate) user_has_approved: bool,
     #[serde(default)]
-    pub user_can_approve: bool,
+    pub(crate) user_can_approve: bool,
     #[serde(default, deserialize_with = "nested_users")]
-    pub approved_by: Vec<User>,
+    pub(crate) approved_by: Vec<User>,
 }
 
 impl From<Approvals> for forge::Approvals {
@@ -177,9 +177,9 @@ fn nested_users<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<User>, D::Error> 
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct Discussion {
-    pub id: ThreadId,
-    pub notes: Vec<Note>,
+pub(crate) struct Discussion {
+    pub(crate) id: ThreadId,
+    pub(crate) notes: Vec<Note>,
 }
 
 impl From<Discussion> for forge::Discussion {
@@ -189,31 +189,31 @@ impl From<Discussion> for forge::Discussion {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct Note {
-    pub id: u64,
-    pub body: String,
-    pub author: User,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+pub(crate) struct Note {
+    pub(crate) id: u64,
+    pub(crate) body: String,
+    pub(crate) author: User,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
     #[serde(default)]
-    pub system: bool,
+    pub(crate) system: bool,
     #[serde(default)]
-    pub resolvable: bool,
+    pub(crate) resolvable: bool,
     #[serde(default)]
-    pub resolved: Option<bool>,
+    pub(crate) resolved: Option<bool>,
     #[serde(default)]
-    pub position: Option<Position>,
+    pub(crate) position: Option<Position>,
     #[serde(default)]
-    pub suggestions: Vec<SuggestionWire>,
+    pub(crate) suggestions: Vec<SuggestionWire>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SuggestionWire {
-    pub id: u64,
+pub(crate) struct SuggestionWire {
+    pub(crate) id: u64,
     #[serde(default)]
-    pub applied: bool,
+    pub(crate) applied: bool,
     #[serde(default)]
-    pub appliable: bool,
+    pub(crate) appliable: bool,
 }
 
 impl From<Note> for forge::Note {
@@ -240,39 +240,39 @@ impl From<Note> for forge::Note {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Position {
-    pub base_sha: String,
-    pub head_sha: String,
-    pub start_sha: String,
-    pub position_type: String,
+pub(crate) struct Position {
+    pub(crate) base_sha: String,
+    pub(crate) head_sha: String,
+    pub(crate) start_sha: String,
+    pub(crate) position_type: String,
     #[serde(default)]
-    pub old_path: Option<String>,
+    pub(crate) old_path: Option<String>,
     #[serde(default)]
-    pub new_path: Option<String>,
+    pub(crate) new_path: Option<String>,
     #[serde(default)]
-    pub old_line: Option<u32>,
+    pub(crate) old_line: Option<u32>,
     #[serde(default)]
-    pub new_line: Option<u32>,
+    pub(crate) new_line: Option<u32>,
     #[serde(default)]
-    pub line_range: Option<LineRange>,
+    pub(crate) line_range: Option<LineRange>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LineRange {
-    pub start: LineCode,
-    pub end: LineCode,
+pub(crate) struct LineRange {
+    pub(crate) start: LineCode,
+    pub(crate) end: LineCode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LineCode {
+pub(crate) struct LineCode {
     #[serde(default)]
-    pub line_code: Option<String>,
+    pub(crate) line_code: Option<String>,
     #[serde(rename = "type", default)]
-    pub kind: Option<String>,
+    pub(crate) kind: Option<String>,
     #[serde(default)]
-    pub old_line: Option<u32>,
+    pub(crate) old_line: Option<u32>,
     #[serde(default)]
-    pub new_line: Option<u32>,
+    pub(crate) new_line: Option<u32>,
 }
 
 impl Position {
@@ -296,7 +296,7 @@ impl Position {
 
     /// GitLab's shape for a neutral position: the three SHAs, both paths, and for a range the
     /// `line_code` of each edge.
-    pub fn from_model(position: &forge::Position) -> Self {
+    pub(super) fn from_model(position: &forge::Position) -> Self {
         Self {
             base_sha: position.refs.base.to_string(),
             head_sha: position.refs.head.to_string(),
@@ -322,25 +322,25 @@ fn code_of(position: &forge::Position, line: LineRef) -> LineCode {
 }
 
 /// `sha1(path)_old_new`, GitLab's name for one diff line; a missing side is `0`.
-pub fn line_code(path: &str, old: Option<u32>, new: Option<u32>) -> String {
+pub(super) fn line_code(path: &str, old: Option<u32>, new: Option<u32>) -> String {
     let digest = sha1_smol::Sha1::from(path.as_bytes()).digest().to_string();
     format!("{digest}_{}_{}", old.unwrap_or(0), new.unwrap_or(0))
 }
 
 /// One of my unpublished review comments, as `GET …/draft_notes` returns it.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct DraftNote {
-    pub id: u64,
-    pub note: String,
+pub(super) struct DraftNote {
+    pub(crate) id: u64,
+    pub(crate) note: String,
     #[serde(default)]
-    pub discussion_id: Option<ThreadId>,
+    pub(crate) discussion_id: Option<ThreadId>,
     #[serde(default)]
-    pub resolve_discussion: bool,
+    pub(crate) resolve_discussion: bool,
     #[serde(default)]
-    pub line_code: Option<String>,
+    pub(crate) line_code: Option<String>,
     /// GitLab sends a position of nulls for a note on the MR itself; that reads as `None`.
     #[serde(default, deserialize_with = "anchored_position")]
-    pub position: Option<Position>,
+    pub(crate) position: Option<Position>,
 }
 
 impl From<DraftNote> for forge::Draft {
@@ -365,14 +365,14 @@ fn anchored_position<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Position>
 
 /// What `POST …/draft_notes` needs; `position` anchors it to a line, `in_reply_to_discussion_id` to a thread.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct NewDraft {
-    pub note: String,
+pub(crate) struct NewDraft {
+    pub(crate) note: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub position: Option<Position>,
+    pub(crate) position: Option<Position>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub in_reply_to_discussion_id: Option<ThreadId>,
+    pub(crate) in_reply_to_discussion_id: Option<ThreadId>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub resolve_discussion: bool,
+    pub(crate) resolve_discussion: bool,
 }
 
 impl From<&forge::NewDraft> for NewDraft {
@@ -387,7 +387,7 @@ impl From<&forge::NewDraft> for NewDraft {
 }
 
 /// GitLab answers errors as `{"message": …}` or `{"error": …}`; anything else is shown as is.
-pub fn error_message(body: &str) -> String {
+pub(crate) fn error_message(body: &str) -> String {
     let parsed: Option<serde_json::Value> = serde_json::from_str(body).ok();
     let found = parsed.as_ref().and_then(|v| v.get("message").or_else(|| v.get("error")));
     match found {
@@ -404,33 +404,33 @@ pub(crate) mod fixture {
     use crate::forge::{self, MrKey, Queue};
     use serde::de::DeserializeOwned;
 
-    pub fn parse<T: DeserializeOwned>(json: &str) -> T {
+    pub(crate) fn parse<T: DeserializeOwned>(json: &str) -> T {
         serde_json::from_str(json).expect("fixture parses")
     }
 
     /// An MR from its REST answer; the project path comes from its `web_url`.
-    pub fn mr(json: &str) -> forge::Mr {
+    pub(crate) fn mr(json: &str) -> forge::Mr {
         let wire: Mr = parse(json);
         let project = wire.web_url.split("/-/merge_requests/").next().and_then(|u| u.splitn(4, '/').nth(3)).map(forge::ProjectPath::from);
         wire.into_model(&project.expect("the web_url names the project"))
     }
 
-    pub fn discussion(json: &str) -> forge::Discussion {
+    pub(crate) fn discussion(json: &str) -> forge::Discussion {
         parse::<Discussion>(json).into()
     }
 
     /// A queue from a GraphQL answer body.
-    pub fn queue(body: &str) -> Queue {
+    pub(crate) fn queue(body: &str) -> Queue {
         graphql::queue_from_json(body, None).expect("queue fixture parses")
     }
 
     /// The same, scoped to `project`: one body carries both answers, `currentUser` and `project`.
-    pub fn queue_in(body: &str, project: &str) -> Queue {
+    pub(crate) fn queue_in(body: &str, project: &str) -> Queue {
         graphql::queue_from_json(body, Some(project)).expect("queue fixture parses")
     }
 
     /// The MR every fixture talks about.
-    pub fn key() -> MrKey {
+    pub(crate) fn key() -> MrKey {
         MrKey::new("acme/widgets", 42)
     }
 }

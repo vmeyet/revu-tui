@@ -1,22 +1,22 @@
 //! The seam between the app and the forge that hosts the code: one neutral model, one enum that
 //! sends each call to the backend of the host.
 mod budget;
-pub mod checks;
-pub mod github;
-pub mod gitlab;
+pub(crate) mod checks;
+pub(crate) mod github;
+pub(crate) mod gitlab;
 mod http;
-pub mod image;
+pub(crate) mod image;
 mod model;
 mod queue;
-pub mod rules;
+pub(crate) mod rules;
 
-pub use budget::RateLimit;
-pub use model::{
+pub(crate) use budget::RateLimit;
+pub(crate) use model::{
     Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod,
     MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange, Readiness,
     Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
-pub use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
+pub(crate) use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
 
 use crate::auth::Credentials;
 use crate::config::Config;
@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// Which forge a host runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Kind {
+pub(crate) enum Kind {
     #[default]
     GitLab,
     GitHub,
@@ -34,13 +34,13 @@ pub enum Kind {
 
 impl Kind {
     /// `github.com` is GitHub, anything else GitLab, unless `[hosts."<host>"] forge` says otherwise.
-    pub fn for_host(host: &str, config: &Config) -> Self {
+    pub(crate) fn for_host(host: &str, config: &Config) -> Self {
         let named = config.hosts.get(host).and_then(|h| h.forge);
         named.unwrap_or(if host == "github.com" { Kind::GitHub } else { Kind::GitLab })
     }
 
     /// What goes between a project and a number: `group/project!42`, `owner/repo#42`.
-    pub fn sigil(self) -> char {
+    pub(crate) fn sigil(self) -> char {
         match self {
             Kind::GitLab => '!',
             Kind::GitHub => '#',
@@ -48,7 +48,7 @@ impl Kind {
     }
 
     /// Whether a note takes any emoji, or only the eight both forges share.
-    pub fn any_emoji(self) -> bool {
+    pub(crate) fn any_emoji(self) -> bool {
         match self {
             Kind::GitLab => true,
             Kind::GitHub => false,
@@ -56,7 +56,7 @@ impl Kind {
     }
 
     /// The web page of one diff line: the MR's page, scrolled to the line.
-    pub fn line_url(self, web_url: &str, path: &str, line: LineRef) -> String {
+    pub(crate) fn line_url(self, web_url: &str, path: &str, line: LineRef) -> String {
         match self {
             Kind::GitLab => gitlab::line_url(web_url, path, line),
             Kind::GitHub => github::line_url(web_url, path, line),
@@ -68,59 +68,59 @@ impl Kind {
 /// The hosts a merged queue draws from: the one `revu` started with, and the others. Tells which
 /// forge an MR's host runs, and the short tag its row carries once there is more than one host.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Hosts {
-    pub main: (String, Kind),
-    pub others: Vec<(String, Kind)>,
+pub(crate) struct Hosts {
+    pub(crate) main: (String, Kind),
+    pub(crate) others: Vec<(String, Kind)>,
 }
 
 impl Hosts {
     #[cfg(test)]
-    pub fn one(host: &str, kind: Kind) -> Self {
+    pub(crate) fn one(host: &str, kind: Kind) -> Self {
         Self { main: (host.to_owned(), kind), others: vec![] }
     }
 
-    pub fn kind_of(&self, key: &MrKey) -> Kind {
+    pub(crate) fn kind_of(&self, key: &MrKey) -> Kind {
         key.host.as_deref().and_then(|h| self.others.iter().find(|(host, _)| host == h)).map_or(self.main.1, |(_, kind)| *kind)
     }
 
     /// `gitlab`, `github`: the first name of the host `key` lives on. Callers show it only when
     /// the rows on screen come from several hosts (`Sections::mixes_hosts`).
-    pub fn tag(&self, key: &MrKey) -> Option<String> {
+    pub(crate) fn tag(&self, key: &MrKey) -> Option<String> {
         let host = key.host.as_deref().unwrap_or(&self.main.0);
         host.split('.').next().map(str::to_owned)
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum Forge {
+pub(crate) enum Forge {
     GitLab(gitlab::Client),
     GitHub(github::Client),
 }
 
 impl Forge {
     /// The backend for `kind`, speaking to `credentials.host` only.
-    pub fn connect(kind: Kind, credentials: &Credentials) -> Result<Self> {
+    pub(crate) fn connect(kind: Kind, credentials: &Credentials) -> Result<Self> {
         match kind {
             Kind::GitLab => Ok(Forge::GitLab(gitlab::Client::new(credentials)?)),
             Kind::GitHub => Ok(Forge::GitHub(github::Client::new(credentials)?)),
         }
     }
 
-    pub fn kind(&self) -> Kind {
+    pub(crate) fn kind(&self) -> Kind {
         match self {
             Forge::GitLab(_) => Kind::GitLab,
             Forge::GitHub(_) => Kind::GitHub,
         }
     }
 
-    pub fn host(&self) -> &str {
+    pub(crate) fn host(&self) -> &str {
         match self {
             Forge::GitLab(client) => client.host(),
             Forge::GitHub(client) => client.host(),
         }
     }
 
-    pub async fn me(&self) -> Result<User> {
+    pub(crate) async fn me(&self) -> Result<User> {
         match self {
             Forge::GitLab(client) => client.me().await,
             Forge::GitHub(client) => client.me().await,
@@ -128,7 +128,7 @@ impl Forge {
     }
 
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
-    pub async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
+    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
         match self {
             Forge::GitLab(client) => client.queue(project).await,
             Forge::GitHub(client) => client.queue(project).await,
@@ -136,7 +136,7 @@ impl Forge {
     }
 
     /// The path of a project the user named by its numeric id (`123!42`).
-    pub async fn project_path(&self, id: u64) -> Result<ProjectPath> {
+    pub(crate) async fn project_path(&self, id: u64) -> Result<ProjectPath> {
         match self {
             Forge::GitLab(client) => client.project_path(id).await,
             Forge::GitHub(client) => client.project_path(id).await,
@@ -144,14 +144,14 @@ impl Forge {
     }
 
     /// The open MR whose source is `branch`, if any.
-    pub async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
+    pub(crate) async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
         match self {
             Forge::GitLab(client) => client.mr_for_branch(project, branch).await,
             Forge::GitHub(client) => client.mr_for_branch(project, branch).await,
         }
     }
 
-    pub async fn mr(&self, key: &MrKey) -> Result<Mr> {
+    pub(crate) async fn mr(&self, key: &MrKey) -> Result<Mr> {
         match self {
             Forge::GitLab(client) => client.mr(key).await,
             Forge::GitHub(client) => client.mr(key).await,
@@ -159,7 +159,7 @@ impl Forge {
     }
 
     /// Requests left and any rate-limit wait, as the last answers said.
-    pub fn rate(&self) -> RateLimit {
+    pub(crate) fn rate(&self) -> RateLimit {
         match self {
             Forge::GitLab(client) => client.rate(),
             Forge::GitHub(client) => client.rate(),
@@ -167,7 +167,7 @@ impl Forge {
     }
 
     /// The whole file `path` at commit `sha`, for the context around a hunk.
-    pub async fn file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
+    pub(crate) async fn file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
         match self {
             Forge::GitLab(client) => client.file(&key.project, path, sha.as_str()).await,
             Forge::GitHub(client) => client.file(&key.project, path, sha.as_str()).await,
@@ -176,7 +176,7 @@ impl Forge {
 
     /// The bytes of a picture a note of `key` points at, `url` as the note wrote it. Links off
     /// the forge are refused, and a slow one gives up after [`image::TIMEOUT`].
-    pub async fn image(&self, key: &MrKey, url: &str) -> Result<Vec<u8>> {
+    pub(crate) async fn image(&self, key: &MrKey, url: &str) -> Result<Vec<u8>> {
         let fetch = async {
             match self {
                 Forge::GitLab(client) => client.image(&key.project, url).await,
@@ -187,7 +187,7 @@ impl Forge {
     }
 
     /// Commits `suggestion` on the MR's source branch `branch`.
-    pub async fn apply(&self, key: &MrKey, branch: &str, suggestion: &Suggestion) -> Result<()> {
+    pub(crate) async fn apply(&self, key: &MrKey, branch: &str, suggestion: &Suggestion) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.apply(suggestion).await,
             Forge::GitHub(client) => client.apply(key, branch, suggestion).await,
@@ -195,7 +195,7 @@ impl Forge {
     }
 
     /// The CI run of the MR's head commit `head`; `None` when nothing ran on it.
-    pub async fn checks(&self, key: &MrKey, head: &Sha) -> Result<Option<checks::Checks>> {
+    pub(crate) async fn checks(&self, key: &MrKey, head: &Sha) -> Result<Option<checks::Checks>> {
         match self {
             Forge::GitLab(client) => client.checks(key).await,
             Forge::GitHub(client) => client.checks(key, head.as_str()).await,
@@ -203,7 +203,7 @@ impl Forge {
     }
 
     /// The review apps up for the MR of `branch`, each saying whether it runs `head`.
-    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &Sha) -> Result<Vec<Deployment>> {
+    pub(crate) async fn deployments(&self, key: &MrKey, branch: &str, head: &Sha) -> Result<Vec<Deployment>> {
         match self {
             Forge::GitLab(client) => client.deployments(key, branch, head.as_str()).await,
             Forge::GitHub(client) => client.deployments(key, branch, head.as_str()).await,
@@ -211,21 +211,21 @@ impl Forge {
     }
 
     /// Which of the MRs `numbers` of `project` are merged or closed.
-    pub async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
+    pub(crate) async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
         match self {
             Forge::GitLab(client) => client.finished(project, numbers).await,
             Forge::GitHub(client) => client.finished(project, numbers).await,
         }
     }
 
-    pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
+    pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         match self {
             Forge::GitLab(client) => client.diffs(key).await,
             Forge::GitHub(client) => client.diffs(key).await,
         }
     }
 
-    pub async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
+    pub(crate) async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
         match self {
             Forge::GitLab(client) => client.discussions(key).await,
             Forge::GitHub(client) => client.discussions(key).await,
@@ -233,14 +233,14 @@ impl Forge {
     }
 
     /// My unpublished notes on the MR.
-    pub async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>> {
+    pub(crate) async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>> {
         match self {
             Forge::GitLab(client) => client.drafts(key).await,
             Forge::GitHub(client) => client.drafts(key).await,
         }
     }
 
-    pub async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft> {
+    pub(crate) async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft> {
         match self {
             Forge::GitLab(client) => client.create_draft(key, draft).await,
             Forge::GitHub(client) => client.create_draft(key, draft).await,
@@ -248,14 +248,14 @@ impl Forge {
     }
 
     /// Replaces the whole draft, position included.
-    pub async fn update_draft(&self, key: &MrKey, id: u64, draft: &NewDraft) -> Result<Draft> {
+    pub(crate) async fn update_draft(&self, key: &MrKey, id: u64, draft: &NewDraft) -> Result<Draft> {
         match self {
             Forge::GitLab(client) => client.update_draft(key, id, draft).await,
             Forge::GitHub(client) => client.update_draft(key, id, draft).await,
         }
     }
 
-    pub async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
+    pub(crate) async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.delete_draft(key, id).await,
             Forge::GitHub(client) => client.delete_draft(key, id).await,
@@ -263,14 +263,14 @@ impl Forge {
     }
 
     /// Every draft of mine goes public as one review of `kind`; an error means nothing went public.
-    pub async fn publish(&self, key: &MrKey, kind: ReviewKind) -> Result<Approval> {
+    pub(crate) async fn publish(&self, key: &MrKey, kind: ReviewKind) -> Result<Approval> {
         match self {
             Forge::GitLab(client) => client.publish(key, kind).await,
             Forge::GitHub(client) => client.publish(key, kind).await,
         }
     }
 
-    pub async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
+    pub(crate) async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.resolve(key, discussion, resolved).await,
             Forge::GitHub(client) => client.resolve(discussion, resolved).await,
@@ -278,7 +278,7 @@ impl Forge {
     }
 
     /// Approves the MR, or takes my approval back.
-    pub async fn approve(&self, key: &MrKey, change: ApprovalChange) -> Result<()> {
+    pub(crate) async fn approve(&self, key: &MrKey, change: ApprovalChange) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.approve(key, change).await,
             Forge::GitHub(client) => client.approve(key, change).await,
@@ -286,7 +286,7 @@ impl Forge {
     }
 
     /// Adds my `emoji` to `note`, or takes it off. The note must carry the forge's GraphQL id.
-    pub async fn react(&self, note: &Note, emoji: Emoji, change: ReactionChange) -> Result<()> {
+    pub(crate) async fn react(&self, note: &Note, emoji: Emoji, change: ReactionChange) -> Result<()> {
         let node = note.node.as_deref().context("this note cannot take reactions yet: refresh with r")?;
         match self {
             Forge::GitLab(client) => client.react(node, emoji, change).await,
@@ -295,7 +295,7 @@ impl Forge {
     }
 
     /// Merges the MR as `plan` says, only while its head is still `head`: a push in between is refused.
-    pub async fn merge(&self, key: &MrKey, head: &Sha, plan: MergePlan) -> Result<()> {
+    pub(crate) async fn merge(&self, key: &MrKey, head: &Sha, plan: MergePlan) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.merge(key, head.as_str(), plan).await,
             Forge::GitHub(client) => client.merge(key, head.as_str(), plan).await,
@@ -303,7 +303,7 @@ impl Forge {
     }
 
     /// Marks the MR a draft, or ready; one already there stays as it is.
-    pub async fn set_readiness(&self, key: &MrKey, readiness: Readiness) -> Result<()> {
+    pub(crate) async fn set_readiness(&self, key: &MrKey, readiness: Readiness) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.set_readiness(key, readiness).await,
             Forge::GitHub(client) => client.set_readiness(key, readiness).await,
@@ -311,7 +311,7 @@ impl Forge {
     }
 
     /// A public new thread, on a line when `position` is given.
-    pub async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
+    pub(crate) async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
         match self {
             Forge::GitLab(client) => client.comment(key, body, position).await,
             Forge::GitHub(client) => client.comment(key, body, position).await,
@@ -319,7 +319,7 @@ impl Forge {
     }
 
     /// A public reply at the end of the thread `discussion`.
-    pub async fn reply(&self, key: &MrKey, discussion: &ThreadId, body: &str) -> Result<()> {
+    pub(crate) async fn reply(&self, key: &MrKey, discussion: &ThreadId, body: &str) -> Result<()> {
         match self {
             Forge::GitLab(client) => client.reply(key, discussion, body).await,
             Forge::GitHub(client) => client.reply(key, discussion, body).await,

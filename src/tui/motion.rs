@@ -11,7 +11,7 @@ const LIVELY_TICK: Duration = Duration::from_millis(100);
 const PULSE: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Motion {
+pub(crate) enum Motion {
     Lively,
     Calm,
 }
@@ -26,7 +26,7 @@ impl Motion {
 
     /// How soon a screen that just changed is looked at again; calm, once per spinner step, since nothing on it
     /// moves faster.
-    pub fn tick(self) -> Duration {
+    pub(super) fn tick(self) -> Duration {
         match self {
             Self::Lively => LIVELY_TICK,
             Self::Calm => CALM_FRAME,
@@ -34,12 +34,12 @@ impl Motion {
     }
 
     /// The spinner of something loading, `elapsed` after the start.
-    pub fn spinner(self, elapsed: Duration) -> &'static str {
+    pub(super) fn spinner(self, elapsed: Duration) -> &'static str {
         SPINNER[(elapsed.as_millis() / self.spinner_frame().as_millis()) as usize % SPINNER.len()]
     }
 
     /// The badge of a running pipeline: it may run for minutes, so calm keeps it on one step.
-    pub fn running(self, elapsed: Duration) -> &'static str {
+    pub(crate) fn running(self, elapsed: Duration) -> &'static str {
         match self {
             Self::Lively => self.spinner(elapsed),
             Self::Calm => SPINNER[0],
@@ -47,7 +47,7 @@ impl Motion {
     }
 
     /// Whether a mark that asks for attention is lit: lively, it breathes, bright one second and faded the next.
-    pub fn lit(self, elapsed: Duration) -> bool {
+    pub(super) fn lit(self, elapsed: Duration) -> bool {
         match self {
             Self::Lively => (elapsed.as_millis() / PULSE.as_millis()).is_multiple_of(2),
             Self::Calm => true,

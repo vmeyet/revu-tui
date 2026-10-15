@@ -10,9 +10,9 @@ use ratatui::text::{Line, Span};
 /// What `/` looks for; `typing` while the line at the bottom takes the keys, `from` the row the
 /// search started on, where `esc` puts the cursor back.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Search {
-    pub query: String,
-    pub typing: bool,
+pub(crate) struct Search {
+    pub(crate) query: String,
+    pub(crate) typing: bool,
     from: usize,
 }
 
@@ -75,7 +75,7 @@ impl App {
     }
 
     /// `3/17` once the cursor sits on a match, `–/17` elsewhere, for the status line.
-    pub fn search_count(&self) -> Option<String> {
+    pub(crate) fn search_count(&self) -> Option<String> {
         let open = self.open.as_ref()?;
         let search = self.search.as_ref().filter(|s| !s.query.is_empty())?;
         let hits = hits(&open.review, &search.query);
@@ -195,7 +195,7 @@ fn last_len(text: &str) -> usize {
 }
 
 /// `line` with every match of `query` past column `from` drawn in `style`, the rest untouched.
-pub fn mark(line: &Line<'static>, query: &str, from: usize, style: Style) -> Line<'static> {
+pub(crate) fn mark(line: &Line<'static>, query: &str, from: usize, style: Style) -> Line<'static> {
     let chars: Vec<(char, Style)> = line.spans.iter().flat_map(|s| s.content.chars().map(move |c| (c, s.style))).collect();
     let wanted: Vec<char> = query.chars().collect();
     let same = |a: char, b: char| if exact_case(query) { a == b } else { a.to_lowercase().eq(b.to_lowercase()) };

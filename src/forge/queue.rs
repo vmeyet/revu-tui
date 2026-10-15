@@ -6,59 +6,59 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Queue {
-    pub me: String,
+pub(crate) struct Queue {
+    pub(crate) me: String,
     /// The project the queue is scoped to; `None` for every project.
     #[serde(default)]
-    pub project: Option<ProjectPath>,
-    pub review_requested: Vec<QueueMr>,
-    pub authored: Vec<QueueMr>,
-    pub assigned: Vec<QueueMr>,
+    pub(crate) project: Option<ProjectPath>,
+    pub(crate) review_requested: Vec<QueueMr>,
+    pub(crate) authored: Vec<QueueMr>,
+    pub(crate) assigned: Vec<QueueMr>,
     /// Every open MR of `project`, mine or not.
     #[serde(default)]
-    pub open: Vec<QueueMr>,
+    pub(crate) open: Vec<QueueMr>,
 }
 
 /// One queue row: enough to draw it, badge it and open it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QueueMr {
+pub(crate) struct QueueMr {
     /// The host it came from, when the queue merges several; `None` for the one `revu` started with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
-    pub number: u64,
-    pub project: ProjectPath,
-    pub title: String,
+    pub(crate) host: Option<String>,
+    pub(crate) number: u64,
+    pub(crate) project: ProjectPath,
+    pub(crate) title: String,
     #[serde(default)]
-    pub description: String,
-    pub draft: bool,
-    pub web_url: String,
-    pub updated_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub conflicts: bool,
-    pub author: String,
-    pub author_name: String,
-    pub approved: bool,
-    pub approved_by: Vec<String>,
+    pub(crate) description: String,
+    pub(crate) draft: bool,
+    pub(crate) web_url: String,
+    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) source_branch: String,
+    pub(crate) target_branch: String,
+    pub(crate) conflicts: bool,
+    pub(crate) author: String,
+    pub(crate) author_name: String,
+    pub(crate) approved: bool,
+    pub(crate) approved_by: Vec<String>,
     /// Approvals still missing before the forge lets it merge; `None` when the forge does not say.
     #[serde(default)]
-    pub approvals_left: Option<u32>,
-    pub reviewers: Vec<ReviewerState>,
+    pub(crate) approvals_left: Option<u32>,
+    pub(crate) reviewers: Vec<ReviewerState>,
     #[serde(serialize_with = "upper_case")]
-    pub pipeline: Option<PipelineStatus>,
-    pub additions: u32,
-    pub deletions: u32,
-    pub files: u32,
-    pub unresolved: u32,
-    pub labels: Vec<String>,
-    pub notes: u32,
+    pub(crate) pipeline: Option<PipelineStatus>,
+    pub(crate) additions: u32,
+    pub(crate) deletions: u32,
+    pub(crate) files: u32,
+    pub(crate) unresolved: u32,
+    pub(crate) labels: Vec<String>,
+    pub(crate) notes: u32,
     /// Everyone who commented, the author included.
     #[serde(default)]
-    pub commenters: Vec<String>,
+    pub(crate) commenters: Vec<String>,
     /// Why the "needs me" rules moved it, or sorted it last; set when the sections are built.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<Reason>,
+    pub(crate) reason: Option<Reason>,
 }
 
 /// `revu list --json` has spelled a row's pipeline in upper case since before it had a type.
@@ -68,14 +68,14 @@ fn upper_case<S: serde::Serializer>(status: &Option<PipelineStatus>, serializer:
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReviewerState {
-    pub username: String,
-    pub state: ReviewState,
+pub(crate) struct ReviewerState {
+    pub(crate) username: String,
+    pub(crate) state: ReviewState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ReviewState {
+pub(crate) enum ReviewState {
     Unreviewed,
     Reviewed,
     RequestedChanges,
@@ -86,27 +86,27 @@ pub enum ReviewState {
 
 /// The queue sorted into the sidebar sections, each MR in exactly one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct Sections {
+pub(crate) struct Sections {
     /// Pinned MRs no list holds, each fetched on its own; PINNED also takes the pinned MRs of every other section.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub pinned: Vec<QueueMr>,
-    pub to_review: Vec<QueueMr>,
-    pub mine: Vec<QueueMr>,
+    pub(crate) pinned: Vec<QueueMr>,
+    pub(crate) to_review: Vec<QueueMr>,
+    pub(crate) mine: Vec<QueueMr>,
     /// Others' MRs the ready command named, still needing me: taken out of the sections below.
-    pub ready: Vec<QueueMr>,
-    pub watching: Vec<QueueMr>,
+    pub(crate) ready: Vec<QueueMr>,
+    pub(crate) watching: Vec<QueueMr>,
     /// The rest of the project's open MRs, only when the queue is scoped to one.
-    pub open: Vec<QueueMr>,
+    pub(crate) open: Vec<QueueMr>,
     /// Other people's draft MRs from Watching and Open: not ready, so out of the way.
-    pub drafts: Vec<QueueMr>,
-    pub done: Vec<QueueMr>,
+    pub(crate) drafts: Vec<QueueMr>,
+    pub(crate) done: Vec<QueueMr>,
     /// What the "needs me" rules moved out of To review, Watching and Open, each with its reason.
-    pub other: Vec<QueueMr>,
+    pub(crate) other: Vec<QueueMr>,
 }
 
 impl Sections {
     /// Several hosts' sections as one sidebar: each section holds every host's rows, newest first.
-    pub fn merge(parts: Vec<Sections>) -> Sections {
+    pub(crate) fn merge(parts: Vec<Sections>) -> Sections {
         let mut merged = Sections::default();
         for part in parts {
             merged.to_review.extend(part.to_review);
@@ -136,7 +136,7 @@ impl Sections {
 
 impl Sections {
     /// Every row, section after section.
-    pub fn all(&self) -> impl Iterator<Item = &QueueMr> {
+    pub(crate) fn all(&self) -> impl Iterator<Item = &QueueMr> {
         [&self.pinned, &self.to_review, &self.mine, &self.ready, &self.watching, &self.open, &self.drafts, &self.done, &self.other]
             .into_iter()
             .flatten()
@@ -145,7 +145,7 @@ impl Sections {
     /// The MRs the ready command named move to Ready, when they still need me: someone else's,
     /// open, not already reviewed by me, and not moved out by a rule. `extra` are named MRs the
     /// queue did not list (outside my lists, fetched one by one), judged by the same rules.
-    pub fn with_ready(self, named: &[MrKey], extra: Vec<QueueMr>, me: &str, rules: &Rules, now: DateTime<Utc>) -> Sections {
+    pub(crate) fn with_ready(self, named: &[MrKey], extra: Vec<QueueMr>, me: &str, rules: &Rules, now: DateTime<Utc>) -> Sections {
         let wanted = |mr: &QueueMr| named.contains(&mr.key());
         let mut ready = Vec::new();
         let mut take = |rows: Vec<QueueMr>| -> Vec<QueueMr> {
@@ -177,7 +177,7 @@ impl Sections {
 
     /// Rows from more than one host share the queue: only then does a row need its host's tag.
     /// A queue scoped to a checkout holds one host's rows even when several hosts are logged in.
-    pub fn mixes_hosts(&self) -> bool {
+    pub(crate) fn mixes_hosts(&self) -> bool {
         let mut hosts = self.all().map(|mr| mr.host.as_deref());
         hosts.next().is_some_and(|first| hosts.any(|host| host != first))
     }
@@ -186,7 +186,7 @@ impl Sections {
 impl QueueMr {
     /// A queue row for an MR fetched on its own, as the ready command names MRs outside my lists.
     /// What only a list answers (comments, sizes, threads) is left empty; `None` once it is closed.
-    pub fn from_mr(mr: &super::Mr, host: Option<String>) -> Option<Self> {
+    pub(crate) fn from_mr(mr: &super::Mr, host: Option<String>) -> Option<Self> {
         if mr.state != MrState::Open {
             return None;
         }
@@ -221,7 +221,7 @@ impl QueueMr {
         })
     }
 
-    pub fn my_state(&self, me: &str) -> Option<ReviewState> {
+    pub(super) fn my_state(&self, me: &str) -> Option<ReviewState> {
         self.reviewers.iter().find(|r| r.username == me).map(|r| r.state)
     }
 
@@ -229,19 +229,19 @@ impl QueueMr {
         matches!(self.my_state(me), Some(ReviewState::Approved | ReviewState::Reviewed))
     }
 
-    pub fn key(&self) -> MrKey {
+    pub(crate) fn key(&self) -> MrKey {
         MrKey { host: self.host.clone(), ..MrKey::new(self.project.clone(), self.number) }
     }
 }
 
 impl Queue {
     /// The key of every MR the forge listed, all of them open.
-    pub fn listed(&self) -> impl Iterator<Item = MrKey> + '_ {
+    pub(crate) fn listed(&self) -> impl Iterator<Item = MrKey> + '_ {
         self.review_requested.iter().chain(&self.authored).chain(&self.assigned).chain(&self.open).map(QueueMr::key)
     }
 
     /// Every row marked as coming from `host`, so opening it reaches the right forge.
-    pub fn on_host(self, host: &str) -> Self {
+    pub(crate) fn on_host(self, host: &str) -> Self {
         let tag = |rows: Vec<QueueMr>| rows.into_iter().map(|mr| QueueMr { host: Some(host.to_owned()), ..mr }).collect();
         Self {
             review_requested: tag(self.review_requested),
@@ -254,13 +254,13 @@ impl Queue {
 
     /// The sections as the forge sorted them, before any "needs me" rule.
     #[cfg(test)]
-    pub fn sections(&self, watch_labels: &[String]) -> Sections {
+    pub(crate) fn sections(&self, watch_labels: &[String]) -> Sections {
         self.sections_with(watch_labels, &Rules::disabled(), Utc::now())
     }
 
     /// The sections, then the "needs me" rules: what does not need me leaves To review, Watching
     /// and Open for Other (a draft for Drafts), and what others already review sorts last.
-    pub fn sections_with(&self, watch_labels: &[String], rules: &Rules, now: DateTime<Utc>) -> Sections {
+    pub(crate) fn sections_with(&self, watch_labels: &[String], rules: &Rules, now: DateTime<Utc>) -> Sections {
         let sorted = self.forge_sections(watch_labels);
         if !rules.enabled {
             return sorted;

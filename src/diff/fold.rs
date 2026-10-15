@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Fold {
+pub(crate) enum Fold {
     #[default]
     Open,
     Closed,
@@ -20,47 +20,47 @@ impl Fold {
 
 /// What `initial` needs to know about a file; kept apart from the API types on purpose.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FileMeta {
-    pub path: String,
-    pub too_large: bool,
-    pub binary: bool,
+pub(crate) struct FileMeta {
+    pub(crate) path: String,
+    pub(crate) too_large: bool,
+    pub(crate) binary: bool,
 }
 
 /// A missing key means open, so the maps only hold what differs from a fresh view.
 /// Hunks nest under their file path because JSON has no tuple keys.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FoldState {
+pub(crate) struct FoldState {
     #[serde(default)]
-    pub files: BTreeMap<String, Fold>,
+    pub(crate) files: BTreeMap<String, Fold>,
     #[serde(default)]
-    pub hunks: BTreeMap<String, BTreeMap<usize, Fold>>,
+    pub(crate) hunks: BTreeMap<String, BTreeMap<usize, Fold>>,
 }
 
 impl FoldState {
     /// Closes what nobody wants to read first: huge files, binaries and the configured globs.
-    pub fn initial(files: &[FileMeta], fold_globs: &[String]) -> Self {
+    pub(crate) fn initial(files: &[FileMeta], fold_globs: &[String]) -> Self {
         let patterns: Vec<glob::Pattern> = fold_globs.iter().filter_map(|g| glob::Pattern::new(g).ok()).collect();
         let closed = |file: &FileMeta| file.too_large || file.binary || patterns.iter().any(|p| p.matches(&file.path));
         let files = files.iter().filter(|f| closed(f)).map(|f| (f.path.clone(), Fold::Closed)).collect();
         Self { files, hunks: BTreeMap::new() }
     }
 
-    pub fn file_is_open(&self, path: &str) -> bool {
+    pub(crate) fn file_is_open(&self, path: &str) -> bool {
         self.files.get(path).copied().unwrap_or_default() == Fold::Open
     }
 
-    pub fn hunk_is_open(&self, path: &str, index: usize) -> bool {
+    pub(crate) fn hunk_is_open(&self, path: &str, index: usize) -> bool {
         self.hunks.get(path).and_then(|h| h.get(&index)).copied().unwrap_or_default() == Fold::Open
     }
 
-    pub fn toggle_file(&self, path: &str) -> Self {
+    pub(crate) fn toggle_file(&self, path: &str) -> Self {
         let mut files = self.files.clone();
         let next = files.get(path).copied().unwrap_or_default().flipped();
         set_or_forget(&mut files, path.to_owned(), next);
         Self { files, hunks: self.hunks.clone() }
     }
 
-    pub fn toggle_hunk(&self, path: &str, index: usize) -> Self {
+    pub(crate) fn toggle_hunk(&self, path: &str, index: usize) -> Self {
         let mut hunks = self.hunks.clone();
         let mut in_file = hunks.remove(path).unwrap_or_default();
         let next = in_file.get(&index).copied().unwrap_or_default().flipped();

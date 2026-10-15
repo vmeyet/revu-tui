@@ -96,7 +96,7 @@ impl App {
 
     /// The rows the palette lists for what is typed: MRs the query keeps, ranked by its free
     /// words; nothing for commands, which complete in place.
-    pub fn palette_candidates(&self, palette: &Palette) -> Vec<Candidate> {
+    pub(crate) fn palette_candidates(&self, palette: &Palette) -> Vec<Candidate> {
         match palette.mode {
             Mode::Mrs => self.mr_candidates(&palette.input),
             Mode::Answers => self.answer_candidates(&palette.input),
@@ -131,7 +131,7 @@ impl App {
     }
 
     /// What the token under the cursor completes to, for tab and the ghost text.
-    pub fn completions_for(&self, line: &str) -> Vec<String> {
+    pub(crate) fn completions_for(&self, line: &str) -> Vec<String> {
         match palette::slot(line) {
             Slot::Verb => crate::act::verbs().map(|verb| verb.word.to_owned()).collect(),
             Slot::Mr => self.queue_mrs().iter().map(|mr| format!("{}{}", self.hosts.kind_of(&mr.key()).sigil(), mr.number)).collect(),

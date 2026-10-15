@@ -8,11 +8,11 @@ use std::collections::HashMap;
 use std::fmt;
 
 /// Widest a thumbnail gets, in cells; its height follows the picture, up to [`MAX_ROWS`].
-pub const MAX_COLS: u16 = 60;
-pub const MAX_ROWS: u16 = 14;
+const MAX_COLS: u16 = 60;
+const MAX_ROWS: u16 = 14;
 const MAX_PIXELS: u32 = 4096;
 
-pub enum Thumb {
+pub(crate) enum Thumb {
     Loading,
     /// The picture ready to draw, with its size in pixels to reserve rows for it.
     Ready(Box<StatefulProtocol>, (u32, u32)),
@@ -20,7 +20,7 @@ pub enum Thumb {
 }
 
 /// Whether the terminal can draw pictures, and each picture's state, by the link its note gave.
-pub struct Thumbs {
+pub(crate) struct Thumbs {
     picker: Option<Picker>,
     slots: HashMap<String, Thumb>,
     /// Counts every picture that changed state, so a layout made before it knows it is stale.
@@ -40,20 +40,20 @@ impl Default for Thumbs {
 }
 
 impl Thumbs {
-    pub fn disabled() -> Self {
+    pub(crate) fn disabled() -> Self {
         Self { picker: None, slots: HashMap::new(), changes: 0 }
     }
 
-    pub fn with_picker(picker: Picker) -> Self {
+    pub(super) fn with_picker(picker: Picker) -> Self {
         Self { picker: Some(picker), slots: HashMap::new(), changes: 0 }
     }
 
-    pub fn enabled(&self) -> bool {
+    pub(crate) fn enabled(&self) -> bool {
         self.picker.is_some()
     }
 
     /// The cells a ready picture takes within `max_cols`, never scaled past its own pixels.
-    pub fn cells(&self, url: &str, max_cols: u16) -> Option<Size> {
+    pub(crate) fn cells(&self, url: &str, max_cols: u16) -> Option<Size> {
         let picker = self.picker.as_ref()?;
         let Some(Thumb::Ready(_, (w, h))) = self.slots.get(url) else { return None };
         let font = picker.font_size();
@@ -67,7 +67,7 @@ impl Thumbs {
     }
 
     /// Links not asked for yet, marked loading so each is fetched once.
-    pub fn request_new(&mut self, urls: impl IntoIterator<Item = String>) -> Vec<String> {
+    pub(super) fn request_new(&mut self, urls: impl IntoIterator<Item = String>) -> Vec<String> {
         if !self.enabled() {
             return vec![];
         }
@@ -83,7 +83,7 @@ impl Thumbs {
             .collect()
     }
 
-    pub fn arrived(&mut self, url: &str, image: Option<DynamicImage>) {
+    pub(super) fn arrived(&mut self, url: &str, image: Option<DynamicImage>) {
         let thumb = match (image, &self.picker) {
             (Some(image), Some(picker)) => {
                 let size = (image.width(), image.height());
@@ -95,27 +95,27 @@ impl Thumbs {
         self.changes += 1;
     }
 
-    pub fn changes(&self) -> u64 {
+    pub(crate) fn changes(&self) -> u64 {
         self.changes
     }
 
-    pub fn get(&self, url: &str) -> Option<&Thumb> {
+    pub(crate) fn get(&self, url: &str) -> Option<&Thumb> {
         self.slots.get(url)
     }
 
-    pub fn get_mut(&mut self, url: &str) -> Option<&mut Thumb> {
+    pub(crate) fn get_mut(&mut self, url: &str) -> Option<&mut Thumb> {
         self.slots.get_mut(url)
     }
 }
 
 /// Asks the terminal what it can draw. Pixel protocols only: a half-block mosaic reads worse
 /// than the `[image: …]` line, so those terminals get text.
-pub fn ask_terminal() -> Option<Picker> {
+pub(super) fn ask_terminal() -> Option<Picker> {
     Picker::from_query_stdio().ok().filter(|picker| picker.protocol_type() != ProtocolType::Halfblocks)
 }
 
 /// Decodes with hard limits, so a hostile upload cannot balloon into gigabytes of pixels.
-pub fn decode(bytes: &[u8]) -> Option<DynamicImage> {
+pub(crate) fn decode(bytes: &[u8]) -> Option<DynamicImage> {
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_PIXELS);
     limits.max_image_height = Some(MAX_PIXELS);
@@ -126,17 +126,17 @@ pub fn decode(bytes: &[u8]) -> Option<DynamicImage> {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    pub fn png(w: u32, h: u32) -> Vec<u8> {
+    pub(crate) fn png(w: u32, h: u32) -> Vec<u8> {
         let mut out = std::io::Cursor::new(Vec::new());
         DynamicImage::new_rgb8(w, h).write_to(&mut out, image::ImageFormat::Png).unwrap();
         out.into_inner()
     }
 
     /// A half-block picker with a 10x20 font: it draws into a plain buffer, so tests can see it.
-    pub fn test_thumbs() -> Thumbs {
+    pub(crate) fn test_thumbs() -> Thumbs {
         Thumbs::with_picker(Picker::halfblocks())
     }
 

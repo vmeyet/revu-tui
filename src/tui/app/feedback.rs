@@ -9,9 +9,9 @@ const ZEN_TOAST_GONE: Duration = Duration::from_secs(TOAST_LIFE.as_secs() - ZEN_
 
 /// Something that just happened, shown over the status line until it ages out.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Toast {
-    pub text: String,
-    pub danger: bool,
+pub(crate) struct Toast {
+    pub(crate) text: String,
+    pub(crate) danger: bool,
     until: Instant,
 }
 
@@ -24,12 +24,12 @@ impl Toast {
         Self { text, danger: true, until: now + TOAST_LIFE }
     }
 
-    pub fn live(&self, now: Instant) -> bool {
+    pub(crate) fn live(&self, now: Instant) -> bool {
         now < self.until
     }
 
     /// In its first two seconds: how long zen shows it.
-    pub fn fresh(&self, now: Instant) -> bool {
+    pub(crate) fn fresh(&self, now: Instant) -> bool {
         now + ZEN_TOAST_GONE < self.until
     }
 }
@@ -43,7 +43,7 @@ impl App {
         self.toast = Some(Toast::warning(text.into(), self.now));
     }
 
-    pub fn live_toast(&self) -> Option<&Toast> {
+    pub(crate) fn live_toast(&self) -> Option<&Toast> {
         self.toast.as_ref().filter(|t| t.live(self.now))
     }
 }

@@ -1,20 +1,20 @@
 //! The value the TUI edits: one MR, its files as parsed hunks, its threads hung on lines, and what is folded.
-pub mod draft;
-pub mod image;
-pub mod place;
-pub mod position;
-pub mod suggestion;
-pub mod thread;
-pub mod tree;
+pub(crate) mod draft;
+pub(crate) mod image;
+pub(crate) mod place;
+pub(crate) mod position;
+pub(crate) mod suggestion;
+pub(crate) mod thread;
+pub(crate) mod tree;
 
-pub use draft::{Draft, DraftId};
-pub use place::{Conversation, Entry, EntryKind, Mark, Marker, Markers, Place, Spot};
-pub use thread::{Anchor, Side, Thread, anchor_of};
+pub(crate) use draft::{Draft, DraftId};
+pub(crate) use place::{Conversation, Entry, EntryKind, Mark, Marker, Markers, Place, Spot};
+pub(crate) use thread::{Anchor, Side, Thread, anchor_of};
 
 use crate::diff::fold::{FileMeta, FoldState};
 use crate::diff::words::{self, InlineRule};
 use crate::diff::{self, Hunk, LineKind};
-pub use crate::forge::FileKind;
+pub(crate) use crate::forge::FileKind;
 use crate::forge::{DiffFile, Discussion, Mr, ThreadId};
 use crate::syntax::{self, Spans};
 use std::collections::{BTreeMap, BTreeSet};
@@ -25,33 +25,33 @@ const TOO_LARGE_LINES: usize = 2000;
 
 /// How far a review went: a file that opens folded counts only once marked viewed, the rest wait apart as `folded`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Progress {
-    pub viewed: usize,
-    pub files: usize,
-    pub folded: usize,
+pub(crate) struct Progress {
+    pub(crate) viewed: usize,
+    pub(crate) files: usize,
+    pub(crate) folded: usize,
 }
 
 impl Progress {
-    pub fn new(files: usize, viewed: &BTreeSet<String>, auto_folded: &BTreeSet<String>) -> Self {
+    pub(crate) fn new(files: usize, viewed: &BTreeSet<String>, auto_folded: &BTreeSet<String>) -> Self {
         let folded = auto_folded.difference(viewed).count();
         Self { viewed: viewed.len(), files: files.saturating_sub(folded), folded }
     }
 
-    pub fn done(self) -> bool {
+    pub(crate) fn done(self) -> bool {
         self.viewed == self.files
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct File {
-    pub old_path: String,
-    pub new_path: String,
-    pub kind: FileKind,
-    pub binary: bool,
-    pub too_large: bool,
-    pub hunks: Vec<Hunk>,
-    pub additions: usize,
-    pub deletions: usize,
+pub(crate) struct File {
+    pub(crate) old_path: String,
+    pub(crate) new_path: String,
+    pub(crate) kind: FileKind,
+    pub(crate) binary: bool,
+    pub(crate) too_large: bool,
+    pub(crate) hunks: Vec<Hunk>,
+    pub(crate) additions: usize,
+    pub(crate) deletions: usize,
     colours: Colours,
 }
 
@@ -88,7 +88,7 @@ impl std::fmt::Debug for Colours {
 }
 
 impl File {
-    pub fn from_diff(diff: &DiffFile) -> Self {
+    pub(crate) fn from_diff(diff: &DiffFile) -> Self {
         let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(words::mark).collect();
         let lines = hunks.iter().map(|h| h.lines.len()).sum::<usize>();
         let count = |kind: LineKind| hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind == kind).count();
@@ -111,7 +111,7 @@ impl File {
     }
 
     /// The syntax colours of one diff line, its hunk highlighted on the first ask; empty when the file is not coloured.
-    pub fn spans(&self, hunk: usize, line: usize) -> &[(std::ops::Range<usize>, syntax::Token)] {
+    pub(crate) fn spans(&self, hunk: usize, line: usize) -> &[(std::ops::Range<usize>, syntax::Token)] {
         let (Some(language), Some(cell), Some(lines)) = (self.colours.language, self.colours.hunks.get(hunk), self.hunks.get(hunk)) else {
             return &[];
         };
@@ -120,12 +120,12 @@ impl File {
 
     /// How many hunks were highlighted so far.
     #[cfg(test)]
-    pub fn coloured_hunks(&self) -> usize {
+    pub(crate) fn coloured_hunks(&self) -> usize {
         self.colours.coloured()
     }
 
     /// Names this file's change: equal fingerprints mean nothing was pushed to it since.
-    pub fn fingerprint(&self) -> String {
+    pub(crate) fn fingerprint(&self) -> String {
         let mut hash = sha1_smol::Sha1::new();
         for hunk in &self.hunks {
             hash.update(hunk.header.as_bytes());
@@ -138,7 +138,7 @@ impl File {
         hash.digest().to_string()
     }
 
-    pub fn meta(&self) -> FileMeta {
+    pub(crate) fn meta(&self) -> FileMeta {
         FileMeta { path: self.new_path.clone(), too_large: self.too_large, binary: self.binary }
     }
 
@@ -179,7 +179,7 @@ fn colour(language: &syntax::Language, hunk: &Hunk) -> Vec<Spans> {
 
 /// One row of the review pane, in reading order, after folds. Indexes point into `Review`, so a row is tiny.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Row {
+pub(crate) enum Row {
     Header,
     File {
         index: usize,
@@ -223,7 +223,7 @@ pub enum Row {
 
 impl Row {
     /// The file a row belongs to; the header and gaps belong to none.
-    pub fn file(&self) -> Option<usize> {
+    pub(crate) fn file(&self) -> Option<usize> {
         match self {
             Row::File { index, .. } => Some(*index),
             Row::Hunk { file, .. }
@@ -236,7 +236,7 @@ impl Row {
     }
 
     /// The file and hunk a row sits in, a hunk row its own.
-    pub fn hunk(&self) -> Option<(usize, usize)> {
+    pub(crate) fn hunk(&self) -> Option<(usize, usize)> {
         match self {
             Row::Hunk { file, index: hunk, .. }
             | Row::Line { file, hunk, .. }
@@ -249,45 +249,45 @@ impl Row {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Review {
+pub(crate) struct Review {
     /// What a fetch brought: never changed afterwards, so copies of the review share it.
-    pub mr: Arc<Mr>,
-    pub files: Arc<[File]>,
-    pub threads: Arc<[Thread]>,
+    pub(crate) mr: Arc<Mr>,
+    pub(crate) files: Arc<[File]>,
+    pub(crate) threads: Arc<[Thread]>,
     /// The files that open folded (configured globs, too large, binary): they only count once viewed.
-    pub auto_folded: Arc<BTreeSet<String>>,
-    pub drafts: Vec<Draft>,
-    pub viewed: BTreeSet<String>,
-    pub fold: FoldState,
+    pub(crate) auto_folded: Arc<BTreeSet<String>>,
+    pub(crate) drafts: Vec<Draft>,
+    pub(crate) viewed: BTreeSet<String>,
+    pub(crate) fold: FoldState,
     /// Which changed pairs read as one row.
-    pub inline: InlineRule,
+    pub(crate) inline: InlineRule,
     /// The old file beside the new one, `D` in the TUI; the reader's choice, kept even while the diff is too narrow.
-    pub side_by_side: bool,
+    pub(crate) side_by_side: bool,
     /// The diff area holds two sides of code; below, side by side falls back to inline.
-    pub wide: bool,
+    pub(crate) wide: bool,
     /// One side of the diff alone, as plain code: before on the old side, after on the new, `<` `>` in the TUI.
-    pub peek: Option<Side>,
+    pub(crate) peek: Option<Side>,
     /// Lines that changed only in whitespace read as one quiet row, `W` in the TUI.
-    pub quiet_whitespace: bool,
+    pub(crate) quiet_whitespace: bool,
     /// Unchanged lines shown around hunks, `+` in the TUI.
-    pub context: Context,
+    pub(crate) context: Context,
     /// Threads read under their lines rather than in the right pane: in zen and in a narrow window.
-    pub threads_in_diff: bool,
+    pub(crate) threads_in_diff: bool,
     /// The threads whose every note shows in the diff, by id; the others read as one row.
-    pub unfolded: BTreeSet<ThreadId>,
+    pub(crate) unfolded: BTreeSet<ThreadId>,
 }
 
 /// The files read whole, and how many lines each hunk shows beyond its own.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Context {
+pub(crate) struct Context {
     /// The new side of a file at the head commit, one entry per line, shared between copies of the review.
-    pub texts: BTreeMap<String, Arc<Vec<String>>>,
+    pub(crate) texts: BTreeMap<String, Arc<Vec<String>>>,
     /// Extra lines above and below a hunk, by (file, hunk).
-    pub around: BTreeMap<(usize, usize), u32>,
+    pub(crate) around: BTreeMap<(usize, usize), u32>,
 }
 
 impl Review {
-    pub fn new(mr: Mr, diffs: &[DiffFile], discussions: Vec<Discussion>, fold_globs: &[String]) -> Self {
+    pub(crate) fn new(mr: Mr, diffs: &[DiffFile], discussions: Vec<Discussion>, fold_globs: &[String]) -> Self {
         let files: Vec<File> = diffs.iter().map(File::from_diff).collect();
         let threads = threads_of(discussions, &files);
         let metas: Vec<FileMeta> = files.iter().map(File::meta).collect();
@@ -311,41 +311,41 @@ impl Review {
         }
     }
 
-    pub fn with_mr(self, mr: Mr) -> Self {
+    pub(crate) fn with_mr(self, mr: Mr) -> Self {
         Self { mr: Arc::new(mr), ..self }
     }
 
-    pub fn with_inline(self, inline: InlineRule) -> Self {
+    pub(crate) fn with_inline(self, inline: InlineRule) -> Self {
         Self { inline, ..self }
     }
 
-    pub fn with_side_by_side(self, side_by_side: bool) -> Self {
+    pub(crate) fn with_side_by_side(self, side_by_side: bool) -> Self {
         Self { side_by_side, ..self }
     }
 
-    pub fn with_wide(self, wide: bool) -> Self {
+    pub(crate) fn with_wide(self, wide: bool) -> Self {
         Self { wide, ..self }
     }
 
-    pub fn with_peek(self, peek: Option<Side>) -> Self {
+    pub(crate) fn with_peek(self, peek: Option<Side>) -> Self {
         Self { peek, ..self }
     }
 
     /// Side by side was chosen, the diff is wide enough for it and no peek reads one side alone.
-    pub fn shows_side_by_side(&self) -> bool {
+    pub(crate) fn shows_side_by_side(&self) -> bool {
         self.side_by_side && self.wide && self.peek.is_none()
     }
 
-    pub fn with_threads_in_diff(self, threads_in_diff: bool) -> Self {
+    pub(crate) fn with_threads_in_diff(self, threads_in_diff: bool) -> Self {
         Self { threads_in_diff, ..self }
     }
 
-    pub fn with_unfolded(self, unfolded: BTreeSet<ThreadId>) -> Self {
+    pub(crate) fn with_unfolded(self, unfolded: BTreeSet<ThreadId>) -> Self {
         Self { unfolded, ..self }
     }
 
     /// Threads hang under their lines: asked for, and the diff is not side by side, where the pane keeps them.
-    pub fn reads_threads_in_diff(&self) -> bool {
+    pub(crate) fn reads_threads_in_diff(&self) -> bool {
         self.threads_in_diff && !self.shows_side_by_side()
     }
 
@@ -370,42 +370,42 @@ impl Review {
         pairs
     }
 
-    pub fn with_context(self, context: Context) -> Self {
+    pub(crate) fn with_context(self, context: Context) -> Self {
         Self { context, ..self }
     }
 
-    pub fn with_quiet_whitespace(self, quiet_whitespace: bool) -> Self {
+    pub(crate) fn with_quiet_whitespace(self, quiet_whitespace: bool) -> Self {
         Self { quiet_whitespace, ..self }
     }
 
-    pub fn with_fold(self, fold: FoldState) -> Self {
+    pub(crate) fn with_fold(self, fold: FoldState) -> Self {
         Self { fold, ..self }
     }
 
-    pub fn with_viewed(self, viewed: BTreeSet<String>) -> Self {
+    pub(crate) fn with_viewed(self, viewed: BTreeSet<String>) -> Self {
         Self { viewed, ..self }
     }
 
     /// Viewed files with the fingerprint of the change the reader saw, as the cache keeps them.
-    pub fn viewed_fingerprints(&self) -> BTreeMap<String, String> {
+    pub(crate) fn viewed_fingerprints(&self) -> BTreeMap<String, String> {
         self.files.iter().filter(|f| self.viewed.contains(&f.new_path)).map(|f| (f.new_path.clone(), f.fingerprint())).collect()
     }
 
     /// The saved viewed files that still show the change the reader saw: one pushed to since is to read again.
-    pub fn still_viewed(&self, saved: &BTreeMap<String, String>) -> BTreeSet<String> {
+    pub(crate) fn still_viewed(&self, saved: &BTreeMap<String, String>) -> BTreeSet<String> {
         self.files.iter().filter(|f| saved.get(&f.new_path) == Some(&f.fingerprint())).map(|f| f.new_path.clone()).collect()
     }
 
-    pub fn progress(&self) -> Progress {
+    pub(crate) fn progress(&self) -> Progress {
         Progress::new(self.files.len(), &self.viewed, &self.auto_folded)
     }
 
-    pub fn with_drafts(self, drafts: Vec<Draft>) -> Self {
+    pub(crate) fn with_drafts(self, drafts: Vec<Draft>) -> Self {
         Self { drafts, ..self }
     }
 
     /// The colours already highlighted in `old` for every file that did not change, so a refresh highlights only what moved.
-    pub fn with_colours_kept(self, old: &Arc<[File]>) -> Self {
+    pub(crate) fn with_colours_kept(self, old: &Arc<[File]>) -> Self {
         if Arc::ptr_eq(&self.files, old) {
             return self;
         }
@@ -416,7 +416,7 @@ impl Review {
 
     /// The same diff with fresh threads, for the cheap discussions poll; threads equal to the current ones stay the same
     /// shared slice, so nothing built on them is built again.
-    pub fn with_discussions(self, discussions: Vec<Discussion>) -> Self {
+    pub(crate) fn with_discussions(self, discussions: Vec<Discussion>) -> Self {
         let threads = threads_of(discussions, &self.files);
         if *self.threads == *threads {
             return self;
@@ -425,18 +425,24 @@ impl Review {
     }
 
     /// Every note in every thread, to notice new ones between two polls.
-    pub fn note_count(&self) -> usize {
+    pub(crate) fn note_count(&self) -> usize {
         self.threads.iter().map(|t| t.notes.len()).sum()
     }
 
     /// The thread flipped locally, ahead of the forge's answer.
-    pub fn with_resolved(self, id: &ThreadId, resolved: bool) -> Self {
+    pub(crate) fn with_resolved(self, id: &ThreadId, resolved: bool) -> Self {
         let threads = self.threads.iter().map(|t| if t.id == *id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();
         Self { threads, ..self }
     }
 
     /// My reaction `emoji` on note `index` of thread `id` added or taken off, ahead of the forge's answer.
-    pub fn with_reaction(self, id: &ThreadId, index: usize, emoji: crate::forge::Emoji, change: crate::forge::ReactionChange) -> Self {
+    pub(crate) fn with_reaction(
+        self,
+        id: &ThreadId,
+        index: usize,
+        emoji: crate::forge::Emoji,
+        change: crate::forge::ReactionChange,
+    ) -> Self {
         let react = |note: &crate::forge::Note| crate::forge::Note {
             reactions: crate::forge::toggled(&note.reactions, emoji, change),
             ..note.clone()
@@ -457,20 +463,20 @@ impl Review {
 
     /// The MR marked approved by me or not, ahead of the forge's answer.
     /// My approval, `me`'s, added or taken back ahead of the forge's answer, so the header and `M` agree at once.
-    pub fn with_approved(self, change: crate::forge::ApprovalChange, me: &str) -> Self {
+    pub(crate) fn with_approved(self, change: crate::forge::ApprovalChange, me: &str) -> Self {
         let approvals = self.mr.approvals.with_mine(change, me);
         Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self }
     }
 
-    pub fn unresolved(&self) -> usize {
+    pub(crate) fn unresolved(&self) -> usize {
         self.threads.iter().filter(|t| t.unresolved()).count()
     }
 
-    pub fn thread(&self, id: &ThreadId) -> Option<&Thread> {
+    pub(crate) fn thread(&self, id: &ThreadId) -> Option<&Thread> {
         self.threads.iter().find(|t| t.id == *id)
     }
 
-    pub fn threads_at(&self, path: &str, side: Side, line: u32) -> Vec<&Thread> {
+    pub(crate) fn threads_at(&self, path: &str, side: Side, line: u32) -> Vec<&Thread> {
         self.threads
             .iter()
             .filter(|t| !t.outdated)
@@ -479,12 +485,12 @@ impl Review {
     }
 
     /// Drafts hung on a line, with their index in `drafts`; replies never hang anywhere.
-    pub fn drafts_at(&self, path: &str, side: Side, line: u32) -> Vec<(usize, &Draft)> {
+    pub(crate) fn drafts_at(&self, path: &str, side: Side, line: u32) -> Vec<(usize, &Draft)> {
         self.drafts.iter().enumerate().filter(|(_, d)| d.is_at(path, side, line)).collect()
     }
 
     /// Drafts hung on a line the current diff no longer has: the forge refuses to publish them.
-    pub fn stranded(&self) -> Vec<usize> {
+    pub(crate) fn stranded(&self) -> Vec<usize> {
         self.drafts
             .iter()
             .enumerate()
@@ -493,11 +499,11 @@ impl Review {
             .collect()
     }
 
-    pub fn outdated(&self, path: &str) -> Vec<&Thread> {
+    pub(crate) fn outdated(&self, path: &str) -> Vec<&Thread> {
         self.threads.iter().filter(|t| t.outdated && t.anchor.as_ref().is_some_and(|a| a.path == path)).collect()
     }
 
-    pub fn rows(&self) -> Vec<Row> {
+    pub(crate) fn rows(&self) -> Vec<Row> {
         let rows = self.code_rows();
         if !self.reads_threads_in_diff() {
             return rows;

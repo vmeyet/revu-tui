@@ -1,40 +1,40 @@
 //! Unified diffs as GitLab sends them: hunks only, no `---`/`+++` header.
 #[cfg(test)]
 pub(crate) mod arbitrary;
-pub mod fold;
-pub mod words;
+pub(crate) mod fold;
+pub(crate) mod words;
 
 use std::ops::Range;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LineKind {
+pub(crate) enum LineKind {
     Context,
     Added,
     Removed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Line {
-    pub kind: LineKind,
-    pub old: Option<u32>,
-    pub new: Option<u32>,
-    pub text: String,
+pub(crate) struct Line {
+    pub(crate) kind: LineKind,
+    pub(crate) old: Option<u32>,
+    pub(crate) new: Option<u32>,
+    pub(crate) text: String,
     /// Changed byte ranges inside `text`, filled by `words::mark`; empty for context lines.
-    pub words: Vec<Range<usize>>,
-    pub no_newline: bool,
+    pub(crate) words: Vec<Range<usize>>,
+    pub(crate) no_newline: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Hunk {
-    pub header: String,
-    pub old_start: u32,
-    pub new_start: u32,
-    pub lines: Vec<Line>,
+pub(crate) struct Hunk {
+    pub(crate) header: String,
+    pub(crate) old_start: u32,
+    pub(crate) new_start: u32,
+    pub(crate) lines: Vec<Line>,
 }
 
 const NO_NEWLINE: &str = "\\ No newline at end of file";
 
-pub fn parse(unified: &str) -> Vec<Hunk> {
+pub(crate) fn parse(unified: &str) -> Vec<Hunk> {
     let mut hunks: Vec<Hunk> = Vec::new();
     for raw in unified.split('\n') {
         let line = raw.strip_suffix('\r').unwrap_or(raw);

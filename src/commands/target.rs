@@ -3,7 +3,7 @@ use crate::mrref::{MrRef, ProjectRef, Target};
 use anyhow::{Context, Result};
 
 /// The MR whatever the user typed names: a reference, a URL, or the open MR of the current branch.
-pub async fn resolve(forge: &Forge, arg: Option<&str>) -> Result<MrKey> {
+pub(crate) async fn resolve(forge: &Forge, arg: Option<&str>) -> Result<MrKey> {
     let cwd = std::env::current_dir()?;
     match Target::from_arg(arg, &cwd)? {
         Target::Mr(MrRef { project: ProjectRef::Id(id), iid }) => Ok(MrKey::new(forge.project_path(id).await?, iid)),

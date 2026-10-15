@@ -6,10 +6,10 @@ use ratatui::layout::{Position, Rect};
 /// One label of the tap bar: what it reads, the keys a tap presses, written as `[keys.bind]` writes them, and
 /// what they do, for the short key list.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Tap {
-    pub label: &'static str,
-    pub keys: &'static str,
-    pub does: &'static str,
+pub(crate) struct Tap {
+    pub(crate) label: &'static str,
+    pub(crate) keys: &'static str,
+    pub(crate) does: &'static str,
 }
 
 const fn tap(label: &'static str, keys: &'static str, does: &'static str) -> Tap {
@@ -47,7 +47,7 @@ const PANE: [Tap; 2] = [tap("back", "h", "back to the diff"), MORE];
 /// What the compact layout shows full screen, by what the keys act on: a thread is one under the diff's cursor
 /// or the thread pane, a pane any other right pane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Page {
+pub(crate) enum Page {
     Queue,
     Diff,
     Thread,
@@ -55,7 +55,7 @@ pub enum Page {
 }
 
 impl Page {
-    pub fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Queue => "queue",
             Self::Diff => "diff",
@@ -64,7 +64,7 @@ impl Page {
         }
     }
 
-    pub fn taps(self) -> &'static [Tap] {
+    pub(crate) fn taps(self) -> &'static [Tap] {
         match self {
             Self::Queue => &QUEUE,
             Self::Diff => &DIFF,
@@ -76,13 +76,13 @@ impl Page {
 
 /// A label as the last frame drew it: its cell, and the keys a tap in it presses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TapSpot {
-    pub area: Rect,
-    pub keys: &'static str,
+pub(crate) struct TapSpot {
+    pub(crate) area: Rect,
+    pub(crate) keys: &'static str,
 }
 
 impl App {
-    pub fn page(&self) -> Page {
+    pub(crate) fn page(&self) -> Page {
         let threads_pane = self.open.as_ref().is_some_and(Open::shows_threads);
         match self.focus {
             Focus::Queue => Page::Queue,
@@ -95,7 +95,7 @@ impl App {
 
     /// Something asks the reader for an answer on the bottom rows: a confirmation, the quit prompt, the reaction
     /// picker, the `'` views or the diff's search.
-    pub fn asks(&self) -> bool {
+    pub(crate) fn asks(&self) -> bool {
         self.confirm.is_some()
             || self.pending == Some('\'')
             || self.quit_prompt().is_some()
@@ -105,7 +105,7 @@ impl App {
 
     /// The tap bar has its row: in the compact layout, unless `[tui] tap_bar` hides it, and never under a
     /// question, text being typed or an overlay, which take the keys its labels would press.
-    pub fn shows_taps(&self) -> bool {
+    pub(crate) fn shows_taps(&self) -> bool {
         let typing = self.filtering || self.input.is_some();
         let taken = self.asks() || self.offer.is_some() || typing || self.modal();
         self.compact && self.tap_bar && !taken

@@ -97,7 +97,7 @@ pub(crate) mod capture {
     }
 
     /// Forgets what this thread logged so far.
-    pub fn start() {
+    pub(crate) fn start() {
         static GLOBAL: std::sync::Once = std::sync::Once::new();
         GLOBAL.call_once(|| {
             #[expect(clippy::let_underscore_must_use, reason = "`call_once` sets it once per test binary")]
@@ -107,7 +107,7 @@ pub(crate) mod capture {
     }
 
     /// What this thread logged since [`start`].
-    pub fn text() -> String {
+    pub(crate) fn text() -> String {
         LOGGED.with_borrow(|bytes| String::from_utf8_lossy(bytes).into_owned())
     }
 

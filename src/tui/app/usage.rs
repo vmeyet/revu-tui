@@ -17,14 +17,14 @@ const ZEN_TO_QUEUE: Duration = Duration::from_secs(30);
 
 /// Up to when screen time was counted, the last input, and whether the terminal is in front.
 #[derive(Clone, Copy, Debug)]
-pub struct Clock {
+pub(crate) struct Clock {
     counted_to: Instant,
     last_input: Instant,
     focused: bool,
 }
 
 impl Clock {
-    pub fn starting(now: Instant) -> Self {
+    pub(crate) fn starting(now: Instant) -> Self {
         Self { counted_to: now, last_input: now, focused: true }
     }
 
@@ -38,7 +38,7 @@ impl Clock {
 
 /// The j or k in a row moving through the diff.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Walk {
+pub(crate) struct Walk {
     steps: u32,
     hinted: bool,
 }
@@ -181,13 +181,13 @@ impl App {
     }
 
     /// The terminal came to the front or went to the background: the clock runs only while it is in front.
-    pub fn terminal_focus(&mut self, focused: bool) {
+    pub(crate) fn terminal_focus(&mut self, focused: bool) {
         self.count_time();
         self.usage_clock = Clock { focused, last_input: self.now, ..self.usage_clock };
     }
 
     /// What the counts gathered since the last call add up to, for the runtime to write.
-    pub fn take_usage(&mut self) -> Option<Counts> {
+    pub(crate) fn take_usage(&mut self) -> Option<Counts> {
         self.usage.as_mut()?.take()
     }
 

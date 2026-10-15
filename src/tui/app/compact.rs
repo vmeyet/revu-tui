@@ -9,33 +9,33 @@ use std::time::Duration;
 
 impl App {
     /// The screen moves on its own as little as a phone link likes in the compact layout, freely anywhere else.
-    pub fn motion(&self) -> Motion {
+    pub(crate) fn motion(&self) -> Motion {
         if self.compact { Motion::Calm } else { Motion::Lively }
     }
 
     /// How long revu has run, which is what every spinner and pulse counts from.
-    pub fn elapsed(&self) -> Duration {
+    pub(crate) fn elapsed(&self) -> Duration {
         self.now.duration_since(self.started)
     }
 
-    pub fn spinner(&self) -> &'static str {
+    pub(crate) fn spinner(&self) -> &'static str {
         self.motion().spinner(self.elapsed())
     }
 
     /// Long diff lines wrap: what `w` chose, else on in the compact layout, where a cut line hides most of itself.
-    pub fn wraps(&self) -> bool {
+    pub(crate) fn wraps(&self) -> bool {
         self.wrap.unwrap_or(self.compact)
     }
 
     /// How a queue row reads: two lines in the compact layout whatever `[tui] queue` says, one line leaving a
     /// title no room there.
-    pub fn row_layout(&self) -> QueueLayout {
+    pub(crate) fn row_layout(&self) -> QueueLayout {
         if self.compact { QueueLayout::Comfortable } else { self.queue_layout }
     }
 
     /// The number of the line under the diff's cursor, or of the line its thread row hangs under: the new side's,
     /// the old one's on a line the new side does not have.
-    pub fn cursor_line(&self) -> Option<u32> {
+    pub(crate) fn cursor_line(&self) -> Option<u32> {
         let open = self.open.as_ref()?;
         match open.review.place_of(open.row()?)? {
             Place::Line { new, old, .. } => new.or(old),

@@ -219,7 +219,7 @@ struct Contents {
 impl Client {
     /// GitHub has no API to apply a suggestion: the commit is built here, on the PR's own branch,
     /// and only when I can push to it; a fork's branch or a read-only repo is left to the web.
-    pub async fn apply(&self, key: &MrKey, branch: &str, suggestion: &forge::Suggestion) -> Result<()> {
+    pub(crate) async fn apply(&self, key: &MrKey, branch: &str, suggestion: &forge::Suggestion) -> Result<()> {
         let repo = repo_path(&key.project);
         let pull_path = format!("{repo}/pulls/{}", key.number);
         let (access, pull) = tokio::try_join!(self.http.get::<RepoAccess>(&repo), self.http.get::<PullHead>(&pull_path))?;
@@ -243,7 +243,7 @@ impl Client {
     }
 
     /// The check runs on `head`, grouped by workflow; `None` when nothing ran on it.
-    pub async fn checks(&self, key: &MrKey, head: &str) -> Result<Option<Checks>> {
+    pub(crate) async fn checks(&self, key: &MrKey, head: &str) -> Result<Option<Checks>> {
         let repo = repo_path(&key.project);
         let runs_path = format!("{repo}/commits/{head}/check-runs?per_page=100");
         let workflows_path = format!("{repo}/actions/runs?head_sha={head}&per_page=100");
@@ -258,7 +258,7 @@ impl Client {
 
     /// The newest deployment of each environment the branch went to, once its last status is a
     /// success with an address; GitHub keeps the address on the status, not the deployment.
-    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
+    pub(crate) async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
         let repo = repo_path(&key.project);
         let listed: Vec<DeploymentWire> = self.http.get(&format!("{repo}/deployments?ref={}&per_page=30", encode(branch))).await?;
         let mut newest: Vec<DeploymentWire> = vec![];
@@ -280,18 +280,18 @@ impl Client {
             .collect())
     }
 
-    pub async fn me(&self) -> Result<forge::User> {
+    pub(crate) async fn me(&self) -> Result<forge::User> {
         self.http.get::<RestUser>("user").await.map(forge::User::from)
     }
 
     /// The `owner/repo` of the repository with this numeric id.
-    pub async fn project_path(&self, id: u64) -> Result<ProjectPath> {
+    pub(crate) async fn project_path(&self, id: u64) -> Result<ProjectPath> {
         let repo: Repo = self.http.get(&format!("repositories/{id}")).await.with_context(|| format!("repository {id}"))?;
         Ok(repo.full_name)
     }
 
     /// The open PR whose head is `branch` in the repository itself, if any.
-    pub async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
+    pub(crate) async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
         let (owner, _) = super::owner_and_name(project)?;
         let head = encode(&format!("{owner}:{branch}"));
         let found: Vec<PrNumber> = self.http.get(&format!("{}/pulls?state=open&head={head}", repo_path(project))).await?;
@@ -299,17 +299,17 @@ impl Client {
     }
 
     /// The whole file at `sha`, raw, to show the lines around a hunk.
-    pub async fn file(&self, project: &ProjectPath, path: &str, sha: &str) -> Result<String> {
+    pub(crate) async fn file(&self, project: &ProjectPath, path: &str, sha: &str) -> Result<String> {
         self.get_raw(&format!("{}?ref={}", contents_path(project, path), encode(sha))).await
     }
 
-    pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
+    pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         let files: Vec<File> = self.http.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
     /// A public comment: on a line of the head commit when `position` is given, else on the PR.
-    pub async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
+    pub(crate) async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
         let Some(position) = position else {
             let path = format!("{}/issues/{}/comments", repo_path(&key.project), key.number);
             return self.http.post_json::<PostedComment>(&path, &json!({"body": body})).await.map(|c| c.into_discussion(None));
@@ -326,7 +326,7 @@ impl Client {
 
     /// An approval is a review of its own. GitHub has no taking it back for the one who gave it.
     /// GitHub deletes the branch itself when the repo says so; `sha` refuses a push made after the reader looked.
-    pub async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
+    pub(crate) async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
         let method = match plan.method {
             forge::MergeMethod::Merge => "merge",
             forge::MergeMethod::Squash => "squash",
@@ -340,7 +340,7 @@ impl Client {
             .map_err(merge_refused)
     }
 
-    pub async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
+    pub(crate) async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
         if change == forge::ApprovalChange::Unapprove {
             bail!("GitHub cannot unapprove; request changes or dismiss the review from the web");
         }

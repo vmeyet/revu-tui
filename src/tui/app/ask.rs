@@ -12,43 +12,43 @@ const HALF_PAGE: usize = 10;
 
 /// Claude's answer in the right pane, and the conversation that led to it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Answer {
+pub(crate) struct Answer {
     /// Grows with every question, so pieces of an older stream can be told apart and dropped.
-    pub id: u64,
+    pub(crate) id: u64,
     /// `explain · charge.rs`, the pane's title.
-    pub label: String,
+    pub(crate) label: String,
     /// Everything sent so far; the question being answered is its last turn.
-    pub request: Ask,
-    pub text: String,
-    pub state: AnswerState,
+    pub(crate) request: Ask,
+    pub(crate) text: String,
+    pub(crate) state: AnswerState,
     /// Painted from the cache: the same question was answered before for this diff.
-    pub cached: bool,
-    pub scroll: usize,
+    pub(crate) cached: bool,
+    pub(crate) scroll: usize,
     /// Where `c` puts a draft made of the answer: the lines asked about, or the thread.
-    pub target: Target,
+    pub(crate) target: Target,
 }
 
 /// An answer Claude gave before on this MR, kept in the cache.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PastAnswer {
-    pub label: String,
-    pub asked_at: DateTime<Utc>,
+pub(crate) struct PastAnswer {
+    pub(crate) label: String,
+    pub(crate) asked_at: DateTime<Utc>,
     /// The commit asked about: once the MR moved on, the answer reads an older push.
-    pub head: crate::forge::Sha,
-    pub request: Ask,
-    pub text: String,
-    pub outcome: Outcome,
+    pub(crate) head: crate::forge::Sha,
+    pub(crate) request: Ask,
+    pub(crate) text: String,
+    pub(crate) outcome: Outcome,
 }
 
 /// Where an answer may come from: `CacheFirst` reuses one kept for the same question.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AnswerSource {
+pub(crate) enum AnswerSource {
     CacheFirst,
     Fresh,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AnswerState {
+pub(crate) enum AnswerState {
     Streaming,
     Done(Outcome),
     Failed(String),
@@ -88,14 +88,14 @@ impl Open {
 
 /// Where an answer can become a draft.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Target {
+pub(crate) enum Target {
     Lines(Box<Position>),
     Nowhere,
 }
 
 /// What a piece of Claude's stream brings to the app.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Part {
+pub(crate) enum Part {
     Text(String),
     /// The model declined and another one starts over: the partial text is void.
     Restart,

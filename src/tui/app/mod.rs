@@ -19,7 +19,7 @@ mod pane;
 mod pin;
 mod pins;
 mod pipeline;
-pub mod prefetch;
+pub(crate) mod prefetch;
 mod prose;
 mod queue;
 pub(crate) mod quit;
@@ -49,48 +49,48 @@ mod write;
 mod writes;
 mod zen;
 
-pub use apply::Confirm;
-pub use ask::{Answer, AnswerSource, AnswerState, Part, PastAnswer};
-pub use brief::{Brief, ThreadRow};
-pub use feedback::Toast;
-pub use inbox::{Spot, progress_bar};
-pub use kept::{Kept, ReviewInputs};
-pub use mouse::{Areas, List, ListRow};
-pub use order::{QueueView, ViewChange, with_member};
-pub use outline::{Entry as OutlineEntry, Outline, PaneLine, Symbols};
-pub use pane::{ConversationList, Pane};
-pub use pin::PinChange;
-pub use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
-pub use pipeline::{Pipeline, Run};
-pub use prefetch::Ahead;
-pub use prose::{Prose, Texts, Versions};
-pub use queue::{Badge, QueueRow};
-pub use react::{Pick, Prompt, failure as react_failure};
-pub use review::Open;
-pub use search::{Search, mark as mark_search};
-pub use session::SessionPick;
-pub use share::{Sharing, Stage as ShareStage};
-pub use state::{App, Settings};
-pub use taps::{Tap, TapSpot};
-pub use tree::Tree;
-pub use triage::Mark;
-pub use whats_new::WhatsNew;
-pub use write::Publish;
+pub(crate) use apply::Confirm;
+pub(crate) use ask::{Answer, AnswerSource, AnswerState, Part, PastAnswer};
+pub(crate) use brief::{Brief, ThreadRow};
+pub(crate) use feedback::Toast;
+pub(crate) use inbox::{Spot, progress_bar};
+pub(crate) use kept::{Kept, ReviewInputs};
+pub(crate) use mouse::{Areas, List, ListRow};
+pub(crate) use order::{QueueView, ViewChange, with_member};
+pub(crate) use outline::{Entry as OutlineEntry, Outline, PaneLine, Symbols};
+pub(crate) use pane::{ConversationList, Pane};
+pub(crate) use pin::PinChange;
+pub(crate) use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
+pub(crate) use pipeline::{Pipeline, Run};
+pub(crate) use prefetch::Ahead;
+pub(crate) use prose::{Prose, Texts, Versions};
+pub(crate) use queue::{Badge, QueueRow};
+pub(crate) use react::{Pick, Prompt, failure as react_failure};
+pub(crate) use review::Open;
+pub(crate) use search::{Search, mark as mark_search};
+pub(crate) use session::SessionPick;
+pub(crate) use share::{Sharing, Stage as ShareStage};
+pub(crate) use state::{App, Settings};
+pub(crate) use taps::{Tap, TapSpot};
+pub(crate) use tree::Tree;
+pub(crate) use triage::Mark;
+pub(crate) use whats_new::WhatsNew;
+pub(crate) use write::Publish;
 
 use crate::diff::fold::FoldState;
-pub use crate::forge::MrKey;
+pub(crate) use crate::forge::MrKey;
 use crate::forge::{
     ApprovalChange, Discussion, Position, ProjectPath, QueueMr, ReactionChange, Readiness, ReviewKind, Sections, Sha, ThreadId,
 };
 use crate::review::{Draft, Review};
-pub use crate::review::{Entry, EntryKind};
+pub(crate) use crate::review::{Entry, EntryKind};
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Focus {
+pub(crate) enum Focus {
     #[default]
     Queue,
     Review,
@@ -98,7 +98,7 @@ pub enum Focus {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Action {
+pub(crate) enum Action {
     /// The queue for `scope` (a project path, or `None` for every project); `from_cache` paints
     /// the last answer for that scope first, so a switch never shows the other list.
     LoadQueue {
@@ -322,14 +322,14 @@ impl Action {
 
 /// Where a comment posted at once goes: a new thread on a line (or range), or the end of a thread.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Post {
+pub(crate) enum Post {
     Thread(Box<Position>),
     Reply(ThreadId),
 }
 
 /// What the input row is for while it is open.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Input {
+pub(crate) enum Input {
     /// A new note on the line (or range) `position` names.
     Comment {
         position: Box<Position>,
@@ -350,7 +350,7 @@ pub enum Input {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Failure {
+pub(crate) enum Failure {
     Queue,
     /// Another host did not answer the queue; its rows are the ones it last answered.
     Host,
@@ -415,7 +415,7 @@ pub enum Failure {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Incoming {
+pub(crate) enum Incoming {
     /// `cached` answers only paint while the fresh one is on its way.
     Queue {
         scope: Option<ProjectPath>,

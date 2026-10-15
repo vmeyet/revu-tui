@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail, ensure};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-pub trait SecretStore {
+pub(crate) trait SecretStore {
     fn get(&self, account: &str) -> Result<Option<String>>;
     fn set(&self, account: &str, secret: &str) -> Result<()>;
     fn delete(&self, account: &str) -> Result<()>;
@@ -12,14 +12,14 @@ pub trait SecretStore {
 /// Reads and deletes name the service and account in argv, which hold nothing secret; the secret
 /// comes back on a pipe. Writes go through `security -i`, so the secret never shows in argv.
 /// Items are owned by Apple's signed binary, so a rebuilt CLI never triggers an ACL prompt.
-pub struct SecurityCli {
+pub(crate) struct SecurityCli {
     service: String,
 }
 
 const NOT_FOUND: i32 = 44;
 
 impl SecurityCli {
-    pub fn new(service: &str) -> Self {
+    pub(crate) fn new(service: &str) -> Self {
         Self { service: service.to_owned() }
     }
 
@@ -84,7 +84,7 @@ fn hex(s: &str) -> String {
 
 #[cfg(test)]
 #[derive(Default)]
-pub struct MemoryStore {
+pub(crate) struct MemoryStore {
     items: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 

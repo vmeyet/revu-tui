@@ -34,7 +34,9 @@ Some code predates these rules: fix what you touch, and do not copy it.
 
 - Domain values get newtypes, not bare `String` or `u64` (ids, project paths, URLs, shas, usernames): the compiler then stops a mix-up.
 - Parse into those types at the forge boundary and keep the invariant inside the type: code above it never checks again.
-- Visibility is the smallest that compiles: private by default, `pub(super)` or `pub(crate)` only where used; the library serves only `main.rs` and `tests/`, so `pub` is for what they call.
+- Visibility is the smallest that compiles, and `unreachable_pub` enforces it: private by default, `pub(super)` or `pub(crate)` only where used.
+  `pub` is only for what `main.rs` calls: `cli`, `commands`, `ctx::Ctx` and `log::start`; `tests/` drive the binary.
+  `clippy::redundant_pub_crate` stays off, it fights `unreachable_pub` inside private modules.
 - Never drop a `Result` silently: `let _ =` or `.ok()` on a fallible call needs a reason a reader can see, and best-effort work logs the failure with `tracing::warn!`.
 - `anyhow` at the edges; a typed error (`thiserror` or an enum) where a caller branches on the kind: a string is not a contract.
 - No `bool` parameter on a function with more than one caller: use a two-variant enum or two functions, so the call site reads.

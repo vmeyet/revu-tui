@@ -3,24 +3,24 @@ use super::thread::{Anchor, Side, anchor_of};
 use crate::forge::{self, Position, ThreadId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Draft {
+pub(crate) struct Draft {
     /// Set once the forge holds it as a draft.
-    pub id: Option<u64>,
+    pub(crate) id: Option<u64>,
     /// Set on a draft written in this session, so the forge's late answer finds it wherever the list moved.
-    pub local_id: Option<u64>,
-    pub anchor: Option<Anchor>,
+    pub(crate) local_id: Option<u64>,
+    pub(crate) anchor: Option<Anchor>,
     /// What the forge needs to hang the note on a line; None on the MR itself or in a reply.
-    pub position: Option<Position>,
+    pub(crate) position: Option<Position>,
     /// The thread this replies to; a reply has no row of its own.
-    pub reply_to: Option<ThreadId>,
-    pub body: String,
+    pub(crate) reply_to: Option<ThreadId>,
+    pub(crate) body: String,
     /// Publishing this draft also resolves the thread it replies to.
-    pub resolve: bool,
+    pub(crate) resolve: bool,
 }
 
 /// A draft named whatever its place in the list: by the id this session gave it, else by the forge's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DraftId {
+pub(crate) enum DraftId {
     Local(u64),
     Forge(u64),
 }
@@ -28,12 +28,12 @@ pub enum DraftId {
 impl Draft {
     /// A fresh note on a line, or on the MR when `anchor` is None.
     #[cfg(test)]
-    pub fn new(anchor: Option<Anchor>, body: impl Into<String>) -> Self {
+    pub(crate) fn new(anchor: Option<Anchor>, body: impl Into<String>) -> Self {
         Self { id: None, local_id: None, anchor, position: None, reply_to: None, body: body.into(), resolve: false }
     }
 
     /// A fresh note on the line `position` names.
-    pub fn on(position: Position, body: impl Into<String>) -> Self {
+    pub(crate) fn on(position: Position, body: impl Into<String>) -> Self {
         Self {
             id: None,
             local_id: None,
@@ -45,12 +45,12 @@ impl Draft {
         }
     }
 
-    pub fn reply(thread: ThreadId, body: impl Into<String>) -> Self {
+    pub(crate) fn reply(thread: ThreadId, body: impl Into<String>) -> Self {
         Self { id: None, local_id: None, anchor: None, position: None, reply_to: Some(thread), body: body.into(), resolve: false }
     }
 
     /// One the forge already holds.
-    pub fn from_held(draft: &forge::Draft) -> Self {
+    pub(crate) fn from_held(draft: &forge::Draft) -> Self {
         Self {
             id: Some(draft.id),
             local_id: None,
@@ -63,43 +63,43 @@ impl Draft {
     }
 
     /// What the forge needs to hold this draft, or to replace it whole.
-    pub fn payload(&self) -> forge::NewDraft {
+    pub(crate) fn payload(&self) -> forge::NewDraft {
         forge::NewDraft { body: self.body.clone(), position: self.position.clone(), reply_to: self.reply_to.clone(), resolve: self.resolve }
     }
 
     /// The same text as a note on the MR itself, not yet held by the forge.
-    pub fn on_the_mr(self) -> Self {
+    pub(crate) fn on_the_mr(self) -> Self {
         Self { id: None, anchor: None, position: None, ..self }
     }
 
-    pub fn with_body(self, body: impl Into<String>) -> Self {
+    pub(crate) fn with_body(self, body: impl Into<String>) -> Self {
         Self { body: body.into(), ..self }
     }
 
     /// Held by the forge under `id`, with the text the forge holds.
-    pub fn held_as(self, id: u64, body: impl Into<String>) -> Self {
+    pub(crate) fn held_as(self, id: u64, body: impl Into<String>) -> Self {
         Self { id: Some(id), body: body.into(), ..self }
     }
 
     /// The same note as the forge would list it: body, thread and line all equal.
-    pub fn same_as(&self, other: &Draft) -> bool {
+    pub(crate) fn same_as(&self, other: &Draft) -> bool {
         self.body == other.body && self.reply_to == other.reply_to && self.anchor == other.anchor
     }
 
     #[cfg(test)]
-    pub fn with_id(self, id: u64) -> Self {
+    pub(crate) fn with_id(self, id: u64) -> Self {
         Self { id: Some(id), ..self }
     }
 
-    pub fn with_local_id(self, local_id: u64) -> Self {
+    pub(crate) fn with_local_id(self, local_id: u64) -> Self {
         Self { local_id: Some(local_id), ..self }
     }
 
-    pub fn draft_id(&self) -> Option<DraftId> {
+    pub(crate) fn draft_id(&self) -> Option<DraftId> {
         self.local_id.map(DraftId::Local).or(self.id.map(DraftId::Forge))
     }
 
-    pub fn is(&self, id: DraftId) -> bool {
+    pub(crate) fn is(&self, id: DraftId) -> bool {
         match id {
             DraftId::Local(local) => self.local_id == Some(local),
             DraftId::Forge(forge) => self.id == Some(forge),
@@ -107,14 +107,14 @@ impl Draft {
     }
 
     /// Whether this draft sits in the diff at `(path, side, line)`.
-    pub fn is_at(&self, path: &str, side: Side, line: u32) -> bool {
+    pub(super) fn is_at(&self, path: &str, side: Side, line: u32) -> bool {
         self.reply_to.is_none() && self.anchor.as_ref().is_some_and(|a| a.path == path && a.side == side && a.line == line)
     }
 }
 
 /// The forge's fresh drafts plus the ones this session wrote that it does not hold yet: a refresh never loses a draft.
 /// A written draft the forge now lists takes its id instead of showing twice; every draft keeps its local id.
-pub fn carry(held: &[Draft], old: &[Draft]) -> Vec<Draft> {
+pub(crate) fn carry(held: &[Draft], old: &[Draft]) -> Vec<Draft> {
     let unsaved: Vec<&Draft> = old.iter().filter(|d| d.id.is_none()).collect();
     let listed = |draft: &Draft| held.iter().find(|h| h.same_as(draft)).and_then(|h| h.id);
     let local_of = |held: &Draft| old.iter().find(|d| d.id.is_some() && d.id == held.id).and_then(|d| d.local_id);

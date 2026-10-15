@@ -3,11 +3,11 @@ use super::{Action, App};
 use std::time::Duration;
 
 /// How long the first press waits for the second.
-pub const QUIT_WINDOW: Duration = Duration::from_millis(1500);
+const QUIT_WINDOW: Duration = Duration::from_millis(1500);
 
 /// The key that started a quit: only the same key finishes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuitKey {
+pub(crate) enum QuitKey {
     Q,
     CtrlC,
 }
@@ -36,7 +36,7 @@ impl App {
     }
 
     /// The status line while a quit waits for its second press, naming what would be lost.
-    pub fn quit_prompt(&self) -> Option<String> {
+    pub(crate) fn quit_prompt(&self) -> Option<String> {
         let (key, at) = self.quitting?;
         if self.now.duration_since(at) >= QUIT_WINDOW {
             return None;

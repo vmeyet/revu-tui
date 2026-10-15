@@ -1,18 +1,18 @@
 //! Which way a move goes through a list that wraps around.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Toward {
+pub(super) enum Toward {
     Next,
     Previous,
 }
 
 impl Toward {
-    pub fn next_if(next: bool) -> Self {
+    pub(crate) fn next_if(next: bool) -> Self {
         if next { Self::Next } else { Self::Previous }
     }
 
     /// The index `steps` away from `from` this way, in a list of `len` that wraps around.
-    pub fn wrapped(self, from: usize, steps: usize, len: usize) -> usize {
+    pub(super) fn wrapped(self, from: usize, steps: usize, len: usize) -> usize {
         match self {
             Self::Next => (from + steps) % len,
             Self::Previous => (from + len - steps % len) % len,

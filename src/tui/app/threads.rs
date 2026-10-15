@@ -15,7 +15,7 @@ enum Here {
 
 impl Open {
     /// On a thread row: the conversations of its line, their cursor stops in the diff, and the row's own.
-    pub fn row_view(&self) -> Option<ConversationList> {
+    pub(crate) fn row_view(&self) -> Option<ConversationList> {
         let row @ Row::Thread { stop, .. } = self.row()? else { return None };
         let conversations = self.review.conversations(&self.review.place_of(row)?);
         let entries = self.review.stops(&conversations);
@@ -110,13 +110,13 @@ impl App {
 
     /// The row the compose box hangs under in the diff; none while the pane holds the box, or the diff has no
     /// row for what is written.
-    pub fn compose_row(&self) -> Option<usize> {
+    pub(crate) fn compose_row(&self) -> Option<usize> {
         let from_the_diff = self.compose_from == Focus::Review;
         self.open.as_ref()?.compose_row(self.input.as_ref().filter(|_| from_the_diff)?)
     }
 
     /// A comment is being written and the diff does not hold its box.
-    pub fn composes_outside_the_diff(&self) -> bool {
+    pub(crate) fn composes_outside_the_diff(&self) -> bool {
         self.input.is_some() && self.compose_row().is_none()
     }
 

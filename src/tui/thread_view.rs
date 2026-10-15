@@ -39,9 +39,9 @@ enum Piece {
 }
 
 /// A picture ready to draw, and where: the loop paints it over the rows the pane left blank.
-pub struct Placement {
-    pub url: String,
-    pub area: Rect,
+pub(super) struct Placement {
+    pub(crate) url: String,
+    pub(crate) area: Rect,
 }
 
 /// What a laid-out row carries besides its text.
@@ -66,7 +66,7 @@ struct Laid {
 
 /// The last frame's layout of the pane, and what it was laid out from.
 #[derive(Debug)]
-pub struct PaneLayout {
+pub(crate) struct PaneLayout {
     inputs: PaneInputs,
     laid: Laid,
 }
@@ -115,7 +115,7 @@ fn fresh_layout(app: &App, width: usize) -> Option<PaneLayout> {
 
 /// The pane, and the pictures it made room for: the caller paints them last, above the fades.
 /// Under zen's diff it hangs from a rule carrying its title.
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: bool) -> Vec<Placement> {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: bool) -> Vec<Placement> {
     let theme = app.theme;
     let (focused, zen) = (app.focus == Focus::Side, app.zen);
     let block = |title: &str| if under_diff { rule_pane(theme, title) } else { side_pane(theme, title, focused, zen) };
@@ -185,7 +185,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: bool) -> V
 
 /// The rows the pane under zen's diff takes `width` columns wide to show all it holds: its rule,
 /// its conversations and the compose box, which the pane grows for rather than holding it to a share.
-pub fn rows_needed(app: &App, width: u16) -> u16 {
+pub(super) fn rows_needed(app: &App, width: u16) -> u16 {
     let inner = rule_pane(app.theme, "").inner(Rect::new(0, 0, width, 1));
     let width = inner.width.saturating_sub(1) as usize;
     let rows = match cached(app, width) {
@@ -392,7 +392,7 @@ pub(super) struct Look<'a> {
 /// The conversations of each line as the diff draws them under it, kept while what they are laid out from stays
 /// the same: code in a note is highlighted when its rows are laid out, never on each frame.
 #[derive(Debug, Default)]
-pub struct InlineLayout {
+pub(crate) struct InlineLayout {
     inputs: Option<InlineInputs>,
     stops: BTreeMap<LineKey, Vec<StopRows>>,
 }
@@ -647,7 +647,7 @@ fn note_lines(note: &Note, replaced: &Replaced, look: Look<'_>) -> Vec<Piece> {
 }
 
 /// `👍 2  🎉 1` under a note, mine in the accent colour.
-pub fn reactions_line(reactions: &[crate::forge::Reaction], theme: Theme, ascii: bool) -> Line<'static> {
+fn reactions_line(reactions: &[crate::forge::Reaction], theme: Theme, ascii: bool) -> Line<'static> {
     let spans = reactions.iter().enumerate().flat_map(|(i, r)| {
         let face = if ascii { r.emoji.text() } else { r.emoji.glyph() };
         let style = if r.mine { Style::default().fg(theme.accent).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme.muted) };
@@ -659,7 +659,7 @@ pub fn reactions_line(reactions: &[crate::forge::Reaction], theme: Theme, ascii:
 
 /// Code spans, bullets, quotes and tables `width` columns at most; the rest is the text as written,
 /// wrapped by the widget. Pictures read as their `[image: …]` line, for the panes that never draw them.
-pub fn body_lines<'a>(body: &str, width: usize, theme: Theme) -> Vec<Line<'a>> {
+pub(super) fn body_lines<'a>(body: &str, width: usize, theme: Theme) -> Vec<Line<'a>> {
     body_pieces(body, &Fences::Plain, width, theme)
         .into_iter()
         .map(|piece| match piece {

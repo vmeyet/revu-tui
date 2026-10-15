@@ -12,31 +12,31 @@ const HALF_PAGE: usize = 5;
 
 /// What the pane shows and where the reader is in it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pane {
-    pub place: Place,
+pub(crate) struct Pane {
+    pub(crate) place: Place,
     /// The entry under the cursor bar, counted over every conversation in order.
-    pub note: usize,
-    pub scroll: usize,
+    pub(crate) note: usize,
+    pub(crate) scroll: usize,
     /// Resolved threads the reader unfolded, by id; the others show their first note only.
-    pub unfolded: BTreeSet<ThreadId>,
+    pub(crate) unfolded: BTreeSet<ThreadId>,
     /// `m` in the list of every thread: only the conversations this user takes part in.
-    pub only_with: Option<String>,
+    pub(crate) only_with: Option<String>,
 }
 
 impl Pane {
-    pub fn at(place: Place) -> Self {
+    pub(crate) fn at(place: Place) -> Self {
         Self { place, note: 0, scroll: 0, unfolded: BTreeSet::new(), only_with: None }
     }
 
     /// The pane with its cursor and scroll at the top: what it lists, which they only move within.
-    pub fn unmoved(&self) -> Self {
+    pub(crate) fn unmoved(&self) -> Self {
         Self { note: 0, scroll: 0, ..self.clone() }
     }
 }
 
 /// Every stop of the cursor bar at `place`: all notes of an open thread and my replies after
 /// them, the first note alone of a folded resolved thread, my new draft on its own.
-pub fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTreeSet<ThreadId>) -> Vec<Entry> {
+pub(crate) fn entries(review: &Review, conversations: &[Conversation], unfolded: &BTreeSet<ThreadId>) -> Vec<Entry> {
     let mut entries = vec![];
     for (index, conversation) in conversations.iter().enumerate() {
         if let Some(thread) = conversation.thread.as_ref().and_then(|id| review.thread(id)) {
@@ -56,23 +56,23 @@ pub(super) fn focused(entries: &[Entry], pane: &Pane) -> Option<Entry> {
 /// What the thread keys act on: a note of a thread, one of my drafts in it, or my new draft.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Stop {
-    pub thread: Option<ThreadId>,
-    pub kind: EntryKind,
+    pub(crate) thread: Option<ThreadId>,
+    pub(crate) kind: EntryKind,
 }
 
 /// Conversations as a list shows them: the pane, or the thread rows under a line of the diff.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConversationList {
-    pub conversations: Vec<Conversation>,
+pub(crate) struct ConversationList {
+    pub(crate) conversations: Vec<Conversation>,
     /// Every stop of the cursor through the conversations.
-    pub entries: Vec<Entry>,
+    pub(crate) entries: Vec<Entry>,
     /// The stop under the cursor.
-    pub focused: Option<Entry>,
+    pub(crate) focused: Option<Entry>,
 }
 
 impl Open {
     /// What the pane lists and the stop under its cursor.
-    pub fn pane_view(&self) -> Option<ConversationList> {
+    pub(crate) fn pane_view(&self) -> Option<ConversationList> {
         Some(self.pane_view_of(self.pane.as_ref()?))
     }
 
@@ -90,12 +90,12 @@ impl Open {
     }
 
     /// The thread under the pane's cursor.
-    pub fn focused_thread(&self) -> Option<ThreadId> {
+    pub(super) fn focused_thread(&self) -> Option<ThreadId> {
         stop_of(&self.pane_view()?)?.thread
     }
 
     /// The pane lists every conversation of the MR, not those of one place.
-    pub fn lists_every_thread(&self) -> bool {
+    pub(crate) fn lists_every_thread(&self) -> bool {
         self.pane.as_ref().is_some_and(|pane| pane.place == Place::All)
     }
 
@@ -104,7 +104,7 @@ impl Open {
     }
 
     /// Whether the row's line carries a thread or a draft, or the header conversations on the MR.
-    pub fn is_marked(&self, row: &Row) -> bool {
+    pub(super) fn is_marked(&self, row: &Row) -> bool {
         self.mark_in(&self.review.markers(), row).is_some()
     }
 
@@ -369,7 +369,7 @@ impl App {
     }
 
     /// The page a browser opens for `url` as a note of the open MR wrote it.
-    pub fn web_url(&self, open: &Open, url: &str) -> String {
+    pub(crate) fn web_url(&self, open: &Open, url: &str) -> String {
         crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&self.host), &open.key.project, url)
     }
 

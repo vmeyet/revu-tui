@@ -6,22 +6,22 @@ use crate::changelog::{Changelog, Position, Section};
 use crossterm::event::KeyEvent;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct WhatsNew {
-    pub changelog: Changelog,
+pub(crate) struct WhatsNew {
+    pub(crate) changelog: Changelog,
     /// How far the reader had got before this start: what came after is new to them.
-    pub seen: Position,
+    pub(crate) seen: Position,
 }
 
 impl WhatsNew {
     /// What the first start after an update says: `revu 0.7.0 · 4 new things · :news`.
-    pub fn announcement(&self) -> Option<String> {
+    pub(crate) fn announcement(&self) -> Option<String> {
         let count = self.changelog.count_since(self.seen);
         let things = if count == 1 { "thing" } else { "things" };
         (count > 0).then(|| format!("revu {} · {count} new {things} · :news", self.changelog.running))
     }
 
     /// Every section, newest first, each with whether it is new to the reader.
-    pub fn sections(&self) -> Vec<(&Section, bool)> {
+    pub(crate) fn sections(&self) -> Vec<(&Section, bool)> {
         let new = self.changelog.since(self.seen);
         let is_new = |section: &Section| new.iter().any(|other| other.version == section.version);
         self.changelog.since(Position::START).into_iter().map(|section| (section, is_new(section))).collect()

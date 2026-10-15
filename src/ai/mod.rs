@@ -1,10 +1,10 @@
 //! The two AI providers: which one is on, and where its key comes from.
 //! Keys live in the keychain (service `revu`, one account per provider) or an environment
 //! variable; they never touch the config, the cache or a log line.
-pub mod anthropic;
-pub mod context;
-pub mod triage;
-pub mod typesafe;
+pub(crate) mod anthropic;
+pub(crate) mod context;
+pub(crate) mod triage;
+pub(crate) mod typesafe;
 
 use crate::auth::SecretStore;
 use crate::config::Ai;
@@ -15,7 +15,7 @@ use std::fmt;
 /// An AI provider revu can talk to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
-pub enum Provider {
+pub(crate) enum Provider {
     /// TypeSafe's Jev: typed judgments that rank the queue and the files.
     Typesafe,
     /// Anthropic's Claude: questions about the MR.
@@ -23,10 +23,10 @@ pub enum Provider {
 }
 
 impl Provider {
-    pub const ALL: [Provider; 2] = [Provider::Typesafe, Provider::Anthropic];
+    pub(crate) const ALL: [Provider; 2] = [Provider::Typesafe, Provider::Anthropic];
 
     /// The keychain account under service `revu`.
-    pub fn account(self) -> &'static str {
+    pub(crate) fn account(self) -> &'static str {
         match self {
             Provider::Typesafe => "typesafe",
             Provider::Anthropic => "anthropic",
@@ -34,14 +34,14 @@ impl Provider {
     }
 
     /// The variable that overrides the keychain.
-    pub fn variable(self) -> &'static str {
+    pub(crate) fn variable(self) -> &'static str {
         match self {
             Provider::Typesafe => "TYPESAFE_API_KEY",
             Provider::Anthropic => "ANTHROPIC_API_KEY",
         }
     }
 
-    pub fn enabled(self, ai: &Ai) -> bool {
+    pub(crate) fn enabled(self, ai: &Ai) -> bool {
         match self {
             Provider::Typesafe => ai.typesafe.enabled,
             Provider::Anthropic => ai.anthropic.enabled,
@@ -49,7 +49,7 @@ impl Provider {
     }
 
     /// Where a key for it is made, for the login prompt.
-    pub fn key_page(self) -> &'static str {
+    pub(crate) fn key_page(self) -> &'static str {
         match self {
             Provider::Typesafe => "https://typesafe.ai",
             Provider::Anthropic => "https://console.anthropic.com/settings/keys",
@@ -65,15 +65,15 @@ impl fmt::Display for Provider {
 
 /// A key, printable only as `<redacted>`.
 #[derive(Clone, PartialEq, Eq)]
-pub struct Secret(String);
+pub(crate) struct Secret(String);
 
 impl Secret {
-    pub fn new(key: impl Into<String>) -> Self {
+    pub(crate) fn new(key: impl Into<String>) -> Self {
         Self(key.into())
     }
 
     /// The raw key, for the one header that carries it.
-    pub fn expose(&self) -> &str {
+    pub(crate) fn expose(&self) -> &str {
         &self.0
     }
 }
@@ -87,20 +87,20 @@ impl fmt::Debug for Secret {
 /// Where a key was found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum KeySource {
+pub(crate) enum KeySource {
     Env,
     Keychain,
 }
 
 /// The variables the key lookup reads; a struct so tests build one without `set_var`.
 #[derive(Clone, Debug, Default)]
-pub struct KeyEnv {
-    pub typesafe: Option<String>,
-    pub anthropic: Option<String>,
+pub(crate) struct KeyEnv {
+    pub(crate) typesafe: Option<String>,
+    pub(crate) anthropic: Option<String>,
 }
 
 impl KeyEnv {
-    pub fn from_process() -> Self {
+    pub(crate) fn from_process() -> Self {
         let read = |p: Provider| std::env::var(p.variable()).ok().filter(|v| !v.trim().is_empty());
         Self { typesafe: read(Provider::Typesafe), anthropic: read(Provider::Anthropic) }
     }
@@ -114,7 +114,7 @@ impl KeyEnv {
 }
 
 /// The provider's key: its variable wins, then the keychain.
-pub fn key(provider: Provider, env: &KeyEnv, store: &dyn SecretStore) -> Result<Option<(Secret, KeySource)>> {
+pub(crate) fn key(provider: Provider, env: &KeyEnv, store: &dyn SecretStore) -> Result<Option<(Secret, KeySource)>> {
     if let Some(key) = env.get(provider) {
         return Ok(Some((Secret::new(key.trim()), KeySource::Env)));
     }
@@ -123,15 +123,15 @@ pub fn key(provider: Provider, env: &KeyEnv, store: &dyn SecretStore) -> Result<
 
 /// What `revu ai status` shows for one provider: never the key itself.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct Status {
-    pub provider: Provider,
-    pub enabled: bool,
-    pub key: Option<KeySource>,
+pub(crate) struct Status {
+    pub(crate) provider: Provider,
+    pub(crate) enabled: bool,
+    pub(crate) key: Option<KeySource>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    pub(crate) model: Option<String>,
 }
 
-pub fn status(ai: &Ai, env: &KeyEnv, store: &dyn SecretStore) -> Vec<Status> {
+pub(crate) fn status(ai: &Ai, env: &KeyEnv, store: &dyn SecretStore) -> Vec<Status> {
     Provider::ALL
         .iter()
         .map(|&provider| Status {

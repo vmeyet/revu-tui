@@ -5,7 +5,7 @@ const WORD_START: i64 = 10;
 const CONSECUTIVE: i64 = 6;
 const GAP: i64 = 1;
 
-pub fn score(query: &str, candidate: &str) -> Option<i64> {
+pub(crate) fn score(query: &str, candidate: &str) -> Option<i64> {
     let query: Vec<char> = query.chars().flat_map(char::to_lowercase).collect();
     if query.is_empty() {
         return Some(0);
@@ -42,14 +42,14 @@ pub fn score(query: &str, candidate: &str) -> Option<i64> {
 }
 
 /// Candidates ordered best first, ties keeping the input order.
-pub fn rank<T>(query: &str, items: impl IntoIterator<Item = (String, T)>) -> Vec<(i64, T)> {
+pub(crate) fn rank<T>(query: &str, items: impl IntoIterator<Item = (String, T)>) -> Vec<(i64, T)> {
     let mut scored: Vec<(i64, T)> = items.into_iter().filter_map(|(label, item)| score(query, &label).map(|s| (s, item))).collect();
     scored.sort_by_key(|(s, _)| std::cmp::Reverse(*s));
     scored
 }
 
 /// Levenshtein distance, for typos a subsequence match cannot see (`jion` → `join`).
-pub fn edit_distance(a: &str, b: &str) -> usize {
+fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let mut prev: Vec<usize> = (0..=b.len()).collect();
@@ -65,7 +65,7 @@ pub fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// Suggestions for a mistyped word: fuzzy matches first, then anything within two edits.
-pub fn suggestions<'a>(query: &str, candidates: impl IntoIterator<Item = &'a str>, limit: usize) -> Vec<&'a str> {
+pub(crate) fn suggestions<'a>(query: &str, candidates: impl IntoIterator<Item = &'a str>, limit: usize) -> Vec<&'a str> {
     let candidates: Vec<&str> = candidates.into_iter().collect();
     let mut out: Vec<&str> = rank(query, candidates.iter().map(|c| ((*c).to_owned(), *c))).into_iter().map(|(_, c)| c).collect();
     let mut close: Vec<(usize, &str)> = candidates
@@ -81,7 +81,7 @@ pub fn suggestions<'a>(query: &str, candidates: impl IntoIterator<Item = &'a str
 }
 
 /// The single obvious match, when one candidate clearly beats the rest.
-pub fn best<T>(query: &str, items: impl IntoIterator<Item = (String, T)>) -> Option<T> {
+pub(crate) fn best<T>(query: &str, items: impl IntoIterator<Item = (String, T)>) -> Option<T> {
     let mut ranked = rank(query, items).into_iter();
     let (top, item) = ranked.next()?;
     let runner_up = ranked.next().map_or(i64::MIN, |(s, _)| s);

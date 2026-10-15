@@ -1,22 +1,22 @@
-pub mod store;
+pub(crate) mod store;
 
 #[cfg(test)]
-pub use store::MemoryStore;
-pub use store::{SecretStore, SecurityCli};
+pub(crate) use store::MemoryStore;
+pub(crate) use store::{SecretStore, SecurityCli};
 
 use crate::config::Config;
 use crate::forge::Kind;
 use anyhow::{Context, Result, bail, ensure};
 use std::fmt;
 
-pub const SERVICE: &str = "revu";
-pub const DEFAULT_HOST: &str = "gitlab.com";
+pub(crate) const SERVICE: &str = "revu";
+const DEFAULT_HOST: &str = "gitlab.com";
 const GITHUB_HOST: &str = "github.com";
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Credentials {
-    pub host: String,
-    pub token: String,
+pub(crate) struct Credentials {
+    pub(crate) host: String,
+    pub(crate) token: String,
 }
 
 impl fmt::Debug for Credentials {
@@ -27,7 +27,7 @@ impl fmt::Debug for Credentials {
 
 /// Where the token came from, so `whoami` can say it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Source {
+pub(crate) enum Source {
     Env,
     Keychain,
 }
@@ -35,15 +35,15 @@ pub enum Source {
 /// What the resolution looks at around the process: token and host variables, and the host of
 /// the checkout it runs in. A struct, so tests build one without `set_var` or a git repo.
 #[derive(Clone, Default)]
-pub struct Env {
+pub(crate) struct Env {
     /// `GITLAB_TOKEN`, for the `GITLAB_HOST` host, else gitlab.com.
-    pub gitlab_token: Option<String>,
+    pub(crate) gitlab_token: Option<String>,
     /// `GITHUB_TOKEN`, else `GH_TOKEN`, for github.com.
-    pub github_token: Option<String>,
+    pub(crate) github_token: Option<String>,
     /// `GITLAB_HOST`.
-    pub host: Option<String>,
+    pub(crate) host: Option<String>,
     /// The host of the `origin` remote of the checkout under the working directory.
-    pub origin: Option<String>,
+    pub(crate) origin: Option<String>,
 }
 
 impl fmt::Debug for Env {
@@ -59,7 +59,7 @@ impl fmt::Debug for Env {
 }
 
 impl Env {
-    pub fn from_process() -> Self {
+    pub(crate) fn from_process() -> Self {
         let read = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
         let origin = std::env::current_dir().ok().and_then(|dir| crate::mrref::origin_host(&dir));
         Self {
@@ -88,7 +88,7 @@ fn default_host(kind: Kind) -> &'static str {
 }
 
 /// The token variable of each forge, for messages.
-pub fn token_variable(kind: Kind) -> &'static str {
+pub(crate) fn token_variable(kind: Kind) -> &'static str {
     match kind {
         Kind::GitLab => "GITLAB_TOKEN",
         Kind::GitHub => "GITHUB_TOKEN",
@@ -107,7 +107,7 @@ fn variable_hint(host: &str, kind: Kind) -> String {
 
 /// The host this run is for: its token variable wins when it is its forge's primary host, the one
 /// stated by `--host`, `GITLAB_HOST` or the config's `host`, else the forge's default host.
-pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<(Credentials, Source)> {
+pub(crate) fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<(Credentials, Source)> {
     let stated = named.or(env.host.as_deref()).or(config.host.as_deref());
     let token_for = |h: &str, kind: Kind| {
         let primary = stated.filter(|s| Kind::for_host(s, config) == kind).unwrap_or(default_host(kind));
@@ -126,7 +126,7 @@ pub fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Optio
 }
 
 /// An extra host the config lists: its keychain entry only, since the token variables belong to the primary host.
-pub fn resolve_extra(store: &dyn SecretStore, host: &str) -> Result<Credentials> {
+pub(crate) fn resolve_extra(store: &dyn SecretStore, host: &str) -> Result<Credentials> {
     check_host(host)?;
     let token = store.get(host)?.with_context(|| format!("no token for {host}: run `revu login {host}`"))?;
     Ok(Credentials { host: host.to_owned(), token })
@@ -134,7 +134,7 @@ pub fn resolve_extra(store: &dyn SecretStore, host: &str) -> Result<Credentials>
 
 /// The flag, then `GITLAB_HOST`, then the checkout's own host when `usable` says a token is there
 /// for it, then the configured host, then gitlab.com.
-pub fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn(&str) -> bool) -> Result<String> {
+pub(crate) fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn(&str) -> bool) -> Result<String> {
     let host = host
         .map(str::to_owned)
         .or_else(|| env.host.clone())
@@ -147,7 +147,7 @@ pub fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn
 
 /// A host names a cache folder, so only a plain `name` or `name:port` passes: `..`, `/` or a path
 /// would reach outside the cache. The URL parser keeps `.` and `..` as names, hence the dot rule.
-pub fn check_host(host: &str) -> Result<()> {
+pub(crate) fn check_host(host: &str) -> Result<()> {
     let parsed = url::Url::parse(&format!("https://{host}")).ok();
     let whole = parsed.and_then(|url| authority(&url)).is_some_and(|authority| authority.eq_ignore_ascii_case(host));
     let dotted = host.starts_with('.') || host.contains("..");

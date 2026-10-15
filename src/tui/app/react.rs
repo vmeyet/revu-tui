@@ -8,22 +8,22 @@ use crossterm::event::{KeyCode, KeyEvent};
 /// The picker open on note `note` of thread `thread`, `selected` the reaction `enter` gives.
 /// The choices are `row`, or with a `search` (GitLab only) the emoji whose name matches it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pick {
-    pub thread: ThreadId,
-    pub note: usize,
-    pub selected: usize,
-    pub row: Vec<Emoji>,
-    pub search: Option<Search>,
+pub(crate) struct Pick {
+    pub(crate) thread: ThreadId,
+    pub(crate) note: usize,
+    pub(crate) selected: usize,
+    pub(crate) row: Vec<Emoji>,
+    pub(crate) search: Option<Search>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Search {
-    pub query: String,
-    pub found: Vec<Emoji>,
+pub(crate) struct Search {
+    pub(crate) query: String,
+    pub(crate) found: Vec<Emoji>,
 }
 
 /// How many choices the status line shows at once.
-pub const PAGE: usize = 8;
+const PAGE: usize = 8;
 
 /// How many of my most used reactions lead the row: under half of it, so most of the eight keep their place.
 const LEADING: usize = 3;
@@ -152,7 +152,7 @@ impl App {
 
     /// The picker as the status line shows it: the search typed so far, then the page of choices
     /// around the selected one, my reactions standing out, the selected one framed.
-    pub fn react_prompt(&self) -> Option<Prompt> {
+    pub(crate) fn react_prompt(&self) -> Option<Prompt> {
         let pick = self.react.as_ref()?;
         let note: Option<&Note> = self.open.as_ref()?.review.thread(&pick.thread).and_then(|t| t.notes.get(pick.note));
         let mine = |emoji: Emoji| note.is_some_and(|n| n.reactions.iter().any(|r| r.emoji == emoji && r.mine));
@@ -175,17 +175,17 @@ impl App {
 }
 
 /// What the status line shows while the picker is open.
-pub struct Prompt {
+pub(crate) struct Prompt {
     /// The name typed so far, once `/` started a search.
-    pub search: Option<String>,
+    pub(crate) search: Option<String>,
     /// Whether `/` searches every emoji: the forge takes any.
-    pub more: bool,
+    pub(crate) more: bool,
     /// Each choice's label, whether it is mine, and whether it is selected.
-    pub choices: Vec<(String, bool, bool)>,
+    pub(crate) choices: Vec<(String, bool, bool)>,
 }
 
 /// The reaction the failure was about, for `Failure::React`.
-pub fn failure(thread: ThreadId, index: usize, emoji: Emoji, change: ReactionChange) -> Failure {
+pub(crate) fn failure(thread: ThreadId, index: usize, emoji: Emoji, change: ReactionChange) -> Failure {
     Failure::React { thread, index, emoji, change }
 }
 

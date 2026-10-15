@@ -10,15 +10,15 @@ use std::fmt;
 /// `[queue.rules]`: every threshold the rules use.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Rules {
+pub(crate) struct Rules {
     /// `false` leaves every section as the forge sorted it.
-    pub enabled: bool,
+    pub(crate) enabled: bool,
     /// An MR with no activity for more days than this moves to Other.
-    pub stale_days: u32,
+    pub(crate) stale_days: u32,
     /// This many comments from others, and none from me, and someone already reviews it.
-    pub reviewed_comments: u32,
+    pub(crate) reviewed_comments: u32,
     /// Words in a title, or in the first paragraph of a description, that say "not yet".
-    pub not_ready: Vec<String>,
+    pub(crate) not_ready: Vec<String>,
 }
 
 impl Default for Rules {
@@ -35,16 +35,16 @@ impl Default for Rules {
 impl Rules {
     /// No rule at all: the sections as the forge answered them.
     #[cfg(test)]
-    pub fn disabled() -> Self {
+    pub(crate) fn disabled() -> Self {
         Self { enabled: false, ..Self::default() }
     }
 
-    pub fn is_default(&self) -> bool {
+    pub(crate) fn is_default(&self) -> bool {
         *self == Self::default()
     }
 
     /// Thresholds that would silence everything, or match every title, fail at load time.
-    pub fn check(&self) -> Result<()> {
+    pub(crate) fn check(&self) -> Result<()> {
         if self.stale_days == 0 {
             bail!("`queue.rules.stale_days` must be at least 1");
         }
@@ -60,7 +60,7 @@ impl Rules {
 
 /// Why the rules moved an MR out of the sections that need me, or pushed it down its own.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Reason {
+pub(crate) enum Reason {
     Stale { days: i64 },
     ApprovedEnough { approvals: usize },
     ReviewedBy { people: usize },
@@ -70,14 +70,14 @@ pub enum Reason {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Place {
+pub(crate) enum Place {
     Title,
     Description,
 }
 
 impl Reason {
     /// Reviewed by others keeps its section and only sorts last; every other reason moves the MR out.
-    pub fn moves_out(&self) -> bool {
+    pub(crate) fn moves_out(&self) -> bool {
         !matches!(self, Reason::ReviewedBy { .. })
     }
 }
@@ -106,7 +106,7 @@ impl Serialize for Reason {
 /// The first reason that applies to someone else's MR, most decisive first.
 /// "Not ready" holds everywhere; stale and approved enough spare an MR that asks me by name,
 /// since a review request is the one signal nobody sends by accident.
-pub fn judge(mr: &QueueMr, me: &str, now: DateTime<Utc>, rules: &Rules) -> Option<Reason> {
+pub(crate) fn judge(mr: &QueueMr, me: &str, now: DateTime<Utc>, rules: &Rules) -> Option<Reason> {
     if !rules.enabled || mr.author == me {
         return None;
     }

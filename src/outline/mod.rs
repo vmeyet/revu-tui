@@ -3,7 +3,7 @@
 //! the calls the query finds link them into a tree.
 mod tree;
 
-pub use tree::{Branch, Direction, Item, Section, Shape, Site};
+pub(crate) use tree::{Branch, Direction, Item, Section, Shape, Site};
 
 use crate::forge::Side;
 use crate::syntax;
@@ -17,22 +17,22 @@ use tree_sitter_tags::{TagsConfiguration, TagsContext};
 const RENAME_SIMILARITY: f32 = 0.8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Kind {
+pub(crate) enum Kind {
     Class,
     Function,
     Method,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Symbol {
-    pub kind: Kind,
+pub(crate) struct Symbol {
+    pub(crate) kind: Kind,
     /// Led by the classes around it: `Cart.total`.
-    pub name: String,
+    pub(crate) name: String,
     /// The definition up to its body, whitespace collapsed and brackets tightened.
-    pub signature: String,
-    pub public: bool,
+    pub(crate) signature: String,
+    pub(crate) public: bool,
     /// Its first and last line, from 1.
-    pub lines: (u32, u32),
+    pub(crate) lines: (u32, u32),
     body: String,
     calls: Vec<Call>,
 }
@@ -53,7 +53,7 @@ impl Symbol {
 
 /// How a symbol changed, riskiest first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum State {
+pub(crate) enum State {
     Removed,
     Signature,
     Added,
@@ -62,29 +62,29 @@ pub enum State {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Change {
+pub(crate) struct Change {
     /// The file's path at head.
-    pub path: String,
-    pub state: State,
+    pub(crate) path: String,
+    pub(crate) state: State,
     /// The symbol at head; at base when removed.
-    pub symbol: Symbol,
+    pub(crate) symbol: Symbol,
     /// The symbol at base, for a changed signature or a rename.
-    pub before: Option<Symbol>,
+    pub(crate) before: Option<Symbol>,
 }
 
 impl Change {
     /// Public at head, or at base: a symbol that stopped being exported still counts.
-    pub fn public(&self) -> bool {
+    pub(crate) fn public(&self) -> bool {
         self.symbol.public || self.before.as_ref().is_some_and(|before| before.public)
     }
 
     /// The side its lines are on: base for a removed symbol, head for every other.
-    pub fn side(&self) -> Side {
+    pub(crate) fn side(&self) -> Side {
         if self.state == State::Removed { Side::Old } else { Side::New }
     }
 
     /// A public symbol gone, or called differently now.
-    pub fn breaking(&self) -> bool {
+    pub(crate) fn breaking(&self) -> bool {
         self.public() && matches!(self.state, State::Removed | State::Signature)
     }
 
@@ -97,20 +97,20 @@ impl Change {
 
 /// What the outline read in the MR: the changed symbols, by file then risk, and the unchanged ones of their files at head.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Reading {
-    pub changes: Vec<Change>,
+pub(crate) struct Reading {
+    pub(crate) changes: Vec<Change>,
     unchanged: Vec<(String, Symbol)>,
 }
 
 impl Reading {
     /// The call tree over the changes of `section`, cut as `shape` says.
-    pub fn tree(&self, shape: Shape, section: Section) -> Vec<Branch> {
+    pub(crate) fn tree(&self, shape: Shape, section: Section) -> Vec<Branch> {
         tree::build(&self.changes, &self.unchanged, shape, section)
     }
 }
 
 /// Reads each file, given as its path with its text at base and at head, empty on a side it does not exist.
-pub fn read(files: &[(String, String, String)]) -> Reading {
+pub(crate) fn read(files: &[(String, String, String)]) -> Reading {
     let mut changes = vec![];
     let mut unchanged = vec![];
     for (path, base, head) in files {
@@ -123,9 +123,9 @@ pub fn read(files: &[(String, String, String)]) -> Reading {
 
 /// One file to outline: its path at base, absent when added, and at head, absent when deleted.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sides {
-    pub base: Option<String>,
-    pub head: Option<String>,
+pub(crate) struct Sides {
+    pub(crate) base: Option<String>,
+    pub(crate) head: Option<String>,
 }
 
 /// One syntax language with a tags query, named as in [`syntax::LANGUAGES`], which says which files it reads.
@@ -186,7 +186,7 @@ fn tags_for(path: &str) -> Option<&'static Tags> {
 }
 
 /// A test file, by the usual names: a `test`, `tests` or `__tests__` folder, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`.
-pub fn is_test(path: &str) -> bool {
+pub(crate) fn is_test(path: &str) -> bool {
     let (folders, name) = path.rsplit_once('/').unwrap_or(("", path));
     let in_tests = folders.split('/').any(|folder| matches!(folder, "test" | "tests" | "__tests__"));
     let python = name.strip_suffix(".py").is_some_and(|stem| stem.starts_with("test_") || stem.ends_with("_test"));
@@ -194,7 +194,7 @@ pub fn is_test(path: &str) -> bool {
 }
 
 /// Whether the outline can read this file.
-pub fn readable(path: &str) -> bool {
+pub(crate) fn readable(path: &str) -> bool {
     tags_for(path).is_some()
 }
 

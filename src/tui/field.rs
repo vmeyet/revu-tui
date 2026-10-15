@@ -2,93 +2,93 @@
 //! The cursor is a byte offset kept on a character boundary, so an accent or an emoji never splits.
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Field {
+pub(crate) struct Field {
     text: String,
     cursor: usize,
 }
 
 impl Field {
     /// Starts on `text` with the cursor after its last character, where typing goes on.
-    pub fn new(text: impl Into<String>) -> Self {
+    pub(crate) fn new(text: impl Into<String>) -> Self {
         let text = text.into();
         Self { cursor: text.len(), text }
     }
 
-    pub fn text(&self) -> &str {
+    pub(crate) fn text(&self) -> &str {
         &self.text
     }
 
     /// Hands the text over and leaves the row empty.
-    pub fn take(&mut self) -> String {
+    pub(crate) fn take(&mut self) -> String {
         self.cursor = 0;
         std::mem::take(&mut self.text)
     }
 
-    pub fn at_end(&self) -> bool {
+    fn at_end(&self) -> bool {
         self.cursor == self.text.len()
     }
 
     /// What sits before the cursor, the character under it (empty past the last one), and the rest.
-    pub fn split(&self) -> (&str, &str, &str) {
+    pub(crate) fn split(&self) -> (&str, &str, &str) {
         let under = self.next().map_or("", |end| &self.text[self.cursor..end]);
         (&self.text[..self.cursor], under, &self.text[self.cursor + under.len()..])
     }
 
-    pub fn insert(&mut self, c: char) {
+    pub(crate) fn insert(&mut self, c: char) {
         self.text.insert(self.cursor, c);
         self.cursor += c.len_utf8();
     }
 
-    pub fn backspace(&mut self) {
+    pub(super) fn backspace(&mut self) {
         let Some(prev) = self.prev() else { return };
         self.text.remove(prev);
         self.cursor = prev;
     }
 
-    pub fn delete(&mut self) {
+    pub(crate) fn delete(&mut self) {
         if !self.at_end() {
             self.text.remove(self.cursor);
         }
     }
 
     /// Deletes back to the start of the word the cursor follows, the spaces in between included.
-    pub fn delete_word(&mut self) {
+    pub(super) fn delete_word(&mut self) {
         let from = self.word_start();
         self.text.replace_range(from..self.cursor, "");
         self.cursor = from;
     }
 
-    pub fn left(&mut self) {
+    pub(crate) fn left(&mut self) {
         self.cursor = self.prev().unwrap_or(0);
     }
 
-    pub fn right(&mut self) {
+    pub(crate) fn right(&mut self) {
         self.cursor = self.next().unwrap_or(self.cursor);
     }
 
     /// To the start of the word the cursor follows, as `⌥←` does in a macOS text field.
-    pub fn word_left(&mut self) {
+    pub(super) fn word_left(&mut self) {
         self.cursor = self.word_start();
     }
 
     /// To the end of the word ahead of the cursor, as `⌥→` does in a macOS text field.
-    pub fn word_right(&mut self) {
+    pub(super) fn word_right(&mut self) {
         let rest = &self.text[self.cursor..];
         let word = rest.trim_start();
         let skipped = rest.len() - word.len();
         self.cursor += skipped + word.find(char::is_whitespace).unwrap_or(word.len());
     }
 
-    pub fn start(&mut self) {
+    pub(crate) fn start(&mut self) {
         self.cursor = 0;
     }
 
-    pub fn end(&mut self) {
+    pub(crate) fn end(&mut self) {
         self.cursor = self.text.len();
     }
 
     /// To the line above, at the same column or the end of a shorter line; nothing on the first line.
-    pub fn up(&mut self) {
+    pub(crate) fn up(&mut self) {
         let start = self.line_start(self.cursor);
         if start > 0 {
             self.cursor = self.at_column(self.line_start(start - 1), self.column());
@@ -96,7 +96,7 @@ impl Field {
     }
 
     /// To the line below, at the same column or the end of a shorter line; nothing on the last line.
-    pub fn down(&mut self) {
+    pub(crate) fn down(&mut self) {
         let end = self.line_end(self.cursor);
         if end < self.text.len() {
             self.cursor = self.at_column(end + 1, self.column());

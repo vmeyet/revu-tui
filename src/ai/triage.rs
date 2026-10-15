@@ -52,7 +52,7 @@ const RISK: (&str, Question) = (
 /// How big an MR reads to a reviewer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Size {
+pub(crate) enum Size {
     Trivial,
     Focused,
     Large,
@@ -61,20 +61,20 @@ pub enum Size {
 
 /// What Jev said about one queue MR, for the `updated_at` it saw.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Verdict {
+pub(crate) struct Verdict {
     /// The probability-weighted level, 0 "can wait" to 3 "blocking someone".
-    pub urgency: f64,
-    pub size: Size,
-    pub seen: DateTime<Utc>,
+    pub(crate) urgency: f64,
+    pub(crate) size: Size,
+    pub(crate) seen: DateTime<Utc>,
 }
 
 impl Verdict {
-    pub fn urgent(&self) -> bool {
+    pub(crate) fn urgent(&self) -> bool {
         self.urgency >= URGENT_FROM
     }
 
     /// Still true for `mr`: it has not moved since Jev looked.
-    pub fn fresh_for(&self, mr: &QueueMr) -> bool {
+    pub(crate) fn fresh_for(&self, mr: &QueueMr) -> bool {
         self.seen == mr.updated_at
     }
 }
@@ -82,7 +82,7 @@ impl Verdict {
 /// How much a file's change could hurt, lowest first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Risk {
+pub(crate) enum Risk {
     Cosmetic,
     Logic,
     Data,
@@ -102,25 +102,25 @@ impl Risk {
 
 /// What Jev said about an open MR at one head commit: whether it waits on me, and each file's risk.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Reading {
-    pub waits_on_me: bool,
-    pub risks: BTreeMap<String, Risk>,
+pub(crate) struct Reading {
+    pub(crate) waits_on_me: bool,
+    pub(crate) risks: BTreeMap<String, Risk>,
 }
 
-pub fn queue_questions() -> [(&'static str, Question); 2] {
+fn queue_questions() -> [(&'static str, Question); 2] {
     [URGENCY, SIZE]
 }
 
-pub fn waits_questions() -> [(&'static str, Question); 1] {
+fn waits_questions() -> [(&'static str, Question); 1] {
     [WAITS_ON_ME]
 }
 
-pub fn risk_questions() -> [(&'static str, Question); 1] {
+fn risk_questions() -> [(&'static str, Question); 1] {
     [RISK]
 }
 
 /// The state Jev reads for one queue MR; `now` dates it, so ages stay honest.
-pub fn queue_state(mr: &QueueMr, now: DateTime<Utc>) -> Value {
+fn queue_state(mr: &QueueMr, now: DateTime<Utc>) -> Value {
     json!({
         "title": mr.title,
         "description": cut(&mr.description, DESCRIPTION_CHARS),
@@ -137,7 +137,7 @@ pub fn queue_state(mr: &QueueMr, now: DateTime<Utc>) -> Value {
     })
 }
 
-pub fn verdict(answers: &Answers, mr: &QueueMr) -> Result<Verdict, Unavailable> {
+pub(crate) fn verdict(answers: &Answers, mr: &QueueMr) -> Result<Verdict, Unavailable> {
     let size = match answers.choice(SIZE.0)? {
         "trivial" => Size::Trivial,
         "focused" => Size::Focused,
@@ -149,7 +149,7 @@ pub fn verdict(answers: &Answers, mr: &QueueMr) -> Result<Verdict, Unavailable> 
 }
 
 /// The last notes of the MR, oldest first, each saying whether I wrote it.
-pub fn waits_state(review: &Review, me: &str) -> Option<Value> {
+pub(crate) fn waits_state(review: &Review, me: &str) -> Option<Value> {
     let mut notes: Vec<_> = review.threads.iter().flat_map(|t| t.notes.iter()).filter(|n| !n.system).collect();
     notes.sort_by_key(|n| n.created_at);
     let last: Vec<Value> = notes
@@ -163,7 +163,7 @@ pub fn waits_state(review: &Review, me: &str) -> Option<Value> {
 }
 
 /// One state per text file: its path and the start of its changed lines.
-pub fn file_states(review: &Review) -> Vec<(String, Value)> {
+pub(crate) fn file_states(review: &Review) -> Vec<(String, Value)> {
     review
         .files
         .iter()
@@ -175,27 +175,27 @@ pub fn file_states(review: &Review) -> Vec<(String, Value)> {
         .collect()
 }
 
-pub fn waits(answers: &Answers) -> Result<bool, Unavailable> {
+pub(crate) fn waits(answers: &Answers) -> Result<bool, Unavailable> {
     Ok(answers.noul(WAITS_ON_ME.0)? >= WAITS_FROM)
 }
 
-pub fn risk(answers: &Answers) -> Result<Risk, Unavailable> {
+pub(crate) fn risk(answers: &Answers) -> Result<Risk, Unavailable> {
     Ok(Risk::from_level(answers.score(RISK.0)?))
 }
 
 /// Whether a queue MR needs Jev again: never asked, or moved since.
-pub fn stale(verdicts: &std::collections::HashMap<MrKey, Verdict>, mr: &QueueMr) -> bool {
+pub(crate) fn stale(verdicts: &std::collections::HashMap<MrKey, Verdict>, mr: &QueueMr) -> bool {
     verdicts.get(&mr.key()).is_none_or(|v| !v.fresh_for(mr))
 }
 
 /// Asks Jev about one queue MR.
-pub async fn judge_mr(judge: &impl Judge, mr: &QueueMr, now: DateTime<Utc>) -> Result<Verdict, Unavailable> {
+pub(crate) async fn judge_mr(judge: &impl Judge, mr: &QueueMr, now: DateTime<Utc>) -> Result<Verdict, Unavailable> {
     let answers = judge.ask(&queue_state(mr, now), &queue_questions()).await?;
     verdict(&answers, mr)
 }
 
 /// Asks Jev about an open MR: whether it waits on me (when it has notes), and each file's risk, all at once.
-pub async fn judge_open(judge: &impl Judge, waits: Option<Value>, files: Vec<(String, Value)>) -> Result<Reading, Unavailable> {
+pub(crate) async fn judge_open(judge: &impl Judge, waits: Option<Value>, files: Vec<(String, Value)>) -> Result<Reading, Unavailable> {
     let waits_on_me = async {
         match &waits {
             Some(state) => self::waits(&judge.ask(state, &waits_questions()).await?),

@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 /// One action; its row in [`ROWS`] says everything else about it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Act {
+pub(crate) enum Act {
     NextThread,
     PrevThread,
     NextHunk,
@@ -122,7 +122,7 @@ pub enum Act {
 
 /// A task of the `?` help and its keys; a key that only works in one pane says which in its words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Group {
+pub(crate) enum Group {
     Move,
     Queue,
     View,
@@ -135,37 +135,37 @@ pub enum Group {
 
 /// A line of the `?` help: its keys as the help writes them, and what they do in a few words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Line {
-    pub group: Group,
-    pub keys: &'static str,
-    pub does: &'static str,
+pub(crate) struct Line {
+    pub(crate) group: Group,
+    pub(crate) keys: &'static str,
+    pub(crate) does: &'static str,
 }
 
 /// A palette command: the word typed after `:`, and what the list says it does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Verb {
-    pub word: &'static str,
-    pub does: &'static str,
+pub(crate) struct Verb {
+    pub(crate) word: &'static str,
+    pub(crate) does: &'static str,
 }
 
 /// What revu knows about one action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Row {
-    pub act: Act,
-    pub name: Name,
+pub(crate) struct Row {
+    pub(crate) act: Act,
+    pub(crate) name: Name,
     /// The keys revu reads for it outside a text box, as `[keys.bind]` writes them; a binding stands for the first.
-    pub keys: &'static [&'static str],
-    pub help: &'static [Line],
-    pub verb: Option<Verb>,
+    pub(crate) keys: &'static [&'static str],
+    pub(crate) help: &'static [Line],
+    pub(crate) verb: Option<Verb>,
     /// Where its one-key keys do it.
-    pub panes: &'static [Pane],
+    pub(crate) panes: &'static [Pane],
     /// Where `revu usage` lists it; `None` for an action it does not count.
-    pub section: Option<Section>,
+    pub(crate) section: Option<Section>,
 }
 
 /// Where a key does an action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Pane {
+pub(crate) enum Pane {
     /// Wherever the keys go to a pane, before the pane gets them.
     Anywhere,
     Queue,
@@ -193,7 +193,7 @@ const MOVES: &[Pane] =
 
 /// What an action is called, and who uses the name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Name {
+pub(crate) enum Name {
     /// `[keys.bind]` can give it more keys; the usage counts and `revu usage` use the name too.
     Bind(&'static str),
     /// Counted, and listed by `revu usage` even when never used.
@@ -204,7 +204,7 @@ pub enum Name {
 
 impl Name {
     /// The name its usage is counted under.
-    pub fn counted(self) -> Option<&'static str> {
+    pub(crate) fn counted(self) -> Option<&'static str> {
         match self {
             Self::Bind(name) | Self::Listed(name) => Some(name),
             Self::None => None,
@@ -214,7 +214,7 @@ impl Name {
 
 /// The section of `revu usage` an action is listed in, in the order the report shows them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Section {
+pub(crate) enum Section {
     Move,
     Jump,
     Queue,
@@ -227,7 +227,7 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 9] = [
+    pub(crate) const ALL: [Section; 9] = [
         Section::Move,
         Section::Jump,
         Section::Queue,
@@ -239,7 +239,7 @@ impl Section {
         Section::Commands,
     ];
 
-    pub fn title(self) -> &'static str {
+    pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Move => "move",
             Self::Jump => "jump",
@@ -300,7 +300,7 @@ impl Row {
 }
 
 /// One row per [`Act`], in its order: bindable actions first, then the others `revu usage` lists, then the rest.
-pub const ROWS: &[Row] = &[
+pub(crate) const ROWS: &[Row] = &[
     bound(Act::NextThread, "next_thread", &["]n", "n"])
         .help(&[
             line(Group::Move, "]n [n", "next, previous open conversation"),
@@ -560,7 +560,7 @@ pub const ROWS: &[Row] = &[
 ];
 
 impl Group {
-    pub fn title(self) -> &'static str {
+    pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Move => "move",
             Self::Queue => "queue",
@@ -633,18 +633,18 @@ impl Group {
     }
 
     /// Its lines, in the order the help shows them.
-    pub fn lines(self) -> impl Iterator<Item = &'static Line> {
+    pub(crate) fn lines(self) -> impl Iterator<Item = &'static Line> {
         self.acts().iter().flat_map(move |act| act.row().help.iter().filter(move |line| line.group == self))
     }
 }
 
 /// The palette's verbs, in the order its list shows them.
-pub fn verbs() -> impl Iterator<Item = Verb> {
+pub(crate) fn verbs() -> impl Iterator<Item = Verb> {
     ROWS.iter().filter_map(|row| row.verb)
 }
 
 impl Act {
-    pub fn row(self) -> &'static Row {
+    pub(crate) fn row(self) -> &'static Row {
         &ROWS[self as usize]
     }
 }
@@ -658,13 +658,13 @@ static DEFAULT_KEYS: LazyLock<Vec<(&'static Row, Vec<KeyEvent>)>> = LazyLock::ne
 });
 
 /// The action whose default is `prefix` then `second`: `z` then `a`.
-pub fn act_after(prefix: char, second: char) -> Option<Act> {
+pub(crate) fn act_after(prefix: char, second: char) -> Option<Act> {
     let typed = [KeyEvent::from(KeyCode::Char(prefix)), KeyEvent::from(KeyCode::Char(second))];
     DEFAULT_KEYS.iter().find(|(_, keys)| *keys == typed).map(|(row, _)| row.act)
 }
 
 /// The first action `applies` keeps whose one-key default is `code` with exactly `modifiers`.
-pub fn with_key(code: KeyCode, modifiers: KeyModifiers, applies: impl Fn(&Row) -> bool) -> Option<Act> {
+pub(crate) fn with_key(code: KeyCode, modifiers: KeyModifiers, applies: impl Fn(&Row) -> bool) -> Option<Act> {
     let is_it = |(row, keys): &&(&Row, Vec<KeyEvent>)| {
         let is_the_key = matches!(keys.as_slice(), [own] if own.code == code && own.modifiers == modifiers);
         is_the_key && applies(row)
@@ -674,7 +674,7 @@ pub fn with_key(code: KeyCode, modifiers: KeyModifiers, applies: impl Fn(&Row) -
 
 /// What `key` does in `pane`: with ctrl held, only a ctrl default; else its plain default, whatever else is held.
 /// Where two rows share a key in one pane, the first one wins.
-pub fn act_in(pane: Pane, key: KeyEvent) -> Option<Act> {
+pub(crate) fn act_in(pane: Pane, key: KeyEvent) -> Option<Act> {
     let works_here = |row: &Row| row.panes.contains(&pane);
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let modifiers = if ctrl { KeyModifiers::CONTROL } else { KeyModifiers::NONE };
@@ -682,7 +682,7 @@ pub fn act_in(pane: Pane, key: KeyEvent) -> Option<Act> {
 }
 
 /// Every action `[keys.bind]` can name, with the default key a binding stands for.
-pub fn bindable() -> impl Iterator<Item = (&'static str, &'static str)> {
+pub(crate) fn bindable() -> impl Iterator<Item = (&'static str, &'static str)> {
     ROWS.iter().filter_map(|row| match row.name {
         Name::Bind(name) => Some((name, *row.keys.first()?)),
         _ => None,
@@ -700,12 +700,12 @@ fn without_repeats(names: impl Iterator<Item = &'static str>) -> Vec<&'static st
 }
 
 /// Every action name `revu usage` lists, bindable ones first.
-pub fn listed_names() -> Vec<&'static str> {
+pub(crate) fn listed_names() -> Vec<&'static str> {
     without_repeats(ROWS.iter().filter_map(|row| row.name.counted()))
 }
 
 /// The names `revu usage` lists under `section`, in table order.
-pub fn listed_in(section: Section) -> Vec<&'static str> {
+pub(crate) fn listed_in(section: Section) -> Vec<&'static str> {
     without_repeats(ROWS.iter().filter(|row| row.section == Some(section)).filter_map(|row| row.name.counted()))
 }
 

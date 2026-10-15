@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Key {
+pub(crate) struct Key {
     code: Code,
     ctrl: bool,
     alt: bool,
@@ -94,7 +94,7 @@ impl Key {
         }
     }
 
-    pub(crate) fn plain_char(self) -> Option<char> {
+    fn plain_char(self) -> Option<char> {
         match self.code {
             Code::Char(c) if !self.ctrl && !self.alt => Some(c),
             _ => None,
@@ -103,7 +103,7 @@ impl Key {
 }
 
 /// `"n"`, `")n"`, `"zz"`: one or two plain keys; `"ctrl-k"`, `"alt-n"`, `"tab"`, `"backtab"`, `"enter"`: one named key.
-pub fn parse(text: &str) -> Result<Vec<Key>> {
+pub(crate) fn parse(text: &str) -> Result<Vec<Key>> {
     if let Some(key) = named(text)? {
         return Ok(vec![key]);
     }
@@ -167,7 +167,7 @@ fn default_of(keys: &[Key]) -> Option<&'static str> {
 
 /// What the loop does with a key before the app sees it.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Feed {
+pub(crate) enum Feed {
     /// The first key of a two-key binding of the user's: wait for the second.
     Hold(KeyEvent),
     /// Hand these to the app, in order: the default keys a binding stands for, or the key itself.
@@ -176,7 +176,7 @@ pub enum Feed {
 
 /// The user's keys, each standing for revu's default keys.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Keymap {
+pub(crate) struct Keymap {
     aliases: BTreeMap<Vec<Key>, Vec<Key>>,
     /// The help labels: per default binding, the user's keys to show in front of it.
     shown: BTreeMap<Vec<Key>, Vec<Vec<Key>>>,
@@ -185,7 +185,7 @@ pub struct Keymap {
 
 impl Keymap {
     /// Fails on an unknown action, a key that does not parse, or a key already taken.
-    pub fn new(keys: &Keys) -> Result<Self> {
+    pub(crate) fn new(keys: &Keys) -> Result<Self> {
         let azerty = keys.layout == Layout::Azerty;
         let mut owners: BTreeMap<Vec<Key>, &str> = BTreeMap::new();
         let mut map = Self { azerty, ..Self::default() };
@@ -249,7 +249,7 @@ impl Keymap {
 
     /// One key from the terminal, with the key held since the last call, if any. A held key
     /// whose second key matches nothing is handed over as itself, so `z` then `a` stays `za`.
-    pub fn feed(&self, held: Option<KeyEvent>, event: KeyEvent) -> Feed {
+    pub(crate) fn feed(&self, held: Option<KeyEvent>, event: KeyEvent) -> Feed {
         let Some(key) = Key::from_event(event) else { return Feed::Keys(held.into_iter().chain([event]).collect()) };
         if let Some(first) = held.and_then(Key::from_event) {
             return match self.aliases.get(&vec![first, key]) {
@@ -269,7 +269,7 @@ impl Keymap {
     }
 
     /// A help entry's keys (`]n [n`) as they are in effect: the user's in front, `(`/`)` for `[`/`]` on AZERTY.
-    pub fn label(&self, keys: &str) -> String {
+    pub(crate) fn label(&self, keys: &str) -> String {
         keys.split(' ').map(|word| self.label_word(word)).collect::<Vec<_>>().join(" ")
     }
 
@@ -326,13 +326,13 @@ fn is_gone(action: &str) -> bool {
 }
 
 /// One warning per `[keys.bind]` entry on an action this revu no longer has: the binding is left out, the rest loads.
-pub fn ignored(keys: &Keys) -> Vec<String> {
+pub(crate) fn ignored(keys: &Keys) -> Vec<String> {
     let gone = keys.bind.keys().filter(|action| is_gone(action));
     gone.map(|action| format!("`{action}` is not an action this revu knows; it is ignored")).collect()
 }
 
 /// The name `action` goes by today: an old name reads as its new one.
-pub fn current(action: &str) -> &str {
+pub(crate) fn current(action: &str) -> &str {
     RENAMED.iter().find(|(old, _)| *old == action).map_or(action, |(_, new)| new)
 }
 

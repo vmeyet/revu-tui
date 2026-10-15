@@ -3,13 +3,13 @@
 
 /// One picture a note points at, `url` exactly as written (relative GitLab uploads included).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Image {
-    pub alt: String,
-    pub url: String,
+pub(crate) struct Image {
+    pub(crate) alt: String,
+    pub(crate) url: String,
 }
 
 /// The line with its pictures taken out, and the pictures in order.
-pub fn split(line: &str) -> (String, Vec<Image>) {
+pub(crate) fn split(line: &str) -> (String, Vec<Image>) {
     let mut text = String::new();
     let mut images = vec![];
     let mut rest = line;
@@ -23,7 +23,7 @@ pub fn split(line: &str) -> (String, Vec<Image>) {
 }
 
 /// Every picture of a body, skipping fenced code where `![x](y)` is only text.
-pub fn images_in(body: &str) -> Vec<Image> {
+pub(crate) fn images_in(body: &str) -> Vec<Image> {
     let mut fenced = false;
     let mut out = vec![];
     for line in body.lines() {

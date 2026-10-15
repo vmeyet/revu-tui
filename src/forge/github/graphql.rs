@@ -594,7 +594,7 @@ const COMMENT_FIELDS: &str = "id fullDatabaseId body createdAt updatedAt state a
 impl Client {
     /// Every PR waiting on me; with `project`, only that repository's, plus all its other open PRs.
     /// Two calls in parallel keep each query small.
-    pub async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
+    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
         let (mine_query, open_query) = (format!("{QUEUE}{PR_FIELDS}"), format!("{OPEN}{PR_FIELDS}"));
         let mine = self.graphql::<QueueData>(&mine_query, searches(project));
         let Some(project) = project else { return Ok(queue_from(mine.await?, None, vec![])) };
@@ -605,7 +605,7 @@ impl Client {
         Ok(queue_from(mine, Some(project), prs(repository.pull_requests)))
     }
 
-    pub async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
+    pub(crate) async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
         let (owner, name) = owner_and_name(&key.project)?;
         let data: MrData = self.graphql(MR, json!({"owner": owner, "name": name, "number": key.number})).await?;
         let repository = data.repository.with_context(|| format!("{} not found", key.project))?;
@@ -615,7 +615,7 @@ impl Client {
     }
 
     /// Adds my `emoji` to the comment `node`, or takes it off; GitHub needs no reaction id for either.
-    pub async fn react(&self, node: &str, emoji: forge::Emoji, change: forge::ReactionChange) -> Result<()> {
+    pub(crate) async fn react(&self, node: &str, emoji: forge::Emoji, change: forge::ReactionChange) -> Result<()> {
         let Some(content) = emoji.github() else { bail!("GitHub reacts with eight emoji only") };
         let mutation = match change {
             forge::ReactionChange::Add => "addReaction",
@@ -628,7 +628,7 @@ impl Client {
     }
 
     /// Marks the PR a draft, or ready for review; asked first, so a PR already there is left alone.
-    pub async fn set_readiness(&self, key: &MrKey, readiness: forge::Readiness) -> Result<()> {
+    pub(crate) async fn set_readiness(&self, key: &MrKey, readiness: forge::Readiness) -> Result<()> {
         let draft = readiness == forge::Readiness::Draft;
         let (owner, name) = owner_and_name(&key.project)?;
         let data: DraftStateData = self.graphql(DRAFT_STATE, json!({"owner": owner, "name": name, "number": key.number})).await?;
@@ -642,7 +642,7 @@ impl Client {
     }
 
     /// Which of `numbers` in `project` are merged or closed: one query per fifty, each PR an alias.
-    pub async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
+    pub(crate) async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
         let (owner, name) = owner_and_name(project)?;
         let mut done = vec![];
         for chunk in numbers.chunks(50) {
@@ -688,16 +688,16 @@ impl Client {
         Ok(Thread { comments, ..thread })
     }
 
-    pub async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
+    pub(crate) async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
         Ok(self.threads(key).await?.discussions())
     }
 
-    pub async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>> {
+    pub(crate) async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>> {
         Ok(self.threads(key).await?.drafts())
     }
 
     /// Adds the draft to my pending review, opening one first when there is none.
-    pub async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft> {
+    pub(crate) async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft> {
         let prs = self.threads(key).await?;
         let review = match prs.pending_review() {
             Some(review) => review.clone(),
@@ -711,7 +711,7 @@ impl Client {
     }
 
     /// GitHub keeps a comment where it was written: only the text changes.
-    pub async fn update_draft(&self, key: &MrKey, id: u64, draft: &NewDraft) -> Result<Draft> {
+    pub(crate) async fn update_draft(&self, key: &MrKey, id: u64, draft: &NewDraft) -> Result<Draft> {
         match self.threads(key).await?.node_of(id).with_context(|| format!("draft {id} is not in my pending review"))? {
             Target::Summary(review) => self.summary_draft(&review, &draft.body).await,
             Target::Comment(node) => {
@@ -731,7 +731,7 @@ impl Client {
         }
     }
 
-    pub async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
+    pub(crate) async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
         match self.threads(key).await?.node_of(id).with_context(|| format!("draft {id} is not in my pending review"))? {
             Target::Summary(review) => self.summary_draft(&review, "").await.map(|_| ()),
             Target::Comment(node) => {
@@ -743,7 +743,7 @@ impl Client {
 
     /// Submits my pending review, as an approval when asked; with nothing pending, an approval
     /// alone is still a review.
-    pub async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
+    pub(crate) async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
         let prs = self.threads(key).await?;
         let (event, approval) = match kind {
             forge::ReviewKind::Approve => ("APPROVE", forge::Approval::Given),
@@ -759,7 +759,7 @@ impl Client {
         Ok(approval)
     }
 
-    pub async fn resolve(&self, discussion: &ThreadId, resolved: bool) -> Result<()> {
+    pub(crate) async fn resolve(&self, discussion: &ThreadId, resolved: bool) -> Result<()> {
         if !discussion.as_str().starts_with("PRRT_") {
             bail!("only review threads resolve on GitHub; this is a comment on the pull request");
         }
@@ -770,7 +770,7 @@ impl Client {
 
     /// A public reply: on a review thread, in it; GitHub has no thread for any other comment, so
     /// the reply is a new comment on the PR.
-    pub async fn reply(&self, key: &MrKey, thread: &ThreadId, body: &str) -> Result<()> {
+    pub(crate) async fn reply(&self, key: &MrKey, thread: &ThreadId, body: &str) -> Result<()> {
         if !thread.as_str().starts_with("PRRT_") {
             return self.comment(key, body, None).await.map(|_| ());
         }

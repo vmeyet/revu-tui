@@ -79,10 +79,10 @@ pub enum Command {
 pub struct DocsArgs {
     /// Where the pages go.
     #[arg(long, default_value = "docs/reference")]
-    pub dir: std::path::PathBuf,
+    pub(crate) dir: std::path::PathBuf,
     /// Write nothing; fail when a page on disk differs from the code.
     #[arg(long)]
-    pub check: bool,
+    pub(crate) check: bool,
 }
 
 /// Flags of `revu usage`.
@@ -90,7 +90,7 @@ pub struct DocsArgs {
 pub struct UsageArgs {
     /// How far back to look: `30d`, `4w`, or `all`.
     #[arg(long, default_value = "30d")]
-    pub since: String,
+    pub(crate) since: String,
 }
 
 /// Flags of `revu news`.
@@ -98,10 +98,10 @@ pub struct UsageArgs {
 pub struct NewsArgs {
     /// Only what came after this version: `0.5.0`.
     #[arg(long, value_name = "VERSION")]
-    pub since: Option<crate::changelog::Position>,
+    pub(crate) since: Option<crate::changelog::Position>,
     /// As `revu update` ends: nothing when nothing is new, and a last line on how to read it again.
     #[arg(long, hide = true, requires = "since")]
-    pub after_update: bool,
+    pub(crate) after_update: bool,
 }
 
 /// Flags of `revu update`.
@@ -109,7 +109,7 @@ pub struct NewsArgs {
 pub struct UpdateArgs {
     /// Install even when the running binary is already the latest commit (`brew reinstall` under brew).
     #[arg(short, long)]
-    pub force: bool,
+    pub(crate) force: bool,
 }
 
 /// Flags of `revu login`.
@@ -119,13 +119,13 @@ pub struct LoginArgs {
     pub host: Option<String>,
     /// Read the token `glab` already holds instead of prompting (GitLab).
     #[arg(long, conflicts_with = "from_gh")]
-    pub from_glab: bool,
+    pub(crate) from_glab: bool,
     /// Read the token `gh` already holds instead of prompting (GitHub).
     #[arg(long)]
-    pub from_gh: bool,
+    pub(crate) from_gh: bool,
     /// Read the token from stdin (`-`) instead of prompting.
     #[arg(long, value_name = "-")]
-    pub token: Option<String>,
+    pub(crate) token: Option<String>,
 }
 
 /// Flags of `revu list`.
@@ -133,83 +133,83 @@ pub struct LoginArgs {
 pub struct ListArgs {
     /// Print the last fetched queue without touching the network.
     #[arg(long)]
-    pub cached: bool,
+    pub(crate) cached: bool,
 }
 
 /// What the TUI opens on.
 #[derive(Args, Debug)]
 pub struct TuiArgs {
     /// Open the TUI on this MR, in zen: `42`, `group/project!42` or an MR URL (quote `'!42'` in your shell).
-    pub mr: Option<String>,
+    pub(crate) mr: Option<String>,
 }
 
 /// The merge request a read command works on.
 #[derive(Args, Debug)]
 pub struct RefArgs {
     /// `group/project!42`, `!42` (project from the origin remote), an MR URL, or nothing for the current branch.
-    pub mr: Option<String>,
+    pub(crate) mr: Option<String>,
 }
 
 /// Arguments of `revu comment`.
 #[derive(Args, Debug)]
 pub struct CommentArgs {
     /// `group/project!42`, `!42`, or an MR URL.
-    pub mr: String,
+    pub(crate) mr: String,
     /// Anchor the comment on a line of the new file: `src/a.rs:13`.
     #[arg(long, value_name = "PATH:LINE")]
-    pub at: Option<String>,
+    pub(crate) at: Option<String>,
     /// The comment, markdown.
     #[arg(required = true, trailing_var_arg = true)]
-    pub text: Vec<String>,
+    pub(crate) text: Vec<String>,
 }
 
 /// Arguments of `revu share`.
 #[derive(Args, Debug)]
 pub struct ShareArgs {
     /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
-    pub mr: Option<String>,
+    pub(crate) mr: Option<String>,
     /// Which `[share.targets.<name>]` to post to; needed when there are several.
     #[arg(long)]
-    pub target: Option<String>,
+    pub(crate) target: Option<String>,
     /// A line of context under the link.
     #[arg(long)]
-    pub note: Option<String>,
+    pub(crate) note: Option<String>,
     /// Send without asking.
     #[arg(long)]
-    pub yes: bool,
+    pub(crate) yes: bool,
     /// Print the message and send nothing.
     #[arg(long)]
-    pub dry_run: bool,
+    pub(crate) dry_run: bool,
 }
 
 /// Arguments of `revu approve`.
 #[derive(Args, Debug)]
 pub struct ApproveArgs {
     /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
-    pub mr: Option<String>,
+    pub(crate) mr: Option<String>,
     /// Remove your approval instead.
     #[arg(long)]
-    pub undo: bool,
+    pub(crate) undo: bool,
 }
 
 /// Arguments of `revu merge`.
 #[derive(Args, Debug)]
 pub struct MergeArgs {
     /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
-    pub mr: Option<String>,
+    pub(crate) mr: Option<String>,
     /// Merge without asking.
     #[arg(long, short)]
-    pub yes: bool,
+    pub(crate) yes: bool,
 }
 
 /// Arguments of `revu ready`.
 #[derive(Args, Debug)]
 pub struct ReadyArgs {
     /// `group/project!42`, `!42`, an MR URL, or nothing for the current branch.
-    pub mr: Option<String>,
+    pub(crate) mr: Option<String>,
     /// Make it a draft instead.
     #[arg(long)]
-    pub undo: bool,
+    pub(crate) undo: bool,
 }
 
 /// `revu ai`: one subcommand.
@@ -217,7 +217,7 @@ pub struct ReadyArgs {
 pub struct AiArgs {
     /// What to do with the AI keys, or a question.
     #[command(subcommand)]
-    pub command: AiCommand,
+    pub(crate) command: AiCommand,
 }
 
 impl AiArgs {
@@ -229,7 +229,7 @@ impl AiArgs {
 
 /// The `revu ai` subcommands.
 #[derive(Subcommand, Debug)]
-pub enum AiCommand {
+pub(crate) enum AiCommand {
     /// Store a provider's key in the keychain; the config still has to switch it on.
     Login(AiLoginArgs),
     /// Forget a provider's key.
@@ -247,29 +247,29 @@ pub enum AiCommand {
 #[derive(Args, Debug)]
 pub struct AiAskArgs {
     /// `group/project!42`, `!42`, an MR URL, or `-` for the current branch.
-    pub mr: String,
+    pub(crate) mr: String,
     /// Ask about one file instead of the whole MR.
     #[arg(long, value_name = "PATH")]
-    pub file: Option<String>,
+    pub(crate) file: Option<String>,
     /// With `--file`: the new-side lines asked about, `13` or `13-20`.
     #[arg(long, value_name = "LINES", requires = "file")]
-    pub lines: Option<String>,
+    pub(crate) lines: Option<String>,
     /// The question; a summary of the MR (or an explanation of the file) without one.
     #[arg(trailing_var_arg = true)]
-    pub question: Vec<String>,
+    pub(crate) question: Vec<String>,
 }
 
 /// Flags of `revu ai login`.
 #[derive(Args, Debug)]
 pub struct AiLoginArgs {
     /// Which provider.
-    pub provider: crate::ai::Provider,
+    pub(crate) provider: crate::ai::Provider,
     /// Read the key from stdin (`-`) instead of prompting.
     #[arg(long, value_name = "-")]
-    pub token: Option<String>,
+    pub(crate) token: Option<String>,
     /// Reuse the TypeSafe key slack-tui keeps in the keychain.
     #[arg(long, conflicts_with = "token")]
-    pub from_slack_tui: bool,
+    pub(crate) from_slack_tui: bool,
 }
 
 #[cfg(test)]

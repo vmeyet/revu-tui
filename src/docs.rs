@@ -9,19 +9,19 @@ use anyhow::Result;
 use clap::{Arg, Command, CommandFactory};
 
 /// One config key as the reference page shows it.
-pub struct Setting {
+pub(crate) struct Setting {
     /// The TOML table, `""` for the top level.
-    pub table: &'static str,
-    pub key: &'static str,
-    pub kind: &'static str,
-    pub default: &'static str,
-    pub meaning: &'static str,
+    pub(crate) table: &'static str,
+    pub(crate) key: &'static str,
+    pub(crate) kind: &'static str,
+    pub(crate) default: &'static str,
+    pub(crate) meaning: &'static str,
     /// A TOML value the config accepts for this key, as written after `key = `.
-    pub example: &'static str,
+    pub(crate) example: &'static str,
 }
 
 /// Every key `config.toml` accepts; a test fails when `src/config.rs` gains a field missing here.
-pub const SETTINGS: &[Setting] = &[
+const SETTINGS: &[Setting] = &[
     Setting {
         table: "",
         key: "host",
@@ -386,7 +386,7 @@ pub const SETTINGS: &[Setting] = &[
 ];
 
 /// Each page: its path under `docs/reference/`, then its text.
-pub fn pages() -> Result<Vec<(&'static str, String)>> {
+pub(crate) fn pages() -> Result<Vec<(&'static str, String)>> {
     Ok(vec![("keys.md", keys_page()?), ("config.md", config_page()), ("commands.md", commands_page())])
 }
 
@@ -477,7 +477,7 @@ fn config_page() -> String {
 }
 
 /// Every setting with its example value, as one TOML document; a test parses it.
-pub fn example_toml() -> String {
+fn example_toml() -> String {
     let mut lines = vec![];
     let mut current = None;
     for setting in SETTINGS.iter().filter(|s| !s.meaning.starts_with("Not used")) {
@@ -610,9 +610,9 @@ mod tests {
         ];
         let nested = ["queue", "review", "tui", "ai", "open", "notify", "keys", "hosts", "share", "usage", "agent"];
         for (name, table) in tables {
-            let start = source.find(&format!("pub struct {name} {{")).unwrap_or_else(|| panic!("struct {name}"));
+            let start = source.find(&format!("pub(crate) struct {name} {{")).unwrap_or_else(|| panic!("struct {name}"));
             let body = &source[start..start + source[start..].find("\n}").unwrap()];
-            for field in body.lines().filter_map(|l| l.trim().strip_prefix("pub ")).filter_map(|l| l.split(':').next()) {
+            for field in body.lines().filter_map(|l| l.trim().strip_prefix("pub(crate) ")).filter_map(|l| l.split(':').next()) {
                 let field = field.trim();
                 if field.starts_with("struct") || (table.is_empty() && nested.contains(&field)) {
                     continue;
@@ -627,9 +627,9 @@ mod tests {
     #[test]
     fn every_queue_rule_is_documented() {
         let source = include_str!("forge/rules.rs");
-        let start = source.find("pub struct Rules {").expect("struct Rules");
+        let start = source.find("pub(crate) struct Rules {").expect("struct Rules");
         let body = &source[start..start + source[start..].find("\n}").unwrap()];
-        let fields = body.lines().filter_map(|l| l.trim().strip_prefix("pub ")).filter(|l| !l.starts_with("struct"));
+        let fields = body.lines().filter_map(|l| l.trim().strip_prefix("pub(crate) ")).filter(|l| !l.starts_with("struct"));
         for field in fields.filter_map(|l| l.split(':').next()) {
             assert!(
                 SETTINGS.iter().any(|s| s.table == "queue.rules" && s.key == field.trim()),

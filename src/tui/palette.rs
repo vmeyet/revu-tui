@@ -10,7 +10,7 @@ use crate::fuzzy;
 
 /// What the palette searches, from the first character typed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Mode {
+pub(crate) enum Mode {
     #[default]
     Mrs,
     Commands,
@@ -22,7 +22,7 @@ pub enum Mode {
 
 impl Mode {
     /// The character that switches to this mode, and the word the prompt shows.
-    pub fn prompt(self) -> (&'static str, &'static str) {
+    pub(crate) fn prompt(self) -> (&'static str, &'static str) {
         match self {
             Mode::Mrs => ("", "MRs · @author !42 ~label draft:no"),
             Mode::Commands => (">", "commands"),
@@ -33,7 +33,7 @@ impl Mode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Target {
+pub(crate) enum Target {
     Mr(MrKey),
     /// A kept answer, by its index in the list `a h` found.
     Answer(usize),
@@ -43,17 +43,17 @@ pub enum Target {
 
 /// One row of the palette's list: what it shows, and where `enter` goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Candidate {
-    pub label: String,
+pub(crate) struct Candidate {
+    pub(crate) label: String,
     /// Dim text after the label: the author of an MR.
-    pub detail: String,
-    pub target: Target,
+    pub(crate) detail: String,
+    pub(crate) target: Target,
 }
 
-pub const MAX_SHOWN: usize = 12;
+pub(super) const MAX_SHOWN: usize = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Command {
+pub(crate) enum Command {
     /// Open an MR: `!42`, `#42`, `42`, `group/project!42`, `owner/repo#42`.
     Go(String),
     Open,
@@ -98,7 +98,7 @@ pub enum Command {
 
 impl Command {
     /// The action the command is counted and listed as.
-    pub fn act(&self) -> Act {
+    pub(crate) fn act(&self) -> Act {
         match self {
             Self::Go(_) => Act::GoCommand,
             Self::Open => Act::OpenCommand,
@@ -127,7 +127,7 @@ impl Command {
 
 /// The commands the list shows for what is typed: all of them on an empty line, else ranked by
 /// how well their verb matches, at most `MAX_SHOWN`.
-pub fn verbs_for(input: &str) -> Vec<(&'static str, &'static str)> {
+pub(super) fn verbs_for(input: &str) -> Vec<(&'static str, &'static str)> {
     let verb = input.split_whitespace().next().unwrap_or("");
     let verbs = act::verbs().map(|verb| (verb.word, verb.does));
     let ranked: Vec<(&str, &str)> = if verb.is_empty() {
@@ -138,7 +138,7 @@ pub fn verbs_for(input: &str) -> Vec<(&'static str, &'static str)> {
     ranked.into_iter().take(MAX_SHOWN).collect()
 }
 
-pub fn parse(line: &str) -> Result<Command, String> {
+pub(crate) fn parse(line: &str) -> Result<Command, String> {
     let line = line.trim().trim_start_matches(':').trim();
     let (verb, rest) = line.split_once(char::is_whitespace).map_or((line, ""), |(v, r)| (v, r.trim()));
     match verb {
@@ -184,7 +184,7 @@ pub fn parse(line: &str) -> Result<Command, String> {
 
 /// What the token under the cursor can complete to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Slot {
+pub(super) enum Slot {
     Verb,
     Mr,
     Setting,
@@ -194,7 +194,7 @@ pub enum Slot {
     Free,
 }
 
-pub fn slot(line: &str) -> Slot {
+pub(crate) fn slot(line: &str) -> Slot {
     let line = line.trim_start_matches(':');
     let mut tokens = line.split_whitespace();
     let verb = tokens.next().unwrap_or("");
@@ -213,13 +213,13 @@ pub fn slot(line: &str) -> Slot {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Palette {
-    pub mode: Mode,
+pub(crate) struct Palette {
+    pub(crate) mode: Mode,
     /// What is typed after the mode's character.
-    pub input: String,
+    pub(crate) input: String,
     /// The highlighted row of the list, for MRs and files.
-    pub selected: usize,
-    pub history: Vec<String>,
+    pub(crate) selected: usize,
+    pub(crate) history: Vec<String>,
     history_at: Option<usize>,
     cycle: Option<Cycling>,
 }
@@ -232,12 +232,12 @@ struct Cycling {
 }
 
 impl Palette {
-    pub fn new(mode: Mode, history: Vec<String>) -> Self {
+    pub(crate) fn new(mode: Mode, history: Vec<String>) -> Self {
         Self { mode, history, ..Self::default() }
     }
 
     /// `>` as the very first character switches the mode instead of being typed.
-    pub fn type_char(&mut self, c: char) {
+    pub(super) fn type_char(&mut self, c: char) {
         match (self.mode, self.input.is_empty(), c) {
             (Mode::Mrs, true, '>') => self.mode = Mode::Commands,
             _ => self.input.push(c),
@@ -248,7 +248,7 @@ impl Palette {
 
     /// Erases a character; on an empty line it steps back to MRs first. `false` once there is
     /// nothing left to erase, which closes the palette.
-    pub fn backspace(&mut self) -> bool {
+    pub(super) fn backspace(&mut self) -> bool {
         self.selected = 0;
         self.cycle = None;
         if self.input.pop().is_some() {
@@ -260,17 +260,17 @@ impl Palette {
     }
 
     /// Still on the command's name: `↑ ↓` walk the list of commands, not the arguments.
-    pub fn naming_command(&self) -> bool {
+    pub(super) fn naming_command(&self) -> bool {
         self.mode == Mode::Commands && !self.input.contains(char::is_whitespace)
     }
 
     /// Moves the highlight in a list of `len` rows, staying inside it.
-    pub fn move_by(&mut self, delta: isize, len: usize) {
+    pub(super) fn move_by(&mut self, delta: isize, len: usize) {
         self.selected = if len == 0 { 0 } else { self.selected.saturating_add_signed(delta).min(len - 1) };
     }
 
     /// Replaces the token being typed with the next candidate for its slot.
-    pub fn complete(&mut self, candidates: &[String], toward: Toward) {
+    pub(super) fn complete(&mut self, candidates: &[String], toward: Toward) {
         let cycling = if let Some(mut cycling) = self.cycle.take() {
             cycling.cycle.advance(toward);
             cycling
@@ -286,7 +286,7 @@ impl Palette {
     }
 
     /// The grey rest of the best completion for the token being typed, as a shell shows it.
-    pub fn ghost(&self, candidates: &[String]) -> Option<String> {
+    pub(crate) fn ghost(&self, candidates: &[String]) -> Option<String> {
         if self.cycle.is_some() {
             return None;
         }
@@ -295,7 +295,7 @@ impl Palette {
     }
 
     /// Accepts the ghost text, as `→` does in a shell.
-    pub fn accept(&mut self, candidates: &[String]) {
+    pub(crate) fn accept(&mut self, candidates: &[String]) {
         if let Some(rest) = self.ghost(candidates) {
             self.input.push_str(&rest);
             if !self.input.ends_with('=') {
@@ -304,11 +304,11 @@ impl Palette {
         }
     }
 
-    pub fn hint(&self) -> Option<String> {
+    pub(crate) fn hint(&self) -> Option<String> {
         Some(self.cycle.as_ref()?.cycle.hint(str::to_owned))
     }
 
-    pub fn history_up(&mut self) {
+    pub(super) fn history_up(&mut self) {
         if self.history.is_empty() {
             return;
         }
@@ -318,7 +318,7 @@ impl Palette {
         self.cycle = None;
     }
 
-    pub fn history_down(&mut self) {
+    pub(super) fn history_down(&mut self) {
         let Some(at) = self.history_at else { return };
         if at + 1 >= self.history.len() {
             self.history_at = None;
@@ -331,7 +331,7 @@ impl Palette {
     }
 
     /// Takes the line, remembers it, and leaves the palette empty for the next command.
-    pub fn submit(&mut self) -> String {
+    pub(super) fn submit(&mut self) -> String {
         let line = std::mem::take(&mut self.input).trim().to_owned();
         if !line.is_empty() && self.history.last() != Some(&line) {
             self.history.push(line.clone());

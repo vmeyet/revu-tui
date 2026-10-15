@@ -5,7 +5,7 @@ use crate::forge::QueueMr;
 
 /// The mark before a queue row's title, most pressing first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mark {
+pub(crate) enum Mark {
     /// The last note asks me something.
     WaitsOnMe,
     /// Someone is blocked on this review.
@@ -66,11 +66,11 @@ impl App {
     }
 
     /// Whether Jev has said anything yet: the queue grows its mark column only then.
-    pub fn triaged(&self) -> bool {
+    pub(crate) fn triaged(&self) -> bool {
         !self.verdicts.is_empty() || !self.readings.is_empty()
     }
 
-    pub fn mark(&self, mr: &QueueMr) -> Option<Mark> {
+    pub(crate) fn mark(&self, mr: &QueueMr) -> Option<Mark> {
         let key = mr.key();
         let waits = self.readings.get(&key).is_some_and(|(_, r)| r.waits_on_me);
         let verdict = self.verdicts.get(&key).filter(|v| v.fresh_for(mr));
@@ -87,7 +87,7 @@ impl App {
     }
 
     /// Each file's risk in the open MR, as Jev read it.
-    pub fn risk(&self, path: &str) -> Option<triage::Risk> {
+    pub(crate) fn risk(&self, path: &str) -> Option<triage::Risk> {
         let open = self.open.as_ref()?;
         self.readings.get(&open.key)?.1.risks.get(path).copied()
     }

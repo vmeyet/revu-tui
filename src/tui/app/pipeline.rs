@@ -10,14 +10,14 @@ const WHILE_RUNNING: Duration = Duration::from_secs(15);
 
 /// The pane while it is open: what the forge said, the job under the cursor, the next refresh.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pipeline {
-    pub run: Run,
-    pub selected: usize,
-    pub due: Option<Instant>,
+pub(crate) struct Pipeline {
+    pub(crate) run: Run,
+    pub(crate) selected: usize,
+    pub(crate) due: Option<Instant>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Run {
+pub(crate) enum Run {
     Waiting,
     /// Nothing ran on the head commit.
     Nothing,
@@ -30,7 +30,7 @@ impl Pipeline {
         Self { run: Run::Waiting, selected: 0, due: None }
     }
 
-    pub fn jobs(&self) -> Vec<&Job> {
+    pub(crate) fn jobs(&self) -> Vec<&Job> {
         match &self.run {
             Run::Ready(checks) => checks.jobs().collect(),
             _ => vec![],

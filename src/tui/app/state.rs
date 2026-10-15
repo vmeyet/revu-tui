@@ -14,260 +14,260 @@ const SLOW_DOWN: u32 = 5;
 
 /// What the app is started with; everything else it learns from `Incoming`.
 #[derive(Clone, Debug)]
-pub struct Settings {
-    pub theme: Theme,
-    pub host: String,
-    pub me: String,
+pub(crate) struct Settings {
+    pub(crate) theme: Theme,
+    pub(crate) host: String,
+    pub(crate) me: String,
     /// The project of the checkout `revu` runs in; `None` outside one or with `--all`.
-    pub project: Option<ProjectPath>,
+    pub(crate) project: Option<ProjectPath>,
     /// The terminal's own background, when it said: `:set theme=` tints the new theme from it.
-    pub ground: Option<u32>,
+    pub(crate) ground: Option<u32>,
     /// Jev is switched on and holds a key: the queue and the files get its marks.
-    pub triage: bool,
+    pub(crate) triage: bool,
     /// Claude's model, when it is switched on and holds a key: `a` asks it.
-    pub ask: Option<String>,
+    pub(crate) ask: Option<String>,
     /// `[notify] enabled`: a macOS notification when an MR lands in To review.
-    pub notify: bool,
+    pub(crate) notify: bool,
     /// The hosts the queue draws from: which forge each MR is on, and its row's tag.
-    pub hosts: crate::forge::Hosts,
+    pub(crate) hosts: crate::forge::Hosts,
     /// `[keys]`: the user's keys, each standing for revu's default ones.
-    pub keymap: crate::keymap::Keymap,
+    pub(crate) keymap: crate::keymap::Keymap,
     /// How the terminal draws pictures, asked once at start; `None` when it cannot or `[tui] images = false`.
-    pub pictures: Option<ratatui_image::picker::Picker>,
+    pub(crate) pictures: Option<ratatui_image::picker::Picker>,
     /// `[tui] queue`: two-line rows, or one.
-    pub queue_layout: crate::config::QueueLayout,
+    pub(crate) queue_layout: crate::config::QueueLayout,
     /// How wide the diff reads in zen; `None` grows it with the screen.
-    pub zen_width: Option<u16>,
+    pub(crate) zen_width: Option<u16>,
     /// `[tui] narrow_width` and `wide_width`.
-    pub widths: crate::config::Widths,
+    pub(crate) widths: crate::config::Widths,
     /// `[tui] tap_bar`: a row of labels to tap under the compact layout.
-    pub tap_bar: bool,
+    pub(crate) tap_bar: bool,
     /// `[queue.views]`, in name order: saved filters `'` and the digits apply.
     /// `[share]`: where `Y` can post an MR, the bare target first.
-    pub share: Vec<crate::share::Target>,
+    pub(crate) share: Vec<crate::share::Target>,
     /// The target I last shared to on each host, read once at start: `Y` offers it first.
-    pub last_share: crate::share::LastShare,
-    pub views: Vec<(String, String)>,
+    pub(crate) last_share: crate::share::LastShare,
+    pub(crate) views: Vec<(String, String)>,
     /// `[queue] prefetch`: how many MRs that need me are loaded ahead; 0 turns it off.
-    pub prefetch: usize,
+    pub(crate) prefetch: usize,
     /// `[tui] ascii`: reactions in plain words, for terminals that draw emoji at the wrong width.
-    pub ascii: bool,
+    pub(crate) ascii: bool,
     /// The reactions I gave on each host, read once at start: the picker offers the most used first.
-    pub reactions: crate::reactions::History,
+    pub(crate) reactions: crate::reactions::History,
     /// `[keys] quit_confirm`: `q` and `ctrl-c` need a second press.
-    pub quit_confirm: bool,
+    pub(crate) quit_confirm: bool,
     /// `[usage] enabled`: count the actions used and the time per screen, from this tally on.
-    pub usage: Option<crate::usage::Tally>,
+    pub(crate) usage: Option<crate::usage::Tally>,
     /// revu's own changelog, and how far the reader had got in it.
-    pub whats_new: super::WhatsNew,
+    pub(crate) whats_new: super::WhatsNew,
     /// The keys of the config this revu ignores, toasted at start.
-    pub ignored_settings: Vec<String>,
+    pub(crate) ignored_settings: Vec<String>,
     /// `[agent] enabled`: `a g` opens an agent session on an MR.
-    pub agent: bool,
+    pub(crate) agent: bool,
 }
 
 /// When each background refresh is due; `None` until the first answer arrived.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Poll {
-    pub queue_due: Option<Instant>,
-    pub mr_due: Option<Instant>,
-    pub discussions_due: Option<Instant>,
+pub(crate) struct Poll {
+    pub(crate) queue_due: Option<Instant>,
+    pub(crate) mr_due: Option<Instant>,
+    pub(crate) discussions_due: Option<Instant>,
 }
 
 #[derive(Debug)]
-pub struct App {
-    pub theme: Theme,
-    pub host: String,
-    pub me: String,
-    pub focus: Focus,
+pub(crate) struct App {
+    pub(crate) theme: Theme,
+    pub(crate) host: String,
+    pub(crate) me: String,
+    pub(crate) focus: Focus,
     /// The checkout's project; the queue shows only it unless `everywhere`.
-    pub project: Option<ProjectPath>,
-    pub everywhere: bool,
-    pub sections: Option<Sections>,
+    pub(crate) project: Option<ProjectPath>,
+    pub(crate) everywhere: bool,
+    pub(crate) sections: Option<Sections>,
     /// When each MR was last opened here, so the queue can mark what moved since.
-    pub opened: HashMap<MrKey, DateTime<Utc>>,
-    pub queue_selected: usize,
-    pub queue_scroll: usize,
-    pub filter: String,
+    pub(crate) opened: HashMap<MrKey, DateTime<Utc>>,
+    pub(crate) queue_selected: usize,
+    pub(crate) queue_scroll: usize,
+    pub(crate) filter: String,
     /// The saved view the filter came from, named in the queue title until the filter changes.
-    pub view: Option<String>,
+    pub(crate) view: Option<String>,
     /// Where `Y` can post an MR.
-    pub share_targets: Vec<crate::share::Target>,
+    pub(crate) share_targets: Vec<crate::share::Target>,
     /// The target I last shared to on each host, kept as I share.
-    pub last_share: crate::share::LastShare,
+    pub(crate) last_share: crate::share::LastShare,
     /// The post being prepared; nothing is sent before its preview gets a `y`.
-    pub sharing: Option<super::Sharing>,
-    pub views: Vec<(String, String)>,
+    pub(crate) sharing: Option<super::Sharing>,
+    pub(crate) views: Vec<(String, String)>,
     /// The filter row is taking keys.
-    pub filtering: bool,
+    pub(crate) filtering: bool,
     /// Queue sections folded to their header; Done starts folded.
     /// Long diff lines wrap under their text instead of ending in `…`, once `w` chose; until then the layout does.
-    pub wrap: Option<bool>,
+    pub(crate) wrap: Option<bool>,
     /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.
-    pub zen: bool,
+    pub(crate) zen: bool,
     /// The last frame was too narrow for the right pane beside the diff.
-    pub narrow: bool,
+    pub(crate) narrow: bool,
     /// The last frame showed the compact layout: one page at a time, full screen.
-    pub compact: bool,
+    pub(crate) compact: bool,
     /// The last frame was compact and too short for the rows around the page.
-    pub short: bool,
+    pub(crate) short: bool,
     /// `[tui] tap_bar`: the compact layout ends on a row of labels to tap.
-    pub tap_bar: bool,
+    pub(crate) tap_bar: bool,
     /// The labels of the tap bar, as this frame drew them.
-    pub taps: Vec<super::TapSpot>,
+    pub(crate) taps: Vec<super::TapSpot>,
     /// How wide the diff reads in zen, `[tui] zen_width`; `None` grows it with the screen.
-    pub zen_width: Option<u16>,
+    pub(crate) zen_width: Option<u16>,
     /// The terminal widths the layout turns on, `[tui] narrow_width` and `wide_width`.
-    pub widths: crate::config::Widths,
+    pub(crate) widths: crate::config::Widths,
     /// The MR zen just switched to, shown on top for a moment: when, and what it says.
-    pub zen_switch: Option<(Instant, String)>,
+    pub(crate) zen_switch: Option<(Instant, String)>,
     /// Notifications that arrived in zen, sent when it ends.
-    pub quiet_notices: Vec<Action>,
+    pub(crate) quiet_notices: Vec<Action>,
     /// What the forge's rate limit says, copied in by the loop each tick.
-    pub rate: crate::forge::RateLimit,
+    pub(crate) rate: crate::forge::RateLimit,
     /// What changed in the open MR since the reader last pressed a key: `● 2 new notes`.
-    pub news: Option<String>,
+    pub(crate) news: Option<String>,
     /// A commit waiting for `y`; every key answers it first.
-    pub confirm: Option<super::Confirm>,
+    pub(crate) confirm: Option<super::Confirm>,
     /// The reaction picker `+` opened on a note; every key answers it first.
-    pub react: Option<super::Pick>,
+    pub(crate) react: Option<super::Pick>,
     /// The reactions I gave on each host, counted as I give them.
-    pub reactions: crate::reactions::History,
+    pub(crate) reactions: crate::reactions::History,
     /// What `/` looks for in the diff, while it is typed and after, until `esc`.
-    pub search: Option<super::Search>,
+    pub(crate) search: Option<super::Search>,
     /// The answers `a h` found kept for the open MR, which the search box lists.
-    pub past_answers: Vec<super::PastAnswer>,
-    pub ascii: bool,
-    pub notify: bool,
-    pub hosts: crate::forge::Hosts,
+    pub(crate) past_answers: Vec<super::PastAnswer>,
+    pub(crate) ascii: bool,
+    pub(crate) notify: bool,
+    pub(crate) hosts: crate::forge::Hosts,
     /// What To review held at the last fresh answer, so only newcomers are announced.
-    pub seen: Option<super::notify::Seen>,
+    pub(crate) seen: Option<super::notify::Seen>,
     /// How rows sit inside the sections: `s` sorts, `S` groups by author.
-    pub queue_view: super::QueueView,
+    pub(crate) queue_view: super::QueueView,
     /// The MRs pinned in this scope: PINNED shows them above every section.
-    pub pins: BTreeSet<MrKey>,
-    pub queue_layout: crate::config::QueueLayout,
-    pub queue_loading: bool,
+    pub(crate) pins: BTreeSet<MrKey>,
+    pub(crate) queue_layout: crate::config::QueueLayout,
+    pub(crate) queue_loading: bool,
     /// The last load failed: with nothing to show, the pane says so until one succeeds or `r` asks again.
-    pub queue_failed: bool,
+    pub(crate) queue_failed: bool,
     /// How many MRs to load ahead after each fresh queue.
-    pub prefetch_limit: usize,
+    pub(crate) prefetch_limit: usize,
     /// A plan held back while an MR was being opened: it goes out once that MR arrived.
-    pub prefetch_due: bool,
+    pub(crate) prefetch_due: bool,
     /// The next MR that needs me, offered in the status line after a publish.
-    pub offer: Option<MrKey>,
+    pub(crate) offer: Option<MrKey>,
     /// Per started MR: the queue shows how far each review went.
-    pub progress: HashMap<MrKey, crate::review::Progress>,
+    pub(crate) progress: HashMap<MrKey, crate::review::Progress>,
     /// The cursor's place as last saved, so a resting cursor is written once.
-    pub spot_saved: Option<(MrKey, super::Spot)>,
+    pub(crate) spot_saved: Option<(MrKey, super::Spot)>,
     /// Where the cursor rests and since when: it is saved once it rested a moment.
-    pub spot_pending: Option<(super::Spot, Instant)>,
-    pub open: Option<Open>,
+    pub(crate) spot_pending: Option<(super::Spot, Instant)>,
+    pub(crate) open: Option<Open>,
     /// The MR being fetched for the first time; the review pane shows a spinner until it lands.
-    pub opening: Option<MrKey>,
+    pub(crate) opening: Option<MrKey>,
     /// First half of `z`, `[` or `]`.
     /// The first key of a two-key binding of the user's, waiting for its second.
-    pub held: Option<crossterm::event::KeyEvent>,
+    pub(crate) held: Option<crossterm::event::KeyEvent>,
     /// The key pressed over and over right now, as a held key repeats.
-    pub repeat: Option<super::repeat::Repeat>,
+    pub(crate) repeat: Option<super::repeat::Repeat>,
     /// A quit key pressed once, and when: the same key again inside the window quits.
-    pub quitting: Option<(super::quit::QuitKey, Instant)>,
-    pub quit_confirm: bool,
+    pub(crate) quitting: Option<(super::quit::QuitKey, Instant)>,
+    pub(crate) quit_confirm: bool,
     /// What this session counted since the last flush; `None` when `[usage]` is off.
-    pub usage: Option<crate::usage::Tally>,
+    pub(crate) usage: Option<crate::usage::Tally>,
     /// Up to when screen time is counted, and what stops it.
-    pub usage_clock: super::usage::Clock,
+    pub(crate) usage_clock: super::usage::Clock,
     /// The j or k in a row moving through the diff.
-    pub walk: super::usage::Walk,
+    pub(crate) walk: super::usage::Walk,
     /// When zen was left with a key, and on which MR.
-    pub left_zen: Option<(Instant, MrKey)>,
+    pub(crate) left_zen: Option<(Instant, MrKey)>,
     /// What the key in flight did, named by its handler where the same key does something else elsewhere.
-    pub key_did: Option<crate::act::Act>,
-    pub keymap: crate::keymap::Keymap,
-    pub pending: Option<char>,
+    pub(crate) key_did: Option<crate::act::Act>,
+    pub(crate) keymap: crate::keymap::Keymap,
+    pub(crate) pending: Option<char>,
     /// The input row is open for this; `buffer` holds what is typed.
-    pub input: Option<Input>,
-    pub buffer: Field,
+    pub(crate) input: Option<Input>,
+    pub(crate) buffer: Field,
     /// Text typed for a target and left with `esc`, by target: it comes back when the box opens there again.
-    pub unsent: HashMap<String, String>,
+    pub(crate) unsent: HashMap<String, String>,
     /// Per MR, the draft writes the forge has not answered yet and whether it refused one.
-    pub draft_writes: HashMap<MrKey, super::writes::DraftWrites>,
+    pub(crate) draft_writes: HashMap<MrKey, super::writes::DraftWrites>,
     /// Where the compose box was opened from: the keys go back there once it closes.
-    pub compose_from: Focus,
+    pub(crate) compose_from: Focus,
     /// The diff row the cursor left for the compose box under another row; it goes back there once the box closes.
-    pub compose_left: Option<crate::review::Row>,
-    pub publish: Option<Publish>,
+    pub(crate) compose_left: Option<crate::review::Row>,
+    pub(crate) publish: Option<Publish>,
     /// The MR description modal.
-    pub brief: Option<Brief>,
+    pub(crate) brief: Option<Brief>,
     /// revu's own changelog, and how far the reader had got in it before this start.
-    pub whats_new: super::WhatsNew,
+    pub(crate) whats_new: super::WhatsNew,
     /// The first row of the `:news` page while it is open.
-    pub news_page: Option<usize>,
+    pub(crate) news_page: Option<usize>,
     /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
-    pub links: Vec<crate::tui::ui::Link>,
+    pub(crate) links: Vec<crate::tui::ui::Link>,
     /// Where the panes were drawn this frame, so the wheel scrolls the one under the pointer.
-    pub areas: super::Areas,
+    pub(crate) areas: super::Areas,
     /// The rows of text a drag can select, as this frame drew them.
-    pub text_rows: Vec<crate::tui::drag::TextRow>,
+    pub(crate) text_rows: Vec<crate::tui::drag::TextRow>,
     /// The list rows a click can pick, as this frame drew them.
-    pub list_rows: Vec<super::ListRow>,
+    pub(crate) list_rows: Vec<super::ListRow>,
     /// Where the left button went down, so a release elsewhere is a drag and not a click.
-    pub pressed: Option<ratatui::layout::Position>,
+    pub(crate) pressed: Option<ratatui::layout::Position>,
     /// The text a drag covers; it stays lit after the copy until the next key or click.
-    pub drag: Option<crate::tui::drag::Drag>,
+    pub(crate) drag: Option<crate::tui::drag::Drag>,
     /// Pictures of the comments the right pane shows, each fetched once.
-    pub thumbs: crate::tui::images::Thumbs,
+    pub(crate) thumbs: crate::tui::images::Thumbs,
     /// What frames read from the open review, kept until it changes.
-    pub kept: super::Kept,
+    pub(crate) kept: super::Kept,
     /// The right pane as the last frame laid it out.
-    pub pane_layout: Option<crate::tui::thread_view::PaneLayout>,
+    pub(crate) pane_layout: Option<crate::tui::thread_view::PaneLayout>,
     /// The conversations the diff draws under their lines, as the last frame laid them out.
-    pub thread_rows: crate::tui::thread_view::InlineLayout,
+    pub(crate) thread_rows: crate::tui::thread_view::InlineLayout,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
-    pub viewing: Option<crate::open::View>,
+    pub(crate) viewing: Option<crate::open::View>,
     /// `[agent] enabled`: `a g` opens an agent session on an MR.
-    pub agent: bool,
+    pub(crate) agent: bool,
     /// The sessions `a g` found for an MR, which the search box lists.
-    pub session_pick: Option<super::SessionPick>,
+    pub(crate) session_pick: Option<super::SessionPick>,
     /// An agent session ready for the terminal; the loop takes it and hands the terminal over.
-    pub handoff: Option<crate::agent::Handoff>,
+    pub(crate) handoff: Option<crate::agent::Handoff>,
     /// What the editor's text turned into; the loop drains it after `apply`.
-    pub composed: Vec<Action>,
+    pub(crate) composed: Vec<Action>,
     /// The key list, open.
-    pub help: Option<crate::tui::help::Help>,
-    pub palette: Option<crate::tui::palette::Palette>,
-    pub palette_history: Vec<String>,
-    pub ground: Option<u32>,
+    pub(crate) help: Option<crate::tui::help::Help>,
+    pub(crate) palette: Option<crate::tui::palette::Palette>,
+    pub(crate) palette_history: Vec<String>,
+    pub(crate) ground: Option<u32>,
     /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off for good once it fails.
-    pub triage: bool,
+    pub(crate) triage: bool,
     /// Claude's model while `a` may ask it; `:ai off` clears it for the session.
-    pub ask_model: Option<String>,
+    pub(crate) ask_model: Option<String>,
     /// What the config switched on at start, so `:ai on` can bring it back after `:ai off`.
-    pub ai_configured: (bool, Option<String>),
+    pub(crate) ai_configured: (bool, Option<String>),
     /// A question already went out this session: the first one says where the MR goes.
-    pub asked: bool,
+    pub(crate) asked: bool,
     /// The id of the last answer started.
-    pub next_answer: u64,
+    pub(crate) next_answer: u64,
     /// The local id of the last draft written.
-    pub next_draft: u64,
+    pub(crate) next_draft: u64,
     /// The number of the last state save sent: one that finishes after a newer one is dropped.
-    pub next_save: u64,
+    pub(crate) next_save: u64,
     /// What Jev said about each queue MR.
-    pub verdicts: HashMap<MrKey, crate::ai::triage::Verdict>,
+    pub(crate) verdicts: HashMap<MrKey, crate::ai::triage::Verdict>,
     /// MRs Jev is being asked about right now, so a new queue does not ask twice.
-    pub triage_asked: std::collections::HashSet<MrKey>,
+    pub(crate) triage_asked: std::collections::HashSet<MrKey>,
     /// What Jev read in each opened MR, with the head commit it read.
-    pub readings: HashMap<MrKey, (crate::forge::Sha, crate::ai::triage::Reading)>,
-    pub toast: Option<Toast>,
+    pub(crate) readings: HashMap<MrKey, (crate::forge::Sha, crate::ai::triage::Reading)>,
+    pub(crate) toast: Option<Toast>,
     /// Since when refreshes fail while a cached view is shown.
-    pub offline: Option<Instant>,
-    pub poll: Poll,
-    pub should_quit: bool,
-    pub started: Instant,
+    pub(crate) offline: Option<Instant>,
+    pub(crate) poll: Poll,
+    pub(crate) should_quit: bool,
+    pub(crate) started: Instant,
     /// Set by the event loop each time it wakes, so nothing below reads the clock.
-    pub now: Instant,
+    pub(crate) now: Instant,
     /// Wall clock, for ages next to notes and MRs; set with `now`.
-    pub today: DateTime<Utc>,
+    pub(crate) today: DateTime<Utc>,
 }
 
 /// A config this revu partly ignores says so before what is new in revu, which shows again on `:news`.
@@ -279,7 +279,7 @@ fn first_toast(settings: &Settings, now: Instant) -> Option<Toast> {
 }
 
 impl App {
-    pub fn new(settings: Settings) -> Self {
+    pub(crate) fn new(settings: Settings) -> Self {
         let now = Instant::now();
         let toast = first_toast(&settings, now);
         Self {
@@ -395,24 +395,24 @@ impl App {
         }
     }
 
-    pub fn start(&self) -> Vec<Action> {
+    pub(crate) fn start(&self) -> Vec<Action> {
         vec![Action::LoadQueue { scope: self.scope(), from_cache: true }]
     }
 
     /// `revu 42`: the MR opens in zen at once, and the queue loads behind it.
-    pub fn start_on(&mut self, key: MrKey) -> Vec<Action> {
+    pub(crate) fn start_on(&mut self, key: MrKey) -> Vec<Action> {
         let opening = self.open_key(key);
         self.zen = true;
         [self.start(), opening].concat()
     }
 
     /// The project the queue is limited to, `None` for every project.
-    pub fn scope(&self) -> Option<ProjectPath> {
+    pub(crate) fn scope(&self) -> Option<ProjectPath> {
         self.project.clone().filter(|_| !self.everywhere)
     }
 
     /// Called on every tick: what the clock says is due, at most once per due date.
-    pub fn tick(&mut self) -> Vec<Action> {
+    pub(crate) fn tick(&mut self) -> Vec<Action> {
         self.count_time();
         let mut actions = vec![];
         if self.poll.queue_due.is_some_and(|due| self.now >= due) && !self.queue_loading {
@@ -475,7 +475,7 @@ impl App {
         self.poll = Poll { queue_due: later, mr_due: later, discussions_due: later };
     }
 
-    pub fn loading(&self) -> bool {
+    pub(crate) fn loading(&self) -> bool {
         self.queue_loading || self.opening.is_some()
     }
 }

@@ -16,7 +16,7 @@ const DATE: &str = "%Y-%m-%d";
 
 /// A release number, `0.6.0`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Version(u64, u64, u64);
+pub(crate) struct Version(u64, u64, u64);
 
 impl FromStr for Version {
     type Err = anyhow::Error;
@@ -39,14 +39,14 @@ impl fmt::Display for Version {
 /// How far a binary or a reader got: a version, and how many `Unreleased` entries past it, written `0.6.0+2`.
 /// A build from `main` keeps the number of the last release, so only that count tells two of them apart.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Position {
-    pub version: Version,
-    pub unreleased: usize,
+pub(crate) struct Position {
+    pub(crate) version: Version,
+    pub(crate) unreleased: usize,
 }
 
 impl Position {
     /// Before every release: everything is new past it.
-    pub const START: Self = Self { version: Version(0, 0, 0), unreleased: 0 };
+    pub(crate) const START: Self = Self { version: Version(0, 0, 0), unreleased: 0 };
 }
 
 impl FromStr for Position {
@@ -70,35 +70,35 @@ impl fmt::Display for Position {
 
 /// One change: what it is, where it applies, and how to use it. A fix may have nothing to press.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct Entry {
-    pub what: String,
+pub(crate) struct Entry {
+    pub(crate) what: String,
     #[serde(rename = "where")]
-    pub place: String,
-    pub how: Option<String>,
+    pub(crate) place: String,
+    pub(crate) how: Option<String>,
 }
 
 /// What one version brought; `version` is `None` for what waits on `main` for the next release.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct Section {
+pub(crate) struct Section {
     #[serde(serialize_with = "title_of")]
-    pub version: Option<Version>,
-    pub date: Option<String>,
-    pub new: Vec<Entry>,
-    pub fixed: Vec<Entry>,
-    pub removed: Vec<Entry>,
+    pub(crate) version: Option<Version>,
+    pub(crate) date: Option<String>,
+    pub(crate) new: Vec<Entry>,
+    pub(crate) fixed: Vec<Entry>,
+    pub(crate) removed: Vec<Entry>,
 }
 
 impl Section {
-    pub fn title(&self) -> String {
+    pub(crate) fn title(&self) -> String {
         title(self.version)
     }
 
-    pub fn count(&self) -> usize {
+    pub(crate) fn count(&self) -> usize {
         self.new.len() + self.fixed.len() + self.removed.len()
     }
 
     /// The groups that hold something, in the order they read: New, Fixed, then Removed.
-    pub fn groups(&self) -> impl Iterator<Item = (&'static str, &[Entry])> {
+    pub(crate) fn groups(&self) -> impl Iterator<Item = (&'static str, &[Entry])> {
         let groups = [("New", self.new.as_slice()), ("Fixed", self.fixed.as_slice()), ("Removed", self.removed.as_slice())];
         groups.into_iter().filter(|(_, entries)| !entries.is_empty())
     }
@@ -122,18 +122,18 @@ enum Group {
 
 /// Every section, newest first, as the binary running `running` carries them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Changelog {
-    pub running: Version,
-    pub sections: Vec<Section>,
+pub(crate) struct Changelog {
+    pub(crate) running: Version,
+    pub(crate) sections: Vec<Section>,
 }
 
 impl Changelog {
     /// The changelog this binary was built with.
-    pub fn embedded() -> Result<Self> {
+    pub(crate) fn embedded() -> Result<Self> {
         Self::parse(TEXT, env!("CARGO_PKG_VERSION").parse()?)
     }
 
-    pub fn parse(text: &str, running: Version) -> Result<Self> {
+    pub(crate) fn parse(text: &str, running: Version) -> Result<Self> {
         let lines: Vec<&str> = text.lines().collect();
         let sections = parts(&lines, SECTION).iter().skip(1).map(|part| section(part)).collect::<Result<Vec<_>>>()?;
         check_order(&sections, running)?;
@@ -141,25 +141,25 @@ impl Changelog {
     }
 
     /// Where this binary stands.
-    pub fn position(&self) -> Position {
+    pub(crate) fn position(&self) -> Position {
         Position { version: self.running, unreleased: self.unreleased().map_or(0, Section::count) }
     }
 
     /// Where a reader nothing is remembered about is taken to stand: on the release before this one.
-    pub fn previous(&self) -> Position {
+    pub(crate) fn previous(&self) -> Position {
         let version = self.sections.iter().filter_map(|s| s.version).find(|v| *v < self.running);
         version.map_or(Position::START, |version| Position { version, unreleased: 0 })
     }
 
     /// The sections that came after `seen`, newest first; `Unreleased` only while it holds something.
-    pub fn since(&self, seen: Position) -> Vec<&Section> {
+    pub(crate) fn since(&self, seen: Position) -> Vec<&Section> {
         let unreleased = self.unreleased().filter(|_| self.unreleased_since(seen) > 0);
         let released = self.sections.iter().filter(|s| s.version.is_some_and(|version| version > seen.version));
         unreleased.into_iter().chain(released).collect()
     }
 
     /// How many entries came after `seen`.
-    pub fn count_since(&self, seen: Position) -> usize {
+    pub(crate) fn count_since(&self, seen: Position) -> usize {
         let released: usize = self.since(seen).into_iter().filter(|s| s.version.is_some()).map(Section::count).sum();
         released + self.unreleased_since(seen)
     }

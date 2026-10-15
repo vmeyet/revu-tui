@@ -56,7 +56,7 @@ use tokio::sync::mpsc;
 const IDLE_TICK: Duration = Duration::from_secs(1);
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out; on `start` in zen when given.
-pub async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
+pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
     let theme = match ctx.config.tui.theme.as_deref() {
         Some(name) => theme::Theme::named(name)
             .ok_or_else(|| anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", ")))?,

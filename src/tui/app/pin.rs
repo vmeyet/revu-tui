@@ -4,7 +4,7 @@ use super::{Action, App, Focus};
 use crate::forge::{MrKey, QueueMr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PinChange {
+pub(crate) enum PinChange {
     Pin,
     Unpin,
 }

@@ -9,7 +9,7 @@ use url::Url;
 
 /// What fetching a comment picture needs besides the API client.
 #[derive(Clone, Debug)]
-pub struct Downloads {
+pub(super) struct Downloads {
     /// Signed links an attachment redirects to are fetched with this client, which has no token.
     client: reqwest::Client,
     /// Which redirect targets `client` may follow: GitHub's user content in real use.
@@ -43,7 +43,7 @@ enum Link {
 
 impl Client {
     /// The bytes of a picture a comment points at; links elsewhere are not fetched.
-    pub async fn image(&self, url: &str) -> Result<Vec<u8>> {
+    pub(crate) async fn image(&self, url: &str) -> Result<Vec<u8>> {
         let Some(link) = Link::parse(url, &self.host) else { bail!("not a picture on {}", self.host) };
         match link {
             Link::Attachment(path) => self.attachment(&path).await,

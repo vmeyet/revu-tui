@@ -6,23 +6,23 @@ use std::collections::BTreeSet;
 const OPEN_DEPTH: usize = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TreeRow {
+pub(crate) enum TreeRow {
     Folder { path: String, name: String, depth: usize, open: bool, files: usize },
     File { index: usize, name: String, depth: usize },
 }
 
 /// Which folders the reader flipped away from their default, by path.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct TreeFolds {
+pub(crate) struct TreeFolds {
     flipped: BTreeSet<String>,
 }
 
 impl TreeFolds {
-    pub fn is_open(&self, folder: &str) -> bool {
+    pub(crate) fn is_open(&self, folder: &str) -> bool {
         (depth_of(folder) < OPEN_DEPTH) != self.flipped.contains(folder)
     }
 
-    pub fn toggled(&self, folder: &str) -> Self {
+    pub(crate) fn toggled(&self, folder: &str) -> Self {
         let mut flipped = self.flipped.clone();
         if !flipped.remove(folder) {
             flipped.insert(folder.to_owned());
@@ -31,7 +31,7 @@ impl TreeFolds {
     }
 
     /// Opens every folder above `path`, so a file jumped to is visible in the tree.
-    pub fn revealing(&self, path: &str) -> Self {
+    pub(crate) fn revealing(&self, path: &str) -> Self {
         let mut next = self.clone();
         for folder in folders_above(path) {
             if !next.is_open(&folder) {
@@ -43,7 +43,7 @@ impl TreeFolds {
 }
 
 /// The rows a tree shows: every folder whose parents are open, and the files inside open folders.
-pub fn rows(files: &[File], folds: &TreeFolds) -> Vec<TreeRow> {
+pub(crate) fn rows(files: &[File], folds: &TreeFolds) -> Vec<TreeRow> {
     let mut order: Vec<(usize, &str)> = files.iter().enumerate().map(|(i, f)| (i, f.new_path.as_str())).collect();
     order.sort_by_cached_key(|(_, path)| sort_key(path));
     let mut rows = vec![];

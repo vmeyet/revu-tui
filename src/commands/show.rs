@@ -41,10 +41,10 @@ struct Shown<'a> {
 
 #[derive(Serialize)]
 pub(crate) struct FileStat {
-    pub old_path: String,
-    pub new_path: String,
-    pub additions: usize,
-    pub deletions: usize,
+    pub(crate) old_path: String,
+    pub(crate) new_path: String,
+    pub(crate) additions: usize,
+    pub(crate) deletions: usize,
 }
 
 impl From<&DiffFile> for FileStat {

@@ -11,13 +11,13 @@ use std::process::Command;
 use std::sync::Arc;
 
 /// Above this, a file is for the browser, not a terminal program.
-pub const MAX_BYTES: usize = 10 * 1024 * 1024;
+pub(crate) const MAX_BYTES: usize = 10 * 1024 * 1024;
 const MAX_PATH: usize = 4096;
 const FALLBACK: &str = "less";
 
 /// The line of `side`'s file a row stands for: its own number when it has one, the nearest line
 /// that exists on that side when it does not (a removed line has no head number).
-pub fn line_for(review: &Review, row: &Row, side: Side) -> u32 {
+pub(crate) fn line_for(review: &Review, row: &Row, side: Side) -> u32 {
     match row {
         Row::Line { file, hunk, index } => nearest(&review.files[*file].hunks[*hunk], *index, side),
         Row::Pair { file, hunk, removed, added } => {
@@ -35,7 +35,7 @@ pub fn line_for(review: &Review, row: &Row, side: Side) -> u32 {
 }
 
 /// Where an anchor sits in `side`'s file: its own line on that side, else the nearest one there.
-pub fn line_of_anchor(review: &Review, anchor: &Anchor, side: Side) -> u32 {
+pub(crate) fn line_of_anchor(review: &Review, anchor: &Anchor, side: Side) -> u32 {
     if anchor.side == side {
         return anchor.line;
     }
@@ -75,7 +75,7 @@ fn start(hunk: &Hunk, side: Side) -> u32 {
 
 /// The command for `path`: the longest matching `[open.files]` glob, then `[open] default`,
 /// then `$VISUAL`, `$EDITOR`, and `less`.
-pub fn command_for(path: &str, open: &config::Open, visual: Option<&str>, editor: Option<&str>) -> String {
+pub(crate) fn command_for(path: &str, open: &config::Open, visual: Option<&str>, editor: Option<&str>) -> String {
     let matching = open.files.iter().filter(|(glob, _)| matches(glob, path)).max_by_key(|(glob, _)| glob.len());
     matching
         .map(|(_, command)| command.as_str())
@@ -100,7 +100,7 @@ fn basename(path: &str) -> &str {
 /// The argv to run: the command's own words with `{file}` and `{line}` filled in when it names
 /// `{file}`, else its program's built-in template; `read_only` adds the program's read-only flag.
 /// No shell ever sees it: quotes group words, nothing expands.
-pub fn argv(command: &str, file: &str, line: u32, read_only: bool) -> Result<Vec<String>> {
+pub(crate) fn argv(command: &str, file: &str, line: u32, read_only: bool) -> Result<Vec<String>> {
     let words = shell_words::split(command).with_context(|| format!("`{command}` does not split into words"))?;
     let Some(program) = words.first() else { bail!("the command is empty") };
     for word in &words {
@@ -120,7 +120,7 @@ pub fn argv(command: &str, file: &str, line: u32, read_only: bool) -> Result<Vec
 }
 
 /// Checks a command the way [`argv`] will read it, for the config loader.
-pub fn check(command: &str) -> Result<()> {
+pub(crate) fn check(command: &str) -> Result<()> {
     argv(command, "file", 1, false).map(drop)
 }
 
@@ -152,7 +152,7 @@ fn template(program: &str) -> (&'static [&'static str], &'static [&'static str])
 }
 
 /// A path the forge sent, checked before anything touches the disk: relative, no `..`, no NUL.
-pub fn safe_path(path: &str) -> Result<()> {
+pub(crate) fn safe_path(path: &str) -> Result<()> {
     let trusted = !path.is_empty()
         && path.len() <= MAX_PATH
         && !path.starts_with('/')
@@ -166,14 +166,14 @@ pub fn safe_path(path: &str) -> Result<()> {
 
 /// Where the bytes come from: the reader's own checkout when it sits on the very commit, else the forge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Source {
+pub(crate) enum Source {
     Checkout,
     Forge,
 }
 
 impl Source {
     /// `checkout` is the project of the checkout and the commit its `HEAD` points at.
-    pub fn pick(project: &ProjectPath, sha: &str, checkout: Option<(&ProjectPath, &str)>) -> Self {
+    pub(crate) fn pick(project: &ProjectPath, sha: &str, checkout: Option<(&ProjectPath, &str)>) -> Self {
         match checkout {
             Some((there, head)) if there == project && head == sha => Source::Checkout,
             _ => Source::Forge,
@@ -183,20 +183,20 @@ impl Source {
 
 /// The checkout `revu` runs in: its root, and the project its `origin` names on the forge's host.
 #[derive(Clone, Debug)]
-pub struct Checkout {
-    pub root: PathBuf,
-    pub project: ProjectPath,
+pub(crate) struct Checkout {
+    pub(crate) root: PathBuf,
+    pub(crate) project: ProjectPath,
 }
 
 impl Checkout {
-    pub fn find(dir: &Path, host: &str) -> Option<Self> {
+    pub(crate) fn find(dir: &Path, host: &str) -> Option<Self> {
         let project = crate::mrref::checkout_project(dir, host)?;
         let root = git(dir, &["rev-parse", "--show-toplevel"])?;
         Some(Self { root: PathBuf::from(root), project })
     }
 
     /// Asked each time: the reader may have checked out another commit since `revu` started.
-    pub async fn head(&self) -> Option<String> {
+    pub(crate) async fn head(&self) -> Option<String> {
         let output = tokio::process::Command::new("git").arg("-C").arg(&self.root).args(["rev-parse", "HEAD"]).output().await.ok()?;
         printed_text(output)
     }
@@ -214,14 +214,14 @@ fn printed_text(output: std::process::Output) -> Option<String> {
 
 /// A file ready to hand over: the argv, what to say about it, and the private copy it may live in.
 #[derive(Clone, Debug)]
-pub struct View {
-    pub argv: Vec<String>,
+pub(crate) struct View {
+    pub(crate) argv: Vec<String>,
     /// `charge.rs:42`, for the status line on the way back.
-    pub shown: String,
+    pub(crate) shown: String,
     /// Said while the program runs: whose file this is.
-    pub note: Option<String>,
+    pub(crate) note: Option<String>,
     /// The private directory of a fetched file, held only so that dropping the view removes it.
-    pub _copy: Option<Arc<tempfile::TempDir>>,
+    pub(crate) _copy: Option<Arc<tempfile::TempDir>>,
 }
 
 impl PartialEq for View {
@@ -231,13 +231,13 @@ impl PartialEq for View {
 }
 
 impl View {
-    pub fn program(&self) -> &str {
+    pub(crate) fn program(&self) -> &str {
         self.argv.first().map_or("", |p| basename(p))
     }
 }
 
 /// `bytes` under `name` in a fresh private directory (0700), the file itself read-only (0400).
-pub fn write_private(name: &str, bytes: &[u8]) -> Result<(tempfile::TempDir, PathBuf)> {
+pub(crate) fn write_private(name: &str, bytes: &[u8]) -> Result<(tempfile::TempDir, PathBuf)> {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::Builder::new().prefix("revu-view-").tempdir().context("creating a private directory")?;
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -248,7 +248,7 @@ pub fn write_private(name: &str, bytes: &[u8]) -> Result<(tempfile::TempDir, Pat
 }
 
 /// Runs the program on the terminal as it is and waits; the error says what the reader can do.
-pub fn run(argv: &[String]) -> Result<(), String> {
+pub(crate) fn run(argv: &[String]) -> Result<(), String> {
     let Some((program, args)) = argv.split_first() else { return Err("nothing to run".into()) };
     let name = basename(program);
     let status = Command::new(program).args(args).status().map_err(|e| match e.kind() {

@@ -14,15 +14,15 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// One MR link found in the command's output.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Link {
-    pub host: String,
-    pub project: ProjectPath,
-    pub number: u64,
+pub(crate) struct Link {
+    pub(crate) host: String,
+    pub(crate) project: ProjectPath,
+    pub(crate) number: u64,
 }
 
 /// Every GitLab (`/-/merge_requests/N`) and GitHub (`/pull/N`) link in `text`, first mention
 /// first, each once. JSON-escaped slashes, markdown links and chat link syntax all read.
-pub fn links(text: &str) -> Vec<Link> {
+pub(crate) fn links(text: &str) -> Vec<Link> {
     let text = text.replace("\\/", "/");
     let mut found: Vec<Link> = Vec::new();
     for (at, _) in text.match_indices("http") {
@@ -56,7 +56,7 @@ fn link_of(url: &str) -> Option<Link> {
 
 /// Runs `command` (split into words, never through a shell) and returns what it printed.
 /// A failure, a timeout or a missing program is an error naming the command.
-pub async fn output(command: &str) -> Result<String> {
+pub(crate) async fn output(command: &str) -> Result<String> {
     output_within(command, TIMEOUT).await
 }
 
@@ -66,20 +66,20 @@ async fn output_within(command: &str, limit: Duration) -> Result<String> {
 
 /// What the ready command said last for a scope, and the MRs it named that no list of mine holds.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Source {
-    pub output: String,
-    pub outside: Vec<QueueMr>,
+pub(crate) struct Source {
+    pub(crate) output: String,
+    pub(crate) outside: Vec<QueueMr>,
 }
 
 impl Source {
     /// The MR keys the output names, on a host I am logged in to; inside a checkout (`scope`),
     /// only its project's on the main host.
-    pub fn named(&self, main_host: &str, others: &[Home], scope: Option<&ProjectPath>) -> Vec<MrKey> {
+    pub(crate) fn named(&self, main_host: &str, others: &[Home], scope: Option<&ProjectPath>) -> Vec<MrKey> {
         named(&self.output, main_host, others, scope)
     }
 
     /// The sections with the named MRs moved to Ready.
-    pub fn apply(
+    pub(crate) fn apply(
         &self,
         sections: Sections,
         main_host: &str,
@@ -108,7 +108,7 @@ fn named(output: &str, main_host: &str, others: &[Home], scope: Option<&ProjectP
 
 /// A source from a fresh output: the named MRs no list holds are fetched one by one (outside a
 /// checkout only: inside one, every open MR of the project is already listed).
-pub async fn resolve(output: String, main: &Forge, others: &[Home], scope: Option<&ProjectPath>, queues: &[&Queue]) -> Source {
+pub(crate) async fn resolve(output: String, main: &Forge, others: &[Home], scope: Option<&ProjectPath>, queues: &[&Queue]) -> Source {
     let listed: HashSet<MrKey> = queues.iter().flat_map(|q| q.listed()).collect();
     let missing: Vec<MrKey> = if scope.is_some() {
         vec![]
@@ -121,7 +121,7 @@ pub async fn resolve(output: String, main: &Forge, others: &[Home], scope: Optio
 }
 
 /// The command reads as words; checked when the config loads.
-pub fn check(command: &str) -> Result<()> {
+pub(crate) fn check(command: &str) -> Result<()> {
     crate::program::check(command, "queue.ready.command")
 }
 

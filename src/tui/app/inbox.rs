@@ -12,16 +12,16 @@ const SETTLE: Duration = Duration::from_secs(1);
 
 /// A place in a diff that survives a new commit: the file, and the line on each side it had.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Spot {
-    pub path: String,
+pub(crate) struct Spot {
+    pub(crate) path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub old: Option<u32>,
+    pub(crate) old: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub new: Option<u32>,
+    pub(crate) new: Option<u32>,
 }
 
 /// Where the row at `index` sits, when it is a file or a line.
-pub fn spot_at(review: &Review, row: &Row) -> Option<Spot> {
+fn spot_at(review: &Review, row: &Row) -> Option<Spot> {
     let at = |file: usize, old: Option<u32>, new: Option<u32>| Some(Spot { path: review.files.get(file)?.new_path.clone(), old, new });
     let line = |file: usize, hunk: usize, index: usize| review.files.get(file)?.hunks.get(hunk)?.lines.get(index);
     match *row {
@@ -44,7 +44,7 @@ impl App {
     /// The MRs that need me, in the order review mode walks them: READY, then TO REVIEW, sorted
     /// and filtered as the queue shows them, folded sections and stacks included; what I already
     /// approved is skipped.
-    pub fn review_order(&self) -> Vec<MrKey> {
+    fn review_order(&self) -> Vec<MrKey> {
         let Some(sections) = &self.sections else { return vec![] };
         let mut keys = vec![];
         for (name, mrs) in [("READY", &sections.ready), ("TO REVIEW", &sections.to_review)] {
@@ -95,7 +95,7 @@ impl App {
     }
 
     /// The place of the cursor in the open MR, when it is on a file or a line.
-    pub fn spot(&self) -> Option<Spot> {
+    pub(crate) fn spot(&self) -> Option<Spot> {
         let open = self.open.as_ref()?;
         spot_at(&open.review, open.row()?)
     }
@@ -142,7 +142,7 @@ impl App {
     }
 
     /// How far I went in the MR `key`, when I started it.
-    pub fn progress_of(&self, key: &MrKey) -> Option<Progress> {
+    pub(crate) fn progress_of(&self, key: &MrKey) -> Option<Progress> {
         self.progress.get(key).copied().filter(|p| p.viewed > 0)
     }
 
@@ -153,7 +153,7 @@ impl App {
 }
 
 /// `viewed 7/12` with a thin bar of `width` cells, for the review header.
-pub fn progress_bar(viewed: usize, files: usize, width: usize) -> (String, String) {
+pub(crate) fn progress_bar(viewed: usize, files: usize, width: usize) -> (String, String) {
     let done = if files == 0 { 0 } else { (viewed * width).div_ceil(files).min(width) };
     ("━".repeat(done), "─".repeat(width - done))
 }

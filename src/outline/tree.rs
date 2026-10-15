@@ -8,7 +8,7 @@ use std::collections::HashMap;
 const BRIDGES: usize = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Direction {
+pub(crate) enum Direction {
     /// Under each symbol, the symbols it calls.
     Calls,
     /// Under each symbol, the symbols that call it.
@@ -16,7 +16,7 @@ pub enum Direction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Item {
+pub(crate) enum Item {
     /// A changed symbol, by its index in the changes, shown in full here.
     Changed(usize),
     /// A changed symbol shown in full elsewhere.
@@ -30,30 +30,30 @@ pub enum Item {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Branch {
-    pub item: Item,
+pub(crate) struct Branch {
+    pub(crate) item: Item,
     /// The name matched several symbols: the link may be wrong.
-    pub unsure: bool,
+    pub(crate) unsure: bool,
     /// Where the call linking it to its parent is.
-    pub site: Option<Site>,
-    pub children: Vec<Branch>,
+    pub(crate) site: Option<Site>,
+    pub(crate) children: Vec<Branch>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Site {
-    pub path: String,
-    pub side: Side,
-    pub line: u32,
+pub(crate) struct Site {
+    pub(crate) path: String,
+    pub(crate) side: Side,
+    pub(crate) line: u32,
 }
 
 /// How the tree is cut: which changes may be roots, and whether every unchanged function shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Shape {
-    pub direction: Direction,
+pub(crate) struct Shape {
+    pub(crate) direction: Direction,
     /// Private changes may be roots too.
-    pub all: bool,
+    pub(crate) all: bool,
     /// Every unchanged function called, not only those linking two changes.
-    pub stack: bool,
+    pub(crate) stack: bool,
 }
 
 /// One symbol of the graph: a change, or an unchanged symbol of a changed file, read on `side`.
@@ -80,7 +80,7 @@ struct Graph<'a> {
 
 /// Which part of the MR a tree shows: its code, or its tests and the code each one calls.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Section {
+pub(crate) enum Section {
     Code,
     Tests,
 }
@@ -110,7 +110,7 @@ struct Walk<'g> {
 }
 
 impl Direction {
-    pub fn reversed(self) -> Self {
+    pub(crate) fn reversed(self) -> Self {
         match self {
             Self::Calls => Self::CalledBy,
             Self::CalledBy => Self::Calls,

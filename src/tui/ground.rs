@@ -14,7 +14,7 @@ const QUERY: &[u8] = b"\x1b]11;?\x1b\\\x1b[c";
 
 /// Asks the terminal for its background as `0xRRGGBB`; `None` when there is no terminal,
 /// no answer within [`WAIT`], or an answer that is not a colour.
-pub fn ask() -> Option<u32> {
+pub(crate) fn ask() -> Option<u32> {
     use std::io::IsTerminal;
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return None;
@@ -79,7 +79,7 @@ fn attributes_seen(answer: &[u8]) -> bool {
 }
 
 /// Reads `ESC ] 11 ; rgb:R/G/B` ended by BEL or ST, each channel 1 to 4 hex digits scaled to 8 bits.
-pub fn parse(answer: &[u8]) -> Option<u32> {
+pub(crate) fn parse(answer: &[u8]) -> Option<u32> {
     let text = std::str::from_utf8(answer).ok()?;
     let start = text.find("\x1b]11;rgb:")? + "\x1b]11;rgb:".len();
     let rest = &text[start..];

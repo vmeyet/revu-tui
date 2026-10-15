@@ -11,9 +11,9 @@ use std::sync::Arc;
 
 /// The tree while it is open: which folders the reader flipped, and the row under the cursor.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Tree {
-    pub folds: TreeFolds,
-    pub selected: usize,
+pub(crate) struct Tree {
+    pub(crate) folds: TreeFolds,
+    pub(crate) selected: usize,
 }
 
 impl Open {

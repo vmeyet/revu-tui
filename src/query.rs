@@ -19,8 +19,8 @@ const SMALL: u32 = 100;
 const LARGE: u32 = 500;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Query {
-    pub words: Vec<String>,
+pub(crate) struct Query {
+    pub(crate) words: Vec<String>,
     authors: Vec<String>,
     numbers: Vec<u64>,
     labels: Vec<String>,
@@ -38,17 +38,17 @@ enum Size {
 
 impl Query {
     /// Every term must make sense, or the error says which does not: saved views are checked this way.
-    pub fn parse(text: &str) -> Result<Self, String> {
+    pub(crate) fn parse(text: &str) -> Result<Self, String> {
         tokens(text).into_iter().try_fold(Self::default(), |query, token| query.with_token(&token))
     }
 
     /// What is being typed: a term that does not make sense yet (`draft:`, a lone `@`) is left out.
-    pub fn lenient(text: &str) -> Self {
+    pub(crate) fn lenient(text: &str) -> Self {
         tokens(text).into_iter().fold(Self::default(), |query, token| query.clone().with_token(&token).unwrap_or(query))
     }
 
     /// The MR passes every term but the free words, which callers match their own way.
-    pub fn keeps(&self, mr: &QueueMr, me: &str) -> bool {
+    pub(crate) fn keeps(&self, mr: &QueueMr, me: &str) -> bool {
         let author = |name: &String| {
             let name = if name == "me" { me.to_lowercase() } else { name.to_lowercase() };
             mr.author.to_lowercase().contains(&name) || mr.author_name.to_lowercase().contains(&name)
@@ -68,13 +68,13 @@ impl Query {
     }
 
     /// Every free word appears in the title, the author, the project or the branch.
-    pub fn words_found(&self, mr: &QueueMr) -> bool {
+    fn words_found(&self, mr: &QueueMr) -> bool {
         let haystack = format!("{} {} {} {} {}", mr.title, mr.author, mr.author_name, mr.project, mr.source_branch).to_lowercase();
         self.words.iter().all(|word| haystack.contains(word.as_str()))
     }
 
     /// The queue filter: every term, words included.
-    pub fn matches(&self, mr: &QueueMr, me: &str) -> bool {
+    pub(crate) fn matches(&self, mr: &QueueMr, me: &str) -> bool {
         self.keeps(mr, me) && self.words_found(mr)
     }
 

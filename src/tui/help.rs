@@ -12,14 +12,14 @@ use ratatui::widgets::{Clear, Padding, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
 /// The groups, in the order a review goes.
-pub const GROUPS: [Group; 8] =
+pub(crate) const GROUPS: [Group; 8] =
     [Group::Move, Group::Queue, Group::View, Group::Comment, Group::Thread, Group::Outline, Group::Ask, Group::App];
 
 /// The overlay while open: how far it scrolled, and whether it lists every key or the focused pane's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Help {
-    pub scroll: usize,
-    pub every_key: bool,
+pub(crate) struct Help {
+    pub(crate) scroll: usize,
+    pub(crate) every_key: bool,
 }
 
 /// Padding inside the frame: two columns on each side, one row above and below.
@@ -50,7 +50,7 @@ fn groups(every_key: bool, focus: Focus) -> impl Iterator<Item = Group> {
 }
 
 /// The last row the list can scroll to: its groups in one column, so scrolling never stops short.
-pub fn last_row(app: &App, every_key: bool) -> usize {
+pub(super) fn last_row(app: &App, every_key: bool) -> usize {
     column_height(&shown(app, every_key).iter().map(|(_, keys)| keys.len()).collect::<Vec<_>>()).saturating_sub(1)
 }
 
@@ -60,7 +60,7 @@ fn column_height(sizes: &[usize]) -> usize {
 }
 
 /// How many groups go in the left column so both columns end as close as possible; order is kept.
-pub fn split(sizes: &[usize]) -> usize {
+pub(crate) fn split(sizes: &[usize]) -> usize {
     (1..sizes.len()).min_by_key(|&at| column_height(&sizes[..at]).max(column_height(&sizes[at..]))).unwrap_or(sizes.len())
 }
 
@@ -108,7 +108,7 @@ fn natural_width(groups: &[(&str, Vec<(String, &str)>)]) -> usize {
 }
 
 /// The overlay, centred, at most 90 % of the screen each way; it scrolls by `scroll` rows when taller than that.
-pub fn draw(f: &mut Frame<'_>, app: &App, area: Rect, help: Help) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect, help: Help) {
     let groups = shown(app, help.every_key);
     let sizes: Vec<usize> = groups.iter().map(|(_, keys)| keys.len()).collect();
     let max_w = area.width * 9 / 10;

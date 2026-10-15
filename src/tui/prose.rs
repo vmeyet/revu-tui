@@ -11,7 +11,7 @@ use std::convert::identity;
 use std::ops::Range;
 
 /// The bar and the space after it.
-pub const GUTTER: usize = 2;
+pub(super) const GUTTER: usize = 2;
 /// The blank column between the two sides.
 const GAP: usize = 1;
 /// A run of unchanged blocks longer than this folds, its first and last block kept.
@@ -28,7 +28,7 @@ const PRESETS: [(&str, &str); 5] = [
 ];
 
 /// The rows of `old` and `new` drawn as prose in `width` columns, inline or `beside` each other, unchanged runs folded and open.
-pub fn render(old: &str, new: &str, width: usize, beside: bool, theme: Theme) -> Rows {
+pub(crate) fn render(old: &str, new: &str, width: usize, beside: bool, theme: Theme) -> Rows {
     let layout = if beside { Layout::Beside { half: width.saturating_sub(GAP) / 2 } } else { Layout::Inline };
     let settings = settings(theme, layout.side_width(width).saturating_sub(GUTTER));
     let look = Look { theme, palette: settings.theme.palette };
@@ -54,7 +54,7 @@ impl Layout {
 }
 
 /// mrk's settings in revu's colours: the preset of the same theme, or mrk's own for the ground, then every RGB colour revu has.
-pub fn settings(theme: Theme, width: usize) -> Settings {
+pub(crate) fn settings(theme: Theme, width: usize) -> Settings {
     let preset = PRESETS.iter().find(|(revu, _)| *revu == theme.name).and_then(|(_, mrk)| mrk::theme::find(mrk));
     let base = preset.unwrap_or_else(|| mrk::theme::default_for(appearance(theme.base)));
     let own = |colour: Color, fallback: Rgb| rgb(colour).unwrap_or(fallback);

@@ -12,7 +12,7 @@ const KEPT_ROWS: u16 = 2;
 
 impl App {
     /// Any key but the one finishing a quit calls the pending quit off, then does its own job.
-    pub fn handle_key(&mut self, key: KeyEvent) -> Vec<Action> {
+    pub(crate) fn handle_key(&mut self, key: KeyEvent) -> Vec<Action> {
         self.count_input();
         self.drag = None;
         let pending = self.quitting;

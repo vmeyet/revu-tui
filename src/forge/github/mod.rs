@@ -25,7 +25,7 @@ static FLAVOR: Flavor =
 /// for GitHub Enterprise. It also goes to the web host, for comment attachments only, since private
 /// ones answer nobody else. Redirects are refused and every URL is checked first.
 #[derive(Clone, Debug)]
-pub struct Client {
+pub(crate) struct Client {
     http: Transport,
     host: String,
     /// The GraphQL endpoint, relative to the REST base.
@@ -35,7 +35,7 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(credentials: &Credentials) -> Result<Self> {
+    pub(crate) fn new(credentials: &Credentials) -> Result<Self> {
         let web = format!("https://{}/", credentials.host);
         if credentials.host == "github.com" {
             Self::build(credentials, "https://api.github.com/", "graphql", &web)
@@ -46,7 +46,7 @@ impl Client {
 
     /// For tests: REST at `base`, GraphQL at `base/graphql`. The origin guard applies to that server.
     #[cfg(test)]
-    pub fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
+    pub(crate) fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
         let base = format!("{}/", base.trim_end_matches('/'));
         let client = Self::build(credentials, &base, "graphql", &base)?;
         Ok(Self { downloads: std::sync::Arc::new(client.downloads.trusting()), ..client })
@@ -65,11 +65,11 @@ impl Client {
         Ok(Self { http, host: credentials.host.clone(), graphql, downloads })
     }
 
-    pub fn host(&self) -> &str {
+    pub(crate) fn host(&self) -> &str {
         &self.host
     }
 
-    pub fn rate(&self) -> super::budget::RateLimit {
+    pub(crate) fn rate(&self) -> super::budget::RateLimit {
         self.http.rate()
     }
 
@@ -88,7 +88,7 @@ impl Client {
 }
 
 /// GitHub's page for one diff line: the PR's files, scrolled to `diff-sha256(path)` and the side.
-pub fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
+pub(crate) fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
     let anchor = format!("{:x}", Sha256::digest(path.as_bytes()));
     match (line.side(), line.number()) {
         (Side::New, Some(n)) => format!("{web_url}/files#diff-{anchor}R{n}"),

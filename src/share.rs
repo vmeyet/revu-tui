@@ -9,26 +9,26 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// A link titled with the MR's ref, then the note in italics when there is one.
-pub const DEFAULT_TEMPLATE: &str = "[{ref} {title}]({url})\n_{note}_";
+pub(crate) const DEFAULT_TEMPLATE: &str = "[{ref} {title}]({url})\n_{note}_";
 
 const PLACEHOLDERS: [&str; 8] = ["ref", "iid", "title", "url", "author", "project", "branch", "note"];
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// What a template can say about one MR.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Fields {
+pub(crate) struct Fields {
     /// `!1797` on GitLab, `#12` on GitHub.
-    pub reference: String,
-    pub number: u64,
-    pub title: String,
-    pub url: String,
-    pub author: String,
-    pub project: String,
-    pub branch: String,
+    pub(crate) reference: String,
+    pub(crate) number: u64,
+    pub(crate) title: String,
+    pub(crate) url: String,
+    pub(crate) author: String,
+    pub(crate) project: String,
+    pub(crate) branch: String,
 }
 
 impl Fields {
-    pub fn from_queue(mr: &QueueMr, kind: Kind) -> Self {
+    pub(crate) fn from_queue(mr: &QueueMr, kind: Kind) -> Self {
         Self {
             reference: format!("{}{}", kind.sigil(), mr.number),
             number: mr.number,
@@ -40,7 +40,7 @@ impl Fields {
         }
     }
 
-    pub fn from_mr(mr: &Mr, kind: Kind) -> Self {
+    pub(crate) fn from_mr(mr: &Mr, kind: Kind) -> Self {
         Self {
             reference: format!("{}{}", kind.sigil(), mr.number),
             number: mr.number,
@@ -55,16 +55,16 @@ impl Fields {
 
 /// One place to post to: the command that posts and the message it gets.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Target {
+pub(crate) struct Target {
     /// `None` for the bare `[share]` target, the key of `[share.targets.<name>]` otherwise.
-    pub name: Option<String>,
-    pub command: String,
-    pub template: String,
+    pub(crate) name: Option<String>,
+    pub(crate) command: String,
+    pub(crate) template: String,
 }
 
 impl Target {
     /// What the toast says after a post: `shared !42`, or `shared !42 to review`.
-    pub fn done(&self, reference: &str) -> String {
+    pub(crate) fn done(&self, reference: &str) -> String {
         match &self.name {
             Some(name) => format!("shared {reference} to {name}"),
             None => format!("shared {reference}"),
@@ -75,35 +75,35 @@ impl Target {
 /// The target I last shared to, by host: its name, `None` for the bare `[share]` one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LastShare(BTreeMap<String, Option<String>>);
+pub(crate) struct LastShare(BTreeMap<String, Option<String>>);
 
 impl LastShare {
     #[must_use]
-    pub fn with(&self, host: &str, target: Option<&str>) -> Self {
+    pub(crate) fn with(&self, host: &str, target: Option<&str>) -> Self {
         let mut hosts = self.0.clone();
         hosts.insert(host.to_owned(), target.map(str::to_owned));
         Self(hosts)
     }
 
     /// Where the last target of `host` sits in `targets`; the first one when it is unknown or gone.
-    pub fn index_in(&self, host: &str, targets: &[Target]) -> usize {
+    pub(crate) fn index_in(&self, host: &str, targets: &[Target]) -> usize {
         let Some(last) = self.0.get(host) else { return 0 };
         targets.iter().position(|target| target.name == *last).unwrap_or(0)
     }
 }
 
 /// The last targets kept in the cache; none when the file is missing or broken.
-pub fn last_share(cache: &Cache) -> LastShare {
+pub(crate) fn last_share(cache: &Cache) -> LastShare {
     cache.read(&keys::last_share()).unwrap_or_default()
 }
 
 /// Keeps `target` as the last one shared to on `host`, whatever other revu processes wrote meanwhile.
-pub fn remember(cache: &Cache, host: &str, target: Option<&str>) -> Result<LastShare> {
+pub(crate) fn remember(cache: &Cache, host: &str, target: Option<&str>) -> Result<LastShare> {
     cache.update(&keys::last_share(), |last: LastShare| last.with(host, target))
 }
 
 /// The targets the config names, the bare one first, then named ones in name order.
-pub fn targets(share: &config::Share) -> Vec<Target> {
+pub(crate) fn targets(share: &config::Share) -> Vec<Target> {
     let fallback = share.template.as_deref().unwrap_or(DEFAULT_TEMPLATE);
     let bare = share.command.iter().map(|command| Target { name: None, command: command.clone(), template: fallback.to_owned() });
     let named = share.targets.iter().map(|(name, target)| Target {
@@ -116,7 +116,7 @@ pub fn targets(share: &config::Share) -> Vec<Target> {
 
 /// The message for `fields`; every line naming `{note}` goes when the note is empty, so an
 /// optional `_{note}_` line never posts as `__`.
-pub fn render(template: &str, fields: &Fields, note: &str) -> String {
+pub(crate) fn render(template: &str, fields: &Fields, note: &str) -> String {
     let note = note.trim();
     template
         .lines()
@@ -139,7 +139,7 @@ fn fill(line: &str, fields: &Fields, note: &str) -> String {
 
 /// A `{word}` revu does not fill is a typo waiting to post as is: refused when the config loads.
 /// Braces around anything else (JSON, a code sample) are left alone.
-pub fn check_template(template: &str, key: &str) -> Result<()> {
+pub(crate) fn check_template(template: &str, key: &str) -> Result<()> {
     if template.trim().is_empty() {
         bail!("`{key}` is empty");
     }
@@ -165,7 +165,7 @@ pub(crate) fn placeholders(template: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Pipes `message` to the target's command; its output is not read further than for errors.
-pub async fn send(target: &Target, message: &str) -> Result<()> {
+pub(crate) async fn send(target: &Target, message: &str) -> Result<()> {
     crate::program::run(&target.command, Some(message), "share command", TIMEOUT).await.map(|_| ())
 }
 

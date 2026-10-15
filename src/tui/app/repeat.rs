@@ -10,7 +10,7 @@ const STEPS: [(Duration, isize); 2] = [(Duration::from_secs(1), 4), (Duration::f
 
 /// The same key pressed at short intervals since `since`, last at `last`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Repeat {
+pub(crate) struct Repeat {
     code: KeyCode,
     since: Instant,
     last: Instant,
@@ -18,7 +18,7 @@ pub struct Repeat {
 
 impl Repeat {
     /// The run after `code` pressed at `now`: the same one when it goes on soon enough, else a new one.
-    pub fn after(run: Option<Self>, code: KeyCode, now: Instant) -> Self {
+    pub(crate) fn after(run: Option<Self>, code: KeyCode, now: Instant) -> Self {
         match run {
             Some(run) if run.code == code && now.saturating_duration_since(run.last) < GAP => Self { last: now, ..run },
             _ => Self { code, since: now, last: now },
@@ -26,7 +26,7 @@ impl Repeat {
     }
 
     /// How many rows one move covers at this point of the run.
-    pub fn step(self) -> isize {
+    pub(crate) fn step(self) -> isize {
         let held = self.last.saturating_duration_since(self.since);
         STEPS.iter().find(|(after, _)| held >= *after).map_or(1, |(_, step)| *step)
     }

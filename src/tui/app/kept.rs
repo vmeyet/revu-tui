@@ -11,10 +11,10 @@ use std::sync::Arc;
 /// A shared slice compared by identity: a review keeps it until a fetch replaces it, and the held
 /// copy stops its memory from being reused by the next one.
 #[derive(Debug)]
-pub struct ByIdentity<T: ?Sized>(Arc<T>);
+struct ByIdentity<T: ?Sized>(Arc<T>);
 
 impl<T: ?Sized> ByIdentity<T> {
-    pub fn new(shared: &Arc<T>) -> Self {
+    pub(crate) fn new(shared: &Arc<T>) -> Self {
         Self(Arc::clone(shared))
     }
 }
@@ -27,14 +27,14 @@ impl<T: ?Sized> PartialEq for ByIdentity<T> {
 
 /// The parts of the review the marks and the pane's conversations are made of.
 #[derive(Debug, PartialEq)]
-pub struct ReviewInputs {
+pub(crate) struct ReviewInputs {
     threads: ByIdentity<[Thread]>,
     files: ByIdentity<[File]>,
     drafts: Vec<Draft>,
 }
 
 impl ReviewInputs {
-    pub fn from_open(open: &Open) -> Self {
+    pub(crate) fn from_open(open: &Open) -> Self {
         Self {
             threads: ByIdentity::new(&open.review.threads),
             files: ByIdentity::new(&open.review.files),
@@ -63,7 +63,7 @@ impl<K: PartialEq, V> KeptValue<K, V> {
 }
 
 #[derive(Debug, Default)]
-pub struct Kept {
+pub(crate) struct Kept {
     markers: KeptValue<ReviewInputs, Markers>,
     pane_view: KeptValue<(ReviewInputs, Pane), ConversationList>,
     tree: KeptValue<(ByIdentity<[File]>, TreeFolds), Vec<TreeRow>>,
@@ -74,12 +74,12 @@ pub struct Kept {
 
 impl Kept {
     /// What the anchor column of every line shows.
-    pub fn markers(&mut self, open: &Open) -> &Markers {
+    pub(crate) fn markers(&mut self, open: &Open) -> &Markers {
         self.markers.get_or_build(ReviewInputs::from_open(open), || open.review.markers())
     }
 
     /// `Open::pane_view`, kept while the review and the pane stay the same; its cursor only picks the focused stop.
-    pub fn pane_view(&mut self, open: &Open) -> Option<&ConversationList> {
+    pub(crate) fn pane_view(&mut self, open: &Open) -> Option<&ConversationList> {
         let pane = open.pane.as_ref()?;
         let view = self.pane_view.get_or_build((ReviewInputs::from_open(open), pane.unmoved()), || open.pane_view_of(pane));
         view.focused = super::pane::focused(&view.entries, pane);
@@ -87,13 +87,13 @@ impl Kept {
     }
 
     /// The rows of the file tree; none while it is closed.
-    pub fn tree_rows(&mut self, open: &Open) -> &[TreeRow] {
+    pub(crate) fn tree_rows(&mut self, open: &Open) -> &[TreeRow] {
         let Some(folds) = open.tree.as_ref().map(|t| &t.folds) else { return &[] };
         self.tree.get_or_build((ByIdentity::new(&open.review.files), folds.clone()), || tree::rows(&open.review.files, folds))
     }
 
     /// The prose view's rows in `width` columns, inline or `beside`, rendered again only for other texts, width or theme.
-    pub fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, beside: bool, theme: Theme) -> &Rows {
+    pub(crate) fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, beside: bool, theme: Theme) -> &Rows {
         let kept = if beside { &mut self.prose_beside } else { &mut self.prose };
         kept.get_or_build((ByIdentity::new(versions), width, theme), || prose_view::rows(versions, width, beside, theme))
     }

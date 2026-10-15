@@ -11,7 +11,7 @@ use std::time::Duration;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// What marks a review app: where the MR's branch runs.
-pub const DEPLOYED: &str = "⧉ ";
+pub(super) const DEPLOYED: &str = "⧉ ";
 
 const QUEUE_W: u16 = 34;
 /// The queue on a wide terminal: ten more columns show about twice the title.
@@ -35,14 +35,14 @@ const SHORT_BELOW: u16 = 20;
 
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Link {
-    pub x: u16,
-    pub y: u16,
-    pub text: String,
-    pub url: String,
+pub(crate) struct Link {
+    pub(crate) x: u16,
+    pub(crate) y: u16,
+    pub(crate) text: String,
+    pub(crate) url: String,
 }
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
     app.links.clear();
     app.text_rows.clear();
     app.list_rows.clear();
@@ -282,7 +282,7 @@ fn zen_column(area: Rect, width: u16) -> Rect {
     Rect { x: area.x + (area.width - width) / 2, y: area.y + 1, width, height: area.height.saturating_sub(1) }
 }
 
-pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
+pub(crate) fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
     let title_style =
         if focused { Style::default().fg(theme.accent).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme.faded) };
     Block::bordered()
@@ -293,7 +293,7 @@ pub fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
 }
 
 /// A right pane's frame; in zen, only a faded title line over the content, both where the diff's text starts.
-pub fn side_pane(theme: Theme, title: &str, focused: bool, zen: bool) -> Block<'static> {
+pub(super) fn side_pane(theme: Theme, title: &str, focused: bool, zen: bool) -> Block<'static> {
     if !zen {
         return pane(theme, title, focused);
     }
@@ -301,7 +301,7 @@ pub fn side_pane(theme: Theme, title: &str, focused: bool, zen: bool) -> Block<'
 }
 
 /// Zen's thread pane under the diff: a faded rule carrying its title, no frame.
-pub fn rule_pane(theme: Theme, title: &str) -> Block<'static> {
+pub(super) fn rule_pane(theme: Theme, title: &str) -> Block<'static> {
     let title = Line::from(vec![
         Span::styled("─ ", Style::default().fg(theme.border)),
         Span::styled(format!("{title} "), Style::default().fg(theme.faded)),
@@ -309,7 +309,7 @@ pub fn rule_pane(theme: Theme, title: &str) -> Block<'static> {
     Block::new().borders(Borders::TOP).border_style(Style::default().fg(theme.border)).title(title).padding(Padding::horizontal(1))
 }
 
-pub fn draw_empty(f: &mut Frame<'_>, theme: Theme, area: Rect, lines: &[&str]) {
+pub(super) fn draw_empty(f: &mut Frame<'_>, theme: Theme, area: Rect, lines: &[&str]) {
     let text: Vec<Line<'_>> = lines.iter().map(|l| Line::from(Span::styled((*l).to_owned(), Style::default().fg(theme.faded)))).collect();
     let top = area.y + area.height.saturating_sub(text.len() as u16) / 2;
     let centered = Rect { y: top, height: (text.len() as u16).min(area.height), ..area };
@@ -493,7 +493,7 @@ fn draw_status(f: &mut Frame<'_>, app: &App, area: Rect) {
 
 /// The text in `area` takes one colour and its frames the quiet `border`: `color` is brighter than any
 /// frame, so fading a frame would light the unfocused pane's box above the focused one's.
-pub fn fade(f: &mut Frame<'_>, area: Rect, theme: Theme, color: Color) {
+pub(super) fn fade(f: &mut Frame<'_>, area: Rect, theme: Theme, color: Color) {
     let buf = f.buffer_mut();
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
@@ -507,7 +507,7 @@ pub fn fade(f: &mut Frame<'_>, area: Rect, theme: Theme, color: Color) {
 }
 
 /// The viewport only moves when the selection leaves it.
-pub fn settle_scroll(scroll: usize, selected: usize, height: usize) -> usize {
+pub(super) fn settle_scroll(scroll: usize, selected: usize, height: usize) -> usize {
     if height == 0 {
         return 0;
     }
@@ -522,7 +522,7 @@ pub fn settle_scroll(scroll: usize, selected: usize, height: usize) -> usize {
 
 /// `text` cut to `width` columns, an ellipsis in the last one when it does not fit.
 /// `2 passed · 1 failed`: each count in its colour, zeros left out.
-pub fn counts<'a>(parts: &[(usize, &str, Color)], theme: Theme) -> Line<'a> {
+pub(crate) fn counts<'a>(parts: &[(usize, &str, Color)], theme: Theme) -> Line<'a> {
     let mut spans = vec![Span::raw(" ")];
     for (count, label, colour) in parts.iter().filter(|(count, _, _)| *count > 0) {
         if spans.len() > 1 {
@@ -533,7 +533,7 @@ pub fn counts<'a>(parts: &[(usize, &str, Color)], theme: Theme) -> Line<'a> {
     Line::from(spans)
 }
 
-pub fn truncate(text: &str, width: usize) -> String {
+pub(crate) fn truncate(text: &str, width: usize) -> String {
     if text.width() <= width {
         return text.to_owned();
     }
@@ -541,7 +541,7 @@ pub fn truncate(text: &str, width: usize) -> String {
 }
 
 /// `text` cut to `width` columns from its middle, so both of its ends still read: `src/pay/…/charge.rs`.
-pub fn truncate_middle(text: &str, width: usize) -> String {
+pub(super) fn truncate_middle(text: &str, width: usize) -> String {
     if text.width() <= width {
         return text.to_owned();
     }
@@ -552,7 +552,7 @@ pub fn truncate_middle(text: &str, width: usize) -> String {
 }
 
 /// `text` with each tab drawn as `tab`, cut as `truncate` cuts, without drawing the tabs of a long line past the cut.
-pub fn truncate_tabs(text: &str, tab: &str, width: usize) -> String {
+pub(super) fn truncate_tabs(text: &str, tab: &str, width: usize) -> String {
     let drawn = text.split('\t').map(UnicodeWidthStr::width).sum::<usize>() + text.matches('\t').count() * tab.width();
     if drawn <= width {
         return text.replace('\t', tab);
@@ -577,7 +577,7 @@ fn fitting(chars: impl Iterator<Item = char>, room: usize) -> String {
         .collect()
 }
 
-pub fn short_age(age: Duration) -> String {
+pub(super) fn short_age(age: Duration) -> String {
     let secs = age.as_secs();
     match secs {
         0..=59 => format!("{secs}s"),

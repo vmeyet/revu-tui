@@ -76,7 +76,7 @@ pub(super) const CLEAR: &str = r"printf '\033[H\033[2J\033[3J'";
 
 /// A terminal revu knows how to split, with what it needs to find revu's own pane in it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Terminal {
+pub(crate) enum Terminal {
     /// Its panes carry no id revu can read from inside: revu's own is the one in front when `a g` is pressed.
     Ghostty,
     /// `session` is the id of the session revu runs in.
@@ -88,7 +88,7 @@ pub enum Terminal {
 impl Terminal {
     /// The terminal revu runs in, from what it wrote in the environment. `TERM_PROGRAM` decides: a
     /// terminal started from another one inherits that one's other variables, never this one.
-    pub fn detect(env: impl Fn(&str) -> Option<String>) -> Option<Self> {
+    pub(crate) fn detect(env: impl Fn(&str) -> Option<String>) -> Option<Self> {
         match env("TERM_PROGRAM")?.as_str() {
             "ghostty" => Some(Terminal::Ghostty),
             "iTerm.app" => {

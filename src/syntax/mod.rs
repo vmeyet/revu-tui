@@ -9,7 +9,7 @@ use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter}
 
 /// What a piece of code is, as far as colour goes; each theme gives every token a colour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Token {
+pub(crate) enum Token {
     Keyword,
     String,
     Comment,
@@ -21,13 +21,13 @@ pub enum Token {
 }
 
 /// The coloured byte ranges of one line of text.
-pub type Spans = Vec<(Range<usize>, Token)>;
+pub(crate) type Spans = Vec<(Range<usize>, Token)>;
 
 /// One language the diff can colour.
-pub struct Language {
-    pub name: &'static str,
+pub(crate) struct Language {
+    pub(crate) name: &'static str,
     /// Lower-case file extensions, without the dot.
-    pub extensions: &'static [&'static str],
+    pub(crate) extensions: &'static [&'static str],
     config: fn() -> Option<HighlightConfiguration>,
     /// `None` inside when the grammar's query does not build: the language then stays uncoloured.
     loaded: OnceLock<Option<HighlightConfiguration>>,
@@ -55,7 +55,7 @@ impl Language {
 }
 
 /// Every language revu colours. Order matters only when two claim one extension: the first wins.
-pub static LANGUAGES: [Language; 7] = [
+pub(crate) static LANGUAGES: [Language; 7] = [
     Language::new("TypeScript", &["ts", "mts", "cts"], typescript),
     Language::new("TSX", &["tsx"], tsx),
     Language::new("JavaScript", &["js", "mjs", "cjs", "jsx"], javascript),
@@ -70,24 +70,24 @@ static MARKDOWN_INLINE: Language = Language::new("Markdown inline", &[], markdow
 
 const MARKDOWN: &str = "Markdown";
 
-pub fn is_markdown(path: &str) -> bool {
+pub(crate) fn is_markdown(path: &str) -> bool {
     language_for(path, &LANGUAGES).is_some_and(|language| language.name == MARKDOWN)
 }
 
 /// The language of a path, by its extension; nothing is loaded by asking.
-pub fn language_for(path: &str, languages: &'static [Language]) -> Option<&'static Language> {
+pub(crate) fn language_for(path: &str, languages: &'static [Language]) -> Option<&'static Language> {
     let (_, extension) = path.rsplit_once('.')?;
     languages.iter().find(|language| language.claims(extension))
 }
 
 /// The language a code fence's tag names, by its name or one of its extensions: `ts`, `python`, `JSON`.
-pub fn language_named(tag: &str, languages: &'static [Language]) -> Option<&'static Language> {
+pub(crate) fn language_named(tag: &str, languages: &'static [Language]) -> Option<&'static Language> {
     languages.iter().find(|language| language.name.eq_ignore_ascii_case(tag) || language.claims(tag))
 }
 
 /// The spans of each line of `source`, split on `\n`; one entry per line, empty for uncoloured ones.
 /// A grammar that fails to parse leaves every line uncoloured rather than failing the diff.
-pub fn highlight(language: &Language, source: &str) -> Vec<Spans> {
+pub(crate) fn highlight(language: &Language, source: &str) -> Vec<Spans> {
     let starts: Vec<usize> = std::iter::once(0).chain(source.match_indices('\n').map(|(i, _)| i + 1)).collect();
     let mut lines: Vec<Spans> = vec![Vec::new(); starts.len()];
     let Some(config) = language.configuration() else { return lines };

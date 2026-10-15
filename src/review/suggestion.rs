@@ -3,7 +3,7 @@
 use anyhow::{Result, bail};
 
 /// `lines` are the selected diff lines as shown, sign included; the block replaces them all.
-pub fn prefill(lines: &[&str]) -> String {
+pub(crate) fn prefill(lines: &[&str]) -> String {
     let below = lines.len().saturating_sub(1);
     let body: Vec<&str> = lines.iter().map(|l| strip_sign(l)).collect();
     format!("```suggestion:-0+{below}\n{}\n```\n", body.join("\n"))
@@ -12,14 +12,14 @@ pub fn prefill(lines: &[&str]) -> String {
 /// A suggestion read from a note: how many lines above and below the anchored one it replaces
 /// (`suggestion:-A+B`, both 0 when absent), and the text that takes their place.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Proposal {
-    pub above: u32,
-    pub below: u32,
-    pub text: String,
+pub(crate) struct Proposal {
+    pub(crate) above: u32,
+    pub(crate) below: u32,
+    pub(crate) text: String,
 }
 
 /// The first suggestion block of `body`, if it has one.
-pub fn parse(body: &str) -> Option<Proposal> {
+pub(crate) fn parse(body: &str) -> Option<Proposal> {
     let mut lines = body.lines();
     let opener = lines.by_ref().find(|l| l.trim_start().starts_with("```suggestion"))?;
     let (above, below) = span(opener.trim_start().trim_start_matches("```suggestion"));
@@ -35,7 +35,7 @@ fn span(rest: &str) -> (u32, u32) {
 }
 
 /// `file` with the lines around `line` (1-based) replaced by the proposal, its final newline kept.
-pub fn apply_to(file: &str, line: u32, proposal: &Proposal) -> Result<String> {
+pub(crate) fn apply_to(file: &str, line: u32, proposal: &Proposal) -> Result<String> {
     let lines: Vec<&str> = file.lines().collect();
     let Some(first) = line.checked_sub(proposal.above).filter(|&first| first >= 1) else { bail!("the suggestion starts above the file") };
     let last = line + proposal.below;

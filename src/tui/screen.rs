@@ -15,14 +15,14 @@ const MOUSE_ON: &[u8] = b"\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 const MOUSE_OFF: &[u8] = b"\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 
 /// What revu asked of the terminal, so it can take it back exactly.
-pub struct Screen {
+pub(crate) struct Screen {
     modifiers: bool,
 }
 
 impl Screen {
     /// Takes the terminal. `ratatui::init` installs the panic hook that gives it back; the mouse,
     /// focus changes and the modifier report are undone first on a panic too, or the shell would read escape codes.
-    pub fn enter() -> (DefaultTerminal, Self) {
+    pub(crate) fn enter() -> (DefaultTerminal, Self) {
         let terminal = ratatui::init();
         let modifiers = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false) && report_modifiers();
         let screen = Self { modifiers };
@@ -41,14 +41,14 @@ impl Screen {
     }
 
     /// Gives the terminal back to the shell for good.
-    pub fn leave(self) {
+    pub(crate) fn leave(self) {
         give_extras_back(self.modifiers);
         ratatui::restore();
     }
 
     /// Lends the terminal to another program while `run` lasts: the program gets a plain terminal,
     /// then revu takes it back and repaints. No new panic hook stacks up on the way.
-    pub fn lend<T>(&self, terminal: &mut DefaultTerminal, run: impl FnOnce() -> T) -> T {
+    pub(super) fn lend<T>(&self, terminal: &mut DefaultTerminal, run: impl FnOnce() -> T) -> T {
         give_extras_back(self.modifiers);
         ratatui::restore();
         let outcome = run();

@@ -8,17 +8,17 @@ use unicode_width::UnicodeWidthChar;
 
 /// One screen row of text a drag can select, as the last frame drew it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TextRow {
+pub(crate) struct TextRow {
     /// The cell its text starts at; the rows of one column all start at the same `x`.
-    pub at: Position,
+    pub(crate) at: Position,
     /// The cells the column gives its text.
-    pub width: u16,
+    pub(crate) width: u16,
     /// Rows of one line share it: a wrapped line copies back as one.
-    pub line: usize,
+    pub(crate) line: usize,
     /// The raw text of the whole line.
-    pub text: String,
+    pub(crate) text: String,
     /// The bytes of `text` under each cell of this row; empty where the drawing adds a glyph of its own.
-    pub cells: Vec<Range<usize>>,
+    pub(crate) cells: Vec<Range<usize>>,
 }
 
 impl TextRow {
@@ -33,7 +33,7 @@ impl TextRow {
 }
 
 /// The bytes under each cell of `text` drawn as the diff draws it, a tab `tab` cells wide.
-pub fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
+pub(super) fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
     let mut cells: Vec<Range<usize>> = vec![];
     for (at, c) in text.char_indices() {
         let bytes = at..at + c.len_utf8();
@@ -53,7 +53,7 @@ const MARKUP: [char; 8] = ['`', '|', ' ', '-', '*', '>', '#', '\t'];
 
 /// The bytes of `raw` under each cell of `drawn`, the light markdown drawing of it: each drawn
 /// character is found in `raw` past the markup the drawing dropped; a glyph of its own stands for nothing.
-pub fn aligned(drawn: &str, raw: &str) -> Vec<Range<usize>> {
+pub(crate) fn aligned(drawn: &str, raw: &str) -> Vec<Range<usize>> {
     let mut cells = vec![];
     let mut at = 0;
     for c in drawn.chars() {
@@ -70,7 +70,7 @@ pub fn aligned(drawn: &str, raw: &str) -> Vec<Range<usize>> {
 
 /// What a drag covers: from the cell it started on to the cell under the pointer, in one column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Drag {
+pub(crate) struct Drag {
     column: u16,
     from: Position,
     to: Position,
@@ -78,14 +78,14 @@ pub struct Drag {
 
 impl Drag {
     /// A press on a row of text starts a drag there; anywhere else it starts nothing.
-    pub fn start(rows: &[TextRow], at: Position) -> Option<Self> {
+    pub(crate) fn start(rows: &[TextRow], at: Position) -> Option<Self> {
         let row = rows.iter().find(|row| row.at.y == at.y && (row.at.x..row.at.x + row.width).contains(&at.x))?;
         Some(Self { column: row.at.x, from: at, to: at })
     }
 
     /// The pointer moved to `at`: the drag follows it, held inside its column.
     #[must_use]
-    pub fn moved_to(self, rows: &[TextRow], at: Position) -> Self {
+    pub(super) fn moved_to(self, rows: &[TextRow], at: Position) -> Self {
         let column: Vec<&TextRow> = self.rows(rows).collect();
         let (Some(first), Some(last)) = (column.first(), column.last()) else { return self };
         let right = self.column + first.width.saturating_sub(1);
@@ -98,13 +98,13 @@ impl Drag {
     }
 
     /// A press and a release on the same cell is a click, not a drag.
-    pub fn is_click(self) -> bool {
+    pub(super) fn is_click(self) -> bool {
         self.from == self.to
     }
 
     /// The raw text selected: rows of one line joined as they were, lines by a newline. A row
     /// selected from its first cell or through its last takes the whole start or end of its line.
-    pub fn text(self, rows: &[TextRow]) -> String {
+    pub(crate) fn text(self, rows: &[TextRow]) -> String {
         let column: Vec<&TextRow> = self.rows(rows).collect();
         let mut text = String::new();
         let mut line = None;
@@ -122,7 +122,7 @@ impl Drag {
     }
 
     /// Reverses the selected cells of `buffer`.
-    pub fn paint(self, rows: &[TextRow], buffer: &mut Buffer) {
+    pub(crate) fn paint(self, rows: &[TextRow], buffer: &mut Buffer) {
         for row in self.rows(rows) {
             let Some(cells) = self.cells_on(row) else { continue };
             for cell in cells.start..cells.end.min(row.cells.len()) {

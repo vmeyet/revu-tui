@@ -5,65 +5,65 @@ use crate::syntax::Token;
 use ratatui::style::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Theme {
-    pub name: &'static str,
+pub(crate) struct Theme {
+    pub(crate) name: &'static str,
     /// The terminal background this palette was designed for; text drawn on a colored fill uses it.
-    pub base: Color,
+    pub(crate) base: Color,
     /// Inline code and code blocks: the ground nudged a few percent toward the text.
-    pub surface: Color,
+    pub(crate) surface: Color,
     /// Fill of the selected row. None by default: the `▎` bar alone marks it, which stays
     /// invisible-proof on terminals whose background the theme cannot see.
-    pub highlight: Option<Color>,
+    pub(crate) highlight: Option<Color>,
     /// Frames of the panes that do not have the keys: close to the ground, so the content leads.
-    pub border: Color,
+    pub(crate) border: Color,
     /// Frames of the pane that has the keys, of a modal and of the compose box: one step up from `border`,
     /// the title's accent tells focus apart.
-    pub border_focus: Color,
+    pub(crate) border_focus: Color,
     /// Tertiary text: section headers, muted channels, receded panes.
-    pub faded: Color,
+    pub(crate) faded: Color,
     /// Secondary text: times, hints, counts.
-    pub muted: Color,
+    pub(crate) muted: Color,
     /// Titles, cursor bar, badges, your own reactions.
-    pub accent: Color,
-    pub link: Color,
-    pub code: Color,
-    pub mention: Color,
-    pub success: Color,
-    pub warn: Color,
+    pub(crate) accent: Color,
+    pub(crate) link: Color,
+    pub(crate) code: Color,
+    pub(crate) mention: Color,
+    pub(crate) success: Color,
+    pub(crate) warn: Color,
     /// Incidents in the firehose.
-    pub danger: Color,
+    pub(crate) danger: Color,
     /// Author names, picked by a hash of the name.
-    pub users: [Color; 6],
+    pub(crate) users: [Color; 6],
     /// Text of an added or removed line. The terminal's own foreground: the fill, or on an unknown
     /// ground the sign alone, carries the meaning, which leaves the text free for syntax colours.
-    pub added: Color,
-    pub removed: Color,
+    pub(crate) added: Color,
+    pub(crate) removed: Color,
     /// Fill under a changed line, and the stronger one under its changed words.
     /// None where the ground is unknown: a fill guessed wrong paints text into invisibility.
     /// [`Theme::with_ground`] computes them once the terminal says what its ground is.
-    pub added_fill: Option<Color>,
-    pub removed_fill: Option<Color>,
-    pub added_word: Option<Color>,
-    pub removed_word: Option<Color>,
+    pub(crate) added_fill: Option<Color>,
+    pub(crate) removed_fill: Option<Color>,
+    pub(crate) added_word: Option<Color>,
+    pub(crate) removed_word: Option<Color>,
     /// Code colours, from each palette's own upstream scheme; the diff keeps the fills underneath.
-    pub syntax: Syntax,
+    pub(crate) syntax: Syntax,
 }
 
 /// One colour per [`Token`]: what a keyword, a string or a comment looks like in this palette.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Syntax {
-    pub keyword: Color,
-    pub string: Color,
-    pub comment: Color,
-    pub number: Color,
-    pub kind: Color,
-    pub function: Color,
-    pub constant: Color,
-    pub punctuation: Color,
+pub(crate) struct Syntax {
+    pub(crate) keyword: Color,
+    pub(crate) string: Color,
+    pub(crate) comment: Color,
+    pub(crate) number: Color,
+    pub(crate) kind: Color,
+    pub(crate) function: Color,
+    pub(crate) constant: Color,
+    pub(crate) punctuation: Color,
 }
 
 impl Syntax {
-    pub fn colour(&self, token: Token) -> Color {
+    pub(crate) fn colour(&self, token: Token) -> Color {
         match token {
             Token::Keyword => self.keyword,
             Token::String => self.string,
@@ -122,11 +122,11 @@ impl Default for Theme {
 }
 
 impl Theme {
-    pub const NAMES: [&'static str; 9] =
+    pub(super) const NAMES: [&'static str; 9] =
         ["default", "dracula", "catppuccin", "catppuccin-latte", "rosepine", "rosepine-dawn", "nord", "tokyonight", "monokai"];
 
     /// Case, spaces and dashes do not matter: `Tokyo Night`, `tokyo-night` and `tokyonight` are one theme.
-    pub fn named(name: &str) -> Option<Theme> {
+    pub(crate) fn named(name: &str) -> Option<Theme> {
         let key: String = name.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_lowercase()).collect();
         match key.as_str() {
             "default" | "slack" => Some(DEFAULT),
@@ -144,7 +144,7 @@ impl Theme {
 
     /// A palette that does not know its ground takes the terminal's: changed lines get the same
     /// tinted fills the RGB palettes carry. A palette with an RGB ground keeps its own.
-    pub fn with_ground(self, ground: u32) -> Theme {
+    pub(super) fn with_ground(self, ground: u32) -> Theme {
         if matches!(self.base, Color::Rgb(..)) {
             return self;
         }
@@ -163,7 +163,7 @@ impl Theme {
         }
     }
 
-    pub fn user(&self, name: &str) -> Color {
+    pub(crate) fn user(&self, name: &str) -> Color {
         let idx = name.trim().bytes().fold(7usize, |h, b| h.wrapping_mul(33).wrapping_add(b as usize)) % self.users.len();
         self.users[idx]
     }

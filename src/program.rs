@@ -5,13 +5,13 @@ use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub const OUTPUT_CAP: u64 = 1024 * 1024;
+pub(crate) const OUTPUT_CAP: u64 = 1024 * 1024;
 const STDERR_CAP: u64 = 16 * 1024;
 
 /// Runs `command` with `input` on its stdin (nothing when `None`) and returns what it printed.
 /// `what` names the command in errors (`ready command`, `share command`); a failure, a timeout or a
 /// missing program is an error saying which and why. Output cut at the cap counts as success.
-pub async fn run(command: &str, input: Option<&str>, what: &str, limit: Duration) -> Result<String> {
+pub(crate) async fn run(command: &str, input: Option<&str>, what: &str, limit: Duration) -> Result<String> {
     let words = shell_words::split(command).with_context(|| format!("{what} `{command}` does not split into words"))?;
     let Some((program, args)) = words.split_first() else { bail!("the {what} is empty") };
     let mut child = tokio::process::Command::new(program)
@@ -59,7 +59,7 @@ async fn read_capped(pipe: impl tokio::io::AsyncRead + Unpin, cap: u64) -> std::
 }
 
 /// The command reads as words; checked when the config loads. `key` names it in the error.
-pub fn check(command: &str, key: &str) -> Result<()> {
+pub(crate) fn check(command: &str, key: &str) -> Result<()> {
     let words = shell_words::split(command).with_context(|| format!("`{key}` does not split into words: {command}"))?;
     if words.is_empty() {
         bail!("`{key}` is empty");
@@ -68,11 +68,11 @@ pub fn check(command: &str, key: &str) -> Result<()> {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// A script in a temp dir, and the command that runs it.
-    pub fn script(body: &str) -> (tempfile::TempDir, String) {
+    pub(crate) fn script(body: &str) -> (tempfile::TempDir, String) {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("program.sh");
         std::fs::write(&path, format!("{body}\n")).unwrap();

@@ -7,7 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 /// A commit waiting for the reader's yes: nothing reaches the branch before it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Confirm {
+pub(crate) enum Confirm {
     /// The suggestion of a note, on the MR's branch.
     Apply { suggestion: Suggestion, branch: String },
     /// The MR `name` (`!42`) into `into`, only while its head is still `head`.
@@ -15,7 +15,7 @@ pub enum Confirm {
 }
 
 impl Confirm {
-    pub fn question(&self) -> String {
+    pub(crate) fn question(&self) -> String {
         match self {
             Confirm::Apply { suggestion, branch } => {
                 format!("commit this suggestion to {} on {branch}? y commits · any other key cancels", suggestion.path)

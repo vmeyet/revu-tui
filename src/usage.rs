@@ -10,17 +10,17 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// The file, at the cache root; deleting it starts the counts again.
-pub const FILE: &str = "usage.jsonl";
+pub(crate) const FILE: &str = "usage.jsonl";
 
 /// A habit a faster key replaces, with what to try instead.
-pub const HINTS: &[(&str, &str)] = &[
+pub(crate) const HINTS: &[(&str, &str)] = &[
     ("long_walk", "walked 15 lines or more with j or k to a hunk or a thread; ]c (next hunk) or ]n (next thread) jumps there"),
     ("queue_after_zen", "left zen to open another MR from the queue; [m and ]m change MR, in zen too"),
     ("palette_number", "typed a bare number in the search; !42 (or #42 on GitHub) finds that MR directly"),
 ];
 
 /// Every action the report knows, bindable ones first.
-pub fn known() -> Vec<&'static str> {
+pub(crate) fn known() -> Vec<&'static str> {
     act::listed_names()
 }
 
@@ -33,7 +33,7 @@ const COUNTING: u32 = 2;
 
 /// What one session counted since the last flush: kept in memory, never written by the App itself.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Tally {
+pub(crate) struct Tally {
     actions: BTreeMap<&'static str, u64>,
     screens_ms: BTreeMap<&'static str, u64>,
     hints: BTreeMap<&'static str, u64>,
@@ -43,16 +43,16 @@ pub struct Tally {
 
 /// What a flush writes: whole seconds only; the milliseconds below a second wait for the next one.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Counts {
-    pub actions: BTreeMap<String, u64>,
-    pub screens: BTreeMap<String, u64>,
-    pub hints: BTreeMap<String, u64>,
-    pub shown: BTreeMap<String, u64>,
+pub(crate) struct Counts {
+    pub(crate) actions: BTreeMap<String, u64>,
+    pub(crate) screens: BTreeMap<String, u64>,
+    pub(crate) hints: BTreeMap<String, u64>,
+    pub(crate) shown: BTreeMap<String, u64>,
 }
 
 impl Tally {
     /// A session's tally, knowing how often each hint was shown in the sessions before.
-    pub fn after(days: &[Day]) -> Self {
+    pub(crate) fn after(days: &[Day]) -> Self {
         let mut shown_ever = BTreeMap::new();
         for day in days {
             add(&mut shown_ever, &day.shown);
@@ -60,12 +60,12 @@ impl Tally {
         Self { shown_ever, ..Self::default() }
     }
 
-    pub fn act(&mut self, name: &'static str) {
+    pub(crate) fn act(&mut self, name: &'static str) {
         *self.actions.entry(name).or_default() += 1;
     }
 
     /// Counts a hint, and says whether to show it: yes for its first `HINT_TOASTS` times, every session counted.
-    pub fn hint(&mut self, name: &'static str) -> bool {
+    pub(crate) fn hint(&mut self, name: &'static str) -> bool {
         *self.hints.entry(name).or_default() += 1;
         let shown = self.shown_ever.entry(name.to_owned()).or_default();
         let is_shown = *shown < HINT_TOASTS;
@@ -76,12 +76,12 @@ impl Tally {
         is_shown
     }
 
-    pub fn spend(&mut self, screen: &'static str, time: Duration) {
+    pub(crate) fn spend(&mut self, screen: &'static str, time: Duration) {
         *self.screens_ms.entry(screen).or_default() += u64::try_from(time.as_millis()).unwrap_or(u64::MAX);
     }
 
     /// The counts to write, leaving behind the part of a second not yet spent on each screen.
-    pub fn take(&mut self) -> Option<Counts> {
+    pub(crate) fn take(&mut self) -> Option<Counts> {
         let screens: BTreeMap<String, u64> =
             self.screens_ms.iter().filter(|(_, ms)| **ms >= 1000).map(|(s, ms)| ((*s).to_owned(), ms / 1000)).collect();
         for ms in self.screens_ms.values_mut() {
@@ -99,21 +99,21 @@ fn owned(counts: &mut BTreeMap<&'static str, u64>) -> BTreeMap<String, u64> {
 
 /// One line of the file: everything one local day counted.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Day {
-    pub date: NaiveDate,
+pub(crate) struct Day {
+    pub(crate) date: NaiveDate,
     /// The oldest `COUNTING` that went into the day; lines from before it have none.
     #[serde(default = "first_counting")]
-    pub version: u32,
+    pub(crate) version: u32,
     #[serde(default)]
-    pub actions: BTreeMap<String, u64>,
+    pub(crate) actions: BTreeMap<String, u64>,
     /// Seconds per screen.
     #[serde(default)]
-    pub screens: BTreeMap<String, u64>,
+    pub(crate) screens: BTreeMap<String, u64>,
     #[serde(default)]
-    pub hints: BTreeMap<String, u64>,
+    pub(crate) hints: BTreeMap<String, u64>,
     /// How many hints showed as a toast.
     #[serde(default)]
-    pub shown: BTreeMap<String, u64>,
+    pub(crate) shown: BTreeMap<String, u64>,
 }
 
 impl Day {
@@ -132,14 +132,14 @@ fn first_counting() -> u32 {
 }
 
 /// The file's days, oldest first; a line that does not parse is skipped rather than failing.
-pub fn parse(text: &str) -> Vec<Day> {
+pub(crate) fn parse(text: &str) -> Vec<Day> {
     let mut days: Vec<Day> = text.lines().filter_map(|line| serde_json::from_str(line).ok()).collect();
     days.sort_by_key(|day| day.date);
     days
 }
 
 /// The file with `counts` added to `date`'s line: one line per day, however often it is merged.
-pub fn merge(text: &str, date: NaiveDate, counts: &Counts) -> Result<String> {
+pub(crate) fn merge(text: &str, date: NaiveDate, counts: &Counts) -> Result<String> {
     let mut days = parse(text);
     let index = if let Some(index) = days.iter().position(|day| day.date == date) {
         index
@@ -169,18 +169,18 @@ fn add(into: &mut BTreeMap<String, u64>, from: &BTreeMap<String, u64>) {
 }
 
 /// Adds `counts` to today's line in the cache's usage file, privately and atomically.
-pub fn record(cache: &Cache, date: NaiveDate, counts: &Counts) -> Result<()> {
+pub(crate) fn record(cache: &Cache, date: NaiveDate, counts: &Counts) -> Result<()> {
     let text = cache.read_bytes(FILE).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_default();
     cache.write_bytes(FILE, merge(&text, date, counts)?.as_bytes())
 }
 
 /// Every recorded day in the cache's usage file.
-pub fn read(cache: &Cache) -> Vec<Day> {
+pub(crate) fn read(cache: &Cache) -> Vec<Day> {
     cache.read_bytes(FILE).map(|bytes| parse(&String::from_utf8_lossy(&bytes))).unwrap_or_default()
 }
 
 /// `30d`, `4w`, `all`: how far back a report looks.
-pub fn since(text: &str) -> Result<Option<u32>> {
+pub(crate) fn since(text: &str) -> Result<Option<u32>> {
     if text == "all" {
         return Ok(None);
     }
@@ -195,22 +195,22 @@ pub fn since(text: &str) -> Result<Option<u32>> {
 
 /// The days of the window, summed.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct Report {
-    pub days: usize,
+pub(crate) struct Report {
+    pub(crate) days: usize,
     /// Days counted before `COUNTING`: their time and hints are left out.
-    pub old_days: usize,
-    pub never: Vec<(String, Vec<String>)>,
-    pub rarely: Vec<(String, u64)>,
-    pub most: Vec<(String, u64)>,
-    pub screens: Vec<(String, u64)>,
-    pub hints: Vec<(String, u64, String)>,
+    pub(crate) old_days: usize,
+    pub(crate) never: Vec<(String, Vec<String>)>,
+    pub(crate) rarely: Vec<(String, u64)>,
+    pub(crate) most: Vec<(String, u64)>,
+    pub(crate) screens: Vec<(String, u64)>,
+    pub(crate) hints: Vec<(String, u64, String)>,
 }
 
 const RARELY: u64 = 2;
 const MOST: usize = 10;
 
 /// Sums the days within `window` days of `today`, and sorts every known action into the sections.
-pub fn report(days: &[Day], today: NaiveDate, window: Option<u32>) -> Report {
+pub(crate) fn report(days: &[Day], today: NaiveDate, window: Option<u32>) -> Report {
     let kept: Vec<&Day> = days.iter().filter(|day| window.is_none_or(|w| (today - day.date).num_days() < i64::from(w))).collect();
     let mut actions = BTreeMap::<String, u64>::new();
     let mut screens = BTreeMap::<String, u64>::new();
@@ -259,7 +259,7 @@ fn grouped<'a>(names: impl Iterator<Item = &'a str>) -> Vec<(String, Vec<String>
 }
 
 /// `1h 12m`, `4m`, `35s`.
-pub fn duration(seconds: u64) -> String {
+pub(crate) fn duration(seconds: u64) -> String {
     match (seconds / 3600, (seconds % 3600) / 60) {
         (0, 0) => format!("{seconds}s"),
         (0, m) => format!("{m}m"),

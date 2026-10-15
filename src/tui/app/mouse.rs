@@ -13,15 +13,15 @@ const DIFF_ROWS: usize = 3;
 
 /// Where each pane was drawn in the last frame; a hidden pane has no area.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Areas {
-    pub queue: Rect,
-    pub review: Rect,
-    pub side: Rect,
+pub(crate) struct Areas {
+    pub(crate) queue: Rect,
+    pub(crate) review: Rect,
+    pub(crate) side: Rect,
 }
 
 impl Areas {
     /// The diff and the right pane were both on screen.
-    pub fn both_shown(self) -> bool {
+    pub(super) fn both_shown(self) -> bool {
         !self.review.is_empty() && !self.side.is_empty()
     }
 
@@ -34,7 +34,7 @@ impl Areas {
 
 /// The lists a click can pick a row in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum List {
+pub(crate) enum List {
     Queue,
     Tree,
     Outline,
@@ -43,15 +43,15 @@ pub enum List {
 
 /// A list row as the last frame drew it: which list, and the index its cursor takes on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ListRow {
-    pub area: Rect,
-    pub list: List,
-    pub index: usize,
+pub(crate) struct ListRow {
+    pub(crate) area: Rect,
+    pub(crate) list: List,
+    pub(crate) index: usize,
 }
 
 impl App {
     /// The wheel, a left drag, a click on a link or on a list row; over an overlay only its links answer, over a prompt nothing.
-    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
+    pub(crate) fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
         self.count_input();
         let at = Position::new(mouse.column, mouse.row);
         if self.confirm.is_some() || self.react.is_some() {
@@ -166,7 +166,7 @@ impl App {
     }
 
     /// An overlay holds the screen: help, publish, the cover, the news page, the palette or a share preview.
-    pub fn modal(&self) -> bool {
+    pub(crate) fn modal(&self) -> bool {
         let page = self.brief.is_some() || self.news_page.is_some();
         self.help.is_some() || self.publish.is_some() || page || self.palette.is_some() || self.sharing.is_some()
     }

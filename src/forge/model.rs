@@ -39,16 +39,16 @@ macro_rules! parsed_text {
 /// The one way an MR is addressed: the path of its project (`group/sub/project`, `owner/repo`)
 /// and its number there.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct MrKey {
+pub(crate) struct MrKey {
     /// The host it lives on, when that is not the one `revu` started with: a queue can hold several.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
-    pub project: ProjectPath,
-    pub number: u64,
+    pub(crate) host: Option<String>,
+    pub(crate) project: ProjectPath,
+    pub(crate) number: u64,
 }
 
 impl MrKey {
-    pub fn new(project: impl Into<ProjectPath>, number: u64) -> Self {
+    pub(crate) fn new(project: impl Into<ProjectPath>, number: u64) -> Self {
         Self { host: None, project: project.into(), number }
     }
 }
@@ -57,17 +57,17 @@ impl MrKey {
 /// Two or more `/`-separated names of ASCII letters, digits, `-`, `_` and `.`, none of them `.`
 /// or `..`, so it can name a cache folder. Stored as a plain JSON string.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ProjectPath(Arc<str>);
+pub(crate) struct ProjectPath(Arc<str>);
 
 impl ProjectPath {
-    pub fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         let name = |part: &str| {
             !matches!(part, "" | "." | "..") && part.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
         };
         (text.contains('/') && text.split('/').all(name)).then(|| Self(text.into()))
     }
 
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -75,46 +75,46 @@ impl ProjectPath {
 parsed_text!(ProjectPath, "a project path");
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct User {
-    pub id: u64,
-    pub username: String,
-    pub name: String,
+pub(crate) struct User {
+    pub(crate) id: u64,
+    pub(crate) username: String,
+    pub(crate) name: String,
 }
 
 /// One merge request, with what the header and the approvals need.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Mr {
-    pub project: ProjectPath,
-    pub number: u64,
-    pub title: String,
-    pub description: String,
-    pub state: MrState,
-    pub draft: bool,
-    pub author: User,
-    pub source_branch: String,
-    pub target_branch: String,
-    pub web_url: String,
-    pub updated_at: DateTime<Utc>,
-    pub refs: Refs,
-    pub pipeline: Option<Pipeline>,
+pub(crate) struct Mr {
+    pub(crate) project: ProjectPath,
+    pub(crate) number: u64,
+    pub(crate) title: String,
+    pub(crate) description: String,
+    pub(crate) state: MrState,
+    pub(crate) draft: bool,
+    pub(crate) author: User,
+    pub(crate) source_branch: String,
+    pub(crate) target_branch: String,
+    pub(crate) web_url: String,
+    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) refs: Refs,
+    pub(crate) pipeline: Option<Pipeline>,
     /// As the forge counts it; GitLab caps it at `"1000+"`.
-    pub changes_count: Option<String>,
-    pub conflicts: bool,
-    pub reviewers: Vec<User>,
-    pub labels: Vec<String>,
-    pub approvals: Approvals,
+    pub(crate) changes_count: Option<String>,
+    pub(crate) conflicts: bool,
+    pub(crate) reviewers: Vec<User>,
+    pub(crate) labels: Vec<String>,
+    pub(crate) approvals: Approvals,
     /// How the forge merges it, from its project settings; the confirmation names the method.
     #[serde(default)]
-    pub merge: MergePlan,
+    pub(crate) merge: MergePlan,
     /// I wrote it, as the host that holds it knows me: a queue can mix hosts, and names differ on each.
     #[serde(default)]
-    pub mine: bool,
+    pub(crate) mine: bool,
 }
 
 impl Mr {
     /// Why I may not merge this MR from revu, or `None` when I may: it is mine, open, not a draft,
     /// green, without conflicts, and approved by someone with no approval left to give.
-    pub fn merge_refusal(&self) -> Option<String> {
+    pub(crate) fn merge_refusal(&self) -> Option<String> {
         let approvals = &self.approvals;
         let reason = match () {
             () if !self.mine => "only your own MRs merge from revu".to_owned(),
@@ -132,7 +132,7 @@ impl Mr {
     }
 
     /// Why I may not mark this MR a draft or ready from revu, or `None` when I may: it is mine and open.
-    pub fn draft_refusal(&self) -> Option<String> {
+    pub(crate) fn draft_refusal(&self) -> Option<String> {
         match () {
             () if !self.mine => Some("it is not yours".to_owned()),
             () if self.state != MrState::Open => Some(format!("this MR is {}", self.state.word())),
@@ -144,7 +144,7 @@ impl Mr {
 /// Where an MR stands; stored as GitLab named it before it had a type, so old caches and `--json` readers keep working.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum MrState {
+pub(crate) enum MrState {
     #[serde(rename = "opened")]
     Open,
     Merged,
@@ -152,7 +152,7 @@ pub enum MrState {
 }
 
 impl MrState {
-    pub fn word(self) -> &'static str {
+    pub(crate) fn word(self) -> &'static str {
         match self {
             MrState::Open => "open",
             MrState::Merged => "merged",
@@ -163,7 +163,7 @@ impl MrState {
 
 /// How a forge merges an MR, as its project allows and prefers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MergeMethod {
+pub(crate) enum MergeMethod {
     #[default]
     Merge,
     Squash,
@@ -171,7 +171,7 @@ pub enum MergeMethod {
 }
 
 impl MergeMethod {
-    pub fn word(self) -> &'static str {
+    pub(crate) fn word(self) -> &'static str {
         match self {
             MergeMethod::Merge => "merge commit",
             MergeMethod::Squash => "squash",
@@ -182,35 +182,35 @@ impl MergeMethod {
 
 /// The method, and whether the forge deletes the source branch afterwards.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MergePlan {
-    pub method: MergeMethod,
-    pub remove_branch: bool,
+pub(crate) struct MergePlan {
+    pub(crate) method: MergeMethod,
+    pub(crate) remove_branch: bool,
 }
 
 /// The diff a review reads: its base, where the branch started (GitLab tells it apart from the
 /// base; elsewhere it is the base), and its head. Notes on lines are made against these.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Refs {
-    pub base: Sha,
-    pub start: Sha,
-    pub head: Sha,
+pub(crate) struct Refs {
+    pub(crate) base: Sha,
+    pub(crate) start: Sha,
+    pub(crate) head: Sha,
 }
 
 /// A commit id: 1 to 64 hex digits, never anything else, so it can name a cache file.
 /// Stored as a plain JSON string.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Sha(Arc<str>);
+pub(crate) struct Sha(Arc<str>);
 
 impl Sha {
     /// SHA-256 object names are 64 digits; SHA-1 ones 40.
     const MAX_LEN: usize = 64;
 
-    pub fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         let valid = (1..=Self::MAX_LEN).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_hexdigit());
         valid.then(|| Self(text.into()))
     }
 
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -218,15 +218,15 @@ impl Sha {
 parsed_text!(Sha, "a commit sha");
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Pipeline {
-    pub status: PipelineStatus,
-    pub web_url: Option<String>,
+pub(crate) struct Pipeline {
+    pub(crate) status: PipelineStatus,
+    pub(crate) web_url: Option<String>,
 }
 
 /// Where a pipeline stands. GitLab has all of these; GitHub's check rollup is only ever success,
 /// failed or running.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PipelineStatus {
+pub(crate) enum PipelineStatus {
     Created,
     WaitingForResource,
     WaitingForCallback,
@@ -259,7 +259,7 @@ impl PipelineStatus {
         PipelineStatus::Scheduled,
     ];
 
-    pub fn word(self) -> &'static str {
+    pub(crate) fn word(self) -> &'static str {
         match self {
             PipelineStatus::Created => "created",
             PipelineStatus::WaitingForResource => "waiting_for_resource",
@@ -279,12 +279,12 @@ impl PipelineStatus {
 
     /// The status a word names in either case, as GitLab's REST (`failed`) and GraphQL (`FAILED`)
     /// spell it; a word this list does not know yet is taken for a pipeline still on its way.
-    pub fn from_word(word: &str) -> Self {
+    fn from_word(word: &str) -> Self {
         Self::ALL.into_iter().find(|status| status.word().eq_ignore_ascii_case(word)).unwrap_or(PipelineStatus::Pending)
     }
 
     /// Not done yet: the badge waits on it.
-    pub fn is_running(self) -> bool {
+    pub(crate) fn is_running(self) -> bool {
         matches!(
             self,
             PipelineStatus::Created
@@ -311,23 +311,23 @@ impl<'de> Deserialize<'de> for PipelineStatus {
 
 /// Where the MR's branch was deployed and can be tried: a review app, a preview, a storybook.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Deployment {
-    pub environment: String,
-    pub url: String,
+pub(crate) struct Deployment {
+    pub(crate) environment: String,
+    pub(crate) url: String,
     /// Whether it runs the MR as it is now, not an older push.
-    pub current: bool,
+    pub(crate) current: bool,
 }
 
 impl Deployment {
     /// The one to try first: a `review/` app, else the first listed.
-    pub fn to_try(all: &[Deployment]) -> Option<&Deployment> {
+    pub(crate) fn to_try(all: &[Deployment]) -> Option<&Deployment> {
         all.iter().find(|d| d.environment.starts_with("review/")).or_else(|| all.first())
     }
 }
 
 /// What became of the approval asked with a publish; the drafts went public whatever it says.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Approval {
+pub(crate) enum Approval {
     NotAsked,
     Given,
     /// The forge refused it, in words the reader can act on.
@@ -336,25 +336,25 @@ pub enum Approval {
 
 /// What a publish says with the drafts: only them, or an approval too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReviewKind {
+pub(crate) enum ReviewKind {
     Comment,
     Approve,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ApprovalChange {
+pub(crate) enum ApprovalChange {
     Approve,
     Unapprove,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReactionChange {
+pub(crate) enum ReactionChange {
     Add,
     Remove,
 }
 
 impl ReactionChange {
-    pub fn undone(self) -> Self {
+    pub(crate) fn undone(self) -> Self {
         match self {
             Self::Add => Self::Remove,
             Self::Remove => Self::Add,
@@ -364,14 +364,14 @@ impl ReactionChange {
 
 /// Whether an MR is a draft or ready for review.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Readiness {
+pub(crate) enum Readiness {
     Draft,
     Ready,
 }
 
 impl Readiness {
     /// The end of `!42 is …`.
-    pub fn described(self) -> &'static str {
+    pub(crate) fn described(self) -> &'static str {
         match self {
             Self::Draft => "a draft",
             Self::Ready => "ready for review",
@@ -380,18 +380,18 @@ impl Readiness {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Approvals {
-    pub approved: bool,
-    pub approvals_left: u32,
-    pub user_has_approved: bool,
-    pub user_can_approve: bool,
-    pub approved_by: Vec<User>,
+pub(crate) struct Approvals {
+    pub(crate) approved: bool,
+    pub(crate) approvals_left: u32,
+    pub(crate) user_has_approved: bool,
+    pub(crate) user_can_approve: bool,
+    pub(crate) approved_by: Vec<User>,
 }
 
 impl Approvals {
     /// The approvals once mine, `me`'s, is added or taken back, counted the way the forge will
     /// until its own answer comes; a removal gives back the approval it had taken.
-    pub fn with_mine(&self, change: ApprovalChange, me: &str) -> Self {
+    pub(crate) fn with_mine(&self, change: ApprovalChange, me: &str) -> Self {
         let approve = change == ApprovalChange::Approve;
         let had = self.approved_by.iter().any(|u| u.username == me);
         let mut approved_by: Vec<User> = self.approved_by.iter().filter(|u| u.username != me).cloned().collect();
@@ -410,19 +410,19 @@ impl Approvals {
 /// One changed file: its unified diff body (hunks from the first `@@`) and how it changed.
 /// `change` has no default, so diffs cached before it existed fail to read and are fetched again.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DiffFile {
-    pub diff: String,
-    pub old_path: String,
-    pub new_path: String,
-    pub change: FileKind,
+pub(crate) struct DiffFile {
+    pub(crate) diff: String,
+    pub(crate) old_path: String,
+    pub(crate) new_path: String,
+    pub(crate) change: FileKind,
     /// The forge withheld the body: too many lines for it to send.
     #[serde(default)]
-    pub too_large: bool,
+    pub(crate) too_large: bool,
 }
 
 /// How a file changed; a renamed file's old name is its `old_path`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FileKind {
+pub(crate) enum FileKind {
     Added,
     Deleted,
     Renamed,
@@ -434,19 +434,19 @@ pub enum FileKind {
 
 /// A thread as the forge holds it: its notes in order, the first one carrying where it hangs.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Discussion {
-    pub id: ThreadId,
-    pub notes: Vec<Note>,
+pub(crate) struct Discussion {
+    pub(crate) id: ThreadId,
+    pub(crate) notes: Vec<Note>,
 }
 
 /// A thread's id as its forge names it: GitLab's discussion id, GitHub's review thread node id.
 /// Any text the forge sent; stored as a plain JSON string.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ThreadId(Arc<str>);
+pub(crate) struct ThreadId(Arc<str>);
 
 impl ThreadId {
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -470,32 +470,32 @@ impl std::fmt::Display for ThreadId {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Note {
-    pub id: u64,
-    pub body: String,
-    pub author: User,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+pub(crate) struct Note {
+    pub(crate) id: u64,
+    pub(crate) body: String,
+    pub(crate) author: User,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
     /// Written by the forge itself: "added 2 commits", "approved this merge request".
-    pub system: bool,
-    pub resolvable: bool,
-    pub resolved: bool,
-    pub position: Option<Position>,
+    pub(crate) system: bool,
+    pub(crate) resolvable: bool,
+    pub(crate) resolved: bool,
+    pub(crate) position: Option<Position>,
     /// The suggestions the forge can apply for us, by id; GitHub has none, its suggestions live in the text only.
     #[serde(default)]
-    pub suggestions: Vec<Applicable>,
+    pub(crate) suggestions: Vec<Applicable>,
     /// The reactions on it, one entry per emoji that has any.
     #[serde(default)]
-    pub reactions: Vec<Reaction>,
+    pub(crate) reactions: Vec<Reaction>,
     /// The forge's GraphQL id for the note, which reacting needs: `gid://gitlab/DiffNote/…`, GitHub's node id.
     #[serde(default)]
-    pub node: Option<String>,
+    pub(crate) node: Option<String>,
 }
 
 /// A reaction: one of the eight both forges share (GitHub's, which GitLab has under other names),
 /// or any other emoji, which only GitLab takes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Emoji {
+pub(crate) enum Emoji {
     ThumbsUp,
     ThumbsDown,
     Laugh,
@@ -508,11 +508,11 @@ pub enum Emoji {
 }
 
 impl Emoji {
-    pub const ALL: [Emoji; 8] =
+    pub(crate) const ALL: [Emoji; 8] =
         [Emoji::ThumbsUp, Emoji::ThumbsDown, Emoji::Laugh, Emoji::Confused, Emoji::Heart, Emoji::Hooray, Emoji::Rocket, Emoji::Eyes];
 
     /// The picture a terminal with emoji shows.
-    pub fn glyph(self) -> &'static str {
+    pub(crate) fn glyph(self) -> &'static str {
         match self {
             Emoji::ThumbsUp => "👍",
             Emoji::ThumbsDown => "👎",
@@ -527,7 +527,7 @@ impl Emoji {
     }
 
     /// The same in plain text, for terminals that draw emoji at the wrong width.
-    pub fn text(self) -> &'static str {
+    pub(crate) fn text(self) -> &'static str {
         match self {
             Emoji::ThumbsUp => "+1",
             Emoji::ThumbsDown => "-1",
@@ -542,7 +542,7 @@ impl Emoji {
     }
 
     /// GitLab's award name.
-    pub fn gitlab(self) -> &'static str {
+    pub(crate) fn gitlab(self) -> &'static str {
         match self {
             Emoji::ThumbsUp => "thumbsup",
             Emoji::ThumbsDown => "thumbsdown",
@@ -557,7 +557,7 @@ impl Emoji {
     }
 
     /// GitHub's reaction content, as GraphQL spells it; GitHub has none for the others.
-    pub fn github(self) -> Option<&'static str> {
+    pub(crate) fn github(self) -> Option<&'static str> {
         Some(match self {
             Emoji::ThumbsUp => "THUMBS_UP",
             Emoji::ThumbsDown => "THUMBS_DOWN",
@@ -572,18 +572,18 @@ impl Emoji {
     }
 
     /// The emoji a GitHub content stands for, one of the eight.
-    pub fn from_github(content: &str) -> Option<Emoji> {
+    pub(super) fn from_github(content: &str) -> Option<Emoji> {
         Emoji::ALL.into_iter().find(|e| e.github() == Some(content))
     }
 
     /// The emoji a GitLab award name stands for: one of the eight by its GitLab name, else any
     /// emoji by its short code; GitLab's custom emoji are left out.
-    pub fn from_gitlab(name: &str) -> Option<Emoji> {
+    pub(crate) fn from_gitlab(name: &str) -> Option<Emoji> {
         Emoji::ALL.into_iter().find(|e| e.gitlab() == name).or_else(|| emojis::get_by_shortcode(name).map(Emoji::Other))
     }
 
     /// Every emoji outside the eight, for a forge that takes any.
-    pub fn others() -> impl Iterator<Item = Emoji> {
+    pub(crate) fn others() -> impl Iterator<Item = Emoji> {
         emojis::iter().filter(|e| e.skin_tone().is_none_or(|t| t == emojis::SkinTone::Default)).map(Emoji::Other).filter(|e| {
             let name = e.gitlab();
             Emoji::ALL.iter().all(|known| known.gitlab() != name)
@@ -614,14 +614,14 @@ impl<'de> Deserialize<'de> for Emoji {
 
 /// How many people reacted with `emoji`, me among them or not.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Reaction {
-    pub emoji: Emoji,
-    pub count: u32,
-    pub mine: bool,
+pub(crate) struct Reaction {
+    pub(crate) emoji: Emoji,
+    pub(crate) count: u32,
+    pub(crate) mine: bool,
 }
 
 /// Reactions tallied from `(emoji name, was it me)` pairs, in the order of `Emoji::ALL`.
-pub fn tally(awards: impl IntoIterator<Item = (Emoji, bool)>) -> Vec<Reaction> {
+pub(crate) fn tally(awards: impl IntoIterator<Item = (Emoji, bool)>) -> Vec<Reaction> {
     let mut counts = std::collections::BTreeMap::<Emoji, (u32, bool)>::new();
     for (emoji, mine) in awards {
         let entry = counts.entry(emoji).or_default();
@@ -632,7 +632,7 @@ pub fn tally(awards: impl IntoIterator<Item = (Emoji, bool)>) -> Vec<Reaction> {
 }
 
 /// A note with my reaction `emoji` added or taken off, counts kept right.
-pub fn toggled(reactions: &[Reaction], emoji: Emoji, change: ReactionChange) -> Vec<Reaction> {
+pub(crate) fn toggled(reactions: &[Reaction], emoji: Emoji, change: ReactionChange) -> Vec<Reaction> {
     let mut all: Vec<Reaction> = reactions.to_vec();
     match (change, all.iter_mut().find(|r| r.emoji == emoji)) {
         (ReactionChange::Add, Some(r)) if !r.mine => *r = Reaction { count: r.count + 1, mine: true, ..*r },
@@ -648,27 +648,27 @@ pub fn toggled(reactions: &[Reaction], emoji: Emoji, change: ReactionChange) -> 
 /// A suggestion to commit on the MR's branch: GitLab applies it by `id`; elsewhere the lines around
 /// `line` of `path` are replaced by `text` (`above` lines before it, `below` after).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Suggestion {
-    pub id: Option<u64>,
-    pub path: String,
-    pub line: u32,
-    pub above: u32,
-    pub below: u32,
-    pub text: String,
+pub(crate) struct Suggestion {
+    pub(crate) id: Option<u64>,
+    pub(crate) path: String,
+    pub(crate) line: u32,
+    pub(crate) above: u32,
+    pub(crate) below: u32,
+    pub(crate) text: String,
 }
 
 /// A suggestion the forge applies itself when asked by its id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Applicable {
-    pub id: u64,
-    pub applied: bool,
+pub(crate) struct Applicable {
+    pub(crate) id: u64,
+    pub(crate) applied: bool,
     /// False once the lines moved under it or the MR closed.
-    pub appliable: bool,
+    pub(crate) appliable: bool,
 }
 
 /// Which side of the diff a line number counts on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum Side {
+pub(crate) enum Side {
     Old,
     New,
 }
@@ -676,19 +676,19 @@ pub enum Side {
 /// One diff line by its numbers: a removed line has only `old`, an added one only `new`, a
 /// context line both.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LineRef {
-    pub old: Option<u32>,
-    pub new: Option<u32>,
+pub(crate) struct LineRef {
+    pub(crate) old: Option<u32>,
+    pub(crate) new: Option<u32>,
 }
 
 impl LineRef {
     /// The side a note on this line hangs on: new whenever the line exists there.
-    pub fn side(self) -> Side {
+    pub(crate) fn side(self) -> Side {
         if self.new.is_some() { Side::New } else { Side::Old }
     }
 
     /// The number on `side()`.
-    pub fn number(self) -> Option<u32> {
+    pub(crate) fn number(self) -> Option<u32> {
         self.new.or(self.old)
     }
 }
@@ -697,19 +697,19 @@ impl LineRef {
 /// Each backend builds its own wire shape from this (GitLab's SHAs and `line_range`, GitHub's
 /// `side`/`line`/`commit_id`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Position {
-    pub refs: Refs,
-    pub old_path: String,
-    pub new_path: String,
+pub(crate) struct Position {
+    pub(crate) refs: Refs,
+    pub(crate) old_path: String,
+    pub(crate) new_path: String,
     /// The line the note sits on: the last line of a range.
-    pub line: LineRef,
+    pub(crate) line: LineRef,
     /// The first line of a range; `None` for a note on one line.
-    pub start: Option<LineRef>,
+    pub(crate) start: Option<LineRef>,
 }
 
 impl Position {
     /// The path of the file on the side the note hangs on.
-    pub fn path(&self) -> &str {
+    pub(crate) fn path(&self) -> &str {
         match self.line.side() {
             Side::New => &self.new_path,
             Side::Old => &self.old_path,
@@ -719,24 +719,24 @@ impl Position {
 
 /// A note of mine the forge holds but has not published yet.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Draft {
-    pub id: u64,
-    pub body: String,
+pub(crate) struct Draft {
+    pub(crate) id: u64,
+    pub(crate) body: String,
     /// On a line; `None` on the MR itself or in a reply.
-    pub position: Option<Position>,
+    pub(crate) position: Option<Position>,
     /// The thread it answers.
-    pub reply_to: Option<ThreadId>,
+    pub(crate) reply_to: Option<ThreadId>,
     /// Publishing it also resolves the thread it answers.
-    pub resolve: bool,
+    pub(crate) resolve: bool,
 }
 
 /// What a forge needs to hold a new draft, or to replace one whole.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NewDraft {
-    pub body: String,
-    pub position: Option<Position>,
-    pub reply_to: Option<ThreadId>,
-    pub resolve: bool,
+pub(crate) struct NewDraft {
+    pub(crate) body: String,
+    pub(crate) position: Option<Position>,
+    pub(crate) reply_to: Option<ThreadId>,
+    pub(crate) resolve: bool,
 }
 
 #[cfg(test)]

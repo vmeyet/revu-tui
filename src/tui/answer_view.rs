@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let focused = app.focus == Focus::Side;
 

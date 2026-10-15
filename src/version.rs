@@ -1,17 +1,17 @@
 use std::sync::LazyLock;
 
 /// The commit this binary was built from, or [`UNKNOWN`] when built without git history.
-pub const COMMIT: &str = env!("GIT_HASH");
+pub(crate) const COMMIT: &str = env!("GIT_HASH");
 
-pub const UNKNOWN: &str = "unknown";
+pub(crate) const UNKNOWN: &str = "unknown";
 
 /// `0.1.0 (a1b2c3d)`, as shown by `revu --version`.
-pub fn label() -> &'static str {
+pub(crate) fn label() -> &'static str {
     static LABEL: LazyLock<String> = LazyLock::new(|| format!("{} ({})", env!("CARGO_PKG_VERSION"), short(COMMIT)));
     &LABEL
 }
 
-pub fn short(commit: &str) -> &str {
+pub(crate) fn short(commit: &str) -> &str {
     commit.get(..7).unwrap_or(commit)
 }
 

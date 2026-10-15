@@ -8,13 +8,13 @@ use std::time::Duration;
 use url::Url;
 
 /// A bigger file is not a comment's picture worth a thumbnail.
-pub const MAX_BYTES: usize = 5 * 1024 * 1024;
+pub(crate) const MAX_BYTES: usize = 5 * 1024 * 1024;
 /// A picture that takes longer shows its `[image: …]` line instead.
-pub const TIMEOUT: Duration = Duration::from_secs(15);
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(15);
 
 /// A client without the token and without redirects, for the signed links a forge hands out:
 /// such a link carries its own right to read, so nothing else needs to travel with it.
-pub fn bare_client() -> Result<reqwest::Client> {
+pub(super) fn bare_client() -> Result<reqwest::Client> {
     crate::http::client()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(TIMEOUT)
@@ -25,7 +25,7 @@ pub fn bare_client() -> Result<reqwest::Client> {
 
 /// The body of a successful answer when it is a picture no larger than [`MAX_BYTES`].
 /// GitLab uploads and GitHub's raw files come untyped, so such a body counts when its bytes are an image.
-pub async fn read(mut response: Response) -> Result<Vec<u8>> {
+pub(crate) async fn read(mut response: Response) -> Result<Vec<u8>> {
     let status = response.status();
     if !status.is_success() {
         bail!("HTTP {}", status.as_u16());
@@ -53,7 +53,7 @@ pub async fn read(mut response: Response) -> Result<Vec<u8>> {
 }
 
 /// Where GitHub sends an attachment link: its user-content hosts and the S3 bucket behind them.
-pub fn signed_host(url: &Url) -> bool {
+pub(super) fn signed_host(url: &Url) -> bool {
     let Some(host) = url.host_str() else { return false };
     url.scheme() == "https"
         && (host.ends_with(".githubusercontent.com")
@@ -62,7 +62,7 @@ pub fn signed_host(url: &Url) -> bool {
 
 /// The link a reader's browser opens for `url` as written in a note of `project` on `host`:
 /// GitLab writes uploads relative to the project, other relative links to the host.
-pub fn web_url(host: &str, project: &super::ProjectPath, url: &str) -> String {
+pub(crate) fn web_url(host: &str, project: &super::ProjectPath, url: &str) -> String {
     if url.starts_with("http://") || url.starts_with("https://") {
         return url.to_owned();
     }

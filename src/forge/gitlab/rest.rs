@@ -136,13 +136,13 @@ impl From<JobWire> for Found {
 
 impl Client {
     /// The path of the project with this numeric id.
-    pub async fn project_path(&self, id: u64) -> Result<ProjectPath> {
+    pub(crate) async fn project_path(&self, id: u64) -> Result<ProjectPath> {
         let project: Project = self.http.get(&format!("projects/{id}")).await.with_context(|| format!("project {id}"))?;
         Ok(project.path_with_namespace)
     }
 
     /// The open MR whose source is `branch`, if any.
-    pub async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
+    pub(crate) async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
         let path = format!("{}/merge_requests?state=opened&source_branch={}", project_path(project), url_encode(branch));
         let found: Vec<MrIid> = self.http.get(&path).await?;
         Ok(found.first().map(|m| m.iid))
@@ -150,7 +150,7 @@ impl Client {
 
     /// The MR with its approvals folded in; the requests run together.
     /// Who I am only decides `mine`: when `/user` fails, the MR still loads and merge is not offered.
-    pub async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
+    pub(crate) async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
         let path = mr_path(key);
         let approvals_path = format!("{path}/approvals");
         let (mr, approvals, me) =
@@ -161,19 +161,19 @@ impl Client {
     }
 
     /// The whole file at `sha`, to show the lines around a hunk.
-    pub async fn file(&self, project: &ProjectPath, path: &str, sha: &str) -> Result<String> {
+    pub(crate) async fn file(&self, project: &ProjectPath, path: &str, sha: &str) -> Result<String> {
         self.http.get_text(&format!("{}/repository/files/{}/raw?ref={sha}", project_path(project), url_encode(path))).await
     }
 
     /// GitLab commits the suggestion itself, on the MR's branch, from its id.
-    pub async fn apply(&self, suggestion: &forge::Suggestion) -> Result<()> {
+    pub(crate) async fn apply(&self, suggestion: &forge::Suggestion) -> Result<()> {
         let Some(id) = suggestion.id else { return Err(anyhow!("GitLab did not list this suggestion as appliable")) };
         self.http.send_empty(Method::PUT, &format!("suggestions/{id}/apply"), None).await
     }
 
     /// The jobs of the MR's newest pipeline; `None` when it never ran one. GitLab creates a
     /// pipeline's jobs stage by stage, so their ids give the stage order.
-    pub async fn checks(&self, key: &MrKey) -> Result<Option<Checks>> {
+    pub(crate) async fn checks(&self, key: &MrKey) -> Result<Option<Checks>> {
         let pipelines: Vec<PipelineRef> = self.http.get(&format!("{}/pipelines?per_page=1", mr_path(key))).await?;
         let Some(newest) = pipelines.into_iter().next() else { return Ok(None) };
         let jobs: Vec<JobWire> = self.http.get_all(&format!("{}/pipelines/{}/jobs", project_path(&key.project), newest.id)).await?;
@@ -182,7 +182,7 @@ impl Client {
 
     /// The review apps still up for the MR: environments named after its branch whose last
     /// deployment came from it; the deployments list itself cannot be filtered by branch.
-    pub async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
+    pub(crate) async fn deployments(&self, key: &MrKey, branch: &str, head: &str) -> Result<Vec<forge::Deployment>> {
         let project = project_path(&key.project);
         let search = format!("{project}/environments?states=available&search={}&per_page=20", url_encode(&ref_slug(branch)));
         let pipelines = format!("{}/pipelines?per_page=1", mr_path(key));
@@ -195,7 +195,7 @@ impl Client {
     }
 
     /// Which of `numbers` in `project` are merged or closed, a hundred per request.
-    pub async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
+    pub(crate) async fn finished(&self, project: &ProjectPath, numbers: &[u64]) -> Result<Vec<u64>> {
         let mut done = vec![];
         for chunk in numbers.chunks(100) {
             let iids: String = chunk.iter().map(|n| format!("&iids[]={n}")).collect();
@@ -206,41 +206,41 @@ impl Client {
         Ok(done)
     }
 
-    pub async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
+    pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         let files: Vec<wire::DiffFile> = self.http.get_all(&format!("{}/diffs", mr_path(key))).await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
     /// The threads, each note with its reactions; the threads still come when reactions cannot be read.
-    pub async fn discussions(&self, key: &MrKey) -> Result<Vec<forge::Discussion>> {
+    pub(crate) async fn discussions(&self, key: &MrKey) -> Result<Vec<forge::Discussion>> {
         let path = format!("{}/discussions", mr_path(key));
         let (discussions, awards) = tokio::join!(self.http.get_all::<Discussion>(&path), self.awards(key));
         let awards = awards.unwrap_or_default();
         Ok(discussions?.into_iter().map(|d| with_awards(forge::Discussion::from(d), &awards)).collect())
     }
 
-    pub async fn drafts(&self, key: &MrKey) -> Result<Vec<forge::Draft>> {
+    pub(crate) async fn drafts(&self, key: &MrKey) -> Result<Vec<forge::Draft>> {
         let drafts: Vec<DraftNote> = self.http.get_all(&format!("{}/draft_notes", mr_path(key))).await?;
         Ok(drafts.into_iter().map(forge::Draft::from).collect())
     }
 
-    pub async fn create_draft(&self, key: &MrKey, draft: &forge::NewDraft) -> Result<forge::Draft> {
+    pub(crate) async fn create_draft(&self, key: &MrKey, draft: &forge::NewDraft) -> Result<forge::Draft> {
         let body = serde_json::to_value(NewDraft::from(draft))?;
         self.http.post_json::<DraftNote>(&format!("{}/draft_notes", mr_path(key)), &body).await.map(forge::Draft::from)
     }
 
     /// The whole draft goes again: GitLab drops the position of a draft updated with its text alone.
-    pub async fn update_draft(&self, key: &MrKey, id: u64, draft: &forge::NewDraft) -> Result<forge::Draft> {
+    pub(crate) async fn update_draft(&self, key: &MrKey, id: u64, draft: &forge::NewDraft) -> Result<forge::Draft> {
         let body = serde_json::to_value(NewDraft::from(draft))?;
         self.http.put_json::<DraftNote>(&format!("{}/draft_notes/{id}", mr_path(key)), &body).await.map(forge::Draft::from)
     }
 
-    pub async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
+    pub(crate) async fn delete_draft(&self, key: &MrKey, id: u64) -> Result<()> {
         self.http.delete(&format!("{}/draft_notes/{id}", mr_path(key))).await
     }
 
     /// Every draft of mine on the MR becomes public at once, as one review; then the approval, when asked.
-    pub async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
+    pub(crate) async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
         self.http.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(key)), None).await?;
         if kind == forge::ReviewKind::Comment {
             return Ok(forge::Approval::NotAsked);
@@ -251,13 +251,13 @@ impl Client {
             .map_or_else(|e| forge::Approval::Refused(e.to_string()), |()| forge::Approval::Given))
     }
 
-    pub async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
+    pub(crate) async fn resolve(&self, key: &MrKey, discussion: &ThreadId, resolved: bool) -> Result<()> {
         let path = format!("{}/discussions/{discussion}", mr_path(key));
         self.http.put_json::<Discussion>(&path, &json!({"resolved": resolved})).await.map(|_| ())
     }
 
     /// A public new thread, on a line when `position` is given.
-    pub async fn comment(&self, key: &MrKey, body: &str, position: Option<&forge::Position>) -> Result<forge::Discussion> {
+    pub(crate) async fn comment(&self, key: &MrKey, body: &str, position: Option<&forge::Position>) -> Result<forge::Discussion> {
         let payload = match position {
             Some(position) => json!({"body": body, "position": wire::Position::from_model(position)}),
             None => json!({"body": body}),
@@ -266,7 +266,7 @@ impl Client {
     }
 
     /// A public reply at the end of `discussion`.
-    pub async fn reply(&self, key: &MrKey, discussion: &ThreadId, body: &str) -> Result<()> {
+    pub(crate) async fn reply(&self, key: &MrKey, discussion: &ThreadId, body: &str) -> Result<()> {
         let path = format!("{}/discussions/{discussion}/notes", mr_path(key));
         self.http.post_json::<serde_json::Value>(&path, &json!({"body": body})).await.map(|_| ())
     }
@@ -274,7 +274,7 @@ impl Client {
     /// Approves, or takes my approval back.
     /// GitLab applies the project's merge method; revu passes the squash and branch choices it
     /// showed, and `sha` so a push made after the reader looked is refused.
-    pub async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
+    pub(crate) async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
         let body = json!({
             "sha": head,
             "squash": plan.method == forge::MergeMethod::Squash,
@@ -283,7 +283,7 @@ impl Client {
         self.http.put_json::<serde_json::Value>(&format!("{}/merge", mr_path(key)), &body).await.map(|_| ()).map_err(merge_refused)
     }
 
-    pub async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
+    pub(crate) async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
         let verb = match change {
             forge::ApprovalChange::Approve => "approve",
             forge::ApprovalChange::Unapprove => "unapprove",

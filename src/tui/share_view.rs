@@ -12,7 +12,7 @@ use ratatui::widgets::{Clear, Paragraph, Wrap};
 const WIDTH: u16 = 72;
 const NOTE_ROWS: u16 = 5;
 
-pub fn draw(f: &mut Frame<'_>, app: &App, sharing: &Sharing, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &App, sharing: &Sharing, area: Rect) {
     let theme = app.theme;
     let width = WIDTH.min(area.width.saturating_sub(4)).max(20);
     let block = pane(theme, &sharing.title(), true)

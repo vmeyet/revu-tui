@@ -4,18 +4,18 @@ use crate::forge::{QueueMr, Sections};
 use chrono::{DateTime, Utc};
 
 /// Below this many requests left, nothing is loaded ahead: the window is kept for what the reader asks.
-pub const SPARE: u64 = 200;
+pub(crate) const SPARE: u64 = 200;
 
 /// One MR to load ahead, with the last change the queue saw on it: a cache at least that new is kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Ahead {
-    pub key: MrKey,
-    pub updated_at: DateTime<Utc>,
+pub(crate) struct Ahead {
+    pub(crate) key: MrKey,
+    pub(crate) updated_at: DateTime<Utc>,
 }
 
 /// The MRs worth loading before they are asked for, in the order the reader meets them: ready
 /// ones, then review requests, then mine. What I already approved and the open MR are left out.
-pub fn plan(sections: &Sections, me: &str, open: Option<&MrKey>, limit: usize) -> Vec<Ahead> {
+pub(crate) fn plan(sections: &Sections, me: &str, open: Option<&MrKey>, limit: usize) -> Vec<Ahead> {
     let needs_me = sections.ready.iter().chain(&sections.to_review).filter(|mr| !mr.approved_by.iter().any(|who| who == me));
     let mut picked: Vec<Ahead> = vec![];
     for mr in needs_me.chain(&sections.mine) {

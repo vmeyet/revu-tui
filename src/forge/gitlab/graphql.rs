@@ -66,7 +66,7 @@ fn project_query() -> String {
 
 impl Client {
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
-    pub async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
+    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
         let (asking_body, authored_body) = (json!({"query": asking_query()}), json!({"query": authored_query()}));
         let asking = self.http.post_json::<Answer>(super::GRAPHQL, &asking_body);
         let authored = self.http.post_json::<Answer>(super::GRAPHQL, &authored_body);
@@ -82,7 +82,7 @@ impl Client {
 
 impl Client {
     /// Marks the MR a draft, or ready; GitLab leaves an MR already there as it is.
-    pub async fn set_readiness(&self, key: &MrKey, readiness: Readiness) -> Result<()> {
+    pub(crate) async fn set_readiness(&self, key: &MrKey, readiness: Readiness) -> Result<()> {
         let draft = readiness == Readiness::Draft;
         let variables = json!({"project": key.project, "iid": key.number.to_string(), "draft": draft});
         let answer = self.http.post_json::<Answer>(super::GRAPHQL, &json!({"query": SET_DRAFT, "variables": variables})).await?;

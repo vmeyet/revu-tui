@@ -48,7 +48,7 @@ impl Placed {
 }
 
 /// `[agent] split` reads as words, starts with a program, and has `{command}` as a word of its own.
-pub fn check_split(command: &str, key: &str) -> Result<()> {
+pub(crate) fn check_split(command: &str, key: &str) -> Result<()> {
     crate::program::check(command, key)?;
     let mut words = command.split_whitespace();
     if words.next().is_some_and(|program| crate::share::placeholders(program).next().is_some()) {

@@ -28,7 +28,7 @@ mod render;
 mod review;
 mod share;
 mod syntax;
-pub mod tui;
+mod tui;
 mod update;
 mod usage;
 mod version;

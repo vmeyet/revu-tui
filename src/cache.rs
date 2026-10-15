@@ -13,21 +13,21 @@ const DIR_MODE: u32 = 0o700;
 const FILE_MODE: u32 = 0o600;
 
 #[derive(Clone, Debug)]
-pub struct Cache {
+pub(crate) struct Cache {
     dir: PathBuf,
 }
 
 /// An MR the cache holds a folder for, and when anything in it was last written.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Kept {
-    pub project: ProjectPath,
-    pub number: u64,
-    pub touched: SystemTime,
+pub(crate) struct Kept {
+    pub(crate) project: ProjectPath,
+    pub(crate) number: u64,
+    pub(crate) touched: SystemTime,
 }
 
 /// The kept MRs to drop: those the forge says are merged or closed, and any untouched for `idle`,
 /// which also covers an MR on a project the forge could not answer for.
-pub fn to_forget<'a>(kept: &'a [Kept], finished: &HashSet<(ProjectPath, u64)>, now: SystemTime, idle: Duration) -> Vec<&'a Kept> {
+pub(crate) fn to_forget<'a>(kept: &'a [Kept], finished: &HashSet<(ProjectPath, u64)>, now: SystemTime, idle: Duration) -> Vec<&'a Kept> {
     let old = |k: &Kept| now.duration_since(k.touched).is_ok_and(|age| age > idle);
     kept.iter().filter(|k| finished.contains(&(k.project.clone(), k.number)) || old(k)).collect()
 }
@@ -46,58 +46,58 @@ fn newest_write(path: &Path) -> Option<SystemTime> {
 
 /// A cached value and when it was fetched, so a stale view can say how stale.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Entry<T> {
-    pub value: T,
-    pub fetched_at: DateTime<Utc>,
+pub(crate) struct Entry<T> {
+    pub(crate) value: T,
+    pub(crate) fetched_at: DateTime<Utc>,
 }
 
 impl<T> Entry<T> {
-    pub fn now(value: T) -> Self {
+    pub(crate) fn now(value: T) -> Self {
         Self { value, fetched_at: Utc::now() }
     }
 
-    pub fn age(&self, now: DateTime<Utc>) -> Duration {
+    pub(crate) fn age(&self, now: DateTime<Utc>) -> Duration {
         (now - self.fetched_at).to_std().unwrap_or(Duration::ZERO)
     }
 }
 
 impl Cache {
-    pub fn for_host(host: &str) -> Result<Self> {
+    pub(crate) fn for_host(host: &str) -> Result<Self> {
         crate::auth::check_host(host)?;
         Ok(Self::in_dir(root().join(host)))
     }
 
-    pub fn in_dir(dir: impl Into<PathBuf>) -> Self {
+    pub(crate) fn in_dir(dir: impl Into<PathBuf>) -> Self {
         Self { dir: dir.into() }
     }
 
     /// The cache root itself, for what belongs to no host.
-    pub fn shared() -> Self {
+    pub(crate) fn shared() -> Self {
         Self::in_dir(root())
     }
 
     /// A folder for files that are not JSON, created on first use.
-    pub fn folder(&self, name: &str) -> Result<PathBuf> {
+    pub(crate) fn folder(&self, name: &str) -> Result<PathBuf> {
         let path = self.dir.join(name);
         std::fs::create_dir_all(&path).with_context(|| format!("creating {}", path.display()))?;
         Ok(path)
     }
 
     /// Whether an entry is there, without reading it: a big diff is not parsed only to be dropped.
-    pub fn has(&self, key: &str) -> bool {
+    pub(crate) fn has(&self, key: &str) -> bool {
         self.dir.join(key).is_file()
     }
 
     /// The entries of folder `dir` whose names start with `prefix`, as keys `read` takes; none
     /// when the folder is not there.
-    pub fn keys_in(&self, dir: &str, prefix: &str) -> Vec<String> {
+    pub(crate) fn keys_in(&self, dir: &str, prefix: &str) -> Vec<String> {
         let Ok(listed) = std::fs::read_dir(self.dir.join(dir)) else { return vec![] };
         let names = listed.filter_map(|entry| entry.ok()?.file_name().into_string().ok());
         names.filter(|name| name.starts_with(prefix)).map(|name| format!("{dir}/{name}")).collect()
     }
 
     /// Every MR this cache holds a folder for, with when anything in it was last written.
-    pub fn kept_mrs(&self) -> Vec<Kept> {
+    pub(crate) fn kept_mrs(&self) -> Vec<Kept> {
         let mrs = self.dir.join("mr");
         let Ok(projects) = std::fs::read_dir(&mrs) else { return vec![] };
         let mut kept = vec![];
@@ -114,7 +114,7 @@ impl Cache {
     }
 
     /// Drops everything kept for one MR; a folder already gone is fine.
-    pub fn forget_mr(&self, project: &ProjectPath, number: u64) -> Result<()> {
+    pub(crate) fn forget_mr(&self, project: &ProjectPath, number: u64) -> Result<()> {
         let path = self.dir.join(keys::mr_dir(project, number));
         match std::fs::remove_dir_all(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e).with_context(|| format!("removing {}", path.display())),
@@ -123,19 +123,19 @@ impl Cache {
     }
 
     /// A missing or unreadable file is a miss; an unreadable one is logged and removed so it cannot fail again.
-    pub fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
+    pub(crate) fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let path = self.dir.join(key);
         let raw = std::fs::read(&path).ok()?;
         serde_json::from_slice(&raw).inspect_err(|e| drop_unreadable(&path, e)).ok()
     }
 
-    pub fn write<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
+    pub(crate) fn write<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
         self.write_bytes(key, &serde_json::to_vec(value)?)
     }
 
     /// Reads, changes and writes one entry while holding `<key>.lock`, so revu processes sharing
     /// the cache take turns and none loses another's change; a missing or broken entry starts from the default.
-    pub fn update<T: Serialize + DeserializeOwned + Default>(&self, key: &str, change: impl FnOnce(T) -> T) -> Result<T> {
+    pub(crate) fn update<T: Serialize + DeserializeOwned + Default>(&self, key: &str, change: impl FnOnce(T) -> T) -> Result<T> {
         let lock = self.dir.join(format!("{key}.lock"));
         create_private_dirs(&self.dir, lock.parent().context("cache key has no parent")?)?;
         let file = std::fs::OpenOptions::new()
@@ -152,26 +152,26 @@ impl Cache {
     }
 
     /// A file that is not JSON, such as a downloaded picture; a missing one is a miss.
-    pub fn read_bytes(&self, key: &str) -> Option<Vec<u8>> {
+    pub(crate) fn read_bytes(&self, key: &str) -> Option<Vec<u8>> {
         std::fs::read(self.dir.join(key)).ok()
     }
 
-    pub fn write_bytes(&self, key: &str, bytes: &[u8]) -> Result<()> {
+    pub(crate) fn write_bytes(&self, key: &str, bytes: &[u8]) -> Result<()> {
         let path = self.dir.join(key);
         write_private(&self.dir, &path, bytes).with_context(|| format!("writing {}", path.display()))
     }
 
-    pub fn read_entry<T: DeserializeOwned>(&self, key: &str) -> Option<Entry<T>> {
+    pub(crate) fn read_entry<T: DeserializeOwned>(&self, key: &str) -> Option<Entry<T>> {
         self.read(key)
     }
 
-    pub fn write_entry<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
+    pub(crate) fn write_entry<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
         self.write(key, &Entry::now(value))
     }
 
     /// File `name` opened to append, private like the rest. Past `max` bytes it first moves to
     /// `<name>.1`, dropping the one before, so it never holds more than twice `max`.
-    pub fn append(&self, name: &str, max: u64) -> Result<std::fs::File> {
+    pub(crate) fn append(&self, name: &str, max: u64) -> Result<std::fs::File> {
         let path = self.dir.join(name);
         create_private_dirs(&self.dir, &self.dir)?;
         if std::fs::metadata(&path).is_ok_and(|m| m.len() > max) {
@@ -183,7 +183,7 @@ impl Cache {
         Ok(file)
     }
 
-    pub fn clear(&self) -> Result<()> {
+    pub(crate) fn clear(&self) -> Result<()> {
         match std::fs::remove_dir_all(&self.dir) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -246,26 +246,26 @@ fn root() -> PathBuf {
 }
 
 /// The one place cache paths are spelled.
-pub mod keys {
+pub(crate) mod keys {
     use crate::forge::{MrKey, ProjectPath, Sha};
 
     /// One file per scope, so switching between a repo and every project never shows the other list.
-    pub fn queue(project: Option<&ProjectPath>) -> String {
+    pub(crate) fn queue(project: Option<&ProjectPath>) -> String {
         scoped("queue", project)
     }
 
     /// The ready command's last output for a scope, and the MRs it named outside my lists.
-    pub fn ready(project: Option<&ProjectPath>) -> String {
+    pub(crate) fn ready(project: Option<&ProjectPath>) -> String {
         scoped("ready", project)
     }
 
     /// How the queue of one scope is sorted and grouped, next to its list.
-    pub fn queue_view(project: Option<&ProjectPath>) -> String {
+    pub(crate) fn queue_view(project: Option<&ProjectPath>) -> String {
         scoped("queue_view", project)
     }
 
     /// The MRs pinned in the queue of one scope.
-    pub fn pins(project: Option<&ProjectPath>) -> String {
+    pub(crate) fn pins(project: Option<&ProjectPath>) -> String {
         scoped("pins", project)
     }
 
@@ -282,27 +282,27 @@ pub mod keys {
     }
 
     /// The folder everything about one MR sits in.
-    pub fn mr_dir(project: &ProjectPath, number: u64) -> String {
+    pub(super) fn mr_dir(project: &ProjectPath, number: u64) -> String {
         format!("mr/{}/{number}", slug(project))
     }
 
     /// When the cache of every host was last cleaned, in the shared cache.
-    pub fn pruned() -> String {
+    pub(crate) fn pruned() -> String {
         "pruned.json".to_owned()
     }
 
     /// How far the reader got in revu's own changelog, in the shared cache.
-    pub fn news() -> String {
+    pub(crate) fn news() -> String {
         "news.json".to_owned()
     }
 
     /// How often I gave each reaction, per host, in the shared cache.
-    pub fn reactions() -> String {
+    pub(crate) fn reactions() -> String {
         "reactions.json".to_owned()
     }
 
     /// The target I last shared to, per host, in the shared cache.
-    pub fn last_share() -> String {
+    pub(crate) fn last_share() -> String {
         "share.json".to_owned()
     }
 
@@ -310,58 +310,58 @@ pub mod keys {
         project.as_str().replace('/', "+")
     }
 
-    pub fn mr(key: &MrKey) -> String {
+    pub(crate) fn mr(key: &MrKey) -> String {
         format!("{}/mr.json", dir(key))
     }
 
-    pub fn diffs(key: &MrKey, head: &Sha) -> String {
+    pub(crate) fn diffs(key: &MrKey, head: &Sha) -> String {
         format!("{}/diffs.{head}.json", dir(key))
     }
 
-    pub fn discussions(key: &MrKey) -> String {
+    pub(crate) fn discussions(key: &MrKey) -> String {
         format!("{}/discussions.json", dir(key))
     }
 
     /// A downloaded picture, by the link a note gave; hashed, since the link holds slashes and queries.
-    pub fn image(url: &str) -> String {
+    pub(crate) fn image(url: &str) -> String {
         format!("images/{}", sha1_smol::Sha1::from(url.as_bytes()).digest())
     }
 
-    pub fn drafts(key: &MrKey) -> String {
+    pub(crate) fn drafts(key: &MrKey) -> String {
         format!("{}/drafts.json", dir(key))
     }
 
-    pub fn state(key: &MrKey) -> String {
+    pub(crate) fn state(key: &MrKey) -> String {
         format!("{}/state.json", dir(key))
     }
 
     /// The agent session revu last opened for an MR.
-    pub fn session(key: &MrKey) -> String {
+    pub(crate) fn session(key: &MrKey) -> String {
         format!("{}/session.json", dir(key))
     }
 
     /// What Jev said about an MR as a queue row.
-    pub fn verdict(key: &MrKey) -> String {
+    pub(crate) fn verdict(key: &MrKey) -> String {
         format!("{}/ai/verdict.json", dir(key))
     }
 
     /// Claude's answer to one request, named by a hash of the request so the same question hits it.
-    pub fn answer(key: &MrKey, request: &str) -> String {
+    pub(crate) fn answer(key: &MrKey, request: &str) -> String {
         format!("{}/ai/answer.{}.json", dir(key), sha1_smol::Sha1::from(request.as_bytes()).digest())
     }
 
     /// Where every answer about an MR lies, and what their names start with.
-    pub fn answers(key: &MrKey) -> (String, &'static str) {
+    pub(crate) fn answers(key: &MrKey) -> (String, &'static str) {
         (format!("{}/ai", dir(key)), "answer.")
     }
 
     /// What Jev read in an MR at one head commit.
-    pub fn reading(key: &MrKey, head: &Sha) -> String {
+    pub(crate) fn reading(key: &MrKey, head: &Sha) -> String {
         format!("{}/ai/reading.{head}.json", dir(key))
     }
 
     /// A file at one commit, named by a hash of its path so no path from the forge becomes a directory.
-    pub fn file(key: &MrKey, sha: &Sha, path: &str) -> String {
+    pub(crate) fn file(key: &MrKey, sha: &Sha, path: &str) -> String {
         format!("{}/files/{sha}/{}.json", dir(key), sha1_smol::Sha1::from(path.as_bytes()).digest())
     }
 }

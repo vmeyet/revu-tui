@@ -8,7 +8,7 @@ const PLACEHOLDERS: [&str; 10] = ["ref", "iid", "url", "author", "project", "bra
 
 /// The command splits into words, starts with a program and names only placeholders revu fills; checked
 /// when the config loads. A program that is a placeholder would run text the forge wrote.
-pub fn check(command: &str, key: &str) -> Result<()> {
+pub(crate) fn check(command: &str, key: &str) -> Result<()> {
     crate::program::check(command, key)?;
     let program = command.split_whitespace().next().unwrap_or_default();
     if crate::share::placeholders(program).next().is_some() {

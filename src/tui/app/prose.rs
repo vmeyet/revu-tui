@@ -7,24 +7,24 @@ use crossterm::event::KeyEvent;
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Prose {
-    pub sides: Sides,
-    pub texts: Texts,
+pub(crate) struct Prose {
+    pub(crate) sides: Sides,
+    pub(crate) texts: Texts,
     /// The first row in view; the draw keeps it inside the rows.
-    pub scroll: usize,
+    pub(crate) scroll: usize,
     /// Every unchanged run shown, `zR`.
-    pub unfolded: bool,
+    pub(crate) unfolded: bool,
 }
 
 impl Prose {
     /// The file's path at head, at base for a deleted file.
-    pub fn path(&self) -> &str {
+    pub(crate) fn path(&self) -> &str {
         self.sides.head.as_deref().or(self.sides.base.as_deref()).unwrap_or_default()
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Texts {
+pub(crate) enum Texts {
     Waiting,
     /// Shared, so the rows rendered from it are kept until another read replaces it.
     Ready(Arc<Versions>),
@@ -33,9 +33,9 @@ pub enum Texts {
 
 /// The whole file at base and at head, empty on the side it does not exist.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Versions {
-    pub base: String,
-    pub head: String,
+pub(crate) struct Versions {
+    pub(crate) base: String,
+    pub(crate) head: String,
 }
 
 impl Open {

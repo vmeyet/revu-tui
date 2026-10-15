@@ -11,7 +11,7 @@ const KEEPALIVE: Duration = Duration::from_secs(15);
 /// The one way to start a `reqwest` client: its TLS runs on ring, the only crypto provider revu links,
 /// which rustls needs installed before the first client is built. No request waits forever on a
 /// silent host; a client that knows how long its answers take adds its own total limit.
-pub fn client() -> reqwest::ClientBuilder {
+pub(crate) fn client() -> reqwest::ClientBuilder {
     static RING: Once = Once::new();
     RING.call_once(|| {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();

@@ -22,7 +22,7 @@ struct Upload {
 
 impl Client {
     /// The bytes of a picture a note in `project` points at; only this host's uploads are fetched.
-    pub async fn image(&self, project: &ProjectPath, url: &str) -> Result<Vec<u8>> {
+    pub(crate) async fn image(&self, project: &ProjectPath, url: &str) -> Result<Vec<u8>> {
         let Some(upload) = Upload::parse(url, &self.host) else { bail!("not an upload on {}", self.host) };
         let owner = match &upload.owner {
             Owner::Mr => super::rest::project_path(project),

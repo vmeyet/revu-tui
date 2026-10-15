@@ -6,27 +6,27 @@ use std::path::Path;
 use std::process::Command;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ProjectRef {
+pub(crate) enum ProjectRef {
     Path(ProjectPath),
     Id(u64),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MrRef {
-    pub project: ProjectRef,
-    pub iid: u64,
+pub(crate) struct MrRef {
+    pub(crate) project: ProjectRef,
+    pub(crate) iid: u64,
 }
 
 /// What the argument points at once parsed: an MR, or the open MR of a branch.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Target {
+pub(crate) enum Target {
     Mr(MrRef),
     Branch { project: ProjectPath, branch: String },
 }
 
 impl Target {
     /// `arg` as typed; the git checkout under `dir` fills in what the argument leaves out.
-    pub fn from_arg(arg: Option<&str>, dir: &Path) -> Result<Self> {
+    pub(crate) fn from_arg(arg: Option<&str>, dir: &Path) -> Result<Self> {
         if let Some(text) = arg {
             return parse(text, || local_project(dir)).map(Target::Mr);
         }
@@ -37,7 +37,7 @@ impl Target {
 }
 
 /// `local_project` is only asked for the bare `42`, `!42` and `#42` forms.
-pub fn parse(text: &str, local_project: impl FnOnce() -> Option<ProjectPath>) -> Result<MrRef> {
+pub(crate) fn parse(text: &str, local_project: impl FnOnce() -> Option<ProjectPath>) -> Result<MrRef> {
     let text = text.trim();
     if let Some(url) = text.strip_prefix("https://").or_else(|| text.strip_prefix("http://")) {
         return parse_url(url).with_context(|| format!("not a merge request URL: {text}"));
@@ -67,7 +67,7 @@ fn parse_url(without_scheme: &str) -> Option<MrRef> {
 }
 
 /// `git@host:group/project.git` or `https://host/group/project(.git)` → `group/project`.
-pub fn project_from_remote(url: &str) -> Option<ProjectPath> {
+fn project_from_remote(url: &str) -> Option<ProjectPath> {
     let url = url.trim();
     let path = if let Some((_, rest)) = url.split_once("://") {
         rest.split_once('/')?.1
@@ -85,18 +85,18 @@ fn local_project(dir: &Path) -> Option<ProjectPath> {
 }
 
 /// The host of the checkout's `origin` remote under `dir`.
-pub fn origin_host(dir: &Path) -> Option<String> {
+pub(crate) fn origin_host(dir: &Path) -> Option<String> {
     remote_host(&git(dir, ["remote", "get-url", "origin"])?).map(str::to_owned)
 }
 
 /// The project of the checkout under `dir`, when its origin lives on `host`.
-pub fn checkout_project(dir: &Path, host: &str) -> Option<ProjectPath> {
+pub(crate) fn checkout_project(dir: &Path, host: &str) -> Option<ProjectPath> {
     let remote = git(dir, ["remote", "get-url", "origin"])?;
     (remote_host(&remote)? == host).then(|| project_from_remote(&remote)).flatten()
 }
 
 /// `git@host:group/project.git`, `ssh://git@host:22/…` or `https://user@host/…` → `host`.
-pub fn remote_host(url: &str) -> Option<&str> {
+fn remote_host(url: &str) -> Option<&str> {
     let url = url.trim();
     let authority = match url.split_once("://") {
         Some((_, rest)) => rest.split('/').next()?,

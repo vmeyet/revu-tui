@@ -5,15 +5,15 @@ use std::collections::BTreeSet;
 
 /// Every row of the pane, and the entries among them the cursor walks.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Rows {
-    pub lines: Vec<PaneLine>,
-    pub entries: Vec<Entry>,
+pub(crate) struct Rows {
+    pub(crate) lines: Vec<PaneLine>,
+    pub(crate) entries: Vec<Entry>,
     /// The line each entry is on.
-    pub line_of: Vec<usize>,
+    pub(crate) line_of: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PaneLine {
+pub(crate) enum PaneLine {
     /// Breaking, added and renamed changes among those counted.
     Counts([usize; 3]),
     Blank,
@@ -29,24 +29,24 @@ pub enum PaneLine {
 
 /// One row the cursor stops on: a section header, a change of the flat list, or a branch of the tree after the lines drawn before it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Entry {
+pub(crate) struct Entry {
     /// The section it heads, with how many changes it holds.
-    pub header: Option<(Section, usize)>,
-    pub lines: String,
+    pub(crate) header: Option<(Section, usize)>,
+    pub(crate) lines: String,
     /// The branch's item; none in the flat list.
-    pub item: Option<Item>,
+    pub(crate) item: Option<Item>,
     /// The change the row shows, by its index in the reading.
-    pub change: Option<usize>,
-    pub unsure: bool,
-    pub site: Option<Site>,
-    pub folded: bool,
+    pub(crate) change: Option<usize>,
+    pub(crate) unsure: bool,
+    pub(crate) site: Option<Site>,
+    pub(crate) folded: bool,
     pub(super) children: bool,
     pub(super) at: Vec<usize>,
 }
 
 impl Entry {
     /// A change of the list, or one shown in full in the tree, not a reference to it.
-    pub fn full(&self) -> bool {
+    pub(crate) fn full(&self) -> bool {
         self.change.is_some() && self.item.as_ref().is_none_or(|item| matches!(item, Item::Changed(_)))
     }
 }
@@ -54,8 +54,8 @@ impl Entry {
 /// How the pane shows the reading.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct View {
-    pub shape: Shape,
-    pub flat: bool,
+    pub(crate) shape: Shape,
+    pub(crate) flat: bool,
 }
 
 impl Rows {

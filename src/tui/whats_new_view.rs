@@ -19,7 +19,7 @@ const BULLET: &str = "• ";
 const UNDER_BULLET: &str = "  ";
 const NEW_TO_YOU: &str = "  ● new for you";
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(scroll) = app.news_page else { return };
     let width = (area.width * SIZE_PCT / 100).clamp(area.width.min(40), MAX_WIDTH).min(area.width);

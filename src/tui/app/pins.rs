@@ -3,25 +3,25 @@
 use crate::review::Row;
 
 /// Below this many diff rows the pins would eat too much of the view.
-pub const MIN_HEIGHT: usize = 20;
+pub(crate) const MIN_HEIGHT: usize = 20;
 
 /// The rows pinned above the diff, as indexes into the review's rows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Pins {
-    pub file: Option<usize>,
-    pub hunk: Option<usize>,
+pub(crate) struct Pins {
+    pub(crate) file: Option<usize>,
+    pub(crate) hunk: Option<usize>,
 }
 
 impl Pins {
     /// How many screen rows the pins take.
-    pub fn count(self) -> usize {
+    pub(crate) fn count(self) -> usize {
         usize::from(self.file.is_some()) + usize::from(self.hunk.is_some())
     }
 }
 
 /// The file header owning the top row, when it sits above the view; then the header of the
 /// cursor's hunk, when that also sits above the view and the cursor is in the pinned file.
-pub fn pins(rows: &[Row], scroll: usize, selected: usize) -> Pins {
+pub(crate) fn pins(rows: &[Row], scroll: usize, selected: usize) -> Pins {
     let Some(file) = (0..=scroll.min(rows.len().saturating_sub(1))).rev().find(|&i| matches!(rows[i], Row::File { .. })) else {
         return Pins::default();
     };
@@ -33,7 +33,7 @@ pub fn pins(rows: &[Row], scroll: usize, selected: usize) -> Pins {
 
 /// Where the view starts once the pins take their rows: the cursor always stays below them.
 /// A few rounds settle it, since moving the view can change which headers are pinned.
-pub fn settle(rows: &[Row], scroll: usize, selected: usize, height: usize) -> (usize, Pins) {
+pub(crate) fn settle(rows: &[Row], scroll: usize, selected: usize, height: usize) -> (usize, Pins) {
     let mut scroll = super::super::ui::settle_scroll(scroll, selected, height);
     let mut pinned = pins(rows, scroll, selected);
     for _ in 0..3 {

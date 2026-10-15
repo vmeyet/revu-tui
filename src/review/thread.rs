@@ -1,28 +1,28 @@
 //! A discussion as the review sees it: where it hangs in the diff, and whether it still can.
-pub use crate::forge::Side;
+pub(crate) use crate::forge::Side;
 use crate::forge::{Discussion, Note, Position, ThreadId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Anchor {
-    pub path: String,
-    pub side: Side,
-    pub line: u32,
+pub(crate) struct Anchor {
+    pub(crate) path: String,
+    pub(crate) side: Side,
+    pub(crate) line: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Thread {
-    pub id: ThreadId,
-    pub resolvable: bool,
-    pub resolved: bool,
-    pub anchor: Option<Anchor>,
+pub(crate) struct Thread {
+    pub(crate) id: ThreadId,
+    pub(crate) resolvable: bool,
+    pub(crate) resolved: bool,
+    pub(crate) anchor: Option<Anchor>,
     /// Anchored, but its line is not in the current diff.
-    pub outdated: bool,
-    pub notes: Vec<Note>,
+    pub(crate) outdated: bool,
+    pub(crate) notes: Vec<Note>,
 }
 
 impl Thread {
     /// None when only system notes remain: nothing a reviewer would read.
-    pub fn from_discussion(discussion: Discussion) -> Option<Self> {
+    pub(super) fn from_discussion(discussion: Discussion) -> Option<Self> {
         let notes: Vec<Note> = discussion.notes.into_iter().filter(|n| !n.system).collect();
         let first = notes.first()?;
         let anchor = first.position.as_ref().and_then(anchor_of);
@@ -30,20 +30,20 @@ impl Thread {
     }
 
     /// Still waits on someone: resolvable and not resolved yet.
-    pub fn unresolved(&self) -> bool {
+    pub(crate) fn unresolved(&self) -> bool {
         self.resolvable && !self.resolved
     }
 
-    pub fn with_outdated(self, outdated: bool) -> Self {
+    pub(super) fn with_outdated(self, outdated: bool) -> Self {
         Self { outdated, ..self }
     }
 
-    pub fn first(&self) -> &Note {
+    pub(crate) fn first(&self) -> &Note {
         &self.notes[0]
     }
 }
 
-pub fn anchor_of(position: &Position) -> Option<Anchor> {
+pub(crate) fn anchor_of(position: &Position) -> Option<Anchor> {
     let line = position.line.number()?;
     Some(Anchor { path: position.path().to_owned(), side: position.line.side(), line })
 }

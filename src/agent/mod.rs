@@ -22,9 +22,9 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use custom::check;
-pub use place::check_split;
-pub use terminal::Terminal;
+pub(crate) use custom::check;
+pub(crate) use place::check_split;
+pub(crate) use terminal::Terminal;
 
 /// A session name longer than this is cut: it is a tmux window's name too.
 const NAME_CHARS: usize = 60;
@@ -35,12 +35,12 @@ const SLOW_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// What a session is told about its MR.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Mr {
-    pub key: MrKey,
-    pub fields: Fields,
-    pub target: String,
+pub(crate) struct Mr {
+    pub(crate) key: MrKey,
+    pub(crate) fields: Fields,
+    pub(crate) target: String,
     /// I wrote it: the session may change it, where someone else's only gets a plan.
-    pub mine: bool,
+    pub(crate) mine: bool,
 }
 
 impl Mr {
@@ -57,13 +57,13 @@ impl Mr {
 
 /// One program to run: its words, and the folder it runs in.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Call {
-    pub argv: Vec<String>,
-    pub dir: Option<PathBuf>,
+pub(crate) struct Call {
+    pub(crate) argv: Vec<String>,
+    pub(crate) dir: Option<PathBuf>,
     /// revu's `PATH`, for a program a terminal starts with an environment of its own.
-    pub path: Option<String>,
+    pub(crate) path: Option<String>,
     /// How long it may run before it is stopped, unless it runs on the terminal.
-    pub limit: Duration,
+    pub(crate) limit: Duration,
 }
 
 impl Call {
@@ -108,7 +108,7 @@ impl Call {
 }
 
 /// Where programs run: on this machine, or in a test's script.
-pub trait Run: Send + Sync {
+pub(crate) trait Run: Send + Sync {
     /// What the program printed on its output; a failure names the program and gives the first line it complained with.
     fn output(&self, call: &Call) -> Result<String>;
     /// The program on the terminal as it is, until it exits; the error is a line for the reader.
@@ -145,7 +145,7 @@ fn reason<'a>(complained: &'a str, printed: &'a str) -> &'a str {
 }
 
 /// The programs of this machine.
-pub struct Programs;
+pub(crate) struct Programs;
 
 impl Run for Programs {
     fn output(&self, call: &Call) -> Result<String> {
@@ -179,35 +179,35 @@ impl Run for Programs {
 
 /// A session the agent knows.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Session {
+pub(crate) struct Session {
     /// What opens it.
-    pub id: String,
+    pub(crate) id: String,
     /// What starts it again once it stopped.
-    pub resume_id: String,
-    pub name: String,
+    pub(crate) resume_id: String,
+    pub(crate) name: String,
     /// The folder it was started in.
-    pub dir: PathBuf,
+    pub(crate) dir: PathBuf,
     /// Running or waiting, so it opens as it is; a stopped one is started again first.
-    pub live: bool,
-    pub started: Option<DateTime<Utc>>,
+    pub(crate) live: bool,
+    pub(crate) started: Option<DateTime<Utc>>,
 }
 
 /// The session revu last opened for an MR, kept in the cache so a restart finds it again.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Kept {
-    pub name: String,
-    pub dir: PathBuf,
+pub(crate) struct Kept {
+    pub(crate) name: String,
+    pub(crate) dir: PathBuf,
     /// The agent's own id for it, when it gives one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
+    pub(crate) id: Option<String>,
     /// The pane of the terminal revu showed it in, to go back to while the terminal still has it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pane: Option<String>,
+    pub(crate) pane: Option<String>,
 }
 
 /// Which session `a g` is after.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Choice {
+pub(crate) enum Choice {
     /// The one that belongs to the MR, wherever it is found.
     Find,
     /// The one the reader picked in the list.
@@ -252,15 +252,15 @@ enum Step {
 
 /// The session's program, waiting for the terminal.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Handoff {
-    pub call: Call,
+pub(crate) struct Handoff {
+    pub(crate) call: Call,
     /// Which session this is and how it was found, for the toast on the way back.
-    pub said: String,
+    pub(crate) said: String,
 }
 
 /// What `a g` led to.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     /// Several sessions could be the one: the reader picks, or starts a new one.
     Pick(Vec<Session>),
     /// The session is on show beside revu or in a tmux window; the text says which.
@@ -279,33 +279,33 @@ enum Harness {
 }
 
 /// What revu learns from the machine at start.
-pub struct Machine {
-    pub home: PathBuf,
+pub(crate) struct Machine {
+    pub(crate) home: PathBuf,
     /// Claude Code's own folder, `~/.claude` unless `CLAUDE_CONFIG_DIR` moves it.
-    pub claude_home: PathBuf,
+    pub(crate) claude_home: PathBuf,
     /// revu runs inside tmux.
-    pub tmux: bool,
+    pub(crate) tmux: bool,
     /// The terminal revu runs in, when it is one revu can split.
-    pub terminal: Option<Terminal>,
+    pub(crate) terminal: Option<Terminal>,
     /// Under this many columns revu's own window is compact: a pane beside it must leave it that much.
-    pub compact_width: u16,
+    pub(crate) compact_width: u16,
     /// The checkout revu was started in: its project and its root, which may be a worktree.
-    pub started_in: Option<(String, PathBuf)>,
+    pub(crate) started_in: Option<(String, PathBuf)>,
 }
 
 /// `[agent]` switched on: everything `a g` needs to find, start and show a session.
 #[derive(Clone)]
-pub struct Agent {
+pub(crate) struct Agent {
     harness: Harness,
     /// Project path → its checkout; the one revu was started in wins over the config's.
     checkouts: BTreeMap<String, PathBuf>,
     /// What can show a session beside revu, and when it should.
     place: place::Place,
-    pub run: Arc<dyn Run>,
+    pub(crate) run: Arc<dyn Run>,
 }
 
 impl Agent {
-    pub fn new(config: &config::Agent, machine: Machine, run: Arc<dyn Run>) -> Self {
+    pub(crate) fn new(config: &config::Agent, machine: Machine, run: Arc<dyn Run>) -> Self {
         let harness = match &config.start {
             Some(start) => Harness::Custom { start: start.clone(), open: config.open.clone() },
             None => Harness::Claude { jobs: machine.claude_home.join("jobs") },
@@ -324,7 +324,7 @@ impl Agent {
 
     /// Finds or starts the session of `mr`, remembers it in `cache`, and shows it beside revu where
     /// something can split. Where nothing can, the caller owns the terminal, so the program comes back.
-    pub fn open(&self, mr: &Mr, cache: &Cache, choice: Choice) -> Result<Outcome> {
+    pub(crate) fn open(&self, mr: &Mr, cache: &Cache, choice: Choice) -> Result<Outcome> {
         let run = self.run.as_ref();
         let key = keys::session(&mr.key);
         let before = cache.read::<Kept>(&key);
@@ -371,26 +371,26 @@ mod tests {
     }
 
     impl Script {
-        pub fn says(self, starts_with: &str, printed: &str) -> Self {
+        pub(crate) fn says(self, starts_with: &str, printed: &str) -> Self {
             self.then(starts_with, Ok(printed.to_owned()))
         }
 
         /// revu's terminal is `width` columns wide.
-        pub fn wide(self, width: u16) -> Self {
+        pub(crate) fn wide(self, width: u16) -> Self {
             Self { width: Some(width), ..self }
         }
 
         /// revu's `PATH` is `search_path`, and every program but the missing ones is in its first folder.
-        pub fn with_path(self, search_path: &str) -> Self {
+        pub(crate) fn with_path(self, search_path: &str) -> Self {
             Self { search_path: Some(search_path.to_owned()), ..self }
         }
 
-        pub fn without(mut self, program: &str) -> Self {
+        pub(crate) fn without(mut self, program: &str) -> Self {
             self.missing.push(program.to_owned());
             self
         }
 
-        pub fn fails(self, starts_with: &str, why: &str) -> Self {
+        pub(crate) fn fails(self, starts_with: &str, why: &str) -> Self {
             self.then(starts_with, Err(why.to_owned()))
         }
 
@@ -399,12 +399,12 @@ mod tests {
             self
         }
 
-        pub fn calls(&self) -> Vec<Call> {
+        pub(crate) fn calls(&self) -> Vec<Call> {
             self.calls.lock().unwrap().clone()
         }
 
         /// Every call as one line, for a test that reads the order.
-        pub fn lines(&self) -> Vec<String> {
+        pub(crate) fn lines(&self) -> Vec<String> {
             self.calls().iter().map(|call| call.argv.join(" ")).collect()
         }
     }

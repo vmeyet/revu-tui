@@ -21,7 +21,7 @@ const INDENT: usize = 2;
 /// Conventional-commit kinds shown as a chip in front of the title.
 const KINDS: [&str; 12] = ["feat", "fix", "docs", "refactor", "test", "chore", "perf", "ci", "build", "style", "tech", "revert"];
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let scope = app.scope().map_or_else(|| "all".to_owned(), |project| project.to_string());
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
@@ -306,7 +306,7 @@ fn stack_title<'m>(mrs: &[&'m QueueMr]) -> (Option<&'m str>, String) {
 
 /// `romain.courtois` is `romain`: the handle up to its first `.`, `_` or `-`, the rest being a
 /// surname or a company suffix the eye does not need.
-pub fn short_name(author: &str) -> &str {
+pub(crate) fn short_name(author: &str) -> &str {
     match author.split(['.', '_', '-']).next() {
         Some(first) if !first.is_empty() => first,
         _ => author,
@@ -331,7 +331,7 @@ fn tail_w(tail: &[Span<'_>]) -> usize {
 
 /// `feat(notion): sync users` is `feat` and `sync users`; a draft prefix goes, since the row's
 /// `D` already says it. A title in no known shape comes back whole.
-pub fn conventional(title: &str) -> (Option<&str>, &str) {
+fn conventional(title: &str) -> (Option<&str>, &str) {
     let title = ["Draft: ", "draft: ", "WIP: "].iter().find_map(|p| title.strip_prefix(p)).unwrap_or(title).trim_start();
     let Some((head, rest)) = title.split_once(':') else { return (None, title) };
     let kind = head.split('(').next().unwrap_or(head).trim_end_matches('!');

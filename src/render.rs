@@ -8,12 +8,12 @@ use unicode_width::UnicodeWidthStr;
 const GAP: usize = 2;
 
 #[derive(Clone, Copy, Debug)]
-pub struct Theme {
-    pub color: bool,
+pub(crate) struct Theme {
+    pub(crate) color: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Style {
+pub(crate) enum Style {
     #[default]
     Plain,
     Dim,
@@ -25,31 +25,31 @@ pub enum Style {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Cell {
-    pub text: String,
-    pub style: Style,
-    pub right: bool,
+pub(crate) struct Cell {
+    pub(crate) text: String,
+    pub(crate) style: Style,
+    pub(crate) right: bool,
 }
 
-pub fn cell(text: impl Into<String>, style: Style) -> Cell {
+pub(crate) fn cell(text: impl Into<String>, style: Style) -> Cell {
     Cell { text: text.into(), style, right: false }
 }
 
-pub fn right(text: impl Into<String>, style: Style) -> Cell {
+pub(crate) fn right(text: impl Into<String>, style: Style) -> Cell {
     Cell { text: text.into(), style, right: true }
 }
 
 impl Theme {
-    pub fn detect() -> Self {
+    pub(crate) fn detect() -> Self {
         Self { color: std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() }
     }
 
     #[cfg(test)]
-    pub fn plain() -> Self {
+    pub(crate) fn plain() -> Self {
         Self { color: false }
     }
 
-    pub fn paint(self, text: &str, style: Style) -> String {
+    pub(crate) fn paint(self, text: &str, style: Style) -> String {
         if !self.color {
             return text.to_owned();
         }
@@ -65,7 +65,7 @@ impl Theme {
     }
 
     /// Rows as aligned lines; every column is padded to its widest cell, the last one is not.
-    pub fn table(self, rows: &[Vec<Cell>]) -> String {
+    pub(crate) fn table(self, rows: &[Vec<Cell>]) -> String {
         let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
         let widths: Vec<usize> =
             (0..columns).map(|c| rows.iter().filter_map(|r| r.get(c)).map(|cell| cell.text.width()).max().unwrap_or(0)).collect();
@@ -92,7 +92,7 @@ impl Theme {
 }
 
 /// `just now`, `12m`, `2h`, `3d`, `5w`, then the date.
-pub fn age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
+pub(crate) fn age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
     let secs = (now - then).num_seconds().max(0);
     match secs {
         s if s < 60 => "just now".into(),
@@ -105,7 +105,7 @@ pub fn age(then: DateTime<Utc>, now: DateTime<Utc>) -> String {
 }
 
 /// One glyph for a pipeline status.
-pub fn pipeline(status: Option<PipelineStatus>) -> Cell {
+pub(crate) fn pipeline(status: Option<PipelineStatus>) -> Cell {
     match status {
         Some(PipelineStatus::Success) => cell("✓", Style::Ok),
         Some(PipelineStatus::Failed) => cell("✗", Style::Bad),
@@ -115,7 +115,7 @@ pub fn pipeline(status: Option<PipelineStatus>) -> Cell {
     }
 }
 
-pub fn truncate(text: &str, max: usize) -> String {
+pub(crate) fn truncate(text: &str, max: usize) -> String {
     let first_line = text.lines().next().unwrap_or("").trim();
     if first_line.width() <= max {
         return first_line.to_owned();

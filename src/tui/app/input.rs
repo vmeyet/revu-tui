@@ -210,7 +210,7 @@ impl App {
 
     /// The compose box's title: `new thread · charge.rs:57`, `new thread · charge.rs:55–57`,
     /// `reply to nina`, `edit draft`.
-    pub fn input_label(&self) -> String {
+    pub(crate) fn input_label(&self) -> String {
         match &self.input {
             Some(Input::Comment { position }) => {
                 let path = position.new_path.as_str();

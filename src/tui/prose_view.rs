@@ -11,7 +11,7 @@ use ratatui::widgets::Paragraph;
 /// The title row and the empty row under it.
 const TITLE_ROWS: u16 = 2;
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = app.open.as_mut() else { return };
     let beside = open.review.side_by_side && open.review.wide;
@@ -32,24 +32,24 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
 
 /// The view's rows both ways, so `zR` and `zM` render nothing again.
 #[derive(Debug)]
-pub struct Rows {
-    pub folded: Vec<Line<'static>>,
-    pub unfolded: Vec<Line<'static>>,
+pub(crate) struct Rows {
+    pub(crate) folded: Vec<Line<'static>>,
+    pub(crate) unfolded: Vec<Line<'static>>,
 }
 
 impl Rows {
-    pub fn shown(&self, unfolded: bool) -> &[Line<'static>] {
+    pub(crate) fn shown(&self, unfolded: bool) -> &[Line<'static>] {
         if unfolded { &self.unfolded } else { &self.folded }
     }
 }
 
 #[cfg(feature = "prose")]
-pub fn rows(versions: &Versions, width: usize, beside: bool, theme: Theme) -> Rows {
+pub(crate) fn rows(versions: &Versions, width: usize, beside: bool, theme: Theme) -> Rows {
     super::prose::render(&versions.base, &versions.head, width, beside, theme)
 }
 
 #[cfg(not(feature = "prose"))]
-pub fn rows(_: &Versions, _: usize, _: bool, theme: Theme) -> Rows {
+pub(crate) fn rows(_: &Versions, _: usize, _: bool, theme: Theme) -> Rows {
     let message =
         vec![Line::styled("this revu was built without the prose view (cargo feature `prose`)", Style::default().fg(theme.muted))];
     Rows { folded: message.clone(), unfolded: message }

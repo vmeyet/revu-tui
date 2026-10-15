@@ -8,36 +8,36 @@ use std::time::{Duration, Instant};
 
 /// The MR on screen: the review plus where the reader is in it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Open {
-    pub key: MrKey,
-    pub review: Review,
-    pub rows: Vec<Row>,
-    pub selected: usize,
-    pub scroll: usize,
+pub(crate) struct Open {
+    pub(crate) key: MrKey,
+    pub(crate) review: Review,
+    pub(crate) rows: Vec<Row>,
+    pub(crate) selected: usize,
+    pub(crate) scroll: usize,
     /// The conversations of one place, when the right pane holds them.
-    pub pane: Option<super::pane::Pane>,
+    pub(crate) pane: Option<super::pane::Pane>,
     /// How old the painted data was when it came from the cache, and when that was.
-    pub cached: Option<(Instant, Duration)>,
+    pub(crate) cached: Option<(Instant, Duration)>,
     /// Where `V` started; the selection runs from there to the cursor.
-    pub select_from: Option<usize>,
+    pub(crate) select_from: Option<usize>,
     /// The file tree, when it holds the right pane.
-    pub tree: Option<super::Tree>,
+    pub(crate) tree: Option<super::Tree>,
     /// Claude's answer, when it holds the right pane.
-    pub answer: Option<super::ask::Answer>,
+    pub(crate) answer: Option<super::ask::Answer>,
     /// The CI run, when it holds the right pane.
-    pub pipeline: Option<super::Pipeline>,
+    pub(crate) pipeline: Option<super::Pipeline>,
     /// The symbols the MR changes, when they hold the right pane.
-    pub outline: Option<super::Outline>,
+    pub(crate) outline: Option<super::Outline>,
     /// The Markdown file drawn rendered, when it holds the diff area.
-    pub prose: Option<super::Prose>,
+    pub(crate) prose: Option<super::Prose>,
     /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
-    pub pinned_file: Option<usize>,
+    pub(crate) pinned_file: Option<usize>,
     /// Where the branch was deployed; `None` until the forge was asked.
-    pub deployments: Option<Vec<crate::forge::Deployment>>,
+    pub(crate) deployments: Option<Vec<crate::forge::Deployment>>,
 }
 
 impl Open {
-    pub fn new(key: MrKey, review: Review) -> Self {
+    pub(crate) fn new(key: MrKey, review: Review) -> Self {
         let rows = review.rows();
         let selected = first_selectable(&rows);
         Self {
@@ -60,18 +60,18 @@ impl Open {
     }
 
     /// The rows the selection covers, the cursor included; just the cursor without `V`.
-    pub fn selection(&self) -> std::ops::RangeInclusive<usize> {
+    pub(crate) fn selection(&self) -> std::ops::RangeInclusive<usize> {
         let from = self.select_from.unwrap_or(self.selected);
         from.min(self.selected)..=from.max(self.selected)
     }
 
-    pub fn is_selected(&self, index: usize) -> bool {
+    pub(crate) fn is_selected(&self, index: usize) -> bool {
         self.select_from.is_some() && self.selection().contains(&index)
     }
 
     /// Fresh data under the same cursor: the row it was on is found again, else the index is kept.
     /// The reader's inline or side by side choice outlives the refresh; the lines read around hunks only while the head stays.
-    pub fn with_review(self, review: Review) -> Self {
+    pub(super) fn with_review(self, review: Review) -> Self {
         let same_head = review.mr.refs.head == self.review.mr.refs.head;
         self.relaid(|old| Review {
             side_by_side: old.side_by_side,
@@ -86,21 +86,21 @@ impl Open {
     }
 
     /// The right pane holds something: threads, the tree, an answer, the pipeline or the outline.
-    pub fn side_open(&self) -> bool {
+    pub(crate) fn side_open(&self) -> bool {
         self.pane.is_some() || self.tree.is_some() || self.answer.is_some() || self.pipeline.is_some() || self.outline.is_some()
     }
 
     /// The right pane shows threads: no file tree, pipeline, outline or answer took their place.
-    pub fn shows_threads(&self) -> bool {
+    pub(crate) fn shows_threads(&self) -> bool {
         self.pane.is_some() && self.tree.is_none() && self.answer.is_none() && self.pipeline.is_none() && self.outline.is_none()
     }
 
-    pub fn row(&self) -> Option<&Row> {
+    pub(crate) fn row(&self) -> Option<&Row> {
         self.rows.get(self.selected)
     }
 
     /// The age of what is on screen, for the `offline` line.
-    pub fn staleness(&self, now: Instant) -> Option<Duration> {
+    pub(crate) fn staleness(&self, now: Instant) -> Option<Duration> {
         self.cached.map(|(at, age)| age + now.saturating_duration_since(at))
     }
 
@@ -170,7 +170,7 @@ impl Open {
     }
 
     /// The web page of the line under the cursor, the MR's page anywhere else.
-    pub fn line_url(&self, kind: Kind) -> String {
+    pub(crate) fn line_url(&self, kind: Kind) -> String {
         let mr = &self.review.mr;
         let (file, hunk, index) = match self.row() {
             Some(Row::Line { file, hunk, index } | Row::Pair { file, hunk, added: index, .. }) => (*file, *hunk, *index),

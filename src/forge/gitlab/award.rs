@@ -22,7 +22,7 @@ const NOTES: &str = "query Awards($project: ID!, $iid: String!, $after: String) 
 const MAX_PAGES: usize = 20;
 
 /// A note's GraphQL id and its reactions, by the note's REST id.
-pub type Awards = HashMap<u64, (String, Vec<Reaction>)>;
+pub(super) type Awards = HashMap<u64, (String, Vec<Reaction>)>;
 
 #[derive(Deserialize)]
 struct Answer<T> {
@@ -112,7 +112,7 @@ impl NoteAwards {
 
 impl Client {
     /// Every note's reactions and GraphQL id, across pages.
-    pub async fn awards(&self, key: &MrKey) -> Result<Awards> {
+    pub(crate) async fn awards(&self, key: &MrKey) -> Result<Awards> {
         let me = self.my_name().await?;
         let mut awards = Awards::new();
         let mut after: Option<String> = None;
@@ -138,7 +138,7 @@ impl Client {
     }
 
     /// Adds my `emoji` to the note `node`, or takes it off.
-    pub async fn react(&self, node: &str, emoji: Emoji, change: ReactionChange) -> Result<()> {
+    pub(crate) async fn react(&self, node: &str, emoji: Emoji, change: ReactionChange) -> Result<()> {
         let mutation = match change {
             ReactionChange::Add => "awardEmojiAdd",
             ReactionChange::Remove => "awardEmojiRemove",

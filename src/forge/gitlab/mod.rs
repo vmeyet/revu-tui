@@ -25,7 +25,7 @@ static FLAVOR: Flavor =
 /// One GitLab host. The token is sent to that host and nowhere else: redirects are refused
 /// and every URL is checked against its origin before the header goes on.
 #[derive(Clone, Debug)]
-pub struct Client {
+pub(crate) struct Client {
     http: Transport,
     host: String,
     /// My username here, asked once: an MR reads as mine by it.
@@ -33,13 +33,13 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(credentials: &Credentials) -> Result<Self> {
+    pub(crate) fn new(credentials: &Credentials) -> Result<Self> {
         Self::build(credentials, &format!("https://{}/api/v4/", credentials.host))
     }
 
     /// For tests: point at a mock server. The origin guard still applies to that server.
     #[cfg(test)]
-    pub fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
+    pub(crate) fn with_base(credentials: &Credentials, base: &str) -> Result<Self> {
         let host = url::Url::parse(base)?.host_str().context("base url without a host")?.to_owned();
         Self::build(&Credentials { host, token: credentials.token.clone() }, base)
     }
@@ -52,26 +52,26 @@ impl Client {
         Ok(Self { http: Transport::new(base, headers, &FLAVOR)?, host: credentials.host.clone(), me: std::sync::Arc::default() })
     }
 
-    pub fn host(&self) -> &str {
+    pub(crate) fn host(&self) -> &str {
         &self.host
     }
 
-    pub fn rate(&self) -> super::budget::RateLimit {
+    pub(crate) fn rate(&self) -> super::budget::RateLimit {
         self.http.rate()
     }
 
-    pub async fn me(&self) -> Result<User> {
+    pub(crate) async fn me(&self) -> Result<User> {
         self.http.get::<wire::User>("user").await.map(User::from)
     }
 
     /// My username on this host, asked the first time and kept for the session.
-    pub async fn my_name(&self) -> Result<String> {
+    pub(crate) async fn my_name(&self) -> Result<String> {
         self.me.get_or_try_init(|| async { self.me().await.map(|u| u.username) }).await.cloned()
     }
 }
 
 /// GitLab's page for one diff line: the MR's diffs, scrolled to `sha1(path)_old_new`.
-pub fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
+pub(crate) fn line_url(web_url: &str, path: &str, line: LineRef) -> String {
     format!("{web_url}/diffs#{}", wire::line_code(path, line.old, line.new))
 }
 

@@ -7,14 +7,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// A post being prepared for one MR, on the host it lives on.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Sharing {
-    pub host: String,
-    pub fields: Fields,
-    pub stage: Stage,
+pub(crate) struct Sharing {
+    pub(crate) host: String,
+    pub(crate) fields: Fields,
+    pub(crate) stage: Stage,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Stage {
+pub(crate) enum Stage {
     /// Several targets: the reader picks one.
     Pick { targets: Vec<Target>, selected: usize },
     /// The optional note, in a compose box.
@@ -25,7 +25,7 @@ pub enum Stage {
 
 impl Sharing {
     /// The modal's title: what is shared, and where once known.
-    pub fn title(&self) -> String {
+    pub(crate) fn title(&self) -> String {
         match &self.stage {
             Stage::Pick { .. } => format!("share {}", self.fields.reference),
             Stage::Note { target, .. } | Stage::Preview { target, .. } => match &target.name {

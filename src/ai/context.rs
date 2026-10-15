@@ -7,7 +7,7 @@ use crate::review::{File, Review};
 use std::fmt::Write as _;
 use std::ops::RangeInclusive;
 
-pub const BUDGET: usize = 60_000;
+pub(crate) const BUDGET: usize = 60_000;
 const DESCRIPTION_CHARS: usize = 2000;
 const AROUND: usize = 20;
 
@@ -19,7 +19,7 @@ Say what you are unsure of in one sentence; if the diff cannot answer, say so an
 
 /// The part of the MR a question is about.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Scope {
+pub(crate) enum Scope {
     Mr,
     File(String),
     /// The hunk at this index of the file.
@@ -30,14 +30,14 @@ pub enum Scope {
 
 /// The questions `revu ai` asks on its own, and a free one.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Prompt {
+pub(crate) enum Prompt {
     Explain,
     Summary,
     Free(String),
 }
 
 impl Prompt {
-    pub fn question(&self) -> String {
+    pub(crate) fn question(&self) -> String {
         match self {
             Prompt::Explain => "What does this change do, and why? Answer in 2 or 3 sentences.".into(),
             Prompt::Summary => "Summarise this MR in at most 5 bullets: what changes and why. \
@@ -49,7 +49,7 @@ impl Prompt {
 }
 
 /// The first call of a conversation: system rules, the MR, the scope, then the question.
-pub fn ask(review: &Review, scope: &Scope, prompt: &Prompt, budget: usize) -> Ask {
+pub(crate) fn ask(review: &Review, scope: &Scope, prompt: &Prompt, budget: usize) -> Ask {
     let mut system = vec![Block { text: SYSTEM.into(), cached: false }, Block { text: mr_block(review), cached: true }];
     if *scope == Scope::Mr {
         system[1].text.push_str(&files_within(review.files.iter(), budget));

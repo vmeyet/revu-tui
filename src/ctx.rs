@@ -46,9 +46,9 @@ impl Ctx {
 /// Another host I am logged in to, ready for the queue to ask.
 #[derive(Clone)]
 pub(crate) struct Home {
-    pub host: String,
-    pub forge: Forge,
-    pub cache: Cache,
+    pub(crate) host: String,
+    pub(crate) forge: Forge,
+    pub(crate) cache: Cache,
 }
 
 impl Home {
@@ -58,14 +58,14 @@ impl Home {
     }
 
     /// This host's queue across every project, each row tagged with the host.
-    pub async fn queue(&self) -> Result<crate::forge::Queue> {
+    pub(crate) async fn queue(&self) -> Result<crate::forge::Queue> {
         let queue = self.forge.queue(None).await?.on_host(&self.host);
         let (cache, saved) = (self.cache.clone(), queue.clone());
         crate::blocking::run(move || cache.write_entry(&crate::cache::keys::queue(None), &saved)).await.or_warn("caching the queue");
         Ok(queue)
     }
 
-    pub fn cached(&self) -> Option<crate::forge::Queue> {
+    pub(crate) fn cached(&self) -> Option<crate::forge::Queue> {
         self.cache.read_entry(&crate::cache::keys::queue(None)).map(|e: crate::cache::Entry<crate::forge::Queue>| e.value)
     }
 }

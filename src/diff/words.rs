@@ -5,7 +5,7 @@ use super::{Hunk, Line, LineKind};
 use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
 
-pub fn mark(hunk: &Hunk) -> Hunk {
+pub(crate) fn mark(hunk: &Hunk) -> Hunk {
     let mut lines = hunk.lines.clone();
     for (removed, added) in pairs(&hunk.lines) {
         for (r, a) in removed.zip(added) {
@@ -45,14 +45,14 @@ fn run(lines: &[Line], from: usize, kind: LineKind) -> Range<usize> {
 /// One run of a changed pair read as a single row: text both lines keep, text only the old one
 /// had, text only the new one has. Consecutive runs of one kind are merged.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Segment {
+pub(crate) enum Segment {
     Same(String),
     Old(String),
     New(String),
 }
 
 /// The runs of a changed pair, read back from the changed ranges `mark` stored on both lines.
-pub fn segments(old: &Line, new: &Line) -> Vec<Segment> {
+pub(crate) fn segments(old: &Line, new: &Line) -> Vec<Segment> {
     let mut found = Vec::new();
     let (mut old_at, mut new_at) = (0, 0);
     let mut old_words = old.words.iter().peekable();
@@ -79,7 +79,7 @@ pub fn segments(old: &Line, new: &Line) -> Vec<Segment> {
     found
 }
 
-pub fn text_segments(old: &str, new: &str) -> Vec<Segment> {
+pub(crate) fn text_segments(old: &str, new: &str) -> Vec<Segment> {
     let mut found: Vec<Segment> = Vec::new();
     for change in TextDiff::from_words(old, new).iter_all_changes() {
         let text = change.value();
@@ -99,11 +99,11 @@ pub fn text_segments(old: &str, new: &str) -> Vec<Segment> {
 
 /// When a changed pair reads better as one row: few changed words, and most of both lines kept.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct InlineRule {
+pub(crate) struct InlineRule {
     /// Most changed runs allowed on each side.
-    pub max_words: usize,
+    pub(crate) max_words: usize,
     /// Least share of each line, in percent of its bytes, the two lines must keep.
-    pub min_same: u8,
+    pub(crate) min_same: u8,
 }
 
 impl Default for InlineRule {
@@ -114,7 +114,7 @@ impl Default for InlineRule {
 
 impl InlineRule {
     /// Read from the changed ranges `mark` stored on both lines.
-    pub fn fits(self, old: &Line, new: &Line) -> bool {
+    pub(crate) fn fits(self, old: &Line, new: &Line) -> bool {
         let (olds, news) = (old.words.len(), new.words.len());
         let same = old.text.len() - old.words.iter().map(ExactSizeIterator::len).sum::<usize>();
         let kept = |len: usize| len > 0 && same * 100 >= usize::from(self.min_same) * len;
@@ -123,7 +123,7 @@ impl InlineRule {
 }
 
 /// The `(removed, added)` line indexes of the pairs in `hunk` that `rule` lets read as one row.
-pub fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
+pub(crate) fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
     pairs(&hunk.lines)
         .into_iter()
         .flat_map(|(removed, added)| removed.zip(added))
@@ -133,12 +133,12 @@ pub fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
 
 /// The `(removed, added)` rows of a side by side diff: each `-` run beside the `+` run after it,
 /// line by line, the longer run's extra lines left without a twin.
-pub fn side_by_side_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
+pub(crate) fn side_by_side_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
     changes(&hunk.lines).into_iter().flat_map(|(removed, added)| removed.zip(added)).collect()
 }
 
 /// Every equal-run pair whose lines differ in whitespace only.
-pub fn whitespace_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
+pub(crate) fn whitespace_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
     pairs(&hunk.lines)
         .into_iter()
         .flat_map(|(removed, added)| removed.zip(added))
@@ -147,7 +147,7 @@ pub fn whitespace_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
 }
 
 /// Equal once every space, tab and line ending is taken out.
-pub fn same_but_whitespace(old: &str, new: &str) -> bool {
+pub(crate) fn same_but_whitespace(old: &str, new: &str) -> bool {
     old != new && old.chars().filter(|c| !c.is_whitespace()).eq(new.chars().filter(|c| !c.is_whitespace()))
 }
 

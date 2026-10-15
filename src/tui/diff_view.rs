@@ -36,7 +36,7 @@ const THREAD_RULE: &str = "│ ";
 /// The line numbers before the sign: both sides, the one side a line is read on when the window is narrow, or none
 /// in the compact layout, which leaves the sign alone.
 #[derive(Clone, Copy)]
-pub enum Gutter {
+pub(super) enum Gutter {
     Both,
     One,
     Sign,
@@ -93,7 +93,7 @@ impl Gutter {
     }
 }
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter) {
     let theme = app.theme;
     let title = match &app.open {
         Some(open) => {
@@ -406,12 +406,12 @@ fn padded(mut row: Vec<Span<'static>>, width: usize, fill: Option<Style>) -> Lin
 }
 
 /// The `group/project!42` at the start of the pane title, one cell past the border and its space.
-pub fn title_link(review: &Review, kind: Kind, area: Rect) -> super::ui::Link {
+fn title_link(review: &Review, kind: Kind, area: Rect) -> super::ui::Link {
     super::ui::Link { x: area.x + 2, y: area.y, text: mr_ref(review, kind), url: review.mr.web_url.clone() }
 }
 
 /// `group/project!42` on GitLab, `owner/repo#42` on GitHub.
-pub fn mr_ref(review: &Review, kind: Kind) -> String {
+pub(crate) fn mr_ref(review: &Review, kind: Kind) -> String {
     format!("{}{}{}", review.mr.project, kind.sigil(), review.mr.number)
 }
 

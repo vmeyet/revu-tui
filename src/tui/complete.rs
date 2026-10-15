@@ -6,7 +6,7 @@ use crate::fuzzy;
 const MAX: usize = 50;
 
 /// The candidates for `token`, best first; an empty token offers the head of the list.
-pub fn rank(token: &str, candidates: &[String]) -> Vec<String> {
+pub(crate) fn rank(token: &str, candidates: &[String]) -> Vec<String> {
     if token.is_empty() {
         return candidates.iter().take(MAX).cloned().collect();
     }
@@ -16,7 +16,7 @@ pub fn rank(token: &str, candidates: &[String]) -> Vec<String> {
 /// The grey text a shell shows after the cursor: the rest of the best candidate for `token`,
 /// or nothing when the token is empty or matches nothing. A candidate `token` starts is preferred
 /// over a fuzzy match, so typing a name to its end never jumps somewhere else.
-pub fn ghost(token: &str, candidates: &[String]) -> Option<String> {
+pub(crate) fn ghost(token: &str, candidates: &[String]) -> Option<String> {
     if token.is_empty() {
         return None;
     }
@@ -28,29 +28,29 @@ pub fn ghost(token: &str, candidates: &[String]) -> Option<String> {
 
 /// The candidates one token is being cycled through, until the text changes again.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Cycle {
+pub(crate) struct Cycle {
     options: Vec<String>,
     at: usize,
 }
 
 impl Cycle {
     /// Starts on the best candidate for `token`, or nothing when none matches.
-    pub fn new(token: &str, candidates: &[String]) -> Option<Self> {
+    pub(crate) fn new(token: &str, candidates: &[String]) -> Option<Self> {
         let options = rank(token, candidates);
         (!options.is_empty()).then_some(Self { options, at: 0 })
     }
 
-    pub fn advance(&mut self, toward: Toward) {
+    pub(super) fn advance(&mut self, toward: Toward) {
         self.at = toward.wrapped(self.at, 1, self.options.len());
     }
 
-    pub fn current(&self) -> &str {
+    pub(crate) fn current(&self) -> &str {
         &self.options[self.at]
     }
 
     /// The row shown while cycling: the option in hand between brackets, then the next few.
     /// `label` is how each one reads on screen, which needs not be the value itself.
-    pub fn hint(&self, label: fn(&str) -> String) -> String {
+    pub(crate) fn hint(&self, label: fn(&str) -> String) -> String {
         let shown = self.options.iter().enumerate().skip(self.at).take(4);
         shown.map(|(i, o)| if i == self.at { format!("[{}]", label(o)) } else { label(o) }).collect::<Vec<_>>().join("  ")
     }

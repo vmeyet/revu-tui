@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(pipeline) = &open.pipeline else { return };
