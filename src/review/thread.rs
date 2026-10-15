@@ -50,7 +50,6 @@ pub fn anchor_of(position: &Position) -> Option<Anchor> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture::discussion;
 

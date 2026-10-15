@@ -313,7 +313,6 @@ impl Anchor {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn refs() -> Refs {
@@ -321,7 +320,6 @@ mod tests {
     }
 
     mod properties {
-        #![allow(clippy::unwrap_used, clippy::expect_used)]
         use super::super::*;
         use crate::diff::{LineKind, arbitrary};
         use crate::review::position::{for_line, for_range};

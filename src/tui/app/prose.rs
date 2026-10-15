@@ -133,7 +133,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
 
@@ -182,7 +181,7 @@ mod tests {
         let actions = press(&mut app, "v");
         let sides = sides(Some("docs/old.md"), Some("docs/README.md"));
         assert_eq!(actions, vec![Action::LoadProse { key: mr_key(), base: "aaaa".into(), head: "bbbb".into(), sides }]);
-        app.apply(Incoming::Prose { key: mr_key(), sides: super::tests::sides(None, Some("other.md")), versions: Versions::default() });
+        app.apply(Incoming::Prose { key: mr_key(), sides: self::sides(None, Some("other.md")), versions: Versions::default() });
         assert_eq!(prose(&app).unwrap().texts, Texts::Waiting, "an answer for another file is dropped");
         read(&mut app);
         assert!(matches!(prose(&app).unwrap().texts, Texts::Ready(_)));
@@ -194,7 +193,7 @@ mod tests {
     fn an_added_file_has_no_base_side_and_a_deleted_one_no_head_side() {
         let mut added = with_markdown(FileKind::Added);
         assert!(
-            matches!(press(&mut added, "v").as_slice(), [Action::LoadProse { sides, .. }] if *sides == super::tests::sides(None, Some("docs/README.md")))
+            matches!(press(&mut added, "v").as_slice(), [Action::LoadProse { sides, .. }] if *sides == self::sides(None, Some("docs/README.md")))
         );
         let mut deleted = with_markdown(FileKind::Deleted);
         press(&mut deleted, "v");

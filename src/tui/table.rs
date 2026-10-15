@@ -201,7 +201,7 @@ pub(super) fn boxed(spans: Vec<Span<'_>>, line: TableLine, theme: Theme) -> Vec<
 /// A table line wider than `width` as rows exactly `width` wide, each cell wrapped inside its column.
 /// The columns come from this line's pipe positions alone, so the rows of an aligned table stay aligned.
 /// `None` when the line fits, or when its columns cannot fit even at their narrowest.
-pub(super) fn wrapped(spans: &[Span], line: TableLine, width: usize, fill: Style, theme: Theme) -> Option<Vec<Vec<Span<'static>>>> {
+pub(super) fn wrapped(spans: &[Span<'_>], line: TableLine, width: usize, fill: Style, theme: Theme) -> Option<Vec<Vec<Span<'static>>>> {
     let chars: Vec<(char, Style)> = spans.iter().flat_map(|span| span.content.chars().map(move |c| (c, span.style))).collect();
     let text: String = chars.iter().map(|(c, _)| c).collect::<String>().trim_end_matches(' ').to_owned();
     if text.width() <= width {
@@ -311,10 +311,9 @@ fn glyphs(text: &str, line: TableLine) -> Vec<(usize, &'static str)> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    fn text(lines: &[Line]) -> Vec<String> {
+    fn text(lines: &[Line<'_>]) -> Vec<String> {
         lines.iter().map(|l| l.spans.iter().map(|s| s.content.to_string()).collect()).collect()
     }
 
@@ -393,7 +392,7 @@ mod tests {
         let word = Style::default().bg(ratatui::style::Color::Red);
         let spans = vec![Span::raw("| a "), Span::styled("| b", word), Span::raw(" |")];
         let drawn = boxed(spans.clone(), TableLine::Cells, theme);
-        let widths = |spans: &[Span]| spans.iter().map(Span::width).sum::<usize>();
+        let widths = |spans: &[Span<'_>]| spans.iter().map(Span::width).sum::<usize>();
         assert_eq!(widths(&drawn), widths(&spans));
         let glyph = drawn.iter().find(|s| s.content == "│" && s.style.bg == word.bg).unwrap();
         assert_eq!(glyph.style.fg, Some(theme.faded), "the pipe of a changed word keeps its fill");

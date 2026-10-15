@@ -351,7 +351,6 @@ fn split_last_token(input: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn typed(text: &str) -> Palette {

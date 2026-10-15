@@ -7,6 +7,7 @@ use crate::review::tree::{self, TreeFolds, TreeRow};
 use crate::review::{File, Row};
 use crate::tui::toward::Toward;
 use crossterm::event::KeyEvent;
+use std::sync::Arc;
 
 /// The tree while it is open: which folders the reader flipped, and the row under the cursor.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -123,7 +124,7 @@ impl App {
     pub(super) fn view_and_move_on(&mut self) -> Vec<Action> {
         let actions = self.toggle_viewed();
         let Some(open) = &self.open else { return actions };
-        let files = open.review.files.clone();
+        let files = Arc::clone(&open.review.files);
         let unviewed: Vec<bool> = files.iter().map(|file| !open.review.viewed.contains(&file.new_path)).collect();
         let is_viewed_here = open.row().and_then(Row::file).is_some_and(|index| !unviewed[index]);
         if !is_viewed_here {
@@ -150,7 +151,6 @@ fn is_first_stop(files: &[File], unviewed: &[bool], row: &Row) -> bool {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     fn tree_row(app: &App) -> usize {

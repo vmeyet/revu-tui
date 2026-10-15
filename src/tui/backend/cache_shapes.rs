@@ -1,6 +1,5 @@
 //! Cache files as revu has written them: a type that no longer reads one makes the cache drop it,
 //! and with it the reader's pins, viewed files and drafts.
-#![allow(clippy::unwrap_used)]
 use super::MrState;
 use super::ai::SavedAnswer;
 use crate::cache::Entry;

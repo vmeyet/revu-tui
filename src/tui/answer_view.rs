@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let focused = app.focus == Focus::Side;
 
@@ -31,10 +31,10 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     };
     let [body, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
     let width = body.width.saturating_sub(1) as usize;
-    let lines: Vec<Line> = body_lines(&answer.text, width, theme).into_iter().flat_map(|line| wrap(line, width)).collect();
+    let lines: Vec<Line<'_>> = body_lines(&answer.text, width, theme).into_iter().flat_map(|line| wrap(line, width)).collect();
     let height = body.height as usize;
     let scroll = scroll_of(answer, lines.len(), height);
-    let shown: Vec<Line> = lines.into_iter().skip(scroll).take(height).map(|l| indent(l)).collect();
+    let shown: Vec<Line<'_>> = lines.into_iter().skip(scroll).take(height).map(|l| indent(l)).collect();
     f.render_widget(Paragraph::new(shown), body);
     f.render_widget(Paragraph::new(footer_line(answer, theme, app.spinner(), footer.width as usize)), footer);
 }

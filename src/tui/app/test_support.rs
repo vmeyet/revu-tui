@@ -1,5 +1,4 @@
 //! What the app tests share: an app on the fixture queue and MR, keys to press, and the screen it draws.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
 pub(super) use super::*;
 pub(super) use crate::forge::gitlab::fixture;
 pub(super) use crate::forge::{Approval, DiffFile, Discussion, Emoji, Kind, Mr, PipelineStatus};
@@ -386,7 +385,7 @@ pub(super) fn with_note(body: &str) -> App {
 pub(super) fn stacked_sections() -> Sections {
     let mut sections = scoped_sections();
     let seed = sections.open[0].clone();
-    let link = |number: u64, title: &str, source: &str, target: &str, pipeline: Option<PipelineStatus>| crate::forge::QueueMr {
+    let link = |number: u64, title: &str, source: &str, target: &str, pipeline: Option<PipelineStatus>| QueueMr {
         number,
         title: title.into(),
         author: "romain.courtois".into(),
@@ -567,7 +566,7 @@ pub(super) fn click(app: &mut App, at: (u16, u16)) -> Vec<Action> {
 }
 
 /// Draws, then clicks the last cell of the row of `list` with cursor stop `index`.
-pub(super) fn click_row(app: &mut App, list: super::List, index: usize) -> Vec<Action> {
+pub(super) fn click_row(app: &mut App, list: List, index: usize) -> Vec<Action> {
     render(app, 160, 30);
     let row =
         app.list_rows.iter().find(|row| row.list == list && row.index == index).unwrap_or_else(|| panic!("{list:?} row {index} on screen"));

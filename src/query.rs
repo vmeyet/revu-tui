@@ -93,7 +93,7 @@ impl Query {
             });
         }
         if let Some(number) = lower.strip_prefix(['!', '#']) {
-            let number = number.parse().map_err(|_| format!("`{token}` is not a number, like !42"))?;
+            let number = number.parse().map_err(|_not_a_number| format!("`{token}` is not a number, like !42"))?;
             self.numbers.push(number);
             return Ok(self);
         }
@@ -149,7 +149,6 @@ fn tokens(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn mr(number: u64, author: &str, title: &str) -> QueueMr {

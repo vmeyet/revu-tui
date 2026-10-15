@@ -53,7 +53,6 @@ fn call(command: &str, mr: &Mr, name: &str, dir: &Path) -> Result<Call> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::super::tests::{Script, agent, cache, mr};
     use super::super::{Choice, Handoff, Harness, Outcome};
     use super::*;

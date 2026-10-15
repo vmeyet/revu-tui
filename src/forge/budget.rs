@@ -69,7 +69,6 @@ pub fn header_number(headers: &reqwest::header::HeaderMap, name: &str) -> Option
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

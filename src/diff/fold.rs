@@ -85,7 +85,6 @@ fn set_or_forget<K: Ord>(map: &mut BTreeMap<K, Fold>, key: K, fold: Fold) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn file(path: &str) -> FileMeta {

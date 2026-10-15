@@ -127,7 +127,6 @@ pub fn check(command: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     type Found = Vec<(String, String, u64)>;

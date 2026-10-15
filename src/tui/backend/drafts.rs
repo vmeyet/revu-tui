@@ -51,7 +51,6 @@ impl Drafts {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture::key;
     use crate::forge::{Forge, LineRef, Position, Refs};
@@ -77,7 +76,7 @@ mod tests {
     }
 
     /// A GitHub whose pending review text is read slowly and written whole, as `create_draft` does for a note on the PR.
-    struct PendingReview(std::sync::Arc<std::sync::Mutex<String>>);
+    struct PendingReview(Arc<std::sync::Mutex<String>>);
 
     impl wiremock::Respond for PendingReview {
         fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
@@ -93,6 +92,7 @@ mod tests {
             let mut threads: serde_json::Value = serde_json::from_str(include_str!("../../forge/github/fixtures/threads.json")).unwrap();
             let reviews = threads["data"]["repository"]["pullRequest"]["reviews"]["nodes"].as_array_mut().unwrap();
             reviews.iter_mut().filter(|r| r["state"] == "PENDING").for_each(|r| r["body"] = serde_json::json!(*text));
+            drop(text);
             wiremock::ResponseTemplate::new(200).set_body_json(threads).set_delay(Duration::from_millis(30))
         }
     }
@@ -100,10 +100,10 @@ mod tests {
     #[tokio::test]
     async fn two_notes_on_a_github_pr_saved_at_once_both_land() {
         let server = wiremock::MockServer::start().await;
-        let text = std::sync::Arc::new(std::sync::Mutex::new("Two nits.".to_owned()));
+        let text = Arc::new(std::sync::Mutex::new("Two nits.".to_owned()));
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/graphql"))
-            .respond_with(PendingReview(text.clone()))
+            .respond_with(PendingReview(Arc::clone(&text)))
             .mount(&server)
             .await;
         let creds = crate::auth::Credentials { host: "github.com".into(), token: "ghp_xxxx".into() };

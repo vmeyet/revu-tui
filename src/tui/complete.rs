@@ -58,7 +58,6 @@ impl Cycle {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn candidates() -> Vec<String> {
@@ -68,7 +67,7 @@ mod tests {
     #[test]
     fn ranking_puts_the_closest_match_first_and_keeps_the_rest() {
         assert_eq!(rank("rock", &candidates())[0], "rock");
-        assert!(rank("rock", &candidates()).contains(&"rocket".to_string()));
+        assert!(rank("rock", &candidates()).contains(&"rocket".to_owned()));
         assert_eq!(rank("zzz", &candidates()), Vec::<String>::new());
     }
 

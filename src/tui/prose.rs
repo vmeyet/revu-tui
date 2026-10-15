@@ -266,7 +266,7 @@ fn appearance(ground: Color) -> Appearance {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::single_range_in_vec_init)]
+    #![expect(clippy::single_range_in_vec_init, reason = "a block change holds a list of word ranges, here of one")]
     use super::*;
 
     const README: &str = "# Widgets\n\nAcme widgets for nina.\n\n- one\n- two\n\nThe end.\n";
@@ -288,7 +288,7 @@ mod tests {
     }
 
     /// Each row as its bar and text, trailing spaces cut.
-    fn plain(rows: &[Line]) -> Vec<String> {
+    fn plain(rows: &[Line<'_>]) -> Vec<String> {
         rows.iter().map(|row| row.spans.iter().map(|s| s.content.as_ref()).collect::<String>().trim_end().to_owned()).collect()
     }
 
@@ -296,7 +296,7 @@ mod tests {
         Look { theme: theme(), palette: settings(theme(), 40).theme.palette }
     }
 
-    fn span<'a>(rows: &'a [Line], text: &str) -> &'a Span<'a> {
+    fn span<'a>(rows: &'a [Line<'_>], text: &str) -> &'a Span<'a> {
         rows.iter().flat_map(|row| &row.spans).find(|s| s.content == text).expect(text)
     }
 

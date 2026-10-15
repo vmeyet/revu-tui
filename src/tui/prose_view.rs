@@ -11,7 +11,7 @@ use ratatui::widgets::Paragraph;
 /// The title row and the empty row under it.
 const TITLE_ROWS: u16 = 2;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = app.open.as_mut() else { return };
     let beside = open.review.side_by_side && open.review.wide;
@@ -26,7 +26,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     };
     let rows = app.kept.prose_rows(versions, body.width as usize, beside, theme).shown(prose.unfolded);
     prose.scroll = prose.scroll.min(rows.len().saturating_sub(body.height as usize));
-    let shown: Vec<Line> = rows.iter().skip(prose.scroll).take(body.height as usize).cloned().collect();
+    let shown: Vec<Line<'_>> = rows.iter().skip(prose.scroll).take(body.height as usize).cloned().collect();
     f.render_widget(Paragraph::new(shown), body);
 }
 

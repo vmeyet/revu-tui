@@ -183,7 +183,7 @@ impl Forge {
                 Forge::GitHub(client) => client.image(url).await,
             }
         };
-        tokio::time::timeout(image::TIMEOUT, fetch).await.map_err(|_| anyhow::anyhow!("timed out"))?
+        tokio::time::timeout(image::TIMEOUT, fetch).await.map_err(|_elapsed| anyhow::anyhow!("timed out"))?
     }
 
     /// Commits `suggestion` on the MR's source branch `branch`.
@@ -329,7 +329,6 @@ impl Forge {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::config::Host;
 

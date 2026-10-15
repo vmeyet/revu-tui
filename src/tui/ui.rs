@@ -42,7 +42,7 @@ pub struct Link {
     pub url: String,
 }
 
-pub fn draw(f: &mut Frame, app: &mut App) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     app.links.clear();
     app.text_rows.clear();
     app.list_rows.clear();
@@ -163,7 +163,7 @@ fn gutter(app: &App) -> diff_view::Gutter {
 }
 
 /// In zen: the MR just switched to, on top for a moment.
-fn draw_zen_banner(f: &mut Frame, app: &App, area: Rect) {
+fn draw_zen_banner(f: &mut Frame<'_>, app: &App, area: Rect) {
     let Some(text) = app.zen_banner(app.now) else { return };
     let theme = app.theme;
     let text = truncate(text, usize::from(area.width.saturating_sub(4)));
@@ -174,7 +174,7 @@ fn draw_zen_banner(f: &mut Frame, app: &App, area: Rect) {
 }
 
 /// Where no status row shows: a fresh toast on the bottom row.
-fn draw_toast_over(f: &mut Frame, app: &App, area: Rect) {
+fn draw_toast_over(f: &mut Frame<'_>, app: &App, area: Rect) {
     let Some(toast) = app.live_toast().filter(|t| t.fresh(app.now)) else { return };
     let theme = app.theme;
     let colour = if toast.danger { theme.danger } else { theme.muted };
@@ -186,7 +186,7 @@ fn draw_toast_over(f: &mut Frame, app: &App, area: Rect) {
 /// Pictures go on last, after the fades: the terminal paints them as pixels or placeholder cells,
 /// and both must stay as the protocol wrote them. Under a modal they are left out, since pixels
 /// would show through it.
-fn draw_pictures(f: &mut Frame, app: &mut App, pictures: &[thread_view::Placement]) {
+fn draw_pictures(f: &mut Frame<'_>, app: &mut App, pictures: &[thread_view::Placement]) {
     for picture in pictures {
         if let Some(super::images::Thumb::Ready(protocol, _)) = app.thumbs.get_mut(&picture.url) {
             let widget = ratatui_image::StatefulImage::<ratatui_image::protocol::StatefulProtocol>::default()
@@ -296,14 +296,14 @@ pub fn rule_pane(theme: Theme, title: &str) -> Block<'static> {
     Block::new().borders(Borders::TOP).border_style(Style::default().fg(theme.border)).title(title).padding(Padding::horizontal(1))
 }
 
-pub fn draw_empty(f: &mut Frame, theme: Theme, area: Rect, lines: &[&str]) {
-    let text: Vec<Line> = lines.iter().map(|l| Line::from(Span::styled((*l).to_owned(), Style::default().fg(theme.faded)))).collect();
+pub fn draw_empty(f: &mut Frame<'_>, theme: Theme, area: Rect, lines: &[&str]) {
+    let text: Vec<Line<'_>> = lines.iter().map(|l| Line::from(Span::styled((*l).to_owned(), Style::default().fg(theme.faded)))).collect();
     let top = area.y + area.height.saturating_sub(text.len() as u16) / 2;
     let centered = Rect { y: top, height: (text.len() as u16).min(area.height), ..area };
     f.render_widget(Paragraph::new(text).alignment(Alignment::Center), centered);
 }
 
-fn draw_filter(f: &mut Frame, app: &App, area: Rect) {
+fn draw_filter(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let line = Line::from(vec![
         Span::styled(" / ", Style::default().fg(theme.accent)),
@@ -358,7 +358,7 @@ fn picker_lines(theme: Theme, prompt: &Prompt, width: u16) -> Vec<Line<'static>>
     }
     let choices = picker_choices(theme, prompt);
     let hint = Span::styled(picker_hint(prompt), Style::default().fg(theme.muted));
-    let one_row: Vec<Span> = label.iter().cloned().chain(choices.iter().flat_map(|c| c.spans.clone())).chain([hint]).collect();
+    let one_row: Vec<Span<'_>> = label.iter().cloned().chain(choices.iter().flat_map(|c| c.spans.clone())).chain([hint]).collect();
     let one_row = Line::from(one_row);
     if one_row.width() <= usize::from(width) {
         return vec![one_row];
@@ -366,7 +366,7 @@ fn picker_lines(theme: Theme, prompt: &Prompt, width: u16) -> Vec<Line<'static>>
     wrap_choices(Line::from(label), choices, usize::from(width))
 }
 
-fn draw_status(f: &mut Frame, app: &App, area: Rect) {
+fn draw_status(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let muted = Style::default().fg(theme.muted);
     let dot = Span::styled(" · ", Style::default().fg(theme.faded));
@@ -480,7 +480,7 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
 
 /// The text in `area` takes one colour and its frames the quiet `border`: `color` is brighter than any
 /// frame, so fading a frame would light the unfocused pane's box above the focused one's.
-pub fn fade(f: &mut Frame, area: Rect, theme: Theme, color: Color) {
+pub fn fade(f: &mut Frame<'_>, area: Rect, theme: Theme, color: Color) {
     let buf = f.buffer_mut();
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
@@ -740,7 +740,6 @@ mod columns_tests {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

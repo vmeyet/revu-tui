@@ -271,7 +271,6 @@ fn check_order(sections: &[Section], running: Version) -> Result<()> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     pub(crate) const SAMPLE: &str = "\

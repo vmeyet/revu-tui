@@ -96,7 +96,6 @@ fn last(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn files(paths: &[&str]) -> Vec<File> {

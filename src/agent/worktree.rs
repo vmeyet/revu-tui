@@ -87,7 +87,6 @@ fn checked_out(listed: &str, branch: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::super::tests::{REPO, Script};
     use super::*;
 

@@ -152,7 +152,6 @@ impl Drag {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
     use super::*;
 
     /// Rows of plain text in a column at x 10, one line per row unless `line` says they wrap.

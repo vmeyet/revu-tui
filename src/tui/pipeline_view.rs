@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(pipeline) = &open.pipeline else { return };
@@ -35,14 +35,14 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let cursor = rows.iter().position(|row| matches!(row, PaneRow::Job(index, _) if *index == pipeline.selected)).unwrap_or(0);
     let scroll = settle_scroll(0, cursor, height);
     let links = app_links(&deployed, scroll, inner);
-    let shown: Vec<Line> =
+    let shown: Vec<Line<'_>> =
         rows.iter().skip(scroll).take(height).map(|row| row_line(row, checks, pipeline.selected, width, theme, tick)).collect();
     f.render_widget(Paragraph::new(shown), inner);
     app.links.extend(links);
 }
 
 /// Each review app's address where it shows in `inner`, `scroll` rows down, so a click opens it.
-fn app_links(deployed: &[(Line, Option<String>)], scroll: usize, inner: Rect) -> Vec<Link> {
+fn app_links(deployed: &[(Line<'_>, Option<String>)], scroll: usize, inner: Rect) -> Vec<Link> {
     let height = usize::from(inner.height);
     deployed
         .iter()
@@ -91,7 +91,7 @@ enum PaneRow<'p> {
 
 /// Every row of the pane: the review apps, the counts, then each stage and its jobs.
 fn rows<'p>(deployed: &'p [(Line<'static>, Option<String>)], checks: &'p Checks) -> Vec<PaneRow<'p>> {
-    let mut rows: Vec<PaneRow> = deployed.iter().map(|(line, _)| PaneRow::Deployed(line)).collect();
+    let mut rows: Vec<PaneRow<'_>> = deployed.iter().map(|(line, _)| PaneRow::Deployed(line)).collect();
     rows.extend([PaneRow::Summary, PaneRow::Blank]);
     let mut index = 0;
     for stage in &checks.stages {
@@ -105,7 +105,7 @@ fn rows<'p>(deployed: &'p [(Line<'static>, Option<String>)], checks: &'p Checks)
     rows
 }
 
-fn row_line(row: &PaneRow, checks: &Checks, selected: usize, width: usize, theme: Theme, tick: &str) -> Line<'static> {
+fn row_line(row: &PaneRow<'_>, checks: &Checks, selected: usize, width: usize, theme: Theme, tick: &str) -> Line<'static> {
     match row {
         PaneRow::Deployed(line) => (*line).clone(),
         PaneRow::Summary => summary(checks, theme),

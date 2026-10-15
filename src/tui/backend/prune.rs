@@ -61,7 +61,6 @@ async fn prune(forge: &Forge, cache: &Cache) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::backend::test_support::homes_on;
 

@@ -381,7 +381,7 @@ impl App {
     }
 
     /// A refresh also posts again every draft GitLab does not hold yet.
-    fn refresh_open(&mut self) -> Vec<Action> {
+    fn refresh_open(&self) -> Vec<Action> {
         let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
         let mut actions = vec![Action::RefreshMr(key)];
         actions.extend(self.retry_unsaved());
@@ -562,7 +562,6 @@ fn palette_key(key: KeyEvent) -> Option<crate::tui::palette::Mode> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
     use ratatui::layout::Rect;
 

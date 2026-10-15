@@ -89,7 +89,6 @@ fn id_of(mr: &QueueMr) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
     use chrono::{Duration, TimeZone, Utc};
@@ -127,7 +126,7 @@ mod tests {
         }
     }
 
-    fn shape(items: &[Item]) -> Vec<Vec<u64>> {
+    fn shape(items: &[Item<'_>]) -> Vec<Vec<u64>> {
         items
             .iter()
             .map(|item| match item {
@@ -221,7 +220,7 @@ mod tests {
     #[test]
     fn an_unfolded_stack_is_remembered_with_the_queue_view() {
         let mut app = stacked_app();
-        let view = QueueView { open_stacks: std::collections::BTreeSet::from(["acme/widgets!61".to_owned()]), ..QueueView::default() };
+        let view = QueueView { open_stacks: BTreeSet::from(["acme/widgets!61".to_owned()]), ..QueueView::default() };
         app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view });
         assert!(app.queue_rows().iter().any(|r| matches!(r, QueueRow::Stack { open: true, .. })));
     }

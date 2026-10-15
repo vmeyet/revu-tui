@@ -101,8 +101,8 @@ impl Kept {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+    use crate::review::tree;
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -169,6 +169,6 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         let open = app.open.as_ref().unwrap();
         assert_ne!(app.kept.tree_rows(open), before.as_slice());
-        assert_eq!(app.kept.tree_rows(open), crate::review::tree::rows(&open.review.files, &open.tree.as_ref().unwrap().folds));
+        assert_eq!(app.kept.tree_rows(open), tree::rows(&open.review.files, &open.tree.as_ref().unwrap().folds));
     }
 }

@@ -19,7 +19,7 @@ const BULLET: &str = "• ";
 const UNDER_BULLET: &str = "  ";
 const NEW_TO_YOU: &str = "  ● new for you";
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(scroll) = app.news_page else { return };
     let width = (area.width * SIZE_PCT / 100).clamp(area.width.min(40), MAX_WIDTH).min(area.width);
@@ -30,7 +30,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
         .title_bottom(Line::from(Span::styled(" j k scroll · esc close ", Style::default().fg(theme.faded))));
     let visible = usize::from(block.inner(popup).height);
     let scroll = scroll.min(lines.len().saturating_sub(visible));
-    let shown: Vec<Line> = lines.into_iter().skip(scroll).take(visible).collect();
+    let shown: Vec<Line<'_>> = lines.into_iter().skip(scroll).take(visible).collect();
     f.render_widget(Clear, popup);
     f.render_widget(Paragraph::new(shown).block(block).style(Style::default().bg(theme.surface)), popup);
     app.news_page = Some(scroll);
@@ -45,7 +45,7 @@ fn centred(area: Rect, width: u16, rows: usize) -> Rect {
 
 /// Every section, a blank row between two.
 fn lines(whats_new: &WhatsNew, theme: Theme, width: usize) -> Vec<Line<'static>> {
-    let sections: Vec<Vec<Line>> =
+    let sections: Vec<Vec<Line<'_>>> =
         whats_new.sections().into_iter().map(|(section, new)| section_lines(section, new, theme, width)).collect();
     sections.join(&Line::default())
 }

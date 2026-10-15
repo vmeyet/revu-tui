@@ -89,7 +89,7 @@ impl std::fmt::Debug for Colours {
 
 impl File {
     pub fn from_diff(diff: &DiffFile) -> Self {
-        let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(diff::words::mark).collect();
+        let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(words::mark).collect();
         let lines = hunks.iter().map(|h| h.lines.len()).sum::<usize>();
         let count = |kind: LineKind| hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind == kind).count();
         let kind = diff.change;
@@ -387,12 +387,12 @@ impl Review {
     }
 
     /// Viewed files with the fingerprint of the change the reader saw, as the cache keeps them.
-    pub fn viewed_fingerprints(&self) -> std::collections::BTreeMap<String, String> {
+    pub fn viewed_fingerprints(&self) -> BTreeMap<String, String> {
         self.files.iter().filter(|f| self.viewed.contains(&f.new_path)).map(|f| (f.new_path.clone(), f.fingerprint())).collect()
     }
 
     /// The saved viewed files that still show the change the reader saw: one pushed to since is to read again.
-    pub fn still_viewed(&self, saved: &std::collections::BTreeMap<String, String>) -> BTreeSet<String> {
+    pub fn still_viewed(&self, saved: &BTreeMap<String, String>) -> BTreeSet<String> {
         self.files.iter().filter(|f| saved.get(&f.new_path) == Some(&f.fingerprint())).map(|f| f.new_path.clone()).collect()
     }
 
@@ -590,7 +590,6 @@ fn threads_of(discussions: Vec<Discussion>, files: &[File]) -> Vec<Thread> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture;
     use serde_json::json;
@@ -648,7 +647,7 @@ pub(crate) mod tests {
         }
     }
 
-    fn has_span(file: &File, line: usize, text: &str, token: crate::syntax::Token) -> bool {
+    fn has_span(file: &File, line: usize, text: &str, token: syntax::Token) -> bool {
         let written = &file.hunks[0].lines[line].text;
         file.spans(0, line).iter().any(|(r, t)| &written[r.clone()] == text && *t == token)
     }
@@ -656,8 +655,8 @@ pub(crate) mod tests {
     #[test]
     fn typescript_files_carry_syntax_per_line_and_other_files_none() {
         let file = File::from_diff(&cart());
-        assert!(has_span(&file, 1, "const", crate::syntax::Token::Keyword));
-        assert!(has_span(&file, 4, "\"total\"", crate::syntax::Token::String));
+        assert!(has_span(&file, 1, "const", syntax::Token::Keyword));
+        assert!(has_span(&file, 4, "\"total\"", syntax::Token::String));
         assert!(File::from_diff(&charge()).spans(0, 1).is_empty(), "no grammar for .rs yet");
         assert!(File::from_diff(&DiffFile { too_large: true, ..cart() }).spans(0, 1).is_empty(), "too large files stay plain");
     }
@@ -666,7 +665,7 @@ pub(crate) mod tests {
     fn a_hunk_is_highlighted_the_first_time_one_of_its_lines_is_read() {
         let file = File::from_diff(&cart());
         assert_eq!(file.coloured_hunks(), 0, "parsing a diff highlights nothing");
-        assert!(has_span(&file, 4, "\"total\"", crate::syntax::Token::String));
+        assert!(has_span(&file, 4, "\"total\"", syntax::Token::String));
         assert_eq!(file.coloured_hunks(), 1);
     }
 
@@ -679,7 +678,7 @@ pub(crate) mod tests {
         let fresh = Review::new(mr(), &[edited.clone(), other], vec![], &[]).with_colours_kept(&old.files);
         assert_eq!(fresh.files[1].coloured_hunks(), 1, "the unchanged file keeps its colours");
         assert_eq!(fresh.files[0].coloured_hunks(), 0, "the changed file is highlighted again when read");
-        assert!(!has_span(&fresh.files[0], 4, "\"total\"", crate::syntax::Token::String), "no colour of the old text survives");
+        assert!(!has_span(&fresh.files[0], 4, "\"total\"", syntax::Token::String), "no colour of the old text survives");
         assert_eq!(fresh.files[0].spans(0, 4), File::from_diff(&edited).spans(0, 4));
     }
 
@@ -721,7 +720,7 @@ pub(crate) mod tests {
         let review = big_review(50);
         let rounds = 1_000;
         let started = std::time::Instant::now();
-        let mut last = review.clone();
+        let mut last = review;
         for _ in 0..rounds {
             let fold = last.fold.clone();
             last = last.with_fold(fold);
@@ -852,7 +851,7 @@ pub(crate) mod tests {
         let path = review.files[0].new_path.clone();
         let saved = review.clone().with_viewed(BTreeSet::from([path.clone()])).viewed_fingerprints();
         assert_eq!(review.still_viewed(&saved), BTreeSet::from([path.clone()]));
-        let moved = std::collections::BTreeMap::from([(path, "an older change".to_owned())]);
+        let moved = BTreeMap::from([(path, "an older change".to_owned())]);
         assert!(review.still_viewed(&moved).is_empty(), "a file pushed to since is to read again");
     }
 

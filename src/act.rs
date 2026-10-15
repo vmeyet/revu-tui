@@ -711,7 +711,6 @@ pub fn listed_in(section: Section) -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::help::GROUPS;
 

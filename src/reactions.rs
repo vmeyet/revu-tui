@@ -52,7 +52,6 @@ pub fn record(cache: &Cache, host: &str, emoji: Emoji) -> Result<History> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn hundred() -> Emoji {

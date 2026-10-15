@@ -208,7 +208,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     fn seconds_on(app: &mut App, screen: &str) -> Option<u64> {

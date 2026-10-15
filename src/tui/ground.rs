@@ -55,20 +55,22 @@ fn readable(tty: &std::fs::File, within: Duration) -> bool {
     if !usize::try_from(fd).is_ok_and(|slot| slot < libc::FD_SETSIZE) {
         return false;
     }
-    #[allow(clippy::unnecessary_fallible_conversions, reason = "suseconds_t is i64 on Linux but i32 on macOS")]
+    #[cfg_attr(
+        target_os = "linux",
+        expect(clippy::unnecessary_fallible_conversions, reason = "suseconds_t is i64 on Linux but i32 on macOS")
+    )]
     let mut timeout = libc::timeval {
         tv_sec: libc::time_t::try_from(within.as_secs()).unwrap_or(libc::time_t::MAX),
         tv_usec: libc::suseconds_t::try_from(within.subsec_micros()).unwrap_or(0),
     };
-    // SAFETY: the set is zeroed then holds one open descriptor, checked above to be below FD_SETSIZE, and select only
-    // writes into the set and the timeout it is handed.
-    unsafe {
-        let mut set: libc::fd_set = std::mem::zeroed();
-        libc::FD_ZERO(&raw mut set);
-        libc::FD_SET(fd, &raw mut set);
-        libc::select(fd + 1, &raw mut set, std::ptr::null_mut(), std::ptr::null_mut(), &raw mut timeout) > 0
-            && libc::FD_ISSET(fd, &raw const set)
-    }
+    // SAFETY: `fd_set` is plain integers, so all zeros is a valid empty set.
+    let mut set: libc::fd_set = unsafe { std::mem::zeroed() };
+    // SAFETY: the descriptor is open and checked above to be below FD_SETSIZE.
+    unsafe { libc::FD_SET(fd, &raw mut set) };
+    // SAFETY: select only writes into the set and the timeout it is handed, both alive for the call.
+    let ready = unsafe { libc::select(fd + 1, &raw mut set, std::ptr::null_mut(), std::ptr::null_mut(), &raw mut timeout) };
+    // SAFETY: the set is initialised and the descriptor is below FD_SETSIZE.
+    ready > 0 && unsafe { libc::FD_ISSET(fd, &raw const set) }
 }
 
 /// The DA1 answer, `ESC [ ? … c`, closes what the terminal sends back.
@@ -98,7 +100,6 @@ fn channel(hex: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

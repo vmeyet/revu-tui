@@ -71,6 +71,7 @@ impl Saves {
         let state = MrState { spot: chosen.spot.or(before.spot), opened_at: before.opened_at, ..chosen };
         self.homes.cache_of(key).write(&keys::state(key), &state)?;
         saved.insert(key.clone(), order);
+        drop(saved);
         Ok(())
     }
 
@@ -103,6 +104,7 @@ impl Saves {
         }
         self.homes.cache.update(entry, change)?;
         changed.insert(id, order);
+        drop(changed);
         Ok(())
     }
 
@@ -133,7 +135,6 @@ impl Saves {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture::key;
     use crate::tui::backend::test_support::homes_in;

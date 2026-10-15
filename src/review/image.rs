@@ -103,7 +103,6 @@ fn find_ascii_ci(text: &str, needle: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn image(alt: &str, url: &str) -> Image {

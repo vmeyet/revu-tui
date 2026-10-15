@@ -1,5 +1,5 @@
 //! End-to-end runs of the `revu` binary: arguments, help and failures that need no network.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![cfg(test)]
 use assert_cmd::Command;
 use predicates::prelude::*;
 

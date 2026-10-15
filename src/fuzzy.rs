@@ -90,7 +90,6 @@ pub fn best<T>(query: &str, items: impl IntoIterator<Item = (String, T)>) -> Opt
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn order(query: &str, items: &[&str]) -> Vec<String> {
@@ -128,7 +127,7 @@ mod tests {
 
     #[test]
     fn best_needs_a_clear_winner() {
-        let items = || ["#general", "#general-fr", "#random"].map(|s| (s.to_string(), s.to_string()));
+        let items = || ["#general", "#general-fr", "#random"].map(|s| (s.to_owned(), s.to_owned()));
         assert_eq!(best("rand", items()).as_deref(), Some("#random"));
         assert_eq!(best("gener", items()), None);
         assert_eq!(best("zzz", items()), None);

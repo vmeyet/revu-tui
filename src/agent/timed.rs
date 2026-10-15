@@ -37,7 +37,7 @@ fn drain(pipe: Option<impl Read + Send + 'static>) -> JoinHandle<std::io::Result
 
 /// What a drain read; one that failed or panicked is an error, never an empty output passed off as the program's.
 fn drained(drain: JoinHandle<std::io::Result<Vec<u8>>>) -> std::io::Result<Vec<u8>> {
-    drain.join().map_err(|_| std::io::Error::other("reading the program's output panicked"))?
+    drain.join().map_err(|_panic| std::io::Error::other("reading the program's output panicked"))?
 }
 
 /// The whole process group, since a stuck `git fetch` is often the `ssh` it started.
@@ -51,7 +51,6 @@ fn stop(child: &mut Child) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn sh(script: &str) -> Command {

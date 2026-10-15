@@ -370,7 +370,6 @@ fn cannot_approve(err: anyhow::Error) -> anyhow::Error {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::auth::Credentials;
     use crate::forge::{LineRef, Refs};

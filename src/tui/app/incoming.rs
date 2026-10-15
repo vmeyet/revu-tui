@@ -254,7 +254,6 @@ fn carry_over(old: &Review, fresh: Review) -> Review {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -272,14 +271,14 @@ mod tests {
     #[test]
     fn a_poll_that_brings_nothing_new_keeps_the_threads_so_nothing_is_laid_out_again() {
         let mut app = with_review();
-        let threads = |app: &App| std::sync::Arc::clone(&app.open.as_ref().unwrap().review.threads);
+        let threads = |app: &App| Arc::clone(&app.open.as_ref().unwrap().review.threads);
         let before = threads(&app);
         app.apply(Incoming::Discussions { key: mr_key(), discussions: discussions() });
-        assert!(std::sync::Arc::ptr_eq(&threads(&app), &before), "the same threads, kept by identity");
+        assert!(Arc::ptr_eq(&threads(&app), &before), "the same threads, kept by identity");
         assert!(app.poll.discussions_due.is_some(), "the next poll is set");
         let more: Vec<Discussion> = discussions().into_iter().chain([thread_on_line_13("new", 1)]).collect();
         app.apply(Incoming::Discussions { key: mr_key(), discussions: more });
-        assert!(!std::sync::Arc::ptr_eq(&threads(&app), &before), "a new thread replaces them");
+        assert!(!Arc::ptr_eq(&threads(&app), &before), "a new thread replaces them");
         assert_eq!(app.open.as_ref().unwrap().review.threads.len(), before.len() + 1);
     }
 
@@ -288,11 +287,11 @@ mod tests {
         let mut app = with_queue();
         app.handle_key(code(KeyCode::Enter));
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: Some(Duration::from_secs(120)) });
-        let painted = std::sync::Arc::clone(&app.open.as_ref().unwrap().review.files);
+        let painted = Arc::clone(&app.open.as_ref().unwrap().review.files);
         let more: Vec<Discussion> = discussions().into_iter().chain([thread_on_line_13("new", 1)]).collect();
         app.apply(Incoming::Threads { key: mr_key(), mr: Box::new(mr()), discussions: more, drafts: vec![] });
         let open = app.open.as_ref().unwrap();
-        assert!(std::sync::Arc::ptr_eq(&open.review.files, &painted), "the diff is the one painted");
+        assert!(Arc::ptr_eq(&open.review.files, &painted), "the diff is the one painted");
         assert_eq!(open.review.threads.len(), review().threads.len() + 1);
         assert_eq!(open.staleness(app.now), None);
         assert_eq!(app.opening, None);

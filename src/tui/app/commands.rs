@@ -244,7 +244,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     fn run_line(app: &mut App, line: &str) -> Vec<Action> {

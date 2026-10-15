@@ -47,7 +47,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::changelog::tests::sample;
     use crate::tui::app::test_support::*;

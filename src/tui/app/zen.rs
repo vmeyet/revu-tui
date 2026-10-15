@@ -123,7 +123,6 @@ const ZEN_BANNER: std::time::Duration = std::time::Duration::from_millis(1_500);
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -180,7 +179,7 @@ mod tests {
         assert!(app.zen, "the MR changes, zen stays");
         let banner = app.zen_banner(app.now).unwrap().to_owned();
         assert!(banner.contains(&format!("2/{}", order.len())), "{banner}");
-        assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(order[1].clone()), "leaving zen shows the queue on it");
+        assert_eq!(app.selected_mr().map(QueueMr::key), Some(order[1].clone()), "leaving zen shows the queue on it");
         app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
         assert_eq!(press(&mut app, "[m"), vec![Action::Open(order[0].clone())]);
         app.apply(Incoming::Review { key: order[0].clone(), review: Box::new(review()), cached: None });
@@ -241,7 +240,7 @@ mod tests {
         app.handle_key(code(KeyCode::Esc));
         assert!(!app.zen);
         assert_eq!(app.focus, Focus::Review, "esc leaves zen onto the diff");
-        assert_eq!(app.selected_mr().map(crate::forge::QueueMr::key), Some(target), "the queue shows it selected, as if opened from it");
+        assert_eq!(app.selected_mr().map(QueueMr::key), Some(target), "the queue shows it selected, as if opened from it");
     }
 
     #[test]
@@ -257,7 +256,7 @@ mod tests {
     fn notifications_wait_for_zen_to_end() {
         let mut app = with_review();
         let full = sections();
-        let before = crate::forge::Sections { to_review: vec![], ..full.clone() };
+        let before = Sections { to_review: vec![], ..full.clone() };
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: before, opened: HashMap::new(), cached: false });
         app.take_actions();
         press(&mut app, "zz");
@@ -339,7 +338,7 @@ mod tests {
         press(&mut app, "w");
         let screen = render(&mut app, 160, 45);
         assert!(screen.lines().last().unwrap().contains("long lines wrap"), "{screen}");
-        app.now += std::time::Duration::from_secs(3);
+        app.now += Duration::from_secs(3);
         let screen = render(&mut app, 160, 45);
         assert!(!screen.contains("long lines wrap"), "gone after two seconds");
     }

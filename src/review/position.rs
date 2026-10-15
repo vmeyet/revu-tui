@@ -39,7 +39,6 @@ fn line_ref(line: &Line) -> LineRef {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::Refs;
     use crate::review::tests::review;
@@ -49,7 +48,6 @@ mod tests {
     }
 
     mod properties {
-        #![allow(clippy::unwrap_used, clippy::expect_used)]
         use super::super::*;
         use crate::diff::arbitrary;
         use crate::review::tests::{lines_of, review_of};

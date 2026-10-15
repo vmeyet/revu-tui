@@ -46,7 +46,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::config::{QueueLayout, Widths};
     use crate::tui::app::test_support::*;
     use ratatui::layout::Rect;

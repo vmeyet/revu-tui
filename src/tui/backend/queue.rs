@@ -153,7 +153,6 @@ fn silent_note(hosts: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::cache::Cache;
     use crate::forge::Forge;
@@ -165,7 +164,7 @@ mod tests {
     fn queues(homes: Homes) -> Queues {
         let homes = Arc::new(homes);
         Queues {
-            saves: Saves::new(homes.clone()),
+            saves: Saves::new(Arc::clone(&homes)),
             homes,
             watch_labels: vec![],
             rules: crate::forge::rules::Rules::disabled(),

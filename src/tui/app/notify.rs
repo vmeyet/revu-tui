@@ -16,7 +16,7 @@ impl App {
         let sections = self.sections.as_ref()?;
         let now: HashSet<MrKey> = sections.to_review.iter().map(crate::forge::QueueMr::key).collect();
         let scope = self.scope();
-        let before = self.seen.replace(Seen { scope: scope.clone(), keys: now.clone() });
+        let before = self.seen.replace(Seen { scope: scope.clone(), keys: now });
         let before = before.filter(|b| b.scope == scope)?;
         if !self.notify {
             return None;
@@ -42,10 +42,9 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
-    fn announce(app: &mut App, sections: crate::forge::Sections) -> Vec<Action> {
+    fn announce(app: &mut App, sections: Sections) -> Vec<Action> {
         app.apply(Incoming::Queue { scope: app.scope(), me: "nina".into(), sections, opened: HashMap::new(), cached: false });
         app.take_actions().into_iter().filter(|a| matches!(a, Action::Notify { .. })).collect()
     }
@@ -67,12 +66,10 @@ mod tests {
     #[test]
     fn a_host_that_misses_a_poll_keeps_its_rows_with_a_note_and_its_return_announces_nothing() {
         let mut app = app();
-        let elsewhere = |mr: crate::forge::QueueMr| crate::forge::QueueMr { host: Some("git.acme.test".into()), ..mr };
+        let elsewhere = |mr: QueueMr| QueueMr { host: Some("git.acme.test".into()), ..mr };
         let full = sections();
-        let both = crate::forge::Sections {
-            to_review: full.to_review.iter().cloned().chain(full.to_review.iter().cloned().map(elsewhere)).collect(),
-            ..full
-        };
+        let both =
+            Sections { to_review: full.to_review.iter().cloned().chain(full.to_review.iter().cloned().map(elsewhere)).collect(), ..full };
         announce(&mut app, both.clone());
         app.apply(Incoming::Failed { what: Failure::Host, message: "git.acme.test did not answer · showing its last rows".into() });
         let toast = app.live_toast().unwrap();
@@ -85,10 +82,10 @@ mod tests {
     fn several_arrivals_share_one_notification_and_off_means_off() {
         let mut app = app();
         let full = sections();
-        let empty = crate::forge::Sections { to_review: vec![], ..full.clone() };
+        let empty = Sections { to_review: vec![], ..full.clone() };
         announce(&mut app, empty.clone());
         let mut more = full.clone();
-        more.to_review.push(crate::forge::QueueMr { number: 77, title: "chore: bump".into(), ..full.to_review[0].clone() });
+        more.to_review.push(QueueMr { number: 77, title: "chore: bump".into(), ..full.to_review[0].clone() });
         let notices = announce(&mut app, more);
         let [Action::Notify { title, body }] = notices.as_slice() else { panic!("{notices:?}") };
         assert_eq!(title, "revu · 2 MRs to review");

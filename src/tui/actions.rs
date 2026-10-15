@@ -254,7 +254,7 @@ fn painted_head(cached: &Incoming) -> Option<crate::forge::Sha> {
 async fn in_turn<T, F, Fut>(plan: Vec<T>, cap: usize, load: F)
 where
     F: Fn(T) -> Fut,
-    Fut: std::future::Future<Output = ()>,
+    Fut: Future<Output = ()>,
 {
     futures_util::stream::iter(plan).for_each_concurrent(cap, load).await;
 }
@@ -315,7 +315,7 @@ mod tests {
     /// Never polled, so nothing runs: the types alone prove the helpers wait without blocking a runtime thread.
     #[test]
     fn the_macos_helpers_are_futures_so_they_never_block_the_runtime() {
-        fn future<F: std::future::Future<Output = Result<()>>>(_: F) {}
+        fn future<F: Future<Output = Result<()>>>(_: F) {}
         future(notify("title", "body"));
         future(open_url("https://gitlab.com"));
         future(copy("text"));

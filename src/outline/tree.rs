@@ -139,7 +139,7 @@ impl<'a> Graph<'a> {
     /// Changes come first, so a change's node is its index; a call links to every code symbol of its name on its own side.
     /// Test symbols call from the tests section only.
     fn new(changes: &'a [Change], unchanged: &'a [(String, Symbol)], direction: Direction, section: Section) -> Self {
-        let nodes: Vec<Node> = changes
+        let nodes: Vec<Node<'_>> = changes
             .iter()
             .enumerate()
             .map(|(index, c)| Node { path: &c.path, symbol: &c.symbol, change: Some(index), side: c.side() })
@@ -157,7 +157,7 @@ impl<'a> Graph<'a> {
             }
         }
         let mut links = vec![vec![]; nodes.len()];
-        let calling = |node: &Node| section == Section::Tests || !super::is_test(node.path);
+        let calling = |node: &Node<'_>| section == Section::Tests || !super::is_test(node.path);
         for (caller, node) in nodes.iter().enumerate().filter(|(_, node)| calling(node)) {
             let named = if node.side == Side::Old { &on_base } else { &on_head };
             for call in &node.symbol.calls {
@@ -288,7 +288,6 @@ fn push_once(links: &mut Vec<Link>, link: Link) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::super::{Reading, read};
     use super::*;
 

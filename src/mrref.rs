@@ -119,7 +119,6 @@ fn git<const N: usize>(dir: &Path, args: [&str; N]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn no_local() -> Option<ProjectPath> {

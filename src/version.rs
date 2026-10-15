@@ -17,7 +17,6 @@ pub fn short(commit: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

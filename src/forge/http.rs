@@ -281,7 +281,6 @@ pub fn scrub(err: reqwest::Error) -> anyhow::Error {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use reqwest::header::HeaderValue;
     use wiremock::matchers::{method, path};

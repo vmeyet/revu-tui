@@ -84,25 +84,25 @@ pub(super) struct Backend {
 impl Backend {
     pub(super) fn new(homes: Homes, setup: Setup) -> Self {
         let homes = Arc::new(homes);
-        let saves = Saves::new(homes.clone());
+        let saves = Saves::new(Arc::clone(&homes));
         Self {
             queues: Queues {
-                homes: homes.clone(),
+                homes: Arc::clone(&homes),
                 saves: saves.clone(),
                 watch_labels: setup.watch_labels,
                 rules: setup.rules,
                 ready_command: setup.ready_command,
             },
             reviews: Reviews {
-                homes: homes.clone(),
+                homes: Arc::clone(&homes),
                 saves: saves.clone(),
                 fold_globs: setup.fold_globs,
                 inline: setup.inline,
                 opening: Arc::default(),
             },
-            drafts: Drafts { homes: homes.clone(), lanes: Lanes::default() },
-            ai: Ai { homes: homes.clone(), jev: setup.jev, claude: setup.claude },
-            files: Files { homes: homes.clone(), open: setup.open, checkout: setup.checkout },
+            drafts: Drafts { homes: Arc::clone(&homes), lanes: Lanes::default() },
+            ai: Ai { homes: Arc::clone(&homes), jev: setup.jev, claude: setup.claude },
+            files: Files { homes: Arc::clone(&homes), open: setup.open, checkout: setup.checkout },
             agent: setup.agent,
             saves,
             homes,
@@ -164,7 +164,6 @@ mod test_support;
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::cache::keys;
     use test_support::homes_in;

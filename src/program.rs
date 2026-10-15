@@ -69,7 +69,6 @@ pub fn check(command: &str, key: &str) -> Result<()> {
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     /// A script in a temp dir, and the command that runs it.

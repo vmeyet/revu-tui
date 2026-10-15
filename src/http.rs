@@ -16,13 +16,12 @@ pub fn client() -> reqwest::ClientBuilder {
     RING.call_once(|| {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
     });
-    #[allow(clippy::disallowed_methods)]
+    #[expect(clippy::disallowed_methods, reason = "this is the one place that builds a client, after installing the TLS provider")]
     reqwest::Client::builder().connect_timeout(CONNECT_TIMEOUT).read_timeout(READ_TIMEOUT).tcp_keepalive(KEEPALIVE)
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

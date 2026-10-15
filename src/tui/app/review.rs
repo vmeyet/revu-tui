@@ -3,6 +3,7 @@ use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef, Sha};
 use crate::review::{Draft, Review, Row, Side};
 use crate::tui::toward::Toward;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// The MR on screen: the review plus where the reader is in it.
@@ -412,7 +413,7 @@ impl App {
     /// A file read whole arrived: the hunks waiting on it show their extra lines, unless a push moved the head since it was asked.
     pub(super) fn apply_file(&mut self, key: &MrKey, path: String, sha: &Sha, text: &str) {
         let Some(open) = self.open.take_if(|o| &o.key == key && &o.review.mr.refs.head == sha) else { return };
-        let lines = std::sync::Arc::new(text.lines().map(str::to_owned).collect());
+        let lines = Arc::new(text.lines().map(str::to_owned).collect());
         self.open = Some(open.relaid(|review| {
             let mut context = review.context.clone();
             context.texts.insert(path, lines);
@@ -446,7 +447,7 @@ impl App {
             order: self.next_save,
             fold: review.fold.clone(),
             viewed: review.viewed_fingerprints(),
-            auto_folded: review.auto_folded.clone(),
+            auto_folded: Arc::clone(&review.auto_folded),
             side_by_side: review.side_by_side,
             spot,
         })
@@ -468,7 +469,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -664,7 +664,7 @@ mod tests {
         let contexts = |app: &App| app.open.as_ref().unwrap().rows.iter().filter(|r| matches!(r, Row::Context { .. })).count();
         app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "01d".into(), text: text.clone() });
         assert_eq!(contexts(&app), 0, "a file read at another head is dropped");
-        app.apply(Incoming::File { key: mr_key(), path: path.clone(), sha: "bbbb".into(), text });
+        app.apply(Incoming::File { key: mr_key(), path, sha: "bbbb".into(), text });
         assert_eq!(contexts(&app), 20, "ten above, ten below");
         assert_eq!(press(&mut app, "="), vec![], "the file is read once");
         let screen = render(&mut app, 120, 40);

@@ -21,7 +21,7 @@ const INDENT: usize = 2;
 /// Conventional-commit kinds shown as a chip in front of the title.
 const KINDS: [&str; 12] = ["feat", "fix", "docs", "refactor", "test", "chore", "perf", "ci", "build", "style", "tech", "revert"];
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let scope = app.scope().map_or_else(|| "all".to_owned(), |project| project.to_string());
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
@@ -379,7 +379,7 @@ fn badge_span(app: &App, badge: Badge) -> Span<'static> {
     }
 }
 
-fn draw_skeleton(f: &mut Frame, theme: Theme, area: Rect) {
+fn draw_skeleton(f: &mut Frame<'_>, theme: Theme, area: Rect) {
     let faded = Style::default().fg(theme.faded);
     let mut lines = vec![];
     for name in ["TO REVIEW", "MINE", "WATCHING", "OPEN"] {
@@ -393,7 +393,6 @@ fn draw_skeleton(f: &mut Frame, theme: Theme, area: Rect) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

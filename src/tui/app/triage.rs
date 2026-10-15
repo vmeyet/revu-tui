@@ -95,7 +95,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     fn triaging() -> App {
@@ -104,7 +103,7 @@ mod tests {
         app
     }
 
-    fn verdict_for(mr: &crate::forge::QueueMr, urgency: f64, size: crate::ai::triage::Size) -> crate::ai::triage::Verdict {
+    fn verdict_for(mr: &QueueMr, urgency: f64, size: crate::ai::triage::Size) -> crate::ai::triage::Verdict {
         crate::ai::triage::Verdict { urgency, size, seen: mr.updated_at }
     }
 
@@ -138,7 +137,7 @@ mod tests {
             QueueRow::Section { .. } | QueueRow::Stack { .. } => None,
         });
         assert_eq!(first_row, Some(last.key()), "the urgent MR leads To review");
-        let moved = crate::forge::QueueMr { updated_at: last.updated_at + chrono::TimeDelta::hours(1), ..last.clone() };
+        let moved = QueueMr { updated_at: last.updated_at + chrono::TimeDelta::hours(1), ..last.clone() };
         assert_eq!(app.mark(&moved), None, "a verdict on an older state marks nothing");
         let screen = render(&mut app, 100, 16);
         let meta = screen.lines().position(|l| l.contains(&format!("!{} ·", last.number))).unwrap();
@@ -162,10 +161,8 @@ mod tests {
         let [Action::Read { head, files, .. }] = asked.as_slice() else { panic!("{asked:?}") };
         assert_ne!(files.as_slice(), []);
         let path = files[0].0.clone();
-        let reading = crate::ai::triage::Reading {
-            waits_on_me: true,
-            risks: std::collections::BTreeMap::from([(path.clone(), crate::ai::triage::Risk::Security)]),
-        };
+        let reading =
+            crate::ai::triage::Reading { waits_on_me: true, risks: BTreeMap::from([(path.clone(), crate::ai::triage::Risk::Security)]) };
         app.apply(Incoming::Read { key: mr_key(), head: head.clone(), reading });
         assert_eq!(app.risk(&path), Some(crate::ai::triage::Risk::Security));
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });

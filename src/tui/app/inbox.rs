@@ -106,7 +106,7 @@ impl App {
         match &self.spot_pending {
             Some((waiting, since)) if *waiting == spot => {
                 let rested = self.now.duration_since(*since) >= SETTLE;
-                let saved = self.spot_saved.as_ref() == Some(&(key, spot.clone()));
+                let saved = self.spot_saved.as_ref() == Some(&(key, spot));
                 (rested && !saved).then(|| self.save_spot_now()).flatten()
             }
             _ => {
@@ -160,7 +160,6 @@ pub fn progress_bar(viewed: usize, files: usize, width: usize) -> (String, Strin
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
 
@@ -175,7 +174,7 @@ mod tests {
 
     fn inbox_sections() -> Sections {
         let base = sections().to_review[0].clone();
-        let mr = |number: u64, approved: bool| crate::forge::QueueMr {
+        let mr = |number: u64, approved: bool| QueueMr {
             number,
             approved_by: if approved { vec!["nina".into()] } else { vec![] },
             ..base.clone()
@@ -269,14 +268,14 @@ mod tests {
     #[test]
     fn a_resting_cursor_is_saved_once_and_the_opening_place_is_not() {
         let mut app = with_review();
-        app.now += std::time::Duration::from_secs(5);
+        app.now += Duration::from_secs(5);
         assert!(!app.tick().iter().any(|a| matches!(a, Action::SaveState { .. })), "nothing moved yet");
         on_line(&mut app);
         app.tick();
-        app.now += std::time::Duration::from_secs(2);
+        app.now += Duration::from_secs(2);
         let saved: Vec<Action> = app.tick().into_iter().filter(|a| matches!(a, Action::SaveState { spot: Some(_), .. })).collect();
         assert_eq!(saved.len(), 1);
-        app.now += std::time::Duration::from_secs(2);
+        app.now += Duration::from_secs(2);
         assert!(!app.tick().iter().any(|a| matches!(a, Action::SaveState { .. })), "saved once");
     }
 

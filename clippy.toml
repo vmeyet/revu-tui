@@ -1,3 +1,5 @@
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
 disallowed-methods = [
   { path = "reqwest::Client::builder", reason = "use crate::http::client, which installs the TLS provider" },
   { path = "reqwest::Client::new", reason = "use crate::http::client, which installs the TLS provider" },

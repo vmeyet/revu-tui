@@ -147,7 +147,6 @@ fn split_call(command: &str, program: &Call, dir: &Path) -> Result<Call> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::super::terminal::CLEAR;
     use super::super::tests::Script;
     use super::super::{Case, Kept};

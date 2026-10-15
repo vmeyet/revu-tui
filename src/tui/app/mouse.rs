@@ -183,7 +183,6 @@ impl List {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{List, ListRow};
     use crate::review::tree::TreeRow;
     use crate::tui::app::test_support::*;

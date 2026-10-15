@@ -152,7 +152,6 @@ fn thread_row(discussion: &Discussion, now: DateTime<Utc>) -> Option<Vec<Cell>> 
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture;
     use chrono::TimeZone;

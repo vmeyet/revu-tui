@@ -62,7 +62,7 @@ pub struct QueueMr {
 }
 
 /// `revu list --json` has spelled a row's pipeline in upper case since before it had a type.
-#[allow(clippy::ref_option, clippy::trivially_copy_pass_by_ref, reason = "serde's serialize_with hands a reference")]
+#[expect(clippy::ref_option, clippy::trivially_copy_pass_by_ref, reason = "serde's serialize_with hands a reference")]
 fn upper_case<S: serde::Serializer>(status: &Option<PipelineStatus>, serializer: S) -> Result<S::Ok, S::Error> {
     status.map(|s| s.word().to_ascii_uppercase()).serialize(serializer)
 }
@@ -156,7 +156,7 @@ impl Sections {
         let to_review = take(self.to_review);
         let watching = take(self.watching);
         let open = take(self.open);
-        let listed: std::collections::HashSet<MrKey> = self
+        let listed: HashSet<MrKey> = self
             .mine
             .iter()
             .chain(&ready)
@@ -304,7 +304,6 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture;
 
@@ -392,7 +391,7 @@ mod tests {
     fn named_mrs_move_to_ready_when_they_still_need_me() {
         let sections = scoped().sections_with(&[], &Rules::default(), day(23));
         let named = [MrKey::new("acme/widgets", 51), MrKey::new("acme/widgets", 41), MrKey::new("acme/widgets", 40)];
-        let ready = sections.clone().with_ready(&named, vec![], "nina", &Rules::default(), day(23));
+        let ready = sections.with_ready(&named, vec![], "nina", &Rules::default(), day(23));
         assert_eq!(numbers(&ready.ready), [51], "open and someone else's: ready");
         assert!(!numbers(&ready.open).contains(&51), "never listed twice");
         assert_eq!(numbers(&ready.mine), [41], "mine stays mine");

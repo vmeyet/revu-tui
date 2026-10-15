@@ -110,7 +110,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     fn view(path: &str, sha: &str, line: u32, note: Option<&str>) -> Action {

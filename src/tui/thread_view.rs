@@ -115,7 +115,7 @@ fn fresh_layout(app: &App, width: usize) -> Option<PaneLayout> {
 
 /// The pane, and the pictures it made room for: the caller paints them last, above the fades.
 /// Under zen's diff it hangs from a rule carrying its title.
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<Placement> {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: bool) -> Vec<Placement> {
     let theme = app.theme;
     let (focused, zen) = (app.focus == Focus::Side, app.zen);
     let block = |title: &str| if under_diff { rule_pane(theme, title) } else { side_pane(theme, title, focused, zen) };
@@ -143,7 +143,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, under_diff: bool) -> Vec<P
     let Some(pane) = app.open.as_mut().and_then(|open| open.pane.as_mut()) else { return vec![] };
     let scroll = settle(pane.scroll, first, last, height);
     pane.scroll = scroll;
-    let drawn: Vec<Line> = rows
+    let drawn: Vec<Line<'_>> = rows
         .iter()
         .skip(scroll)
         .take(height)
@@ -300,7 +300,7 @@ fn box_rows(field: &Field, width: u16, most: usize) -> u16 {
 }
 
 /// The compose box: its target in the top border, the keys in the bottom one, the caret reversed.
-pub(super) fn draw_compose(f: &mut Frame, theme: Theme, label: &str, field: &Field, area: Rect) {
+pub(super) fn draw_compose(f: &mut Frame<'_>, theme: Theme, label: &str, field: &Field, area: Rect) {
     let block = ratatui::widgets::Block::bordered()
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.border_focus))
@@ -415,7 +415,7 @@ struct InlineInputs {
 
 impl InlineLayout {
     /// Forgets the rows laid out from anything but what `open` and `look` show now.
-    pub(super) fn fit(&mut self, open: &Open, look: Look) {
+    pub(super) fn fit(&mut self, open: &Open, look: Look<'_>) {
         let inputs = InlineInputs {
             review: ReviewInputs::from_open(open),
             unfolded: open.review.unfolded.clone(),
@@ -431,7 +431,7 @@ impl InlineLayout {
     }
 
     /// The rows of each cursor stop of the conversations on a line.
-    pub(super) fn stops(&mut self, review: &Review, place: &Place, look: Look) -> &[StopRows] {
+    pub(super) fn stops(&mut self, review: &Review, place: &Place, look: Look<'_>) -> &[StopRows] {
         let Place::Line { file, new, old } = place else { return &[] };
         self.stops.entry((*file, *new, *old)).or_insert_with(|| inline_stops(review, place, look))
     }
@@ -439,7 +439,7 @@ impl InlineLayout {
 
 /// The conversations of `place` as the rows of each cursor stop, `look.width` columns wide: a folded thread is its
 /// one summary row, any other reads as in the pane. A picture reads as its `[image: …]` line.
-fn inline_stops(review: &Review, place: &Place, look: Look) -> Vec<StopRows> {
+fn inline_stops(review: &Review, place: &Place, look: Look<'_>) -> Vec<StopRows> {
     let conversations = review.conversations(place);
     let entries = review.stops(&conversations);
     let thumbs = Thumbs::disabled();
@@ -465,7 +465,7 @@ fn inline_stops(review: &Review, place: &Place, look: Look) -> Vec<StopRows> {
 
 /// A folded thread on one row: its state, who started it, the first line they wrote, how many notes follow, and
 /// a `◇` while replies of mine wait in it.
-fn summary(thread: &Thread, drafts: usize, look: Look) -> Line<'static> {
+fn summary(thread: &Thread, drafts: usize, look: Look<'_>) -> Line<'static> {
     let Look { theme, me, width, .. } = look;
     let faded = Style::default().fg(theme.faded);
     let first = thread.first();
@@ -498,7 +498,7 @@ fn conversation_lines(
     conversation: &Conversation,
     index: usize,
     entries: &[Entry],
-    look: Look,
+    look: Look<'_>,
 ) -> Vec<(Option<Entry>, Piece)> {
     let theme = look.theme;
     let stop = |kind: EntryKind| entries.iter().find(|e| e.conversation == index && e.kind == kind).copied();
@@ -530,7 +530,7 @@ fn conversation_lines(
 
 /// Where a conversation hangs, over it in the list of every conversation: `path:line`, then the
 /// code of that line, faded, so the reader keeps the context.
-fn heading(review: &Review, conversation: &Conversation, look: Look) -> Vec<Line<'static>> {
+fn heading(review: &Review, conversation: &Conversation, look: Look<'_>) -> Vec<Line<'static>> {
     let (place, code) = match review.spot(conversation) {
         Spot::Mr => ("on the MR".to_owned(), None),
         Spot::Outdated(anchor) => (format!("{} · outdated", line_name(anchor)), None),
@@ -606,7 +606,7 @@ pub(super) fn wrap(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
 }
 
 /// My draft: `you · draft ◇`, `unsaved` in danger until the forge holds it.
-fn draft_lines(draft: &crate::review::Draft, replaced: &Replaced, look: Look) -> Vec<Piece> {
+fn draft_lines(draft: &crate::review::Draft, replaced: &Replaced, look: Look<'_>) -> Vec<Piece> {
     let theme = look.theme;
     let (state, colour) = if draft.id.is_none() { ("unsaved", theme.danger) } else { ("draft", theme.muted) };
     let mut lines = vec![Piece::Text(Line::from(vec![
@@ -631,7 +631,7 @@ pub(super) fn shown_ages(review: &Review, today: DateTime<Utc>) -> Vec<String> {
     review.threads.iter().flat_map(|thread| &thread.notes).map(|note| note_age(note, today)).collect()
 }
 
-fn note_lines(note: &Note, replaced: &Replaced, look: Look) -> Vec<Piece> {
+fn note_lines(note: &Note, replaced: &Replaced, look: Look<'_>) -> Vec<Piece> {
     let Look { theme, today, me, ascii, width } = look;
     let author = author_of(note, me);
     let age = note_age(note, today);
@@ -696,7 +696,7 @@ enum Fences<'a> {
 
 /// A body as pieces, with a suggestion block drawn as a small diff (the replaced lines struck as
 /// `-`, the suggested ones as `+`, in the diff colours) and each picture under its line.
-fn body_pieces(body: &str, fences: &Fences, width: usize, theme: Theme) -> Vec<Piece> {
+fn body_pieces(body: &str, fences: &Fences<'_>, width: usize, theme: Theme) -> Vec<Piece> {
     let mut lines = vec![];
     let mut raws = body.lines().peekable();
     while let Some(raw) = raws.next() {
@@ -721,7 +721,7 @@ fn body_pieces(body: &str, fences: &Fences, width: usize, theme: Theme) -> Vec<P
 
 /// A fenced block in the syntax colours of the language its tag names, all in `theme.code` where none;
 /// a suggestion in its file's language, over the diff's signs and fills.
-fn fence_pieces(tag: &str, block: &[&str], fences: &Fences, theme: Theme) -> Vec<Piece> {
+fn fence_pieces(tag: &str, block: &[&str], fences: &Fences<'_>, theme: Theme) -> Vec<Piece> {
     let written_all = |lines: Vec<Line<'static>>| lines.into_iter().zip(block).map(|(line, raw)| written(line, raw));
     let (replaced, file_language, named) = match fences {
         Fences::Plain => (&[][..], None, None),
@@ -799,10 +799,9 @@ pub(super) fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
-    fn text(lines: &[Line]) -> Vec<String> {
+    fn text(lines: &[Line<'_>]) -> Vec<String> {
         lines.iter().map(|l| l.spans.iter().map(|s| s.content.to_string()).collect()).collect()
     }
 
@@ -926,7 +925,7 @@ mod tests {
         texts(body_pieces(body, &Fences::Coloured(&replaced), 80, tokyonight()))
     }
 
-    fn style_of(line: &Line, content: &str) -> Style {
+    fn style_of(line: &Line<'_>, content: &str) -> Style {
         line.spans.iter().find(|span| span.content == content).unwrap_or_else(|| panic!("no {content:?} in {line:?}")).style
     }
 

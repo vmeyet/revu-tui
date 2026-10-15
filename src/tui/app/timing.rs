@@ -1,5 +1,4 @@
 //! How long opening and idling on a large MR take, in a release build: `cargo test --release -- --ignored timing --nocapture`.
-#![allow(clippy::unwrap_used)]
 use super::test_support::*;
 use std::time::Instant;
 

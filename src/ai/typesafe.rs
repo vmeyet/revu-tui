@@ -106,8 +106,8 @@ pub struct TypeSafe {
     slots: Arc<Semaphore>,
 }
 
-impl std::fmt::Debug for TypeSafe {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for TypeSafe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TypeSafe").field("url", &self.url).field("key", &"<redacted>").finish_non_exhaustive()
     }
 }
@@ -211,7 +211,6 @@ pub(crate) fn disabled_reason() -> Option<&'static str> {
 
 #[cfg(test)]
 pub mod stub {
-    #![allow(clippy::expect_used)]
     use super::*;
 
     /// Answers every request from the state alone, with no network.
@@ -227,7 +226,6 @@ pub mod stub {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use wiremock::matchers::{body_partial_json, header, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};

@@ -61,12 +61,11 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
 
     fn mr(number: u64, updated: i64) -> QueueMr {
-        let base = crate::forge::gitlab::fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
+        let base = fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json")).review_requested[0].clone();
         QueueMr { number, updated_at: DateTime::from_timestamp(updated, 0).unwrap(), approved_by: vec![], ..base }
     }
 

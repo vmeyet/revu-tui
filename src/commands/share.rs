@@ -53,7 +53,6 @@ fn confirmed(target: &Target) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn target(name: Option<&str>) -> Target {

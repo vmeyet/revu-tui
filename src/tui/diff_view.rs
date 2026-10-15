@@ -93,7 +93,7 @@ impl Gutter {
     }
 }
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter) {
     let theme = app.theme;
     let title = match &app.open {
         Some(open) => {
@@ -196,7 +196,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     } else {
         settle_scroll(open.scroll, open.selected, height)
     };
-    let mut drawn: VecDeque<Vec<Line>> = (open.scroll..=open.selected).map(|i| render(open, i)).collect();
+    let mut drawn: VecDeque<Vec<Line<'_>>> = (open.scroll..=open.selected).map(|i| render(open, i)).collect();
     let mut drawn_height: usize = drawn.iter().map(Vec::len).sum();
     while open.scroll < open.selected && drawn_height > height.saturating_sub(pinned_at(open).count()) {
         drawn_height -= drawn.pop_front().map_or(0, |row| row.len());
@@ -204,12 +204,12 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
     }
     let pinned = pinned_at(open);
     open.pinned_file = pinned.file;
-    let pinned_lines: Vec<Line> = [pinned.file, pinned.hunk]
+    let pinned_lines: Vec<Line<'_>> = [pinned.file, pinned.hunk]
         .into_iter()
         .flatten()
         .map(|i| pinned_line(&open.review, &anchors, &open.rows[i], gutter, width, theme))
         .collect();
-    let mut lines: Vec<Line> = pinned_lines;
+    let mut lines: Vec<Line<'_>> = pinned_lines;
     let mut selectable = vec![];
     let mut compose_area = None;
     for i in open.scroll..open.rows.len() {
@@ -235,7 +235,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect, gutter: Gutter) {
 
 /// The diff's `body` over the compose box, drawn at its foot while what is written has no row on screen to hang
 /// under and no pane shows the box.
-fn above_compose(f: &mut Frame, theme: Theme, label: &str, text: &super::field::Field, body: Rect) -> Rect {
+fn above_compose(f: &mut Frame<'_>, theme: Theme, label: &str, text: &super::field::Field, body: Rect) -> Rect {
     let rows = thread_view::box_height(text, body);
     let [body, compose] = Layout::vertical([Constraint::Min(0), Constraint::Length(rows)]).areas(body);
     thread_view::draw_compose(f, theme, label, text, compose);
@@ -281,7 +281,7 @@ fn text_columns(review: &Review, row: &Row, gutter: Gutter, width: usize) -> Vec
     };
     let (old_w, new_w) = half_widths(width);
     let spans = [(1, old_w), (1 + old_w, new_w)];
-    let column = |half: Option<Half>, (x, w): (usize, usize)| {
+    let column = |half: Option<Half<'_>>, (x, w): (usize, usize)| {
         let text = half?.line.text;
         Some(Column { x: x + HALF_INDENT, room: w.saturating_sub(HALF_INDENT), cells: drag::cells_of(&text, TAB.width()), text })
     };
@@ -333,7 +333,7 @@ fn screen_rows(cells: &[Range<usize>], room: usize, wrap: bool) -> Vec<&[Range<u
 
 /// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
 /// reads as a bar the diff scrolls under.
-fn pinned_line<'a>(review: &Review, anchors: &Anchors, row: &Row, gutter: Gutter, width: usize, theme: Theme) -> Line<'a> {
+fn pinned_line<'a>(review: &Review, anchors: &Anchors<'_>, row: &Row, gutter: Gutter, width: usize, theme: Theme) -> Line<'a> {
     let line = row_line(review, anchors, row, false, gutter, Overflow::Cut(width), theme);
     let used: usize = line.spans.iter().map(Span::width).sum();
     let mut spans = line.spans;
@@ -342,7 +342,7 @@ fn pinned_line<'a>(review: &Review, anchors: &Anchors, row: &Row, gutter: Gutter
 }
 
 /// The pipeline word ends the header's first row; it links to the run on the forge.
-fn pipeline_link(review: &Review, header: &[Line], area: Rect) -> Option<super::ui::Link> {
+fn pipeline_link(review: &Review, header: &[Line<'_>], area: Rect) -> Option<super::ui::Link> {
     let url = review.mr.pipeline.as_ref()?.web_url.clone()?;
     let spans = &header.first()?.spans;
     let (last, before) = spans.split_last()?;
@@ -393,7 +393,7 @@ fn trailing_fill(spans: &mut Vec<Span<'static>>) -> Option<Style> {
     Some(style)
 }
 
-fn is_blank(span: &Span) -> bool {
+fn is_blank(span: &Span<'_>) -> bool {
     !span.content.is_empty() && span.content.chars().all(|c| c == ' ')
 }
 
@@ -510,7 +510,7 @@ fn deployment_spans<'a>(open: &Open, deployment: &Deployment, theme: Theme) -> V
 }
 
 /// The review app on the header's second row links to where it runs.
-fn deployment_link(open: &Open, header: &[Line], area: Rect) -> Option<super::ui::Link> {
+fn deployment_link(open: &Open, header: &[Line<'_>], area: Rect) -> Option<super::ui::Link> {
     let url = Deployment::to_try(open.deployments.as_deref()?)?.url.clone();
     let spans = &header.get(1)?.spans;
     let at = spans.iter().position(|s| s.content.starts_with(DEPLOYED))?;
@@ -544,7 +544,7 @@ fn peek_badge<'a>(peek: Option<Side>, theme: Theme) -> Vec<Span<'a>> {
     vec![Span::styled(word, Style::default().fg(theme.base).bg(ground).add_modifier(Modifier::BOLD)), Span::raw(" ")]
 }
 
-pub(super) fn pipeline_glyph(status: PipelineStatus, theme: Theme) -> (&'static str, ratatui::style::Color) {
+pub(super) fn pipeline_glyph(status: PipelineStatus, theme: Theme) -> (&'static str, Color) {
     match status {
         PipelineStatus::Success => ("✓", theme.success),
         PipelineStatus::Failed => ("✗", theme.danger),
@@ -560,7 +560,15 @@ enum Overflow {
     Wrap(usize),
 }
 
-fn row_line<'a>(review: &Review, anchors: &Anchors, row: &Row, marked: bool, gutter: Gutter, overflow: Overflow, theme: Theme) -> Line<'a> {
+fn row_line<'a>(
+    review: &Review,
+    anchors: &Anchors<'_>,
+    row: &Row,
+    marked: bool,
+    gutter: Gutter,
+    overflow: Overflow,
+    theme: Theme,
+) -> Line<'a> {
     let width = match overflow {
         Overflow::Cut(width) => width,
         Overflow::Wrap(_) => UNCUT,
@@ -659,7 +667,7 @@ fn halves<'r>(review: &'r Review, row: &Row) -> Option<[Option<Half<'r>>; 2]> {
 /// A diff row as the old side beside the new one, each half cut, or wrapped under its own text.
 fn side_by_side_lines(
     review: &Review,
-    anchors: &Anchors,
+    anchors: &Anchors<'_>,
     row: &Row,
     marked: bool,
     overflow: Overflow,
@@ -668,7 +676,7 @@ fn side_by_side_lines(
     let [old, new] = halves(review, row)?;
     let (Overflow::Cut(width) | Overflow::Wrap(width)) = overflow;
     let (old_w, new_w) = half_widths(width);
-    let draw = |half: Option<Half>, width: usize| -> Vec<Line<'static>> {
+    let draw = |half: Option<Half<'_>>, width: usize| -> Vec<Line<'static>> {
         let Some(half) = half else { return vec![] };
         match overflow {
             Overflow::Cut(_) => vec![half_line(review, anchors, &half, marked, width, theme)],
@@ -693,7 +701,7 @@ fn half_widths(width: usize) -> (usize, usize) {
 }
 
 /// One half: its anchor column, its side's number, the sign, the text in its side's syntax colours.
-fn half_line(review: &Review, anchors: &Anchors, half: &Half, marked: bool, width: usize, theme: Theme) -> Line<'static> {
+fn half_line(review: &Review, anchors: &Anchors<'_>, half: &Half<'_>, marked: bool, width: usize, theme: Theme) -> Line<'static> {
     let file = &review.files[half.file];
     let (path, number_here) = match half.side {
         Side::Old => (&file.old_path, half.line.old),
@@ -1116,11 +1124,10 @@ fn fit<'a>(parts: Vec<(&str, Style)>, room: usize) -> Vec<Span<'a>> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::diff;
 
-    fn spans_text(spans: &[Span]) -> String {
+    fn spans_text(spans: &[Span<'_>]) -> String {
         spans.iter().map(|s| s.content.to_string()).collect()
     }
 
@@ -1156,8 +1163,8 @@ mod tests {
         diff::words::mark(&diff::parse("@@ -1 +1 @@\n-const total = 1;\n+const total = 2;\n")[0])
     }
 
-    fn cart() -> crate::review::File {
-        crate::review::File::from_diff(&crate::forge::DiffFile {
+    fn cart() -> File {
+        File::from_diff(&crate::forge::DiffFile {
             diff: include_str!("../review/fixtures/cart.ts.diff").to_owned(),
             old_path: "src/cart.ts".into(),
             new_path: "src/cart.ts".into(),
@@ -1182,7 +1189,7 @@ mod tests {
         assert_eq!(style_of("2;").fg, Some(theme.success), "the new word keeps the diff colour");
     }
 
-    fn painted(spans: &[Span]) -> String {
+    fn painted(spans: &[Span<'_>]) -> String {
         spans
             .iter()
             .filter(|s| !s.content.trim().is_empty())
@@ -1290,7 +1297,7 @@ mod tests {
         let anchors = Anchors { markers: &review.markers(), stretch: None };
         let rows = review.rows();
         let lines = rows.iter().filter_map(|row| side_by_side_lines(review, &anchors, row, false, overflow, Theme::default()));
-        let split = |line: Line| {
+        let split = |line: Line<'_>| {
             let text: Vec<char> = spans_text(&line.spans).chars().collect();
             let half = |range: Range<usize>| text.get(range).unwrap_or_default().iter().collect::<String>().trim_end().to_owned();
             (half(1..21), half(21..text.len()))

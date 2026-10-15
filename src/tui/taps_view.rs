@@ -40,7 +40,7 @@ fn spots(taps: &[&'static Tap], area: Rect) -> Vec<TapSpot> {
     taps.iter().scan(area.x, spot).collect()
 }
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let taps = fitting(app.page().taps(), usize::from(area.width));
     let spots = spots(&taps, area);
     let style = Style::default().fg(app.theme.muted).bg(app.theme.surface);

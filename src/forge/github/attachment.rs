@@ -120,7 +120,6 @@ fn file(owner: &str, repo: &str, rest: &[&str]) -> Option<Link> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::auth::Credentials;
     use wiremock::matchers::{header, method, path};
@@ -195,7 +194,7 @@ mod tests {
             .mount(&server)
             .await;
         let client = Client::with_base(&Credentials { host: "github.com".into(), token: "ghp_xxxx".into() }, &server.uri()).unwrap();
-        let downloads = Downloads { follow: crate::forge::image::signed_host, ..(*client.downloads).clone() };
+        let downloads = Downloads { follow: image::signed_host, ..(*client.downloads).clone() };
         let client = Client { downloads: std::sync::Arc::new(downloads), ..client };
         let err = client.image("https://github.com/user-attachments/assets/1f2e").await.unwrap_err().to_string();
         assert!(err.contains("evil.example"), "{err}");

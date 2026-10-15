@@ -45,7 +45,7 @@ impl Reviews {
     /// Counts an MR as being opened until the returned guard drops.
     pub(in crate::tui) fn start_opening(&self) -> Opening {
         self.opening.fetch_add(1, Ordering::SeqCst);
-        Opening(self.opening.clone())
+        Opening(Arc::clone(&self.opening))
     }
 
     pub(in crate::tui) fn open_cached(&self, key: &MrKey) -> Option<Incoming> {
@@ -210,7 +210,6 @@ fn merged_fold(initial: FoldState, saved: FoldState) -> FoldState {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::diff::fold::Fold;
     use crate::forge::gitlab::fixture::key;
@@ -218,7 +217,7 @@ mod tests {
 
     fn reviews(homes: Homes) -> Reviews {
         let homes = Arc::new(homes);
-        Reviews { saves: Saves::new(homes.clone()), homes, fold_globs: vec![], inline: InlineRule::default(), opening: Arc::default() }
+        Reviews { saves: Saves::new(Arc::clone(&homes)), homes, fold_globs: vec![], inline: InlineRule::default(), opening: Arc::default() }
     }
 
     fn ahead(updated: &str) -> Ahead {

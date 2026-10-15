@@ -11,7 +11,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(tree) = &open.tree else { return };
@@ -24,7 +24,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
     let scroll = settle_scroll(0, tree.selected, height);
     let selected = tree.selected;
     let shown: Vec<TreeRow> = app.kept.tree_rows(open).iter().skip(scroll).take(height).cloned().collect();
-    let lines: Vec<Line> =
+    let lines: Vec<Line<'_>> =
         shown.iter().zip(scroll..).map(|(row, i)| row_line(app, &open.review, row, i == selected, inner.width as usize)).collect();
     f.render_widget(Paragraph::new(lines), inner);
     let list_rows: Vec<ListRow> = (scroll..)

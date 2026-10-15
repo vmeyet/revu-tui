@@ -37,7 +37,7 @@ impl Files {
             let text = self.file_text(&key, path, sha).await?;
             let name = path.to_owned();
             let (dir, file) = blocking::run(move || crate::open::write_private(&name, text.as_bytes())).await?;
-            (file, Some(std::sync::Arc::new(dir)), note)
+            (file, Some(Arc::new(dir)), note)
         };
         let command = crate::open::command_for(path, &self.open, env("VISUAL").as_deref(), env("EDITOR").as_deref());
         let argv = crate::open::argv(&command, &file.display().to_string(), line, dir.is_some())?;
@@ -130,7 +130,6 @@ fn env(name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture::key;
     use crate::tui::backend::test_support::homes_on;

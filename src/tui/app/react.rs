@@ -190,7 +190,6 @@ pub fn failure(thread: ThreadId, index: usize, emoji: Emoji, on: bool) -> Failur
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::row;
     use crate::reactions::History;
     use crate::tui::app::test_support::*;
@@ -421,7 +420,7 @@ mod tests {
         press(&mut app, "6");
         assert_eq!(reactions_of(&app).len(), 2);
         app.apply(Incoming::Failed {
-            what: crate::tui::app::react_failure("5ugg".into(), 0, Emoji::Hooray, true),
+            what: react_failure("5ugg".into(), 0, Emoji::Hooray, true),
             message: "GitLab refused the reaction".into(),
         });
         assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);

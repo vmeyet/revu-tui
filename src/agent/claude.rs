@@ -171,7 +171,6 @@ fn ready(session: Session, case: Case) -> Ready {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::super::tests::{REPO, Script, cache, claude, mr};
     use super::super::{Handoff, Outcome};
     use super::*;

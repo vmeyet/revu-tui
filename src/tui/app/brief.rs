@@ -298,7 +298,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -339,7 +338,7 @@ mod tests {
         let long: String = (1..=80).map(|n| format!("line {n}\n")).collect();
         app.open = app.open.clone().map(|o| {
             let mut review = o.review.clone();
-            std::sync::Arc::make_mut(&mut review.mr).description = long.clone();
+            Arc::make_mut(&mut review.mr).description = long.clone();
             o.with_review(review)
         });
         press(&mut app, "i");
@@ -364,11 +363,7 @@ mod tests {
         assert!(!render(&mut app, 120, 40).contains("FILES"));
         app.handle_key(code(KeyCode::Enter));
         let open = app.open.as_ref().unwrap();
-        assert_eq!(
-            open.pane.as_ref().map(|p| p.place.clone()),
-            Some(crate::review::Place::Outdated { file: 0 }),
-            "the outdated thread opens in the pane"
-        );
+        assert_eq!(open.pane.as_ref().map(|p| p.place.clone()), Some(Place::Outdated { file: 0 }), "the outdated thread opens in the pane");
         assert_eq!(app.focus, Focus::Side);
     }
 

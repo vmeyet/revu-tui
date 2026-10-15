@@ -165,7 +165,7 @@ impl App {
     }
 
     /// `E` in the pane: my draft under the cursor in the editor, else a reply to the thread.
-    pub(super) fn compose_draft_here(&mut self) -> Vec<Action> {
+    pub(super) fn compose_draft_here(&self) -> Vec<Action> {
         let Some(open) = self.open.as_ref() else { return vec![] };
         if let Some(draft) = self.draft_here().map(|index| &open.review.drafts[index])
             && let Some(id) = draft.draft_id()
@@ -203,7 +203,7 @@ impl App {
         vec![]
     }
 
-    pub(super) fn toggle_approval(&mut self) -> Vec<Action> {
+    pub(super) fn toggle_approval(&self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let approve = !open.review.mr.approvals.user_has_approved;
         vec![Action::Approve { key: open.key.clone(), approve }]
@@ -448,21 +448,20 @@ impl App {
 fn refolded(held: &str, sent: &str, now: &str) -> String {
     match held.strip_suffix(sent) {
         Some(rest) => format!("{rest}{now}"),
-        None => now.to_string(),
+        None => now.to_owned(),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
     fn a_draft_the_forge_folds_into_one_it_already_holds_leaves_one_draft() {
         let mut app = with_review();
         let open = app.open.clone().unwrap();
-        let sent = crate::review::Draft::new(None, "Also: docs").with_local_id(2);
-        let drafts = vec![crate::review::Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone()];
+        let sent = Draft::new(None, "Also: docs").with_local_id(2);
+        let drafts = vec![Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone()];
         app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
         let follow = app.apply_draft_saved(&mr_key(), &sent, 209, "Two nits.\n\nAlso: docs");
         let held: Vec<(Option<u64>, &str)> = app.open.as_ref().unwrap().review.drafts.iter().map(|d| (d.id, d.body.as_str())).collect();
@@ -474,9 +473,8 @@ mod tests {
     fn a_folded_draft_edited_while_its_save_ran_updates_only_its_own_text() {
         let mut app = with_review();
         let open = app.open.clone().unwrap();
-        let sent = crate::review::Draft::new(None, "Also: docs").with_local_id(2);
-        let drafts =
-            vec![crate::review::Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone().with_body("Also: docs, please")];
+        let sent = Draft::new(None, "Also: docs").with_local_id(2);
+        let drafts = vec![Draft::new(None, "Two nits.").with_id(209).with_local_id(1), sent.clone().with_body("Also: docs, please")];
         app.open = Some(open.relaid(|review| review.with_drafts(drafts)));
         let follow = app.apply_draft_saved(&mr_key(), &sent, 209, "Two nits.\n\nAlso: docs");
         let [Action::UpdateDraft { id: 209, draft, .. }] = follow.as_slice() else { panic!("{follow:?}") };
@@ -595,7 +593,7 @@ mod tests {
     /// The review as the forge lists it once the one draft save in `actions` landed as `id`.
     fn listing(actions: &[Action], id: u64) -> Review {
         let [Action::SaveDraft { draft, .. }] = actions else { panic!("{actions:?}") };
-        review().with_drafts(vec![crate::review::Draft { id: Some(id), local_id: None, ..draft.as_ref().clone() }])
+        review().with_drafts(vec![Draft { id: Some(id), local_id: None, ..draft.as_ref().clone() }])
     }
 
     fn draft_writes(actions: Vec<Action>) -> Vec<Action> {
@@ -727,9 +725,9 @@ mod tests {
         press(&mut app, "Pe");
         let nit = app.open.as_ref().unwrap().review.drafts[0].clone();
         let held = |id: u64, body: &str, position| {
-            crate::review::Draft::from_held(&crate::forge::Draft { id, body: body.into(), position, reply_to: None, resolve: false })
+            Draft::from_held(&crate::forge::Draft { id, body: body.into(), position, reply_to: None, resolve: false })
         };
-        let refreshed = review().with_drafts(vec![held(3, "from the web", None), held(9, "nit", nit.position.clone())]);
+        let refreshed = review().with_drafts(vec![held(3, "from the web", None), held(9, "nit", nit.position)]);
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(refreshed), cached: None });
         let actions = type_text(&mut app, "!");
         let drafts = &app.open.as_ref().unwrap().review.drafts;
@@ -834,7 +832,7 @@ mod tests {
         let mut app = with_saved_draft();
         let open = app.open.clone().unwrap();
         let path = open.review.drafts[0].anchor.as_ref().unwrap().path.clone();
-        let gone = crate::review::Draft {
+        let gone = Draft {
             id: Some(5),
             anchor: Some(crate::review::Anchor { path, side: crate::review::Side::New, line: 9_999 }),
             ..open.review.drafts[0].clone()

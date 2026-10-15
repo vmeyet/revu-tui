@@ -404,7 +404,7 @@ fn next_marked(open: &Open, toward: Toward) -> Option<Row> {
 
 /// The row showing where a conversation hangs, among the rows the review shows with every fold open:
 /// the header for the MR, the file row for an outdated line.
-fn row_of(review: &Review, spot: Spot) -> Option<Row> {
+fn row_of(review: &Review, spot: Spot<'_>) -> Option<Row> {
     match spot {
         Spot::Mr => Some(Row::Header),
         Spot::Outdated(anchor) => review.file_of(anchor).map(|index| Row::File { index, open: true }),
@@ -428,7 +428,6 @@ fn unfolded_for(open: &Open, target: &Row) -> crate::diff::fold::FoldState {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
 
@@ -590,7 +589,7 @@ mod tests {
     fn bracket_n_stops_on_my_draft_reply_to_a_resolved_thread() {
         let mut app = with_review();
         let open = app.open.clone().unwrap();
-        let reply = crate::review::Draft::reply("c0ffee00c0ffee00".into(), "agreed");
+        let reply = Draft::reply("c0ffee00c0ffee00".into(), "agreed");
         app.open = Some(open.relaid(|review| review.with_drafts(vec![reply])));
         assert_eq!(thread_stops(&mut app, "]n", 2), [LINE_13, Row::Header]);
     }

@@ -1,5 +1,4 @@
 //! Hosts and fixtures the backend's tests share.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::Homes;
 use crate::cache::Cache;
 use crate::forge::gitlab::Client;

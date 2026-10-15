@@ -93,7 +93,6 @@ fn next_numbers(hunk: &Hunk) -> (u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn numbers(hunk: &Hunk) -> Vec<(LineKind, Option<u32>, Option<u32>)> {
@@ -101,7 +100,6 @@ mod tests {
     }
 
     mod properties {
-        #![allow(clippy::unwrap_used, clippy::expect_used)]
         use super::super::arbitrary::{self, Generated};
         use super::super::*;
         use proptest::prelude::*;

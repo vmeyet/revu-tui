@@ -305,7 +305,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -404,7 +403,7 @@ mod tests {
         assert_eq!(app.badge(&queued(42)), None);
     }
 
-    fn queued(iid: u64) -> crate::forge::QueueMr {
+    fn queued(iid: u64) -> QueueMr {
         let sections = sections();
         [sections.to_review, sections.mine, sections.watching, sections.done].into_iter().flatten().find(|m| m.number == iid).unwrap()
     }
@@ -415,8 +414,8 @@ mod tests {
         let mine = queued(41);
         assert_eq!(mine.author, app.me);
         assert!(!app.approved(&mine), "not approved");
-        assert!(app.approved(&crate::forge::QueueMr { approved: true, approved_by: vec!["lea".into()], ..mine.clone() }));
-        assert!(!app.approved(&crate::forge::QueueMr { approved: true, ..mine }), "no approval rule and nobody approved");
+        assert!(app.approved(&QueueMr { approved: true, approved_by: vec!["lea".into()], ..mine.clone() }));
+        assert!(!app.approved(&QueueMr { approved: true, ..mine }), "no approval rule and nobody approved");
     }
 
     #[test]
@@ -424,11 +423,8 @@ mod tests {
         let app = with_queue();
         let theirs = queued(42);
         assert!(!app.approved(&theirs));
-        assert!(
-            !app.approved(&crate::forge::QueueMr { approved: true, approved_by: vec!["lea".into()], ..theirs.clone() }),
-            "approved, not by me"
-        );
-        assert!(app.approved(&crate::forge::QueueMr { approved_by: vec!["nina".into()], ..theirs }));
+        assert!(!app.approved(&QueueMr { approved: true, approved_by: vec!["lea".into()], ..theirs.clone() }), "approved, not by me");
+        assert!(app.approved(&QueueMr { approved_by: vec!["nina".into()], ..theirs }));
     }
 
     #[test]
@@ -493,7 +489,7 @@ mod tests {
         let here = sections();
         let queue = fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json"));
         let there = queue.on_host("github.com").sections(&[]);
-        let merged = crate::forge::Sections::merge(vec![here, there]);
+        let merged = Sections::merge(vec![here, there]);
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: merged, opened: HashMap::new(), cached: false });
         let screen = render(&mut app, 120, 40);
         assert!(screen.contains("#42") && screen.contains("!42"), "the sigil tells the forges apart:\n{screen}");

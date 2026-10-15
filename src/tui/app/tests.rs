@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::test_support::*;
 
 #[test]
@@ -181,7 +180,7 @@ fn snapshot_description_modal() {
     let mut app = with_review();
     app.open = app.open.clone().map(|o| {
         let mut review = o.review.clone();
-        std::sync::Arc::make_mut(&mut review.mr).description =
+        Arc::make_mut(&mut review.mr).description =
             "## Why\n\nCards were charged twice.\n\n- retry with `idempotency_key`\n- log the attempt".into();
         o.with_review(review)
     });
@@ -314,11 +313,7 @@ fn snapshot_answer_pane() {
     press(&mut app, "aa");
     let (id, ..) = the_ask(&type_text(&mut app, "what does it do?"));
     let text = "It swaps the client for one keyed by the card, so a retry **reuses** the idempotency key.\n\n- `charge` now takes the key\n- nothing else moves";
-    app.apply(Incoming::Answer {
-        key: mr_key(),
-        id,
-        part: super::Part::Done { outcome: done("claude-opus-5"), cached_text: Some(text.into()) },
-    });
+    app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done { outcome: done("claude-opus-5"), cached_text: Some(text.into()) } });
     insta::assert_snapshot!("answer_pane", render(&mut app, 150, 20));
 }
 

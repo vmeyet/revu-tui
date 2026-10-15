@@ -182,7 +182,6 @@ fn push_merged(ranges: &mut Vec<Range<usize>>, range: Range<usize>) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::diff::parse;
 
@@ -197,7 +196,6 @@ mod tests {
     }
 
     mod properties {
-        #![allow(clippy::unwrap_used, clippy::expect_used)]
         use super::super::*;
         use super::marked_pair;
         use crate::diff::{arbitrary, parse};
@@ -369,7 +367,7 @@ mod tests {
         assert!(same_but_whitespace("\tif x {", "    if x {"));
         assert!(!same_but_whitespace("let a = 1;", "let a = 1;"), "an unchanged line is no whitespace change");
         assert!(!same_but_whitespace("let a = 1;", "let a = 2;"));
-        let hunk = &crate::diff::parse("@@ -1,2 +1,2 @@\n-\tone();\n-two();\n+    one();\n+three();\n")[0];
+        let hunk = &parse("@@ -1,2 +1,2 @@\n-\tone();\n-two();\n+    one();\n+three();\n")[0];
         assert_eq!(whitespace_pairs(hunk), [(0, 2)]);
     }
 }

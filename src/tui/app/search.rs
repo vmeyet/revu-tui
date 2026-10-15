@@ -222,14 +222,13 @@ pub fn mark(line: &Line<'static>, query: &str, from: usize, style: Style) -> Lin
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
     use ratatui::style::Modifier;
 
     #[test]
     fn a_hit_in_a_file_the_review_lacks_leaves_the_open_mr_as_it_was() {
-        let open = Open::new(crate::forge::gitlab::fixture::key(), crate::review::tests::review());
+        let open = Open::new(fixture::key(), crate::review::tests::review());
         assert_eq!(open.clone().revealing(Hit { file: 99, hunk: None, line: None }), open);
     }
 

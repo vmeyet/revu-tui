@@ -72,7 +72,6 @@ fn section(out: &mut String, theme: Theme, title: &str) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn report() -> Report {

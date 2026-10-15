@@ -116,7 +116,6 @@ pub fn sorted(mut rows: Vec<&QueueMr>, order: Order, urgency: impl Fn(&QueueMr) 
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::tui::app::test_support::*;
     use chrono::{TimeZone, Utc};
@@ -167,7 +166,7 @@ mod tests {
         assert_eq!(view.order, Order::Author);
         assert_eq!(view.closed_sections, ["DRAFTS", "OPEN", "OTHER"].map(str::to_owned).into());
         assert_eq!(view.open_stacks, ["acme/widgets!61".to_owned()].into());
-        let closed_again = ViewChange::Stack { id: "acme/widgets!61".into(), open: false }.apply(view.clone());
+        let closed_again = ViewChange::Stack { id: "acme/widgets!61".into(), open: false }.apply(view);
         assert!(closed_again.open_stacks.is_empty());
         assert_eq!(
             ViewChange::Stack { id: "acme/widgets!61".into(), open: false }.target(),
@@ -179,7 +178,7 @@ mod tests {
     fn s_cycles_through_the_orders_and_offers_urgency_only_with_jev() {
         use Order::{Author, Oldest, Size, Updated, Urgency};
         let walk = |triaged| {
-            let mut order = Order::Updated;
+            let mut order = Updated;
             (0..6)
                 .map(|_| {
                     let now = order;
@@ -213,12 +212,12 @@ mod tests {
         app.apply(queue_answer(Some("acme/widgets"), scoped_sections(), false));
         let actions = press(&mut app, "s");
         let [Action::ChangeQueueView { scope, change, .. }] = actions.as_slice() else { panic!("{actions:?}") };
-        assert_eq!((scope.as_ref().map(ProjectPath::as_str), change), (Some("acme/widgets"), &ViewChange::Order(order::Order::Oldest)));
+        assert_eq!((scope.as_ref().map(ProjectPath::as_str), change), (Some("acme/widgets"), &ViewChange::Order(Order::Oldest)));
         press(&mut app, "ss");
-        assert_eq!(app.queue_view.order, order::Order::Size);
+        assert_eq!(app.queue_view.order, Order::Size);
         assert_eq!(app.queue_view_label().as_deref(), Some("smallest first"));
         press(&mut app, "s");
-        assert_eq!(app.queue_view.order, order::Order::Updated, "no urgency without Jev: back to the start");
+        assert_eq!(app.queue_view.order, Order::Updated, "no urgency without Jev: back to the start");
         assert_eq!(app.queue_view_label(), None);
         let screen = render(&mut app, 120, 20);
         assert!(screen.contains("Queue · acme/widgets "), "{screen}");
@@ -227,7 +226,7 @@ mod tests {
     #[test]
     fn a_saved_view_for_this_scope_applies_and_one_for_another_is_dropped() {
         let mut app = scoped_app();
-        let grouped = QueueView { order: order::Order::Author, ..QueueView::default() };
+        let grouped = QueueView { order: Order::Author, ..QueueView::default() };
         app.apply(Incoming::QueueView { scope: None, view: grouped.clone() });
         assert_eq!(app.queue_view, QueueView::default());
         app.apply(Incoming::QueueView { scope: Some("acme/widgets".into()), view: grouped.clone() });

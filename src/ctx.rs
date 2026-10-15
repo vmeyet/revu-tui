@@ -8,6 +8,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 /// Everything a command needs, opened once from the config, the environment and the keychain.
+#[derive(Debug)]
 pub struct Ctx {
     pub(crate) forge: Forge,
     pub(crate) credentials: Credentials,

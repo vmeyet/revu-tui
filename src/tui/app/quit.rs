@@ -59,7 +59,6 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     #[test]
@@ -103,7 +102,7 @@ mod tests {
     fn a_single_q_times_out() {
         let mut app = with_review();
         press(&mut app, "q");
-        app.now += crate::tui::app::quit::QUIT_WINDOW;
+        app.now += quit::QUIT_WINDOW;
         assert_eq!(app.quit_prompt(), None, "the prompt is gone");
         press(&mut app, "q");
         assert!(!app.should_quit, "a late second press only asks again");

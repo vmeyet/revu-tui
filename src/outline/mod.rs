@@ -133,7 +133,7 @@ struct Tags {
     language: &'static str,
     grammar: fn() -> tree_sitter::Language,
     queries: &'static [&'static str],
-    public: fn(Node, &str) -> bool,
+    public: fn(Node<'_>, &str) -> bool,
     loaded: OnceLock<Option<TagsConfiguration>>,
 }
 
@@ -142,7 +142,7 @@ impl Tags {
         language: &'static str,
         grammar: fn() -> tree_sitter::Language,
         queries: &'static [&'static str],
-        public: fn(Node, &str) -> bool,
+        public: fn(Node<'_>, &str) -> bool,
     ) -> Self {
         Self { language, grammar, queries, public, loaded: OnceLock::new() }
     }
@@ -163,12 +163,12 @@ static TAGS: [Tags; 4] = [
 ];
 
 /// TypeScript and JavaScript: inside an `export`.
-fn exported(node: Node, _name: &str) -> bool {
+fn exported(node: Node<'_>, _name: &str) -> bool {
     std::iter::successors(node.parent(), Node::parent).any(|n| n.kind() == "export_statement")
 }
 
 /// Where the signature starts: at the `export` that holds the definition itself, so dropping it changes the signature.
-fn signature_start(node: Node) -> usize {
+fn signature_start(node: Node<'_>) -> usize {
     std::iter::successors(node.parent(), Node::parent)
         .take_while(|n| !matches!(n.kind(), "class_body" | "statement_block" | "program"))
         .find(|n| n.kind() == "export_statement")
@@ -176,7 +176,7 @@ fn signature_start(node: Node) -> usize {
 }
 
 /// Python: a name without a leading `_`.
-fn unprefixed(_node: Node, name: &str) -> bool {
+fn unprefixed(_node: Node<'_>, name: &str) -> bool {
     !name.starts_with('_')
 }
 
@@ -259,9 +259,9 @@ fn symbols(tags: &Tags, source: &str) -> Vec<Symbol> {
 
 /// The names bound inside a definition, below its own name: parameters, variables and inner functions.
 /// A plain call to one of them calls the local, not a symbol of the MR.
-fn locals<'s>(definition: Node, source: &'s str) -> Vec<&'s str> {
+fn locals<'s>(definition: Node<'_>, source: &'s str) -> Vec<&'s str> {
     let mut names = vec![];
-    let mut below: Vec<Node> = children(definition);
+    let mut below: Vec<Node<'_>> = children(definition);
     while let Some(node) = below.pop() {
         let bound = match node.kind() {
             "formal_parameters" | "parameters" | "lambda_parameters" => Some(node),
@@ -284,7 +284,7 @@ fn locals<'s>(definition: Node, source: &'s str) -> Vec<&'s str> {
 }
 
 /// The identifiers a parameter list or a pattern binds, defaults and type annotations left out.
-fn bound_names<'s>(pattern: Node, source: &'s str) -> Vec<&'s str> {
+fn bound_names<'s>(pattern: Node<'_>, source: &'s str) -> Vec<&'s str> {
     let field = |name| pattern.child_by_field_name(name).map(|n| bound_names(n, source)).unwrap_or_default();
     match pattern.kind() {
         "identifier" | "shorthand_property_identifier_pattern" => source.get(pattern.byte_range()).into_iter().collect(),
@@ -308,7 +308,7 @@ fn bound_names<'s>(pattern: Node, source: &'s str) -> Vec<&'s str> {
     }
 }
 
-fn children(node: Node) -> Vec<Node> {
+fn children(node: Node<'_>) -> Vec<Node<'_>> {
     (0..node.named_child_count()).filter_map(|i| node.named_child(u32::try_from(i).ok()?)).collect()
 }
 
@@ -321,7 +321,7 @@ fn kind_named(name: &str) -> Option<Kind> {
     }
 }
 
-fn symbol(node: Node, source: &str, kind: Kind, classes: &[&str], name: &str, tags: &Tags) -> Symbol {
+fn symbol(node: Node<'_>, source: &str, kind: Kind, classes: &[&str], name: &str, tags: &Tags) -> Symbol {
     let body = node.child_by_field_name("body").or_else(|| node.child_by_field_name("value")?.child_by_field_name("body"));
     let body_start = body.map_or(node.end_byte(), |b| b.start_byte());
     Symbol {
@@ -418,7 +418,6 @@ fn words(text: &str) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::diff::words::{Segment, text_segments};
 

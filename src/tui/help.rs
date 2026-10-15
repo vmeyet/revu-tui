@@ -108,7 +108,7 @@ fn natural_width(groups: &[(&str, Vec<(String, &str)>)]) -> usize {
 }
 
 /// The overlay, centred, at most 90 % of the screen each way; it scrolls by `scroll` rows when taller than that.
-pub fn draw(f: &mut Frame, app: &App, area: Rect, help: Help) {
+pub fn draw(f: &mut Frame<'_>, app: &App, area: Rect, help: Help) {
     let groups = shown(app, help.every_key);
     let sizes: Vec<usize> = groups.iter().map(|(_, keys)| keys.len()).collect();
     let max_w = area.width * 9 / 10;
@@ -157,7 +157,6 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect, help: Help) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::collections::HashSet;
 

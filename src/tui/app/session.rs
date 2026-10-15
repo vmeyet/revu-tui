@@ -94,9 +94,9 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::agent::{Call, Choice, Handoff, Session};
     use crate::tui::app::test_support::*;
+    use std::sync::Arc;
 
     fn with_agent(mut app: App) -> App {
         app.agent = true;
@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn in_the_diff_in_zen_and_from_the_command_line_it_is_the_open_mr() {
         let mut app = with_agent(with_mr(|mr| Mr { mine: true, ..mr }));
-        let open = app.open.as_ref().unwrap().review.mr.clone();
+        let open = Arc::clone(&app.open.as_ref().unwrap().review.mr);
         let actions = press(&mut app, "ag");
         let (mr, _) = asked(&actions);
         assert_eq!((mr.key.clone(), mr.fields.title.as_str(), mr.mine), (mr_key(), open.title.as_str(), true));
@@ -238,7 +238,7 @@ mod tests {
                 argv: vec!["claude".into(), "attach".into(), "ab12cd34".into()],
                 dir: None,
                 path: None,
-                limit: std::time::Duration::from_secs(15),
+                limit: Duration::from_secs(15),
             },
             said: "a new session for !42".into(),
         };

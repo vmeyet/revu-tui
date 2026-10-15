@@ -399,7 +399,6 @@ pub fn error_message(body: &str) -> String {
 
 /// GitLab answers turned into the neutral model, for tests anywhere in the crate.
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 pub(crate) mod fixture {
     use super::{super::graphql, Discussion, Mr};
     use crate::forge::{self, MrKey, Queue};
@@ -438,7 +437,6 @@ pub(crate) mod fixture {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::fixture::{discussion, parse};
     use super::*;
 
@@ -470,7 +468,6 @@ mod tests {
     }
 
     mod properties {
-        #![allow(clippy::unwrap_used, clippy::expect_used)]
         use super::super::*;
         use crate::diff::arbitrary;
         use crate::review::position::{for_line, for_range};

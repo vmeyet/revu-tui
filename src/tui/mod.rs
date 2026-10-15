@@ -368,7 +368,7 @@ fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
         return None;
     }
     let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
-    if let Some(reason) = crate::ai::typesafe::disabled_reason() {
+    if let Some(reason) = ai::typesafe::disabled_reason() {
         tracing::info!("Jev is off: {reason}");
         return None;
     }
@@ -412,7 +412,6 @@ fn agent(config: &crate::config::Agent, compact_width: u16, checkout: Option<&cr
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

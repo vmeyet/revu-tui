@@ -1,6 +1,6 @@
 //! The user docs stay true and readable: reference pages match the code, links resolve, and the
 //! prose follows the house style (one sentence per line, short sentences, no em dash, no filler).
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![cfg(test)]
 use assert_cmd::Command;
 use std::path::{Path, PathBuf};
 

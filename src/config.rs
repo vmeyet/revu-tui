@@ -77,7 +77,7 @@ pub enum Layout {
 }
 
 impl Layout {
-    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -148,7 +148,7 @@ fn default_prefetch() -> usize {
     PREFETCH
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if passes a reference")]
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if passes a reference")]
 fn is_default_prefetch(n: &usize) -> bool {
     *n == PREFETCH
 }
@@ -327,7 +327,7 @@ pub enum ScreenLayout {
 }
 
 impl ScreenLayout {
-    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -398,7 +398,7 @@ pub enum QueueLayout {
 }
 
 impl QueueLayout {
-    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -544,7 +544,7 @@ pub enum AgentShow {
 }
 
 impl AgentShow {
-    #[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if hands a reference")]
     fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -751,7 +751,6 @@ fn write_whole(path: &Path, text: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

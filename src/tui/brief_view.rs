@@ -22,7 +22,7 @@ const PAD_Y: u16 = 1;
 /// Lines each thread takes: what it says, then where it is.
 const THREAD_ROWS: usize = 2;
 
-pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
+pub fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let today = app.today;
     let from_review = app.open.as_ref().is_some_and(|o| app.brief.as_ref().is_some_and(|b| b.key == o.key));
@@ -65,7 +65,7 @@ pub fn draw(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 /// Each review app's address where it shows in `inner`, so a click opens it.
-fn app_links(brief: &Brief, lines: &[Line], app_lines: &[usize], inner: Rect) -> Vec<Link> {
+fn app_links(brief: &Brief, lines: &[Line<'_>], app_lines: &[usize], inner: Rect) -> Vec<Link> {
     let shown = |line: usize| {
         let row = wrapped_rows(&lines[..line], inner.width).checked_sub(brief.scroll)?;
         u16::try_from(row).ok().filter(|row| *row < inner.height)
@@ -244,7 +244,7 @@ fn keep_end(text: &str, room: usize) -> String {
 }
 
 /// Rows the wrapped text takes, close enough to stop the scroll at the last page.
-fn wrapped_rows(lines: &[Line], width: u16) -> usize {
+fn wrapped_rows(lines: &[Line<'_>], width: u16) -> usize {
     let width = usize::from(width.max(1));
     lines.iter().map(|l| l.width().max(1).div_ceil(width)).sum()
 }

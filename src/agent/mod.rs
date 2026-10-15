@@ -357,7 +357,6 @@ impl Agent {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use std::sync::Mutex;
 
@@ -477,7 +476,7 @@ mod tests {
         let script = Arc::new(script);
         let checkouts = BTreeMap::from([("acme/widgets".to_owned(), PathBuf::from(REPO))]);
         let place = place::Place { screen, show: config::AgentShow::Auto, compact_width: 70 };
-        (Agent { harness, checkouts, place, run: script.clone() }, script)
+        (Agent { harness, checkouts, place, run: Arc::<Script>::clone(&script) }, script)
     }
 
     pub(super) fn cache() -> (tempfile::TempDir, Cache) {

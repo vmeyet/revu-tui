@@ -355,7 +355,6 @@ fn scope_label(scope: &Scope) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use crate::tui::app::test_support::*;
 
     fn answer(app: &App) -> Answer {
@@ -486,7 +485,7 @@ mod tests {
         assert_eq!(app.handle_key(code(KeyCode::Enter)), [] as [Action; 0]);
     }
 
-    fn past(label: &str, head: &str, asked_at: chrono::DateTime<chrono::Utc>, text: &str) -> PastAnswer {
+    fn past(label: &str, head: &str, asked_at: DateTime<Utc>, text: &str) -> PastAnswer {
         let request = crate::ai::anthropic::Ask {
             system: vec![],
             turns: vec![crate::ai::anthropic::Turn { role: crate::ai::anthropic::Role::User, text: "Explain this hunk".into() }],

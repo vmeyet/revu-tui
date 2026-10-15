@@ -21,7 +21,7 @@ pub const HINTS: &[(&str, &str)] = &[
 
 /// Every action the report knows, bindable ones first.
 pub fn known() -> Vec<&'static str> {
-    crate::act::listed_names()
+    act::listed_names()
 }
 
 /// How often a hint shows as a toast, over every session; after that only the report counts it.
@@ -269,7 +269,6 @@ pub fn duration(seconds: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     fn date(text: &str) -> NaiveDate {
@@ -401,7 +400,7 @@ mod tests {
             assert!(known.contains(&name), "`{name}` is counted, so it shows when unused");
         }
         assert_eq!(known.iter().filter(|name| **name == "viewed").count(), 1, "`m` and `zv` share a name");
-        let commands: Vec<String> = crate::act::verbs().map(|verb| format!(":{}", verb.word)).collect();
+        let commands: Vec<String> = act::verbs().map(|verb| format!(":{}", verb.word)).collect();
         let report = grouped(known.iter().copied());
         assert_eq!(
             report.iter().find(|(group, _)| group == "commands").map(|(_, names)| names),

@@ -621,7 +621,7 @@ impl Client {
         let query = format!(
             "mutation($id: ID!, $content: ReactionContent!) {{ {mutation}(input: {{subjectId: $id, content: $content}}) {{ clientMutationId }} }}"
         );
-        self.graphql::<serde_json::Value>(&query, json!({"id": node, "content": content})).await.map(|_| ())
+        self.graphql::<Value>(&query, json!({"id": node, "content": content})).await.map(|_| ())
     }
 
     /// Marks the PR a draft, or ready for review; asked first, so a PR already there is left alone.
@@ -826,7 +826,6 @@ pub(super) fn queue_from_json(mine: &str, open: Option<(&str, &str)>) -> Result<
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::auth::Credentials;
     use crate::forge::{LineRef, ReviewState};

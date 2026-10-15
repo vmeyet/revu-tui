@@ -89,7 +89,6 @@ pub struct MemoryStore {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 impl SecretStore for MemoryStore {
     fn get(&self, account: &str) -> Result<Option<String>> {
         Ok(self.items.lock().unwrap().get(account).cloned())
@@ -108,7 +107,6 @@ impl SecretStore for MemoryStore {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     #[test]

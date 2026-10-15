@@ -63,7 +63,7 @@ impl Ai {
 
     /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
     /// Only a finished answer is kept, so a cut or refused one is asked again next time.
-    #[allow(clippy::too_many_arguments, reason = "the label and head only go into what is kept")]
+    #[expect(clippy::too_many_arguments, reason = "the label and head only go into what is kept")]
     pub(in crate::tui) async fn ask(
         &self,
         key: &MrKey,
@@ -168,7 +168,6 @@ impl Ai {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::forge::gitlab::fixture::key;
     use crate::tui::backend::test_support::{homes_in, queue};

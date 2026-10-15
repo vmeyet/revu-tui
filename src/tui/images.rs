@@ -127,7 +127,6 @@ pub fn decode(bytes: &[u8]) -> Option<DynamicImage> {
 
 #[cfg(test)]
 pub mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     pub fn png(w: u32, h: u32) -> Vec<u8> {

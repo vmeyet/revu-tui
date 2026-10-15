@@ -310,7 +310,6 @@ struct WireLabel {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::auth::Credentials;
     use wiremock::matchers::{body_partial_json, method, path};
@@ -347,7 +346,7 @@ mod tests {
         assert_eq!(queue.me, "nina");
         assert_eq!(iids(&queue.review_requested), [42, 40]);
         let first = &queue.review_requested[0];
-        assert_eq!(first.key(), crate::forge::MrKey::new("acme/widgets", 42));
+        assert_eq!(first.key(), MrKey::new("acme/widgets", 42));
         assert_eq!(first.my_state("nina"), Some(ReviewState::Unreviewed));
         assert_eq!((first.additions, first.deletions, first.files, first.unresolved), (412, 38, 9, 1));
         assert_eq!(first.pipeline, Some(PipelineStatus::Success));

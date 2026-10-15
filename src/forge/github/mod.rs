@@ -104,7 +104,6 @@ fn owner_and_name(project: &ProjectPath) -> Result<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
