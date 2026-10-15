@@ -81,7 +81,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - One tokio multi-thread runtime (`#[tokio::main]`).
 - The loop is one task with a `tokio::select!` over terminal events, an unbounded `Incoming` channel and a tick; it never awaits the network.
 - Each `Action` runs in its own `tokio::spawn` task.
-- Blocking work goes to `spawn_blocking`: cache reads and writes (`Backend::off`, `cache::blocking`), outline parsing, agent sessions, usage saves.
+- Blocking work goes to `spawn_blocking`: cache reads and writes (`Backend::off`, `tui::blocking`), outline parsing, agent sessions, usage saves.
 - Child programs that answer quickly use `tokio::process`; programs that own the terminal block the loop on purpose.
 
 State shared between tasks, and why:

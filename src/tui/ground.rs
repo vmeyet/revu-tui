@@ -1,5 +1,6 @@
 //! The terminal's own background colour, asked once at startup, so a theme that does not know its
 //! ground can still tint changed lines instead of guessing a fill.
+use crate::log::OrWarn as _;
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
 use std::time::{Duration, Instant};
@@ -20,7 +21,7 @@ pub fn ask() -> Option<u32> {
     }
     crossterm::terminal::enable_raw_mode().ok()?;
     let ground = read_answer();
-    let _ = crossterm::terminal::disable_raw_mode();
+    crossterm::terminal::disable_raw_mode().or_warn("turning raw mode off after the colour query");
     ground
 }
 

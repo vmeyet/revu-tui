@@ -42,11 +42,12 @@ fn page(out: &str) -> Result<()> {
     let mut parts = pager.split_whitespace();
     let program = parts.next().context("empty PAGER")?;
     let mut child = Command::new(program).args(parts).stdin(Stdio::piped()).spawn().with_context(|| format!("running {pager}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(out.as_bytes());
-    }
+    let fed = child.stdin.take().map_or(Ok(()), |mut stdin| stdin.write_all(out.as_bytes()));
     child.wait()?;
-    Ok(())
+    match fed {
+        Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => Err(e).context("writing to the pager"),
+        _ => Ok(()),
+    }
 }
 
 fn print_all(out: &str) -> Result<()> {

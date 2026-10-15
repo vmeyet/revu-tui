@@ -37,7 +37,8 @@ mod whats_new_view;
 use crate::ai;
 use crate::ai::anthropic::Claude;
 use crate::ai::typesafe::TypeSafe;
-use crate::cache::{Cache, blocking};
+use crate::blocking;
+use crate::cache::Cache;
 use crate::ctx::Ctx;
 use crate::log::OrWarn as _;
 use actions::{failed, spawn};
@@ -248,7 +249,7 @@ const USAGE_FLUSH: Duration = Duration::from_secs(60);
 /// Adds `counts` to today's line of the usage file; a failure costs a minute of counts, nothing else.
 async fn save_usage(counts: crate::usage::Counts) {
     let today = chrono::Local::now().date_naive();
-    blocking(move || crate::usage::record(&Cache::shared(), today, &counts)).await.or_warn("saving the usage counts");
+    blocking::run(move || crate::usage::record(&Cache::shared(), today, &counts)).await.or_warn("saving the usage counts");
 }
 
 /// The reader's program owns the terminal until it exits; the app, untouched, draws again after.
@@ -348,7 +349,7 @@ fn print_links(links: &[Hyperlink]) {
     use std::io::Write;
     let mut out = std::io::stdout();
     for Hyperlink { link, fg, bg } in links {
-        let _ = queue!(
+        queue!(
             out,
             cursor::SavePosition,
             cursor::MoveTo(link.x, link.y),
@@ -357,9 +358,10 @@ fn print_links(links: &[Hyperlink]) {
             style::Print(format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", link.url, link.text)),
             style::ResetColor,
             cursor::RestorePosition,
-        );
+        )
+        .or_warn("drawing a link");
     }
-    let _ = out.flush();
+    out.flush().or_warn("drawing the links");
 }
 
 /// Jev, only when the config switches it on and a key is found; the environment can still switch it off.
@@ -368,6 +370,10 @@ fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
         return None;
     }
     let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
+    if let Some(reason) = crate::ai::typesafe::disabled_reason() {
+        tracing::info!("Jev is off: {reason}");
+        return None;
+    }
     let (key, _) = ai_key(ai::Provider::Typesafe, &keychain)?;
     TypeSafe::connect(&key).inspect_err(|e| tracing::warn!("Jev is off: {e}")).ok()
 }

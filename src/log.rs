@@ -18,6 +18,7 @@ pub fn start() {
         return;
     }
     let Ok(file) = Cache::shared().append(FILE, MAX_BYTES) else { return };
+    #[expect(clippy::let_underscore_must_use, reason = "`start` runs once per process, so no subscriber is set before")]
     let _ = tracing::subscriber::set_global_default(subscriber(std::sync::Mutex::new(file), level));
 }
 
@@ -99,6 +100,7 @@ pub(crate) mod capture {
     pub fn start() {
         static GLOBAL: std::sync::Once = std::sync::Once::new();
         GLOBAL.call_once(|| {
+            #[expect(clippy::let_underscore_must_use, reason = "`call_once` sets it once per test binary")]
             let _ = tracing::subscriber::set_global_default(super::subscriber(|| ThisThread, LevelFilter::TRACE));
         });
         LOGGED.with_borrow_mut(Vec::clear);

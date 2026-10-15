@@ -52,7 +52,8 @@ impl Screen {
         give_extras_back(self.modifiers);
         ratatui::restore();
         let outcome = run();
-        enable_raw_mode().and_then(|()| crossterm::execute!(std::io::stdout(), EnterAlternateScreen)).or_warn("taking the terminal back");
+        enable_raw_mode().or_warn("turning raw mode back on");
+        crossterm::execute!(std::io::stdout(), EnterAlternateScreen).or_warn("entering the alternate screen again");
         if self.modifiers {
             report_modifiers();
         }
@@ -65,13 +66,13 @@ impl Screen {
 /// Focus changes stop the usage clock while the terminal is in the background.
 fn take_mouse_and_focus() {
     write(MOUSE_ON);
-    let _ = crossterm::execute!(std::io::stdout(), EnableFocusChange);
+    crossterm::execute!(std::io::stdout(), EnableFocusChange).or_warn("asking for focus changes");
 }
 
 /// What revu asked on top of ratatui: the mouse, focus changes, and the modifier report when it was on.
 fn give_extras_back(modifiers: bool) {
     write(MOUSE_OFF);
-    let _ = crossterm::execute!(std::io::stdout(), DisableFocusChange);
+    crossterm::execute!(std::io::stdout(), DisableFocusChange).or_warn("stopping focus changes");
     if modifiers {
         stop_modifiers();
     }
@@ -79,7 +80,7 @@ fn give_extras_back(modifiers: bool) {
 
 fn write(sequence: &[u8]) {
     let mut out = std::io::stdout();
-    let _ = out.write_all(sequence).and_then(|()| out.flush());
+    out.write_all(sequence).and_then(|()| out.flush()).or_warn("writing to the terminal");
 }
 
 fn report_modifiers() -> bool {
@@ -88,5 +89,5 @@ fn report_modifiers() -> bool {
 }
 
 fn stop_modifiers() {
-    let _ = crossterm::execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
+    crossterm::execute!(std::io::stdout(), PopKeyboardEnhancementFlags).or_warn("stopping the modifier report");
 }

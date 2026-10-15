@@ -1,7 +1,8 @@
 //! The action runner: each action the app asks for runs in its own task and answers through `Incoming`.
 use super::app::{self, Action, Failure, Incoming, Part, Post, QueueView};
 use super::backend::{Backend, MrState, Opening};
-use crate::cache::{Cache, blocking, keys};
+use crate::blocking;
+use crate::cache::{Cache, keys};
 use crate::forge::{Forge, MrKey};
 use crate::log::OrWarn as _;
 use anyhow::{Context as _, Result};
@@ -17,23 +18,22 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
     tokio::spawn(async move {
         let send = |incoming: Incoming| {
             log_failure(&incoming);
+            #[expect(clippy::let_underscore_must_use, reason = "the loop drops its receiver only when revu quits")]
             let _ = tx.send(incoming);
         };
         match action {
             Action::LoadQueue { scope, from_cache } => {
                 if from_cache {
                     let wanted = scope.clone();
-                    if let Some(view) =
-                        backend.off(move |b| b.cache.read::<QueueView>(&keys::queue_view(wanted.as_deref()))).await.ok().flatten()
-                    {
+                    if let Some(view) = backend.read_cache(move |b| b.cache.read::<QueueView>(&keys::queue_view(wanted.as_deref()))).await {
                         send(Incoming::QueueView { scope: scope.clone(), view });
                     }
                     let wanted = scope.clone();
-                    let pins = backend.off(move |b| b.pins(wanted.as_deref())).await.unwrap_or_default();
+                    let pins = backend.read_cache(move |b| b.pins(wanted.as_deref())).await;
                     send(Incoming::Pins { scope: scope.clone(), pins });
                 }
                 let wanted = scope.clone();
-                if let Some(cached) = backend.off(move |b| b.cached_queue(wanted)).await.ok().flatten().filter(|_| from_cache) {
+                if let Some(cached) = backend.read_cache(move |b| b.cached_queue(wanted)).await.filter(|_| from_cache) {
                     send(cached);
                 }
                 match backend.load_queue(scope).await {
@@ -68,7 +68,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::Open(key) => {
                 let _opening = Opening::start(&backend.opening);
                 let wanted = key.clone();
-                let cached = backend.off(move |b| b.open_cached(&wanted)).await.ok().flatten();
+                let cached = backend.read_cache(move |b| b.open_cached(&wanted)).await;
                 let painted = cached.as_ref().and_then(painted_head);
                 if let Some(cached) = cached {
                     send(cached);
@@ -109,7 +109,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 send(open_url(&url).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done("opened in the browser".into())));
             }
             Action::SaveTheme(name) => {
-                if let Err(e) = blocking(move || save_theme(&name)).await {
+                if let Err(e) = blocking::run(move || save_theme(&name)).await {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -117,7 +117,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
             Action::RememberShare { host, target } => {
-                blocking(move || crate::share::remember(&Cache::shared(), &host, target.as_deref()))
+                blocking::run(move || crate::share::remember(&Cache::shared(), &host, target.as_deref()))
                     .await
                     .or_warn("remembering the share target");
             }
@@ -157,7 +157,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
             }
             Action::CountReaction { host, emoji } => {
-                blocking(move || crate::reactions::record(&Cache::shared(), &host, emoji)).await.or_warn("counting the reaction");
+                blocking::run(move || crate::reactions::record(&Cache::shared(), &host, emoji)).await.or_warn("counting the reaction");
             }
             Action::Merge { key, head, plan } => {
                 let outcome = backend.forge_of(&key).merge(&key, &head, plan).await;
@@ -203,7 +203,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::Ask { key, id, request, fresh, label, head } => backend.ask(&key, id, &request, fresh, &label, &head, &send).await,
             Action::LoadAnswers(key) => {
                 let wanted = key.clone();
-                let answers = backend.off(move |b| b.past_answers(&wanted)).await.unwrap_or_default();
+                let answers = backend.read_cache(move |b| b.past_answers(&wanted)).await;
                 send(Incoming::PastAnswers { key, answers });
             }
             Action::Triage(mr) => {

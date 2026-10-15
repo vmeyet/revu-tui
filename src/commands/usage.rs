@@ -1,3 +1,4 @@
+#![expect(clippy::let_underscore_must_use, reason = "`writeln!` into a `String` cannot fail")]
 use crate::cache::Cache;
 use crate::cli::UsageArgs;
 use crate::config::Config;

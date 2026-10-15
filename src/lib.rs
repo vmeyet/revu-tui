@@ -3,6 +3,7 @@ mod act;
 mod agent;
 mod ai;
 mod auth;
+mod blocking;
 mod cache;
 mod changelog;
 pub mod cli;

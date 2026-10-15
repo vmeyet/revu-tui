@@ -1,3 +1,4 @@
+#![expect(clippy::let_underscore_must_use, reason = "`writeln!` into a `String` cannot fail")]
 use crate::changelog::{Changelog, Entry, Position, Section};
 use crate::cli::NewsArgs;
 use crate::render::{Style, Theme};

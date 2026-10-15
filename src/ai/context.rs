@@ -1,5 +1,6 @@
 //! What Claude reads for a question: the MR in one cached block, the part asked about in another,
 //! within a character budget, and never a hunk cut in the middle.
+#![expect(clippy::let_underscore_must_use, reason = "`writeln!` into a `String` cannot fail")]
 use super::anthropic::{Ask, Block, Role, Turn};
 use crate::diff::{Hunk, LineKind};
 use crate::review::{File, Review};

@@ -200,7 +200,8 @@ async fn read_error_message(response: reqwest::Response) -> String {
     }
 }
 
-fn disabled_reason() -> Option<&'static str> {
+/// Why the user switched TypeSafe off, when they did.
+pub(crate) fn disabled_reason() -> Option<&'static str> {
     if std::env::var("TYPESAFE_DISABLED").as_deref() == Ok("1") {
         return Some("disabled by TYPESAFE_DISABLED=1");
     }

@@ -51,9 +51,8 @@ pub(crate) struct Home {
 }
 
 impl Home {
-    fn open(env: &Env, store: &dyn SecretStore, config: &Config, host: &str) -> Result<Self> {
-        let (credentials, _) = auth::resolve(env, store, config, Some(host))?;
-        let forge = Forge::connect(Kind::for_host(host, config), &credentials)?;
+    fn connect(host: &str, config: &Config, credentials: &Credentials) -> Result<Self> {
+        let forge = Forge::connect(Kind::for_host(host, config), credentials)?;
         Ok(Self { host: host.to_owned(), forge, cache: Cache::for_host(host)? })
     }
 
@@ -61,7 +60,7 @@ impl Home {
     pub async fn queue(&self) -> Result<crate::forge::Queue> {
         let queue = self.forge.queue(None).await?.on_host(&self.host);
         let (cache, saved) = (self.cache.clone(), queue.clone());
-        crate::cache::blocking(move || cache.write_entry(&crate::cache::keys::queue(None), &saved)).await.or_warn("caching the queue");
+        crate::blocking::run(move || cache.write_entry(&crate::cache::keys::queue(None), &saved)).await.or_warn("caching the queue");
         Ok(queue)
     }
 
@@ -100,8 +99,9 @@ pub(crate) fn others(env: &Env, store: &dyn SecretStore, config: &Config, curren
     hosts
         .into_iter()
         .filter_map(|host| {
-            let home = Home::open(env, store, config, host);
-            home.inspect_err(|e| tracing::warn!("leaving out {host}: {e:#}")).ok()
+            // A configured host without a token is one not logged in to yet: nothing went wrong.
+            let (credentials, _) = auth::resolve(env, store, config, Some(host)).ok()?;
+            Home::connect(host, config, &credentials).inspect_err(|e| tracing::warn!("leaving out {host}: {e:#}")).ok()
         })
         .collect()
 }

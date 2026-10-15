@@ -4,7 +4,8 @@ use super::{app, images};
 use crate::ai::anthropic::{self, Ask, Claude, Outcome, Stop, Usage};
 use crate::ai::triage::{self, Verdict};
 use crate::ai::typesafe::{TypeSafe, Unavailable};
-use crate::cache::{Cache, Entry, blocking, keys};
+use crate::blocking;
+use crate::cache::{Cache, Entry, keys};
 use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, QueueMr, Sections, Sha};
@@ -116,7 +117,7 @@ const KEEP_UNTOUCHED: Duration = Duration::from_hours(30 * 24);
 /// project it cannot answer for keeps its MRs until they are old.
 pub(super) async fn prune(forge: &Forge, cache: &Cache) {
     let listed = cache.clone();
-    let Ok(kept) = blocking(move || Ok(listed.kept_mrs())).await else { return };
+    let Ok(kept) = blocking::run(move || Ok(listed.kept_mrs())).await else { return };
     let mut by_project: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     for mr in &kept {
         by_project.entry(mr.project.clone()).or_default().push(mr.number);
@@ -132,7 +133,7 @@ pub(super) async fn prune(forge: &Forge, cache: &Cache) {
         .map(|mr| (mr.project.clone(), mr.number))
         .collect();
     let cache = cache.clone();
-    blocking(move || {
+    blocking::run(move || {
         for (project, number) in &gone {
             cache.forget_mr(project, *number).or_warn("pruning the cache");
         }
@@ -140,6 +141,10 @@ pub(super) async fn prune(forge: &Forge, cache: &Cache) {
     })
     .await
     .or_warn("pruning the cache");
+}
+
+fn warn_stopped(error: &anyhow::Error) {
+    tracing::warn!("{error:#}");
 }
 
 /// Counts an MR being opened for as long as it lives, so loading ahead steps aside.
@@ -163,13 +168,18 @@ impl Backend {
     /// building a review highlights every hunk.
     pub(super) async fn off<T: Send + 'static>(&self, work: impl FnOnce(&Backend) -> T + Send + 'static) -> Result<T> {
         let me = self.clone();
-        blocking(move || Ok(work(&me))).await
+        blocking::run(move || Ok(work(&me))).await
+    }
+
+    /// `off` for a cache read: a task that stopped is logged and reads as a miss.
+    pub(super) async fn read_cache<T: Default + Send + 'static>(&self, work: impl FnOnce(&Backend) -> T + Send + 'static) -> T {
+        self.off(work).await.inspect_err(warn_stopped).unwrap_or_default()
     }
 
     /// A cache write on the blocking pool whose failure only costs a later fetch: logged as `what`, never handed back.
     async fn write_cache(&self, what: &str, work: impl FnOnce(&Backend) -> Result<()> + Send + 'static) {
         let me = self.clone();
-        blocking(move || work(&me)).await.or_warn(what);
+        blocking::run(move || work(&me)).await.or_warn(what);
     }
 
     /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
@@ -193,7 +203,7 @@ impl Backend {
         };
         let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
         let (wanted, reading) = (key.clone(), cache_key.clone());
-        let saved = self.off(move |b| b.cache_of(&wanted).read::<SavedAnswer>(&reading)).await.ok().flatten();
+        let saved = self.read_cache(move |b| b.cache_of(&wanted).read::<SavedAnswer>(&reading)).await;
         if let Some(saved) = saved.filter(|_| !fresh) {
             let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
             send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
@@ -237,7 +247,7 @@ impl Backend {
     pub(super) async fn triage(&self, mr: &crate::forge::QueueMr) -> Result<Incoming, Unavailable> {
         let key = mr.key();
         let wanted = key.clone();
-        let cached: Option<Verdict> = self.off(move |b| b.cache_of(&wanted).read(&keys::verdict(&wanted))).await.ok().flatten();
+        let cached: Option<Verdict> = self.read_cache(move |b| b.cache_of(&wanted).read(&keys::verdict(&wanted))).await;
         let verdict = if let Some(verdict) = cached.filter(|v| v.fresh_for(mr)) {
             verdict
         } else {
@@ -259,7 +269,7 @@ impl Backend {
         files: Vec<(String, serde_json::Value)>,
     ) -> Result<Incoming, Unavailable> {
         let (wanted, at) = (key.clone(), head.clone());
-        let cached = self.off(move |b| b.cache_of(&wanted).read(&keys::reading(&wanted, &at))).await.ok().flatten();
+        let cached = self.read_cache(move |b| b.cache_of(&wanted).read(&keys::reading(&wanted, &at))).await;
         let reading = if let Some(reading) = cached {
             reading
         } else {
@@ -320,10 +330,10 @@ impl Backend {
             }
         }
         let wanted = silent.clone();
-        let kept = self.off(move |b| {
+        let kept = self.read_cache(move |b| {
             b.others.iter().filter(|home| wanted.contains(&home.host)).filter_map(crate::ctx::Home::cached).collect::<Vec<_>>()
         });
-        (queues.into_iter().chain(kept.await.unwrap_or_default()).collect(), silent)
+        (queues.into_iter().chain(kept.await).collect(), silent)
     }
 
     pub(super) fn cached_queue(&self, scope: Option<String>) -> Option<Incoming> {
@@ -341,7 +351,7 @@ impl Backend {
     /// back as rows, the merged or closed ones as gone. A pin the forge did not answer for stays.
     async fn pins_outside(&self, scope: Option<&str>, listed: &HashSet<MrKey>) -> (Vec<QueueMr>, Vec<MrKey>) {
         let wanted = scope.map(str::to_owned);
-        let pins = self.off(move |b| b.pins(wanted.as_deref())).await.unwrap_or_default();
+        let pins = self.read_cache(move |b| b.pins(wanted.as_deref())).await;
         let missing: Vec<MrKey> = pins.into_iter().filter(|key| !listed.contains(key)).collect();
         let fetched = crate::ctx::fetch_each(&self.forge, &self.others, &missing).await;
         let mut rows = vec![];
@@ -401,10 +411,11 @@ impl Backend {
     /// Only a picture that decodes is kept, so a failed one is asked again next time.
     pub(super) async fn image(&self, key: &MrKey, url: &str) -> Option<image::DynamicImage> {
         let (owner, name) = (key.clone(), keys::image(url));
-        let cached = self.off(move |b| b.cache_of(&owner).read_bytes(&name)).await.ok().flatten();
+        let cached = self.read_cache(move |b| b.cache_of(&owner).read_bytes(&name)).await;
         let fresh = cached.is_none();
         let bytes = match cached {
             Some(bytes) => bytes,
+            // Not logged: the error carries the URL, whose query may hold a signed link's secret; the request line is logged already.
             None => self.forge_of(key).image(key, url).await.ok()?,
         };
         let (owner, name) = (key.clone(), keys::image(url));
@@ -416,6 +427,7 @@ impl Backend {
             Some(picture)
         })
         .await
+        .inspect_err(warn_stopped)
         .ok()
         .flatten()
     }
@@ -423,7 +435,7 @@ impl Backend {
     /// At most once a day, what the cache keeps for merged, closed or long untouched MRs goes:
     /// their diffs, threads and Claude's answers. Safe to run twice; a failure leaves the cache as it is.
     pub(super) async fn prune_daily(&self) {
-        let last = blocking(|| Ok(Cache::shared().read_entry::<()>(&keys::pruned()))).await.ok().flatten();
+        let last = blocking::run(|| Ok(Cache::shared().read_entry::<()>(&keys::pruned()))).await.inspect_err(warn_stopped).ok().flatten();
         if last.is_some_and(|entry| entry.age(Utc::now()) < PRUNE_EVERY) {
             return;
         }
@@ -431,7 +443,7 @@ impl Backend {
         for (forge, cache) in homes {
             prune(forge, cache).await;
         }
-        blocking(|| Cache::shared().write_entry(&keys::pruned(), &())).await.or_warn("noting the prune");
+        blocking::run(|| Cache::shared().write_entry(&keys::pruned(), &())).await.or_warn("noting the prune");
     }
 
     pub(super) fn forge_of(&self, key: &MrKey) -> &Forge {
@@ -517,7 +529,7 @@ impl Backend {
     /// The diffs of `head`, which never change once pushed: from the cache when it holds them.
     async fn diffs_at(&self, key: &MrKey, head: &Sha) -> Result<Vec<DiffFile>> {
         let (wanted, at) = (key.clone(), head.clone());
-        let cached = self.off(move |b| b.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await.ok().flatten();
+        let cached = self.read_cache(move |b| b.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await;
         match cached {
             Some(diffs) => Ok(diffs),
             None => self.forge_of(key).diffs(key).await,
@@ -562,7 +574,7 @@ impl Backend {
         let busy = self.opening.load(std::sync::atomic::Ordering::SeqCst) > 0;
         let low = self.forge_of(&ahead.key).rate().remaining.is_some_and(|left| left < app::prefetch::SPARE);
         let (wanted, seen) = (ahead.key.clone(), ahead.updated_at);
-        if busy || low || self.off(move |b| b.is_fresh(&wanted, seen)).await.unwrap_or(true) {
+        if busy || low || self.off(move |b| b.is_fresh(&wanted, seen)).await.inspect_err(warn_stopped).unwrap_or(true) {
             return;
         }
         if let Ok(fetched) = self.fetch(&ahead.key).await {
@@ -630,7 +642,7 @@ impl Backend {
         } else {
             let text = self.file_text(&key, path, sha).await?;
             let name = path.to_owned();
-            let (dir, file) = blocking(move || crate::open::write_private(&name, text.as_bytes())).await?;
+            let (dir, file) = blocking::run(move || crate::open::write_private(&name, text.as_bytes())).await?;
             (file, Some(std::sync::Arc::new(dir)), note)
         };
         let command = crate::open::command_for(path, &self.open, env("VISUAL").as_deref(), env("EDITOR").as_deref());
@@ -644,7 +656,7 @@ impl Backend {
         use crate::agent::Outcome;
         let agent = self.agent.clone().context("agent sessions are off")?;
         let cache = self.cache_of(&mr.key).clone();
-        blocking(move || {
+        blocking::run(move || {
             Ok(match agent.open(&mr, &cache, choice)? {
                 Outcome::Pick(sessions) => Incoming::SessionPick { mr: Box::new(mr), sessions },
                 Outcome::Shown(shown) => Incoming::Done(shown),
@@ -671,7 +683,7 @@ impl Backend {
             .buffered(OUTLINE_READS)
             .try_collect()
             .await?;
-        blocking(move || Ok(crate::outline::read(&files))).await
+        blocking::run(move || Ok(crate::outline::read(&files))).await
     }
 
     /// The Markdown file the prose view shows, at base and at head.
@@ -692,7 +704,7 @@ impl Backend {
     async fn file_text(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
         let cache_key = keys::file(key, sha, path);
         let (wanted, reading) = (key.clone(), cache_key.clone());
-        if let Some(text) = self.off(move |b| b.cache_of(&wanted).read::<String>(&reading)).await.ok().flatten() {
+        if let Some(text) = self.read_cache(move |b| b.cache_of(&wanted).read::<String>(&reading)).await {
             return Ok(text);
         }
         let short = sha.as_str().get(..8).unwrap_or(sha.as_str());

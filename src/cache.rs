@@ -43,11 +43,6 @@ fn newest_write(path: &Path) -> Option<SystemTime> {
         .max()
 }
 
-/// Runs `work` on tokio's blocking pool: cache I/O and other blocking work stay off the threads that drive the network.
-pub(crate) async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
-    tokio::task::spawn_blocking(work).await.context("a background task stopped")?
-}
-
 /// A cached value and when it was fetched, so a stale view can say how stale.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry<T> {
@@ -126,15 +121,11 @@ impl Cache {
         }
     }
 
-    /// A missing or unreadable file is a miss; an unreadable one is removed so it cannot fail again.
+    /// A missing or unreadable file is a miss; an unreadable one is logged and removed so it cannot fail again.
     pub fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let path = self.dir.join(key);
         let raw = std::fs::read(&path).ok()?;
-        let parsed = serde_json::from_slice(&raw).ok();
-        if parsed.is_none() {
-            remove_broken(&path);
-        }
-        parsed
+        serde_json::from_slice(&raw).inspect_err(|e| drop_unreadable(&path, e)).ok()
     }
 
     pub fn write<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
@@ -212,7 +203,8 @@ fn write_private(root: &Path, path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 /// A file already gone is fine; one that stays is logged, since it will be read and removed again.
-fn remove_broken(path: &Path) {
+fn drop_unreadable(path: &Path, error: &serde_json::Error) {
+    tracing::warn!("dropping unreadable cache file {}: {error}", path.display());
     if let Err(e) = std::fs::remove_file(path)
         && e.kind() != std::io::ErrorKind::NotFound
     {
@@ -455,6 +447,18 @@ mod tests {
         std::fs::write(&path, b"{nope").unwrap();
         assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn a_corrupt_file_dropped_leaves_its_path_in_the_log() {
+        crate::log::capture::start();
+        let (dir, cache) = cache();
+        let path = dir.path().join("gitlab.com").join(keys::queue(None));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"{nope").unwrap();
+        assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
+        let text = crate::log::capture::text();
+        assert!(text.contains("WARN") && text.contains(&format!("dropping unreadable cache file {}", path.display())), "{text}");
     }
 
     #[cfg(unix)]
