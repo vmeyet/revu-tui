@@ -2,6 +2,7 @@
 //! `REVU_LOG` sets the level. A request line holds its method, host, path, status and time:
 //! never a header, so never a token, and never a query, which may carry a signed link's secret.
 use crate::cache::Cache;
+use std::io::Write;
 use std::time::Instant;
 use tracing::level_filters::LevelFilter;
 
@@ -17,9 +18,49 @@ pub fn start() {
     if level == LevelFilter::OFF {
         return;
     }
-    let Ok(file) = Cache::shared().append(FILE, MAX_BYTES) else { return };
+    let Ok(file) = Rolling::open(Cache::shared(), MAX_BYTES) else { return };
     #[expect(clippy::let_underscore_must_use, reason = "`start` runs once per process, so no subscriber is set before")]
     let _ = tracing::subscriber::set_global_default(subscriber(std::sync::Mutex::new(file), level));
+}
+
+/// The log file, rolled over again whenever it passes `max` bytes, so a warning repeated at every
+/// poll through a long session still keeps it under twice `max`.
+struct Rolling {
+    cache: Cache,
+    max: u64,
+    file: std::fs::File,
+    size: u64,
+}
+
+impl Rolling {
+    fn open(cache: Cache, max: u64) -> anyhow::Result<Self> {
+        let file = cache.append(FILE, max)?;
+        let size = file.metadata()?.len();
+        Ok(Self { cache, max, file, size })
+    }
+
+    fn roll_over(&mut self) {
+        match Self::open(self.cache.clone(), self.max) {
+            Ok(next) => *self = next,
+            // A log that cannot roll over has nowhere to say so: it goes on in the same file and tries again later.
+            Err(_) => self.size = 0,
+        }
+    }
+}
+
+impl Write for Rolling {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if self.size > self.max {
+            self.roll_over();
+        }
+        let written = self.file.write(bytes)?;
+        self.size += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
 }
 
 /// Only revu's own events: the HTTP libraries below log frames and headers at their debug levels.
@@ -135,6 +176,18 @@ mod tests {
         assert_eq!(level(Some(" off ")), LevelFilter::OFF);
         assert_eq!(level(Some("loud")), LevelFilter::WARN);
         assert_eq!(level(None), LevelFilter::WARN);
+    }
+
+    #[test]
+    fn the_log_rolls_over_mid_session_once_past_its_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::in_dir(dir.path());
+        let mut log = Rolling::open(cache.clone(), 8).unwrap();
+        log.write_all(b"first").unwrap();
+        log.write_all(b"second").unwrap();
+        log.write_all(b"third").unwrap();
+        assert_eq!(cache.read_bytes("revu.log.1").as_deref(), Some(&b"firstsecond"[..]), "a line is never cut");
+        assert_eq!(cache.read_bytes("revu.log").as_deref(), Some(&b"third"[..]));
     }
 
     #[test]

@@ -19,6 +19,11 @@ Each entry says what changed, then where, then how to use it.
   A host such as `[fd00::1]:8443` now stores its token in the keychain.
 - **A host written with capitals is asked once.**
   When `host` in the config differs from the host in use only by case, the queue no longer fetches it twice.
+- **A cache file revu cannot read is kept, not deleted.**
+  Pins, queue settings or review state this version cannot read move aside to `<file>.unreadable` in the cache folder.
+  Rename it back to restore it with a version that reads it; revu drops it after 30 days.
+- **The log stays small in a long session.**
+  `revu.log` rolls over to `revu.log.1` whenever it passes 2 MB, not only at startup, so a warning repeated at every poll cannot fill the disk.
 
 ## 0.9.0 - 2026-10-15
 

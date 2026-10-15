@@ -112,14 +112,14 @@ The internals:
 
 - One folder per host under the platform cache folder (`dirs::cache_dir()/revu`, or `$REVU_CACHE_DIR`), one JSON file per key.
 - Folders are 0700, files 0600, written to a temp name then renamed.
-- A cache failure never stops the reader: `backend::read_cache` turns a stopped task into a logged miss, `backend::write_cache` logs a failed write, and an unreadable file is logged then removed.
+- A cache failure never stops the reader: `backend::read_cache` turns a stopped task into a logged miss, `backend::write_cache` logs a failed write, and an unreadable file is logged then moved aside to `<file>.unreadable`, which nothing reads back.
 - `Cache::shared()` is the root, for what belongs to no host: the changelog position, reactions, usage, the last share, the prune stamp, the log.
 - Opening an MR paints the cached review at once, then fetches it again; when the head did not move, the diffs are not read again.
 - Diffs are keyed by head sha; a file at a sha is cached forever.
 - Each MR keeps `state.json`: folds, viewed files, the cursor spot, the side-by-side setting.
 - Claude's answers are keyed by MR and the whole request: model, context and question.
 - MRs waiting on the reader load ahead, two at a time, so `enter` paints at once.
-- Once a day the cache drops MRs the forge says are merged or closed, and any MR untouched for 30 days.
+- Once a day the cache drops MRs the forge says are merged or closed, any MR untouched for 30 days, and any file set aside as unreadable 30 days ago.
 
 ## Where to add things
 

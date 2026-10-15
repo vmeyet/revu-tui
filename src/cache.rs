@@ -1,6 +1,7 @@
 //! Cached answers under `~/.cache/revu/<host>/`, one JSON file per key. The files hold MR
 //! content, so directories are 0700 and files 0600; writes go through a temp name then a rename.
 use crate::forge::ProjectPath;
+use crate::log::OrWarn as _;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
@@ -11,6 +12,8 @@ use std::time::{Duration, SystemTime};
 
 const DIR_MODE: u32 = 0o700;
 const FILE_MODE: u32 = 0o600;
+/// Added to the name of a file `read` could not parse; nothing reads such a file back.
+const UNREADABLE: &str = ".unreadable";
 
 #[derive(Clone, Debug)]
 pub(crate) struct Cache {
@@ -93,7 +96,7 @@ impl Cache {
     pub(crate) fn keys_in(&self, dir: &str, prefix: &str) -> Vec<String> {
         let Ok(listed) = std::fs::read_dir(self.dir.join(dir)) else { return vec![] };
         let names = listed.filter_map(|entry| entry.ok()?.file_name().into_string().ok());
-        names.filter(|name| name.starts_with(prefix)).map(|name| format!("{dir}/{name}")).collect()
+        names.filter(|name| name.starts_with(prefix) && !name.ends_with(UNREADABLE)).map(|name| format!("{dir}/{name}")).collect()
     }
 
     /// Every MR this cache holds a folder for, with when anything in it was last written.
@@ -122,11 +125,23 @@ impl Cache {
         }
     }
 
-    /// A missing or unreadable file is a miss; an unreadable one is logged and removed so it cannot fail again.
+    /// A missing or unreadable file is a miss; an unreadable one is logged and set aside so it cannot
+    /// fail again, yet a revu that reads it can still get it back.
     pub(crate) fn read<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         let path = self.dir.join(key);
         let raw = std::fs::read(&path).ok()?;
-        serde_json::from_slice(&raw).inspect_err(|e| drop_unreadable(&path, e)).ok()
+        serde_json::from_slice(&raw).inspect_err(|e| set_aside(&path, e)).ok()
+    }
+
+    /// Drops the files set aside as unreadable once untouched for `idle`, in every folder below; safe to run twice.
+    pub(crate) fn forget_unreadable(&self, now: SystemTime, idle: Duration) {
+        let old = |path: &Path| {
+            let touched = std::fs::metadata(path).and_then(|m| m.modified());
+            touched.is_ok_and(|touched| now.duration_since(touched).is_ok_and(|age| age > idle))
+        };
+        for path in unreadable_files(&self.dir).into_iter().filter(|path| old(path)) {
+            remove_if_there(&path).or_warn("dropping an unreadable cache file");
+        }
     }
 
     pub(crate) fn write<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
@@ -203,13 +218,46 @@ fn write_private(root: &Path, path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// A file already gone is fine; one that stays is logged, since it will be read and removed again.
-fn drop_unreadable(path: &Path, error: &serde_json::Error) {
-    tracing::warn!("dropping unreadable cache file {}: {error}", path.display());
-    if let Err(e) = std::fs::remove_file(path)
+/// Moved to `<name>.unreadable`, replacing the one before; a file already gone is fine.
+fn set_aside(path: &Path, error: &serde_json::Error) {
+    let aside = aside_of(path);
+    tracing::warn!("setting aside unreadable cache file {} as {}: {error}", path.display(), aside.display());
+    if let Err(e) = move_aside(path, &aside)
         && e.kind() != std::io::ErrorKind::NotFound
     {
-        tracing::warn!("removing the broken cache file {} failed: {e}", path.display());
+        tracing::warn!("moving the unreadable cache file {} aside failed: {e}", path.display());
+    }
+}
+
+fn aside_of(path: &Path) -> PathBuf {
+    let mut aside = path.as_os_str().to_owned();
+    aside.push(UNREADABLE);
+    aside.into()
+}
+
+/// Stamped now once moved, so the prune keeps it as long from when it was set aside.
+fn move_aside(path: &Path, aside: &Path) -> std::io::Result<()> {
+    std::fs::rename(path, aside)?;
+    std::fs::File::options().write(true).open(aside)?.set_modified(SystemTime::now())
+}
+
+/// Every file under `dir` set aside as unreadable, at any depth.
+fn unreadable_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(listed) = std::fs::read_dir(dir) else { return vec![] };
+    listed
+        .filter_map(Result::ok)
+        .flat_map(|entry| match entry.file_type() {
+            Ok(kind) if kind.is_dir() => unreadable_files(&entry.path()),
+            Ok(_) if entry.file_name().to_string_lossy().ends_with(UNREADABLE) => vec![entry.path()],
+            _ => vec![],
+        })
+        .collect()
+}
+
+fn remove_if_there(path: &Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e).with_context(|| format!("removing {}", path.display())),
+        _ => Ok(()),
     }
 }
 
@@ -439,26 +487,51 @@ mod tests {
         assert_eq!(cache.read::<Vec<u32>>(&key), Some(vec![3]));
     }
 
-    #[test]
-    fn corrupt_file_is_a_miss_and_is_removed() {
-        let (dir, cache) = cache();
+    /// The queue file of the host cache in `dir`, written with `bytes`.
+    fn queue_file(dir: &tempfile::TempDir, bytes: &[u8]) -> PathBuf {
         let path = dir.path().join("gitlab.com").join(keys::queue(None));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, b"{nope").unwrap();
-        assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
-        assert!(!path.exists());
+        std::fs::write(&path, bytes).unwrap();
+        path
     }
 
     #[test]
-    fn a_corrupt_file_dropped_leaves_its_path_in_the_log() {
+    fn an_unreadable_file_is_a_miss_and_is_set_aside_replacing_the_one_before() {
+        let (dir, cache) = cache();
+        let path = queue_file(&dir, b"{old");
+        assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
+        queue_file(&dir, b"{new");
+        assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
+        assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None, "a second read finds nothing to move");
+        assert!(!path.exists());
+        assert_eq!(std::fs::read(aside_of(&path)).unwrap(), b"{new");
+    }
+
+    #[test]
+    fn an_unreadable_file_set_aside_leaves_its_path_in_the_log() {
         crate::log::capture::start();
         let (dir, cache) = cache();
-        let path = dir.path().join("gitlab.com").join(keys::queue(None));
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, b"{nope").unwrap();
+        let path = queue_file(&dir, b"{nope");
         assert_eq!(cache.read::<Vec<u32>>(&keys::queue(None)), None);
         let text = crate::log::capture::text();
-        assert!(text.contains("WARN") && text.contains(&format!("dropping unreadable cache file {}", path.display())), "{text}");
+        assert!(text.contains("WARN") && text.contains(&format!("setting aside unreadable cache file {}", path.display())), "{text}");
+    }
+
+    #[test]
+    fn files_set_aside_are_forgotten_once_old_at_any_depth_and_twice_without_harm() {
+        let (dir, cache) = cache();
+        queue_file(&dir, b"{nope");
+        cache.write(&keys::state(&key()), &"x").unwrap();
+        std::fs::write(dir.path().join("gitlab.com").join(keys::state(&key())), b"{nope").unwrap();
+        cache.read::<Vec<u32>>(&keys::queue(None));
+        cache.read::<String>(&keys::state(&key()));
+        let day = Duration::from_hours(24);
+        let now = SystemTime::now();
+        cache.forget_unreadable(now, day);
+        assert_eq!(unreadable_files(&cache.dir).len(), 2, "both were set aside just now");
+        cache.forget_unreadable(now + day * 2, day);
+        cache.forget_unreadable(now + day * 2, day);
+        assert_eq!(unreadable_files(&cache.dir), [] as [PathBuf; 0]);
     }
 
     #[cfg(unix)]
@@ -493,6 +566,7 @@ mod tests {
         cache.write("mr/a/1/ai/answer.1.json", &1).unwrap();
         cache.write("mr/a/1/ai/answer.2.json", &2).unwrap();
         cache.write("mr/a/1/ai/verdict.json", &3).unwrap();
+        cache.write("mr/a/1/ai/answer.3.json.unreadable", &4).unwrap();
         let mut found = cache.keys_in("mr/a/1/ai", "answer.");
         found.sort();
         assert_eq!(found, ["mr/a/1/ai/answer.1.json", "mr/a/1/ai/answer.2.json"]);

@@ -96,7 +96,7 @@ mod tests {
         assert_eq!(app.live_toast().unwrap().text, "draft not deleted: offline · it is back, d deletes it again");
         assert_eq!(publish_keys(&mut app), vec![], "the forge would publish what it still holds");
         assert!(app.live_toast().unwrap().text.contains("r reads the drafts again"));
-        let held = app.open.as_ref().unwrap().review.drafts.clone();
+        let held = app.open.as_ref().unwrap().review.drafts.to_vec();
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review().with_drafts(held)), cached: None });
         assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), kind: ReviewKind::Comment, count: 1 }]);
     }
@@ -107,9 +107,9 @@ mod tests {
         press(&mut app, "l");
         let delete = press(&mut app, "d");
         app.apply(deleted(&delete));
-        let held = app.open.as_ref().unwrap().review.drafts.clone();
+        let held = app.open.as_ref().unwrap().review.drafts.to_vec();
         app.apply(Incoming::Threads { key: mr_key(), mr: Box::new(mr()), discussions: discussions(), drafts: held.clone() });
-        assert_eq!(app.open.as_ref().unwrap().review.drafts, held, "the draft the forge still holds stays");
+        assert_eq!(*app.open.as_ref().unwrap().review.drafts, *held, "the draft the forge still holds stays");
         assert_eq!(publish_keys(&mut app), vec![Action::Publish { key: mr_key(), kind: ReviewKind::Comment, count: 1 }]);
     }
 

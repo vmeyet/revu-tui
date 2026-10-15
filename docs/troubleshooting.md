@@ -37,7 +37,7 @@ Start revu with `REVU_LOG=info` to also log every request and the tokens each Cl
 
 A request line holds the method, the host, the path, the status and the time it took.
 It never holds your token, a header or the query of a link.
-Past 2 MB the log moves to `revu.log.1` when revu starts, so the two files stay small.
+Past 2 MB the log moves to `revu.log.1`, even while revu runs, so the two files stay small.
 
 ## See also
 

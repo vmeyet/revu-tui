@@ -159,7 +159,7 @@ impl Open {
 
     /// The drafts `change` makes of the current ones, laid out again.
     pub(super) fn with_drafts_changed(self, change: impl FnOnce(Vec<Draft>) -> Vec<Draft>) -> Self {
-        self.relaid(|review| Review { drafts: change(review.drafts), ..review })
+        self.relaid(|review| Review { drafts: change(review.drafts.to_vec()).into(), ..review })
     }
 
     pub(super) fn with_draft_replaced(self, index: usize, draft: Draft) -> Self {

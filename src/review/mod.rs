@@ -49,7 +49,8 @@ pub(crate) struct Review {
     pub(crate) threads: Arc<[Thread]>,
     /// The files that open folded (configured globs, too large, binary): they only count once viewed.
     pub(crate) auto_folded: Arc<BTreeSet<String>>,
-    pub(crate) drafts: Vec<Draft>,
+    /// Replaced whole on every change, so a copy compared by identity tells whether they changed.
+    pub(crate) drafts: Arc<[Draft]>,
     pub(crate) viewed: BTreeSet<String>,
     pub(crate) fold: FoldState,
     /// Which changed pairs read as one row.
@@ -90,7 +91,7 @@ impl Review {
             files: files.into(),
             threads: threads.into(),
             auto_folded: Arc::new(fold.files.keys().cloned().collect()),
-            drafts: vec![],
+            drafts: Arc::from([]),
             viewed: BTreeSet::new(),
             fold,
             inline: InlineRule::default(),
@@ -173,7 +174,7 @@ impl Review {
     }
 
     pub(crate) fn with_drafts(self, drafts: Vec<Draft>) -> Self {
-        Self { drafts, ..self }
+        Self { drafts: drafts.into(), ..self }
     }
 
     /// The colours already highlighted in `old` for every file that did not change, so a refresh highlights only what moved.

@@ -30,7 +30,7 @@ impl<T: ?Sized> PartialEq for ByIdentity<T> {
 pub(crate) struct ReviewInputs {
     threads: ByIdentity<[Thread]>,
     files: ByIdentity<[File]>,
-    drafts: Vec<Draft>,
+    drafts: ByIdentity<[Draft]>,
 }
 
 impl ReviewInputs {
@@ -38,7 +38,7 @@ impl ReviewInputs {
         Self {
             threads: ByIdentity::new(&open.review.threads),
             files: ByIdentity::new(&open.review.files),
-            drafts: open.review.drafts.clone(),
+            drafts: ByIdentity::new(&open.review.drafts),
         }
     }
 }

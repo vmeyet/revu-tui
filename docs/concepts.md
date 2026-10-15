@@ -112,6 +112,7 @@ flowchart LR
 
 The cache keeps each MR's diff, threads and Claude's answers.
 Once a day revu drops what it keeps for merged or closed MRs, and for MRs you have not opened in 30 days.
+A cache file revu cannot read moves aside to `<file>.unreadable`; revu drops it after 30 days.
 
 ## See also
 

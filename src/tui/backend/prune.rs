@@ -1,4 +1,5 @@
-//! Once a day, the cache drops what it keeps for finished or long untouched MRs.
+//! Once a day, the cache drops what it keeps for finished or long untouched MRs, and the files it
+//! set aside as unreadable long ago.
 use super::{Homes, warn_stopped};
 use crate::blocking;
 use crate::cache::{Cache, keys};
@@ -10,7 +11,8 @@ use std::time::Duration;
 
 /// How often the cache drops what it keeps for finished MRs.
 const PRUNE_EVERY: Duration = Duration::from_hours(24);
-/// An MR nobody opened for this long is dropped even when its forge could not say it is finished.
+/// An MR nobody opened for this long is dropped even when its forge could not say it is finished;
+/// a file set aside as unreadable is kept as long.
 const KEEP_UNTOUCHED: Duration = Duration::from_hours(30 * 24);
 
 impl Homes {
@@ -25,6 +27,11 @@ impl Homes {
         for (forge, cache) in homes {
             prune(forge, cache).await;
         }
+        let forget_unreadable = || {
+            Cache::shared().forget_unreadable(std::time::SystemTime::now(), KEEP_UNTOUCHED);
+            Ok(())
+        };
+        blocking::run(forget_unreadable).await.or_warn("dropping the unreadable cache files");
         blocking::run(|| Cache::shared().write_entry(&keys::pruned(), &())).await.or_warn("noting the prune");
     }
 }
