@@ -1,5 +1,5 @@
 ---
-source: src/tui/thread_view.rs
+source: src/tui/thread_view/body.rs
 expression: "runs.join(\"\\n\")"
 ---
 Reset/Reset "Shorter:                                "

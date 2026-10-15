@@ -499,7 +499,9 @@ mod tests {
         let sources = [
             ("ui.rs", include_str!("ui.rs")),
             ("diff_view.rs", include_str!("diff_view.rs")),
-            ("thread_view.rs", include_str!("thread_view.rs")),
+            ("thread_view/mod.rs", include_str!("thread_view/mod.rs")),
+            ("thread_view/body.rs", include_str!("thread_view/body.rs")),
+            ("thread_view/conversation.rs", include_str!("thread_view/conversation.rs")),
             ("answer_view.rs", include_str!("answer_view.rs")),
             ("publish_view.rs", include_str!("publish_view.rs")),
             ("brief_view.rs", include_str!("brief_view.rs")),
