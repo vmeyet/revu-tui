@@ -50,7 +50,7 @@ impl Draft {
     }
 
     /// One the forge already holds.
-    pub fn held(draft: &forge::Draft) -> Self {
+    pub fn from_held(draft: &forge::Draft) -> Self {
         Self {
             id: Some(draft.id),
             local_id: None,
@@ -134,7 +134,7 @@ mod tests {
     }
 
     fn held(id: u64, body: &str, position: Option<Position>, reply_to: Option<&str>, resolve: bool) -> Draft {
-        Draft::held(&forge::Draft { id, body: body.into(), position, reply_to: reply_to.map(ThreadId::from), resolve })
+        Draft::from_held(&forge::Draft { id, body: body.into(), position, reply_to: reply_to.map(ThreadId::from), resolve })
     }
 
     #[test]

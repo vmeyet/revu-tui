@@ -25,7 +25,7 @@ pub(super) fn backend_on_nothing() -> Backend {
         cache: Cache::in_dir(std::path::Path::new("/nonexistent")),
         fold_globs: vec![],
         watch_labels: vec![],
-        rules: crate::forge::rules::Rules::off(),
+        rules: crate::forge::rules::Rules::disabled(),
         ready_command: None,
         inline: InlineRule::default(),
         open: crate::config::Open::default(),

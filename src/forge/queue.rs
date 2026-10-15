@@ -255,7 +255,7 @@ impl Queue {
     /// The sections as the forge sorted them, before any "needs me" rule.
     #[cfg(test)]
     pub fn sections(&self, watch_labels: &[String]) -> Sections {
-        self.sections_with(watch_labels, &Rules::off(), Utc::now())
+        self.sections_with(watch_labels, &Rules::disabled(), Utc::now())
     }
 
     /// The sections, then the "needs me" rules: what does not need me leaves To review, Watching

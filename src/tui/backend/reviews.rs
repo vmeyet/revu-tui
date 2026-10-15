@@ -83,7 +83,7 @@ impl Backend {
         self.run_blocking(move |b| {
             b.keep_threads(&key, &mr, &discussions, &drafts);
             b.mark_opened(&key);
-            let drafts = drafts.iter().map(Draft::held).collect();
+            let drafts = drafts.iter().map(Draft::from_held).collect();
             Incoming::Threads { key, mr: Box::new(mr), discussions, drafts }
         })
         .await
@@ -181,7 +181,7 @@ impl Backend {
             .with_viewed(viewed)
             .with_inline(self.inline)
             .with_side_by_side(state.side_by_side)
-            .with_drafts(drafts.iter().map(Draft::held).collect())
+            .with_drafts(drafts.iter().map(Draft::from_held).collect())
     }
 }
 

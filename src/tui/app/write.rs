@@ -727,7 +727,7 @@ mod tests {
         press(&mut app, "Pe");
         let nit = app.open.as_ref().unwrap().review.drafts[0].clone();
         let held = |id: u64, body: &str, position| {
-            crate::review::Draft::held(&crate::forge::Draft { id, body: body.into(), position, reply_to: None, resolve: false })
+            crate::review::Draft::from_held(&crate::forge::Draft { id, body: body.into(), position, reply_to: None, resolve: false })
         };
         let refreshed = review().with_drafts(vec![held(3, "from the web", None), held(9, "nit", nit.position.clone())]);
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(refreshed), cached: None });

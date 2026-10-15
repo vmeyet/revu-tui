@@ -11,7 +11,7 @@ impl Backend {
     pub(in crate::tui) async fn save_draft(&self, key: MrKey, draft: Box<Draft>) -> Result<Incoming> {
         let _lane = self.draft_lanes.enter(&key).await;
         let held = self.forge_of(&key).drafts(&key).await?;
-        let saved = match held.into_iter().find(|note| draft.same_as(&Draft::held(note))) {
+        let saved = match held.into_iter().find(|note| draft.same_as(&Draft::from_held(note))) {
             Some(note) => note,
             None => self.forge_of(&key).create_draft(&key, &draft.payload()).await?,
         };

@@ -35,7 +35,7 @@ impl Default for Rules {
 impl Rules {
     /// No rule at all: the sections as the forge answered them.
     #[cfg(test)]
-    pub fn off() -> Self {
+    pub fn disabled() -> Self {
         Self { enabled: false, ..Self::default() }
     }
 
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn switched_off_nothing_moves() {
         let draft = QueueMr { draft: true, ..mr() };
-        assert_eq!(judge(&draft, "me", now(), &Rules::off()), None);
+        assert_eq!(judge(&draft, "me", now(), &Rules::disabled()), None);
     }
 
     #[test]
