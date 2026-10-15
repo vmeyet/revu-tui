@@ -1,0 +1,83 @@
+[
+  {
+    "id": "6a9c1750b37d513a43987b574953fceb50b03ce7",
+    "notes": [
+      {
+        "id": 101,
+        "body": "nit: rename",
+        "author": {
+          "id": 3,
+          "username": "lea",
+          "name": "Lea"
+        },
+        "created_at": "2026-03-02T10:00:00Z",
+        "updated_at": "2026-03-02T10:00:00Z",
+        "system": false,
+        "resolvable": true,
+        "resolved": false,
+        "position": {
+          "refs": {
+            "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "start": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "old_path": "src/cart.rs",
+          "new_path": "src/cart.rs",
+          "line": {
+            "old": null,
+            "new": 14
+          },
+          "start": {
+            "old": 12,
+            "new": 12
+          }
+        },
+        "suggestions": [
+          {
+            "id": 9,
+            "applied": false,
+            "appliable": true
+          }
+        ],
+        "reactions": [
+          {
+            "emoji": "ThumbsUp",
+            "count": 1,
+            "mine": true
+          }
+        ],
+        "node": "gid://gitlab/DiffNote/101"
+      },
+      {
+        "id": 102,
+        "body": "done",
+        "author": {
+          "id": 3,
+          "username": "lea",
+          "name": "Lea"
+        },
+        "created_at": "2026-03-02T10:00:00Z",
+        "updated_at": "2026-03-02T10:00:00Z",
+        "system": false,
+        "resolvable": true,
+        "resolved": false,
+        "position": null,
+        "suggestions": [
+          {
+            "id": 9,
+            "applied": false,
+            "appliable": true
+          }
+        ],
+        "reactions": [
+          {
+            "emoji": "ThumbsUp",
+            "count": 1,
+            "mine": true
+          }
+        ],
+        "node": "gid://gitlab/DiffNote/102"
+      }
+    ]
+  }
+]

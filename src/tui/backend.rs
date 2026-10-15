@@ -818,6 +818,9 @@ fn env(name: &str) -> Option<String> {
 }
 
 #[cfg(test)]
+mod cache_shapes;
+
+#[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;

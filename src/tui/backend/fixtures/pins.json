@@ -1,0 +1,11 @@
+[
+  {
+    "project": "acme/widgets",
+    "number": 42
+  },
+  {
+    "host": "github.com",
+    "project": "acme/gadgets",
+    "number": 7
+  }
+]

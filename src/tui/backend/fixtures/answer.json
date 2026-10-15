@@ -1,0 +1,27 @@
+{
+  "text": "It charges the card twice on retry.",
+  "model": "claude-opus-5",
+  "usage": {
+    "input": 1200,
+    "output": 80,
+    "cache_read": 0,
+    "cache_write": 1100
+  },
+  "label": "summary",
+  "asked_at": "2026-03-02T10:00:00Z",
+  "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "request": {
+    "system": [
+      {
+        "text": "You review acme/widgets!42.",
+        "cached": true
+      }
+    ],
+    "turns": [
+      {
+        "role": "user",
+        "text": "What does it do?"
+      }
+    ]
+  }
+}

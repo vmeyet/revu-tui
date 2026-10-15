@@ -1,0 +1,85 @@
+{
+  "value": {
+    "me": "nina",
+    "project": null,
+    "review_requested": [
+      {
+        "host": "github.com",
+        "number": 7,
+        "project": "acme/gadgets",
+        "title": "fix: round prices",
+        "description": "",
+        "draft": false,
+        "web_url": "https://github.com/acme/gadgets/pull/7",
+        "updated_at": "2026-03-02T10:00:00Z",
+        "created_at": "2026-03-01T09:00:00Z",
+        "source_branch": "fix/round",
+        "target_branch": "main",
+        "conflicts": false,
+        "author": "lea",
+        "author_name": "Lea",
+        "approved": false,
+        "approved_by": [],
+        "approvals_left": 1,
+        "reviewers": [
+          {
+            "username": "nina",
+            "state": "UNREVIEWED"
+          }
+        ],
+        "pipeline": "RUNNING",
+        "additions": 4,
+        "deletions": 2,
+        "files": 1,
+        "unresolved": 0,
+        "labels": [],
+        "notes": 0,
+        "commenters": []
+      }
+    ],
+    "authored": [
+      {
+        "number": 42,
+        "project": "acme/widgets",
+        "title": "feat: charge cards",
+        "description": "Charges cards.",
+        "draft": false,
+        "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/42",
+        "updated_at": "2026-03-02T10:00:00Z",
+        "created_at": "2026-03-01T09:00:00Z",
+        "source_branch": "feat/checkout",
+        "target_branch": "main",
+        "conflicts": false,
+        "author": "nina",
+        "author_name": "Nina",
+        "approved": true,
+        "approved_by": [
+          "lea"
+        ],
+        "approvals_left": 0,
+        "reviewers": [
+          {
+            "username": "lea",
+            "state": "REVIEWED"
+          }
+        ],
+        "pipeline": "SUCCESS",
+        "additions": 120,
+        "deletions": 8,
+        "files": 3,
+        "unresolved": 1,
+        "labels": [
+          "backend"
+        ],
+        "notes": 2,
+        "commenters": [
+          "lea",
+          "nina"
+        ]
+      }
+    ],
+    "assigned": [],
+    "open": []
+  },
+  "fetched_at": "2026-03-02T10:00:00Z"
+}

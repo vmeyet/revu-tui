@@ -1,0 +1,59 @@
+{
+  "value": {
+    "project": "acme/widgets",
+    "number": 42,
+    "title": "feat: charge cards",
+    "description": "Charges cards.",
+    "state": "opened",
+    "draft": false,
+    "author": {
+      "id": 5,
+      "username": "nina",
+      "name": "Nina"
+    },
+    "source_branch": "feat/checkout",
+    "target_branch": "main",
+    "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/42",
+    "updated_at": "2026-03-02T10:00:00Z",
+    "refs": {
+      "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "start": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "pipeline": {
+      "status": "success",
+      "web_url": "https://gitlab.com/acme/widgets/-/pipelines/7"
+    },
+    "changes_count": "3",
+    "conflicts": false,
+    "reviewers": [
+      {
+        "id": 3,
+        "username": "lea",
+        "name": "Lea"
+      }
+    ],
+    "labels": [
+      "backend"
+    ],
+    "approvals": {
+      "approved": true,
+      "approvals_left": 0,
+      "user_has_approved": false,
+      "user_can_approve": true,
+      "approved_by": [
+        {
+          "id": 3,
+          "username": "lea",
+          "name": "Lea"
+        }
+      ]
+    },
+    "merge": {
+      "method": "Squash",
+      "remove_branch": true
+    },
+    "mine": true
+  },
+  "fetched_at": "2026-03-02T10:00:00Z"
+}

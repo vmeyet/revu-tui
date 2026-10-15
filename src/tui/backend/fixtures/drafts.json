@@ -1,0 +1,32 @@
+[
+  {
+    "id": 201,
+    "body": "why?",
+    "position": {
+      "refs": {
+        "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "start": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "old_path": "src/cart.rs",
+      "new_path": "src/cart.rs",
+      "line": {
+        "old": null,
+        "new": 14
+      },
+      "start": {
+        "old": 12,
+        "new": 12
+      }
+    },
+    "reply_to": null,
+    "resolve": false
+  },
+  {
+    "id": 202,
+    "body": "agreed",
+    "position": null,
+    "reply_to": "6a9c1750b37d513a43987b574953fceb50b03ce7",
+    "resolve": true
+  }
+]
