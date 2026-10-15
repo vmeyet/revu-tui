@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### Fixed
+
+- **Failures revu works around now show in the log.**
+  A cache write that failed, a host left out of the queue or an unreadable key leaves a warning.
+  Read `revu.log` in the cache folder when something looks off.
+
 ## 0.9.0 - 2026-10-15
 
 ### New

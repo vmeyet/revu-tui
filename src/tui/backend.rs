@@ -1,13 +1,14 @@
 //! The service behind the loop: the forge, the cache and the AI, answering actions off the event loop.
 use super::lanes::Lanes;
-use super::{app, blocking, images};
+use super::{app, images};
 use crate::ai::anthropic::{self, Ask, Claude, Outcome, Stop, Usage};
 use crate::ai::triage::{self, Verdict};
 use crate::ai::typesafe::{TypeSafe, Unavailable};
-use crate::cache::{Cache, Entry, keys};
+use crate::cache::{Cache, Entry, blocking, keys};
 use crate::diff::fold::FoldState;
 use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Queue, QueueMr, Sections, Sha};
+use crate::log::OrWarn as _;
 use crate::ready::Source as ReadySource;
 use crate::review::{Draft, Progress, Review};
 use anyhow::{Context as _, Result};
@@ -131,13 +132,14 @@ pub(super) async fn prune(forge: &Forge, cache: &Cache) {
         .map(|mr| (mr.project.clone(), mr.number))
         .collect();
     let cache = cache.clone();
-    let _ = blocking(move || {
+    blocking(move || {
         for (project, number) in &gone {
-            let _ = cache.forget_mr(project, *number);
+            cache.forget_mr(project, *number).or_warn("pruning the cache");
         }
         Ok(())
     })
-    .await;
+    .await
+    .or_warn("pruning the cache");
 }
 
 /// Counts an MR being opened for as long as it lives, so loading ahead steps aside.
@@ -161,7 +163,13 @@ impl Backend {
     /// building a review highlights every hunk.
     pub(super) async fn off<T: Send + 'static>(&self, work: impl FnOnce(&Backend) -> T + Send + 'static) -> Result<T> {
         let me = self.clone();
-        tokio::task::spawn_blocking(move || work(&me)).await.context("a background task stopped")
+        blocking(move || Ok(work(&me))).await
+    }
+
+    /// A cache write on the blocking pool whose failure only costs a later fetch: logged as `what`, never handed back.
+    async fn write_cache(&self, what: &str, work: impl FnOnce(&Backend) -> Result<()> + Send + 'static) {
+        let me = self.clone();
+        blocking(move || work(&me)).await.or_warn(what);
     }
 
     /// Claude's answer, piece by piece as it streams, or at once from the cache unless `fresh`.
@@ -217,7 +225,7 @@ impl Backend {
                         request: Some(request.clone()),
                     };
                     let wanted = key.clone();
-                    let _ = self.off(move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
+                    self.write_cache("caching Claude's answer", move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
                 }
                 send(part(Part::Done { outcome, cached_text: None }));
             }
@@ -236,7 +244,7 @@ impl Backend {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let verdict = triage::judge_mr(jev, mr, Utc::now()).await?;
             let (wanted, saved) = (key.clone(), verdict.clone());
-            let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::verdict(&wanted), &saved)).await;
+            self.write_cache("caching the verdict", move |b| b.cache_of(&wanted).write(&keys::verdict(&wanted), &saved)).await;
             verdict
         };
         Ok(Incoming::Triaged { key, verdict })
@@ -258,7 +266,7 @@ impl Backend {
             let jev = self.jev.as_ref().ok_or_else(|| Unavailable("switched off".into()))?;
             let reading = triage::judge_open(jev, waits, files).await?;
             let (wanted, at, saved) = (key.clone(), head.clone(), reading.clone());
-            let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::reading(&wanted, &at), &saved)).await;
+            self.write_cache("caching the reading", move |b| b.cache_of(&wanted).write(&keys::reading(&wanted, &at), &saved)).await;
             reading
         };
         Ok(Incoming::Read { key, head, reading })
@@ -279,7 +287,7 @@ impl Backend {
         let (queue, (others, silent), said) = tokio::join!(self.forge.queue(scope.as_deref()), others, self.ask_ready());
         let queue = queue?;
         let (wanted, saved) = (scope.clone(), queue.clone());
-        let _ = self.off(move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
+        self.write_cache("caching the queue", move |b| b.cache.write_entry(&keys::queue(wanted.as_deref()), &saved)).await;
         let (ready, failure) = match said {
             Ok(Some(output)) => (Some(self.fresh_ready(scope.as_deref(), output, &queue, &others).await), None),
             Ok(None) => (None, None),
@@ -362,7 +370,7 @@ impl Backend {
         let queues: Vec<&Queue> = std::iter::once(queue).chain(others).collect();
         let source = crate::ready::resolve(output, &self.forge, &self.others, scope, &queues).await;
         let (wanted, saved) = (scope.map(str::to_owned), source.clone());
-        let _ = self.off(move |b| b.cache.write(&keys::ready(wanted.as_deref()), &saved)).await;
+        self.write_cache("caching the ready command's answer", move |b| b.cache.write(&keys::ready(wanted.as_deref()), &saved)).await;
         source
     }
 
@@ -403,7 +411,7 @@ impl Backend {
         self.off(move |b| {
             let picture = images::decode(&bytes)?;
             if fresh {
-                let _ = b.cache_of(&owner).write_bytes(&name, &bytes);
+                b.cache_of(&owner).write_bytes(&name, &bytes).or_warn("caching a picture");
             }
             Some(picture)
         })
@@ -423,7 +431,7 @@ impl Backend {
         for (forge, cache) in homes {
             prune(forge, cache).await;
         }
-        let _ = blocking(|| Cache::shared().write_entry(&keys::pruned(), &())).await;
+        blocking(|| Cache::shared().write_entry(&keys::pruned(), &())).await.or_warn("noting the prune");
     }
 
     pub(super) fn forge_of(&self, key: &MrKey) -> &Forge {
@@ -477,7 +485,7 @@ impl Backend {
         if &mr.refs.head == head {
             let (wanted, kept) = (key.clone(), mr.clone());
             self.off(move |b| {
-                let _ = b.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept);
+                b.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept).or_warn("caching the MR");
                 b.mark_opened(&wanted);
             })
             .await?;
@@ -536,16 +544,16 @@ impl Backend {
 
     /// Writes what a fetch brought where opening reads it; a failed write only costs a later fetch.
     fn keep(&self, key: &MrKey, (mr, diffs, discussions, drafts): &Fetched) {
-        let _ = self.cache_of(key).write(&keys::diffs(key, &mr.refs.head), diffs);
+        self.cache_of(key).write(&keys::diffs(key, &mr.refs.head), diffs).or_warn("caching the diffs");
         self.keep_threads(key, mr, discussions, drafts);
     }
 
     /// Writes what changes at a head the cache already holds the diffs of.
     fn keep_threads(&self, key: &MrKey, mr: &Mr, discussions: &[Discussion], drafts: &[HeldDraft]) {
         let cache = self.cache_of(key);
-        let _ = cache.write_entry(&keys::mr(key), mr);
-        let _ = cache.write(&keys::discussions(key), discussions);
-        let _ = cache.write(&keys::drafts(key), drafts);
+        cache.write_entry(&keys::mr(key), mr).or_warn("caching the MR");
+        cache.write(&keys::discussions(key), discussions).or_warn("caching the threads");
+        cache.write(&keys::drafts(key), drafts).or_warn("caching the drafts");
     }
 
     /// Loads one MR into the cache ahead of time, quietly. It never marks the MR opened, so its
@@ -559,7 +567,7 @@ impl Backend {
         }
         if let Ok(fetched) = self.fetch(&ahead.key).await {
             let key = ahead.key;
-            let _ = self.off(move |b| b.keep(&key, &fetched)).await;
+            self.off(move |b| b.keep(&key, &fetched)).await.or_warn("loading ahead");
         }
     }
 
@@ -596,14 +604,14 @@ impl Backend {
         let _lane = self.draft_lanes.enter(&key).await;
         let approval = self.forge_of(&key).publish(&key, approve).await?;
         let wanted = key.clone();
-        let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())).await;
+        self.write_cache("caching the drafts", move |b| b.cache_of(&wanted).write(&keys::drafts(&wanted), &Vec::<HeldDraft>::new())).await;
         Ok(Incoming::Published { key, approval, count })
     }
 
     pub(super) async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
         let discussions = self.forge_of(&key).discussions(&key).await?;
         let (wanted, saved) = (key.clone(), discussions.clone());
-        let _ = self.off(move |b| b.cache_of(&wanted).write(&keys::discussions(&wanted), &saved)).await;
+        self.write_cache("caching the threads", move |b| b.cache_of(&wanted).write(&keys::discussions(&wanted), &saved)).await;
         Ok(Incoming::Discussions { key, discussions })
     }
 
@@ -695,7 +703,7 @@ impl Backend {
             text.len() / (1024 * 1024)
         );
         let (wanted, saved) = (key.clone(), text.clone());
-        let _ = self.off(move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
+        self.write_cache("caching the file", move |b| b.cache_of(&wanted).write(&cache_key, &saved)).await;
         Ok(text)
     }
 
@@ -755,7 +763,7 @@ impl Backend {
     fn mark_opened(&self, key: &MrKey) {
         let _saving = self.saved.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let state = MrState { opened_at: Some(Utc::now()), ..self.state(key) };
-        let _ = self.cache_of(key).write(&keys::state(key), &state);
+        self.cache_of(key).write(&keys::state(key), &state).or_warn("marking the MR opened");
     }
 
     /// Sends where the reader left `key` last time, when a place was saved.
@@ -856,6 +864,18 @@ mod tests {
         let backend = Backend { cache: Cache::in_dir(dir.path()), ..backend_on_nothing() };
         backend.cache.write(&keys::queue(None), &7_u32).unwrap();
         assert_eq!(backend.off(|b| b.cache.read::<u32>(&keys::queue(None))).await.unwrap(), Some(7));
+    }
+
+    #[tokio::test]
+    async fn a_cache_write_that_fails_is_logged_with_where_it_went() {
+        crate::log::capture::start();
+        let dir = tempfile::tempdir().unwrap();
+        let taken = dir.path().join("taken");
+        std::fs::write(&taken, "a file where the cache folder goes").unwrap();
+        let backend = Backend { cache: Cache::in_dir(&taken), ..backend_on_nothing() };
+        backend.write_cache("caching the queue", |b| b.cache.write(&keys::queue(None), &7_u32)).await;
+        let text = crate::log::capture::text();
+        assert!(text.contains("WARN") && text.contains("caching the queue failed: writing ") && text.contains("taken/"), "{text}");
     }
 
     use crate::diff::fold::Fold;
@@ -986,7 +1006,7 @@ mod tests {
             open: crate::config::Open::default(),
             checkout: None,
             jev: None,
-            claude: Some(Claude::with_base(&server.uri(), ai::Secret::new("sk-ant-test"), "claude-opus-5")),
+            claude: Some(Claude::with_base(&server.uri(), ai::Secret::new("sk-ant-test"), "claude-opus-5").unwrap()),
             agent: None,
             opening: std::sync::Arc::default(),
             saved: std::sync::Arc::default(),

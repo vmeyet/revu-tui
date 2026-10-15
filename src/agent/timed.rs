@@ -22,17 +22,22 @@ pub(super) fn output_within(mut command: Command, limit: Duration) -> std::io::R
         std::thread::sleep(CHECK_EVERY);
     }
     let status = child.wait()?;
-    Ok(Some(Output { status, stdout: printed.join().unwrap_or_default(), stderr: complained.join().unwrap_or_default() }))
+    Ok(Some(Output { status, stdout: drained(printed)?, stderr: drained(complained)? }))
 }
 
-fn drain(pipe: Option<impl Read + Send + 'static>) -> JoinHandle<Vec<u8>> {
+fn drain(pipe: Option<impl Read + Send + 'static>) -> JoinHandle<std::io::Result<Vec<u8>>> {
     std::thread::spawn(move || {
         let mut bytes = vec![];
         if let Some(mut pipe) = pipe {
-            let _partial = pipe.read_to_end(&mut bytes);
+            pipe.read_to_end(&mut bytes)?;
         }
-        bytes
+        Ok(bytes)
     })
+}
+
+/// What a drain read; one that failed or panicked is an error, never an empty output passed off as the program's.
+fn drained(drain: JoinHandle<std::io::Result<Vec<u8>>>) -> std::io::Result<Vec<u8>> {
+    drain.join().map_err(|_| std::io::Error::other("reading the program's output panicked"))?
 }
 
 /// The whole process group, since a stuck `git fetch` is often the `ssh` it started.
@@ -60,6 +65,20 @@ mod tests {
         let output = output_within(sh("echo said; echo complained >&2; exit 3"), Duration::from_secs(5)).unwrap().unwrap();
         assert_eq!((output.stdout.as_slice(), output.stderr.as_slice()), (&b"said\n"[..], &b"complained\n"[..]));
         assert_eq!(output.status.code(), Some(3));
+    }
+
+    #[test]
+    fn a_drain_that_fails_or_panics_is_an_error() {
+        struct Broken;
+        impl Read for Broken {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("pipe broke"))
+            }
+        }
+        assert_eq!(drained(drain(Some(Broken))).unwrap_err().to_string(), "pipe broke");
+        let panicked = std::thread::spawn(|| -> std::io::Result<Vec<u8>> { panic!("reader died") });
+        assert_eq!(drained(panicked).unwrap_err().to_string(), "reading the program's output panicked");
+        assert_eq!(drained(drain(None::<&[u8]>)).unwrap(), b"");
     }
 
     #[test]

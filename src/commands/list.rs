@@ -2,6 +2,7 @@ use crate::cache::keys;
 use crate::cli::ListArgs;
 use crate::ctx::{Ctx, Home};
 use crate::forge::{Hosts, Queue, QueueMr, Sections};
+use crate::log::OrWarn as _;
 use crate::ready;
 use crate::render::{self, Cell, Style, Theme, cell, right};
 use anyhow::{Context, Result};
@@ -44,7 +45,7 @@ async fn ready(ctx: &Ctx, others: &[Home], queues: &[&Queue], cached: bool) -> O
     match ready::output(command).await {
         Ok(output) => {
             let source = ready::resolve(output, &ctx.forge, others, ctx.project.as_deref(), queues).await;
-            let _ = ctx.cache.write(&key, &source);
+            ctx.cache.write(&key, &source).or_warn("caching the ready command's answer");
             Some(source)
         }
         Err(e) => {

@@ -58,7 +58,7 @@ fn claude(ai: &crate::config::Ai) -> Result<anthropic::Claude> {
     }
     let (key, _) = ai::key(Provider::Anthropic, &KeyEnv::from_process(), &SecurityCli::new(auth::SERVICE))?
         .context("no Anthropic key: run `revu ai login anthropic` or set ANTHROPIC_API_KEY")?;
-    Ok(anthropic::Claude::new(key, ai.anthropic.model()))
+    anthropic::Claude::new(key, ai.anthropic.model())
 }
 
 /// The scope and the question the arguments name: a summary or an explanation when no question is typed.

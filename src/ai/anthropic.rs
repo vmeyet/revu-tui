@@ -1,6 +1,7 @@
 //! Claude over raw HTTPS: one streamed Messages API call, with prompt caching on the stable blocks
 //! and server-side fallbacks, so a refused question is answered by another model when one can.
 use super::Secret;
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fmt;
@@ -103,7 +104,7 @@ impl fmt::Debug for Claude {
 }
 
 impl Claude {
-    pub fn new(key: Secret, model: &str) -> Self {
+    pub fn new(key: Secret, model: &str) -> anyhow::Result<Self> {
         Self::with_base(API_URL, key, model)
     }
 
@@ -112,9 +113,9 @@ impl Claude {
     }
 
     /// Pointed at another server: a mock in tests.
-    pub(crate) fn with_base(base: &str, key: Secret, model: &str) -> Self {
-        let http = crate::http::client().read_timeout(STREAM_IDLE_TIMEOUT).build().unwrap_or_default();
-        Self { http, base: base.trim_end_matches('/').to_owned(), key, model: model.to_owned() }
+    pub(crate) fn with_base(base: &str, key: Secret, model: &str) -> anyhow::Result<Self> {
+        let http = crate::http::client().read_timeout(STREAM_IDLE_TIMEOUT).build().context("building the Claude client")?;
+        Ok(Self { http, base: base.trim_end_matches('/').to_owned(), key, model: model.to_owned() })
     }
 
     /// Streams the answer to `on`, text as it comes, and says how it ended.
@@ -319,7 +320,7 @@ mod tests {
     }
 
     fn claude(server: &MockServer) -> Claude {
-        Claude::with_base(&server.uri(), Secret::new("sk-ant-test"), "claude-opus-5")
+        Claude::with_base(&server.uri(), Secret::new("sk-ant-test"), "claude-opus-5").unwrap()
     }
 
     #[test]

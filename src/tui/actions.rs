@@ -1,9 +1,9 @@
 //! The action runner: each action the app asks for runs in its own task and answers through `Incoming`.
 use super::app::{self, Action, Failure, Incoming, Part, Post, QueueView};
 use super::backend::{Backend, MrState, Opening};
-use super::blocking;
-use crate::cache::{Cache, keys};
+use crate::cache::{Cache, blocking, keys};
 use crate::forge::{Forge, MrKey};
+use crate::log::OrWarn as _;
 use anyhow::{Context as _, Result};
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
@@ -117,9 +117,9 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 send(crate::share::send(&target, &message).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done)));
             }
             Action::RememberShare { host, target } => {
-                if let Err(e) = blocking(move || crate::share::remember(&Cache::shared(), &host, target.as_deref())).await {
-                    tracing::warn!("remembering the share target failed: {e:#}");
-                }
+                blocking(move || crate::share::remember(&Cache::shared(), &host, target.as_deref()))
+                    .await
+                    .or_warn("remembering the share target");
             }
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
             Action::SaveDraft { key, draft } => send(match backend.save_draft(key.clone(), draft).await {
@@ -157,9 +157,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
             }
             Action::CountReaction { host, emoji } => {
-                if let Err(e) = blocking(move || crate::reactions::record(&Cache::shared(), &host, emoji)).await {
-                    tracing::warn!("counting the reaction failed: {e:#}");
-                }
+                blocking(move || crate::reactions::record(&Cache::shared(), &host, emoji)).await.or_warn("counting the reaction");
             }
             Action::Merge { key, head, plan } => {
                 let outcome = backend.forge_of(&key).merge(&key, &head, plan).await;

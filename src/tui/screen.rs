@@ -1,6 +1,7 @@
 //! The terminal as revu holds it: raw mode on the alternate screen, the mouse wheel and drags, focus changes, and ⌘
 //! reported where the terminal speaks the kitty keyboard protocol (Ghostty, Kitty, `WezTerm`,
 //! iTerm2 with the option on), so ⌘K reaches the palette like ctrl-k does.
+use crate::log::OrWarn as _;
 use crossterm::event::{
     DisableFocusChange, EnableFocusChange, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
@@ -51,13 +52,12 @@ impl Screen {
         give_extras_back(self.modifiers);
         ratatui::restore();
         let outcome = run();
-        let _ = enable_raw_mode();
-        let _ = crossterm::execute!(std::io::stdout(), EnterAlternateScreen);
+        enable_raw_mode().and_then(|()| crossterm::execute!(std::io::stdout(), EnterAlternateScreen)).or_warn("taking the terminal back");
         if self.modifiers {
             report_modifiers();
         }
         take_mouse_and_focus();
-        let _ = terminal.clear();
+        terminal.clear().or_warn("clearing the terminal");
         outcome
     }
 }

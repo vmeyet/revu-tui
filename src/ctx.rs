@@ -3,6 +3,7 @@ use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
 use crate::forge::{Forge, Kind, Mr, MrKey};
+use crate::log::OrWarn as _;
 use anyhow::Result;
 use serde::Serialize;
 
@@ -50,11 +51,17 @@ pub(crate) struct Home {
 }
 
 impl Home {
+    fn open(env: &Env, store: &dyn SecretStore, config: &Config, host: &str) -> Result<Self> {
+        let (credentials, _) = auth::resolve(env, store, config, Some(host))?;
+        let forge = Forge::connect(Kind::for_host(host, config), &credentials)?;
+        Ok(Self { host: host.to_owned(), forge, cache: Cache::for_host(host)? })
+    }
+
     /// This host's queue across every project, each row tagged with the host.
     pub async fn queue(&self) -> Result<crate::forge::Queue> {
         let queue = self.forge.queue(None).await?.on_host(&self.host);
         let (cache, saved) = (self.cache.clone(), queue.clone());
-        let _ = tokio::task::spawn_blocking(move || cache.write_entry(&crate::cache::keys::queue(None), &saved)).await;
+        crate::cache::blocking(move || cache.write_entry(&crate::cache::keys::queue(None), &saved)).await.or_warn("caching the queue");
         Ok(queue)
     }
 
@@ -93,9 +100,8 @@ pub(crate) fn others(env: &Env, store: &dyn SecretStore, config: &Config, curren
     hosts
         .into_iter()
         .filter_map(|host| {
-            let (credentials, _) = auth::resolve(env, store, config, Some(host)).ok()?;
-            let forge = Forge::connect(Kind::for_host(host, config), &credentials).ok()?;
-            Some(Home { host: host.clone(), forge, cache: Cache::for_host(host).ok()? })
+            let home = Home::open(env, store, config, host);
+            home.inspect_err(|e| tracing::warn!("leaving out {host}: {e:#}")).ok()
         })
         .collect()
 }

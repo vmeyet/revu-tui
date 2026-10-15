@@ -1,4 +1,5 @@
 //! The clipboard of the terminal the reader looks at, which over ssh or mosh is not the machine revu runs on.
+use crate::log::OrWarn as _;
 use base64::Engine as _;
 use std::io::Write as _;
 
@@ -12,8 +13,8 @@ pub fn escape(text: &str, in_tmux: bool) -> String {
 /// Written from the loop, between two frames, so the escape never lands inside one.
 pub fn print(text: &str) {
     let mut out = std::io::stdout();
-    let _ = out.write_all(escape(text, std::env::var_os("TMUX").is_some()).as_bytes());
-    let _ = out.flush();
+    let escaped = escape(text, std::env::var_os("TMUX").is_some());
+    out.write_all(escaped.as_bytes()).and_then(|()| out.flush()).or_warn("copying to the clipboard");
 }
 
 #[cfg(test)]

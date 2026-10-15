@@ -36,6 +36,20 @@ fn level(variable: Option<&str>) -> LevelFilter {
     variable.and_then(|v| v.trim().parse().ok()).unwrap_or(DEFAULT_LEVEL)
 }
 
+/// Work the reader's flow goes on without, such as a cache write: a failure is left in the log, not handed back.
+pub(crate) trait OrWarn {
+    /// `what` names the work in the log line, before the error.
+    fn or_warn(self, what: &str);
+}
+
+impl<T, E: Into<anyhow::Error>> OrWarn for Result<T, E> {
+    fn or_warn(self, what: &str) {
+        if let Err(e) = self {
+            tracing::warn!("{what} failed: {:#}", e.into());
+        }
+    }
+}
+
 /// Sends `request` like `RequestBuilder::send`, and logs its line once it is answered or not.
 pub(crate) async fn send(request: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Response> {
     let (client, request) = request.build_split();
@@ -132,5 +146,15 @@ mod tests {
         assert!(text.contains("INFO") && text.contains("GET gitlab.com/api/v4/user 200 "), "{text}");
         assert!(text.contains("WARN") && text.contains("POST api.anthropic.com/v1/messages no answer "), "{text}");
         assert!(!text.contains("glpat") && !text.contains('?'), "{text}");
+    }
+
+    #[test]
+    fn a_failed_best_effort_step_leaves_a_warning_and_a_done_one_nothing() {
+        capture::start();
+        Ok::<(), anyhow::Error>(()).or_warn("caching the queue");
+        assert_eq!(capture::text(), "");
+        Err::<(), _>(anyhow::anyhow!("disk full").context("writing queue.json")).or_warn("caching the queue");
+        let text = capture::text();
+        assert!(text.contains("WARN") && text.contains("caching the queue failed: writing queue.json: disk full"), "{text}");
     }
 }

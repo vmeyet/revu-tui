@@ -43,6 +43,11 @@ fn newest_write(path: &Path) -> Option<SystemTime> {
         .max()
 }
 
+/// Runs `work` on tokio's blocking pool: cache I/O and other blocking work stay off the threads that drive the network.
+pub(crate) async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+    tokio::task::spawn_blocking(work).await.context("a background task stopped")?
+}
+
 /// A cached value and when it was fetched, so a stale view can say how stale.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry<T> {
@@ -127,7 +132,7 @@ impl Cache {
         let raw = std::fs::read(&path).ok()?;
         let parsed = serde_json::from_slice(&raw).ok();
         if parsed.is_none() {
-            let _ = std::fs::remove_file(&path);
+            remove_broken(&path);
         }
         parsed
     }
@@ -161,13 +166,7 @@ impl Cache {
 
     pub fn write_bytes(&self, key: &str, bytes: &[u8]) -> Result<()> {
         let path = self.dir.join(key);
-        let parent = path.parent().context("cache key has no parent")?;
-        create_private_dirs(&self.dir, parent)?;
-        let temp = tempfile::Builder::new().prefix(".tmp-").tempfile_in(parent).context("creating a temp file")?;
-        std::fs::set_permissions(temp.path(), private(FILE_MODE))?;
-        std::fs::write(temp.path(), bytes)?;
-        temp.persist(&path).with_context(|| format!("writing {}", path.display()))?;
-        Ok(())
+        write_private(&self.dir, &path, bytes).with_context(|| format!("writing {}", path.display()))
     }
 
     pub fn read_entry<T: DeserializeOwned>(&self, key: &str) -> Option<Entry<T>> {
@@ -198,6 +197,26 @@ impl Cache {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e).with_context(|| format!("removing {}", self.dir.display())),
         }
+    }
+}
+
+/// Through a private temp file then a rename, so a reader never sees half a file.
+fn write_private(root: &Path, path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path.parent().context("cache key has no parent")?;
+    create_private_dirs(root, parent)?;
+    let temp = tempfile::Builder::new().prefix(".tmp-").tempfile_in(parent).context("creating a temp file")?;
+    std::fs::set_permissions(temp.path(), private(FILE_MODE))?;
+    std::fs::write(temp.path(), bytes)?;
+    temp.persist(path)?;
+    Ok(())
+}
+
+/// A file already gone is fine; one that stays is logged, since it will be read and removed again.
+fn remove_broken(path: &Path) {
+    if let Err(e) = std::fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!("removing the broken cache file {} failed: {e}", path.display());
     }
 }
 
