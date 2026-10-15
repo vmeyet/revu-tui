@@ -229,6 +229,27 @@ mod tests {
         app.react.take().unwrap().row
     }
 
+    /// The diff's cursor moved onto the line whose thread has the note, the pane closed.
+    fn move_to_the_line(app: &mut App) {
+        app.close_pane();
+        let mut open = app.open.clone().unwrap();
+        let place = Place::Line { file: 0, new: Some(13), old: None };
+        open.selected = open.rows.iter().position(|r| open.review.place_of(r).as_ref() == Some(&place)).unwrap();
+        app.open = Some(open);
+    }
+
+    fn on_the_line() -> App {
+        let mut app = with_reactions();
+        move_to_the_line(&mut app);
+        app
+    }
+
+    fn in_zen() -> App {
+        let mut app = on_the_line();
+        app.zen = true;
+        app
+    }
+
     #[test]
     fn with_no_history_the_row_is_the_eight_in_their_order() {
         assert_eq!(row(&[]), Emoji::ALL);
@@ -292,11 +313,7 @@ mod tests {
         let mut app = with_reactions();
         app.reactions = given(&[Emoji::Rocket]);
         let in_pane = row_on_plus(&mut app);
-        app.close_pane();
-        let mut open = app.open.clone().unwrap();
-        let place = Place::Line { file: 0, new: Some(13), old: None };
-        open.selected = open.rows.iter().position(|r| open.review.place_of(r).as_ref() == Some(&place)).unwrap();
-        app.open = Some(open);
+        move_to_the_line(&mut app);
         assert_eq!(row_on_plus(&mut app), in_pane);
         assert_eq!(in_pane[0], Emoji::Rocket);
     }
@@ -340,13 +357,7 @@ mod tests {
 
     #[test]
     fn plus_on_a_diff_line_with_a_thread_reacts_there_and_elsewhere_does_nothing() {
-        let mut app = with_reactions();
-        app.close_pane();
-        app.zen = true;
-        let mut open = app.open.clone().unwrap();
-        let place = Place::Line { file: 0, new: Some(13), old: None };
-        open.selected = open.rows.iter().position(|r| open.review.place_of(r).as_ref() == Some(&place)).unwrap();
-        app.open = Some(open);
+        let mut app = in_zen();
         assert_eq!(press(&mut app, "+"), vec![]);
         assert_eq!(app.react.as_ref().map(|p| (p.thread.as_str(), p.note)), Some(("5ugg", 0)), "the line's first note");
         assert_eq!(app.focus, Focus::Review, "the diff keeps the focus");
@@ -415,6 +426,101 @@ mod tests {
         });
         assert_eq!(reactions_of(&app), vec![crate::forge::Reaction { emoji: Emoji::ThumbsUp, count: 2, mine: true }]);
         assert!(app.live_toast().unwrap().text.starts_with("no reaction:"));
+    }
+
+    /// The status rows the picker takes, from its label to the bottom of the screen.
+    fn picker_rows(app: &mut App, width: u16, height: u16) -> String {
+        let screen = render(app, width, height);
+        let rows: Vec<&str> = screen.lines().skip_while(|row| !row.starts_with(" react")).collect();
+        assert!(!rows.is_empty(), "the picker shows:\n{screen}");
+        rows.join("\n")
+    }
+
+    fn shows_every_choice(rows: &str) -> bool {
+        Emoji::ALL.iter().enumerate().all(|(i, emoji)| rows.contains(&format!("{} {}", i + 1, emoji.glyph())))
+    }
+
+    #[test]
+    fn snapshot_the_picker_on_small_screens() {
+        for (width, ascii, search) in [
+            (50, false, ""),
+            (60, false, ""),
+            (80, false, ""),
+            (50, true, ""),
+            (50, false, "/"),
+            (60, false, "/"),
+            (80, false, "/"),
+            (50, true, "/"),
+        ] {
+            let mut app = with_reactions();
+            app.ascii = ascii;
+            press(&mut app, &format!("+{search}"));
+            let name =
+                format!("react_picker_{width}{}{}", if search.is_empty() { "" } else { "_search" }, if ascii { "_ascii" } else { "" });
+            insta::assert_snapshot!(name, picker_rows(&mut app, width, 30));
+        }
+    }
+
+    #[test]
+    fn the_key_hint_goes_before_the_choices_wrap() {
+        let mut app = with_reactions();
+        press(&mut app, "+");
+        assert!(picker_rows(&mut app, 150, 24).contains("esc"), "a wide screen keeps the hint");
+        let rows = picker_rows(&mut app, 80, 24);
+        assert_eq!(rows.lines().count(), 1, "{rows}");
+        assert!(shows_every_choice(&rows) && !rows.contains("esc"), "{rows}");
+        let rows = picker_rows(&mut app, 50, 24);
+        assert!(rows.lines().count() > 1 && !rows.contains("esc"), "{rows}");
+    }
+
+    #[test]
+    fn wrapped_every_choice_shows_and_its_digit_picks_it() {
+        let mut app = with_reactions();
+        press(&mut app, "+");
+        let rows = picker_rows(&mut app, 50, 30);
+        assert!(shows_every_choice(&rows), "{rows}");
+        let actions = press(&mut app, "8");
+        assert!(matches!(actions.as_slice(), [Action::React { emoji: Emoji::Eyes, on: true, .. }, _]), "{actions:?}");
+    }
+
+    fn on_a_thread_row() -> App {
+        let mut app = with_reactions();
+        render(&mut app, 50, 30);
+        app.close_pane();
+        walk_to_any_thread(&mut app, true);
+        press(&mut app, "j");
+        assert!(app.on_thread_row());
+        app
+    }
+
+    fn under_a_search() -> App {
+        let mut app = with_reactions();
+        app.close_pane();
+        press(&mut app, "/client");
+        app.handle_key(code(KeyCode::Enter));
+        move_to_the_line(&mut app);
+        assert!(app.search.is_some(), "the search stays");
+        app
+    }
+
+    #[test]
+    fn the_picker_wraps_wherever_it_opens() {
+        let places = vec![
+            ("the thread pane", with_reactions(), 30),
+            ("a diff line", on_the_line(), 30),
+            ("a diff line under a search", under_a_search(), 30),
+            ("a thread row", on_a_thread_row(), 30),
+            ("zen", in_zen(), 30),
+            ("a short screen", on_the_line(), 14),
+        ];
+        for (place, mut app, height) in places {
+            press(&mut app, "+");
+            assert!(app.react.is_some(), "{place}: the picker opens");
+            let screen = render(&mut app, 50, height);
+            assert_eq!(screen.lines().count(), usize::from(height), "{place}: the bottom row is the picker's");
+            assert!(shows_every_choice(&picker_rows(&mut app, 50, height)), "{place}:\n{screen}");
+            assert!(!app.shows_taps(), "{place}: the tap bar hides");
+        }
     }
 
     #[test]

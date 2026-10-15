@@ -64,7 +64,7 @@ pub use pipeline::{Pipeline, Run};
 pub use prefetch::Ahead;
 pub use prose::{Prose, Texts, Versions};
 pub use queue::{Badge, QueueRow};
-pub use react::{Pick, failure as react_failure};
+pub use react::{Pick, Prompt, failure as react_failure};
 pub use review::Open;
 pub use search::{Search, mark as mark_search};
 pub use session::SessionPick;

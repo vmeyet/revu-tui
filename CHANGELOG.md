@@ -24,6 +24,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **The reaction picker fits a phone.**
+  After `+` on a narrow screen, such as a phone: the key hint goes first, then the choices wrap onto more rows.
+  Every choice stays on screen and its digit still picks it.
 - **The news page marks a new version `● new for you`.**
   On the page `:news` opens, beside each version that came after the one you last ran.
 - **Paging down at the end of a Markdown file no longer stops revu.**

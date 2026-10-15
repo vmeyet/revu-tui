@@ -174,6 +174,7 @@ The row leads with the three reactions I gave most on the MR's host (`reactions.
 Three is under half the row, so at least five of the eight keep their order; on GitLab a leading emoji found by name pushes the last of the eight out of the row, `/` still finds them.
 Where the forge takes only the eight, only they lead.
 Adding a reaction counts it, taking one off does not; a search lists my most used first among equally good matches.
+The picker takes the status row, ahead of a kept search; where its row does not fit, its key hint goes first, then its choices wrap onto more status rows, the panes giving them up, so all eight stay on screen.
 
 Sticky headers: once a file's own row scrolls above the view, a copy stays pinned at the top of the diff, on the surface colour, until the next file's row reaches the top.
 When the cursor's hunk header has also scrolled off, it is pinned below the file.

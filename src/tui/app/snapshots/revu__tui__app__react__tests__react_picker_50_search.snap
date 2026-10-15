@@ -1,0 +1,7 @@
+---
+source: src/tui/app/react.rs
+expression: "picker_rows(&mut app, width, 30)"
+---
+ react /▏  👍  thumbsup   👎  thumbsdown
+         😄  laughing   😕  confused   💖  heart
+         🎉  tada   🚀  rocket   👀  eyes

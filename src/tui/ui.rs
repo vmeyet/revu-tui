@@ -1,4 +1,4 @@
-use super::app::{App, Focus};
+use super::app::{App, Focus, Prompt};
 use super::theme::Theme;
 use super::{brief_view, diff_view, publish_view, thread_view};
 use crate::config::Widths;
@@ -52,7 +52,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     app.narrow = app.compact || screen.width < app.widths.narrow;
     app.short = app.compact && screen.height < SHORT_BELOW;
     let input_rows = u16::from(app.filtering);
-    let status_rows = status_rows(app);
+    let status_rows = status_rows(app, screen.width);
     let tap_rows = u16::from(app.shows_taps());
     let rows = [Constraint::Min(3), Constraint::Length(input_rows), Constraint::Length(status_rows), Constraint::Length(tap_rows)];
     let [main, input, status, taps] = Layout::vertical(rows).areas(screen);
@@ -144,7 +144,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 /// The status row shows unless zen or a short compact screen drops it; whatever asks the reader something brings it back.
-fn status_rows(app: &App) -> u16 {
+/// The reaction picker takes as many rows as its choices need at `width`.
+fn status_rows(app: &App, width: u16) -> u16 {
+    if let Some(prompt) = app.react_prompt() {
+        return u16::try_from(picker_lines(app.theme, &prompt, width).len()).unwrap_or(u16::MAX);
+    }
     let dropped = app.zen || (app.short && app.offer.is_none());
     u16::from(app.asks() || !dropped)
 }
@@ -310,6 +314,58 @@ fn draw_filter(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(line), area);
 }
 
+const PICKER_LABEL: &str = " react ";
+
+fn picker_hint(prompt: &Prompt) -> &'static str {
+    match (&prompt.search, prompt.more) {
+        (Some(_), _) if prompt.choices.is_empty() => "  no emoji by that name · esc",
+        (Some(_), _) => "  ← → enter · esc",
+        (None, true) => "  1-8 or h l enter · / any emoji · esc",
+        (None, false) => "  1-8 or h l enter · esc",
+    }
+}
+
+fn picker_choices(theme: Theme, prompt: &Prompt) -> Vec<Line<'static>> {
+    let choice = |(text, mine, selected): &(String, bool, bool)| {
+        let colour = if *mine { theme.accent } else { theme.muted };
+        let style = if *selected { Style::default().fg(colour).add_modifier(Modifier::REVERSED) } else { Style::default().fg(colour) };
+        Line::from(vec![Span::raw(" "), Span::styled(format!(" {text} "), style)])
+    };
+    prompt.choices.iter().map(choice).collect()
+}
+
+/// `choices` after `label`, as many on a row as `width` holds, the rows after the first under the label.
+fn wrap_choices(label: Line<'static>, choices: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
+    let indent = Span::raw(" ".repeat(PICKER_LABEL.width()));
+    let mut rows = vec![label];
+    for choice in choices {
+        let is_full = rows.last().is_some_and(|row| row.width() + choice.width() > width);
+        if is_full {
+            rows.push(Line::from(indent.clone()));
+        }
+        if let Some(row) = rows.last_mut() {
+            row.spans.extend(choice.spans);
+        }
+    }
+    rows
+}
+
+/// The picker on one row while it fits in `width`; else without its key hint, its choices on as many rows as they need.
+fn picker_lines(theme: Theme, prompt: &Prompt, width: u16) -> Vec<Line<'static>> {
+    let mut label = vec![Span::styled(PICKER_LABEL, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))];
+    if let Some(query) = &prompt.search {
+        label.push(Span::styled(format!("/{query}▏"), Style::default().fg(theme.accent)));
+    }
+    let choices = picker_choices(theme, prompt);
+    let hint = Span::styled(picker_hint(prompt), Style::default().fg(theme.muted));
+    let one_row: Vec<Span> = label.iter().cloned().chain(choices.iter().flat_map(|c| c.spans.clone())).chain([hint]).collect();
+    let one_row = Line::from(one_row);
+    if one_row.width() <= usize::from(width) {
+        return vec![one_row];
+    }
+    wrap_choices(Line::from(label), choices, usize::from(width))
+}
+
 fn draw_status(f: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme;
     let muted = Style::default().fg(theme.muted);
@@ -334,6 +390,10 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(Paragraph::new(line), area);
         return;
     }
+    if let Some(prompt) = app.react_prompt() {
+        f.render_widget(Paragraph::new(picker_lines(theme, &prompt, area.width)), area);
+        return;
+    }
     if let Some(search) = &app.search {
         let count = app.search_count().map(|c| format!("  {c}")).unwrap_or_default();
         let (cursor, hint) = if search.typing { ("▏", "  enter keep · esc back") } else { ("", "  n N next, previous · esc") };
@@ -343,26 +403,6 @@ fn draw_status(f: &mut Frame, app: &App, area: Rect) {
             Span::styled(hint, muted),
         ]);
         f.render_widget(Paragraph::new(line), area);
-        return;
-    }
-    if let Some(prompt) = app.react_prompt() {
-        let mut spans = vec![Span::styled(" react ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))];
-        if let Some(query) = &prompt.search {
-            spans.push(Span::styled(format!("/{query}▏"), Style::default().fg(theme.accent)));
-        }
-        let hint = match (&prompt.search, prompt.more) {
-            (Some(_), _) if prompt.choices.is_empty() => "  no emoji by that name · esc",
-            (Some(_), _) => "  ← → enter · esc",
-            (None, true) => "  1-8 or h l enter · / any emoji · esc",
-            (None, false) => "  1-8 or h l enter · esc",
-        };
-        for (text, mine, selected) in prompt.choices {
-            let colour = if mine { theme.accent } else { theme.muted };
-            let style = if selected { Style::default().fg(colour).add_modifier(Modifier::REVERSED) } else { Style::default().fg(colour) };
-            spans.extend([Span::raw(" "), Span::styled(format!(" {text} "), style)]);
-        }
-        spans.push(Span::styled(hint, muted));
-        f.render_widget(Paragraph::new(Line::from(spans)), area);
         return;
     }
     if app.pending == Some('\'') {
