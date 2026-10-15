@@ -167,9 +167,9 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.homes.forge_of(&key).merge(&key, &head, plan).await;
                 send(outcome.map_or_else(|e| failed(Failure::Merge, &e), |()| Incoming::Merged { key }));
             }
-            Action::SetDraft { key, readiness } => {
+            Action::SetReadiness { key, readiness } => {
                 let outcome = backend.homes.forge_of(&key).set_readiness(&key, readiness).await;
-                send(outcome.map_or_else(|e| failed(Failure::SetDraft, &e), |()| Incoming::DraftSet { key, readiness }));
+                send(outcome.map_or_else(|e| failed(Failure::SetReadiness, &e), |()| Incoming::ReadinessSet { key, readiness }));
             }
             Action::Apply { key, branch, suggestion } => {
                 let outcome = backend.homes.forge_of(&key).apply(&key, &branch, &suggestion).await;

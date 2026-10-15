@@ -429,7 +429,7 @@ impl App {
             Failure::Prose => self.settle_prose(super::Texts::Failed(message)),
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),
-            Failure::SetDraft => self.warn(format!("not changed: {message}")),
+            Failure::SetReadiness => self.warn(format!("not changed: {message}")),
             Failure::React { thread, index, emoji, change } => self.react_failed(&thread, index, emoji, change, &message),
             Failure::Queue
             | Failure::Open { .. }

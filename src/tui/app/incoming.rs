@@ -93,8 +93,8 @@ impl App {
                 let follow = self.merged(&key);
                 self.composed.extend(follow);
             }
-            Incoming::DraftSet { key, readiness } => {
-                let follow = self.draft_set(&key, readiness);
+            Incoming::ReadinessSet { key, readiness } => {
+                let follow = self.readiness_set(&key, readiness);
                 self.composed.extend(follow);
             }
             Incoming::Approved { key, change } => {

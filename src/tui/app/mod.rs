@@ -238,7 +238,7 @@ pub enum Action {
         plan: crate::forge::MergePlan,
     },
     /// Mark my MR a draft, or ready for review.
-    SetDraft {
+    SetReadiness {
         key: MrKey,
         readiness: Readiness,
     },
@@ -402,7 +402,7 @@ pub enum Failure {
     /// The forge did not merge the MR.
     Merge,
     /// The MR kept its draft state.
-    SetDraft,
+    SetReadiness,
     /// The reaction did not reach the forge; its count goes back.
     React {
         thread: ThreadId,
@@ -512,7 +512,7 @@ pub enum Incoming {
         key: MrKey,
     },
     /// The MR is a draft now, or ready for review.
-    DraftSet {
+    ReadinessSet {
         key: MrKey,
         readiness: Readiness,
     },
