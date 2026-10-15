@@ -493,52 +493,36 @@ mod tests {
         assert!(distinct.len() > 1);
     }
 
+    /// Lines of `text`, above its test module, that paint a color by hand instead of asking the theme.
+    fn raw_colors(path: &str, text: &str) -> Vec<String> {
+        let raw = ["Color::", ".cyan()", ".yellow()", ".green()", ".magenta()", ".blue()", ".red()", ".black()", ".on_yellow()", ".dim()"];
+        let lines: Vec<&str> = text.lines().collect();
+        let test_module = lines.windows(2).position(|w| w[0].trim() == "#[cfg(test)]" && w[1].contains("mod ") && w[1].ends_with('{'));
+        lines[..test_module.unwrap_or(lines.len())]
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| !line.trim_start().starts_with("//") && raw.iter().any(|r| line.contains(r)))
+            .map(|(i, line)| format!("{path}:{}: {}", i + 1, line.trim()))
+            .collect()
+    }
+
     /// The whole point of a theme: no pane paints a color the theme did not choose.
     #[test]
     fn no_raw_colors_outside_the_theme() {
-        let sources = [
-            ("ui.rs", include_str!("ui.rs")),
-            ("diff_view.rs", include_str!("diff_view.rs")),
-            ("diff_view/anchors.rs", include_str!("diff_view/anchors.rs")),
-            ("diff_view/header.rs", include_str!("diff_view/header.rs")),
-            ("diff_view/line.rs", include_str!("diff_view/line.rs")),
-            ("diff_view/rows.rs", include_str!("diff_view/rows.rs")),
-            ("diff_view/select.rs", include_str!("diff_view/select.rs")),
-            ("diff_view/side_by_side.rs", include_str!("diff_view/side_by_side.rs")),
-            ("diff_view/wrap.rs", include_str!("diff_view/wrap.rs")),
-            ("thread_view/mod.rs", include_str!("thread_view/mod.rs")),
-            ("thread_view/body.rs", include_str!("thread_view/body.rs")),
-            ("thread_view/conversation.rs", include_str!("thread_view/conversation.rs")),
-            ("answer_view.rs", include_str!("answer_view.rs")),
-            ("publish_view.rs", include_str!("publish_view.rs")),
-            ("brief_view.rs", include_str!("brief_view.rs")),
-            ("app/brief.rs", include_str!("app/brief.rs")),
-            ("mod.rs", include_str!("mod.rs")),
-            ("app/mod.rs", include_str!("app/mod.rs")),
-            ("app/state.rs", include_str!("app/state.rs")),
-            ("app/keys.rs", include_str!("app/keys.rs")),
-            ("app/commands.rs", include_str!("app/commands.rs")),
-            ("app/tree.rs", include_str!("app/tree.rs")),
-            ("tree_view.rs", include_str!("tree_view.rs")),
-            ("palette_view.rs", include_str!("palette_view.rs")),
-            ("queue_view.rs", include_str!("queue_view.rs")),
-            ("palette.rs", include_str!("palette.rs")),
-            ("app/incoming.rs", include_str!("app/incoming.rs")),
-            ("app/queue.rs", include_str!("app/queue.rs")),
-            ("app/review.rs", include_str!("app/review.rs")),
-            ("app/feedback.rs", include_str!("app/feedback.rs")),
-            ("app/input.rs", include_str!("app/input.rs")),
-            ("app/write.rs", include_str!("app/write.rs")),
-            ("app/pane.rs", include_str!("app/pane.rs")),
-            ("app/view.rs", include_str!("app/view.rs")),
-        ];
-        let raw = ["Color::", ".cyan()", ".yellow()", ".green()", ".magenta()", ".blue()", ".red()", ".black()", ".on_yellow()", ".dim()"];
-        let leaks: Vec<String> = sources
+        // prose.rs hands on mrk's own colours for a rendered Markdown file.
+        let allowed = ["theme.rs", "prose.rs"];
+        let test_only = |path: &str| path.ends_with("tests.rs") || path.ends_with("test_support.rs");
+        let leaks: Vec<String> = crate::sources::rust_files("tui")
             .iter()
-            .flat_map(|(file, src)| src.lines().enumerate().map(move |(i, l)| (file, i + 1, l)))
-            .filter(|(_, _, line)| !line.trim_start().starts_with("//") && raw.iter().any(|r| line.contains(r)))
-            .map(|(file, n, line)| format!("{file}:{n}: {}", line.trim()))
+            .filter(|file| !allowed.contains(&file.path.as_str()) && !test_only(&file.path))
+            .flat_map(|file| raw_colors(&file.path, &file.text))
             .collect();
         assert!(leaks.is_empty(), "raw colors:\n{}", leaks.join("\n"));
+    }
+
+    #[test]
+    fn a_raw_color_is_caught_outside_comments_and_tests() {
+        let text = "let a = Style::new().fg(Color::Red);\n// Color::Red in a comment\nlet b = theme.added;\n#[cfg(test)]\npub(crate) mod tests {\n    Color::Red\n}";
+        assert_eq!(raw_colors("new_view.rs", text), ["new_view.rs:1: let a = Style::new().fg(Color::Red);"]);
     }
 }

@@ -54,6 +54,8 @@ Some code predates these rules: fix what you touch, and do not copy it.
 - `unsafe` only inside a safe function whose runtime checks make its `SAFETY:` comment true, not just a claim.
 - One crate per job: prefer std or a dependency already in `Cargo.toml`; a new one needs a line in the MR saying why.
 - About 800 lines is the guideline for a file, not a hard limit; a file grown past it is split when next touched.
+- A module with children lives in `foo/mod.rs`, never `foo.rs` beside a `foo/` folder; `clippy::self_named_module_files` enforces it.
+- A type written to the cache keeps its JSON shape; add a fixture to `tui/backend/cache_shapes.rs` when you add or change one.
 - A type with more than one reason to change gets split; a god struct is split by concern.
 
 ## Releases

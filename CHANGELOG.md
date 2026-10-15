@@ -24,6 +24,8 @@ Each entry says what changed, then where, then how to use it.
   Rename it back to restore it with a version that reads it; revu drops it after 30 days.
 - **The log stays small in a long session.**
   `revu.log` rolls over to `revu.log.1` whenever it passes 2 MB, not only at startup, so a warning repeated at every poll cannot fill the disk.
+- **Steadier internals.**
+  revu's code got a cleanup for safety and speed: errors are logged, tokens stay on their host, and caches survive upgrades.
 
 ## 0.9.0 - 2026-10-15
 

@@ -27,6 +27,8 @@ mod ready;
 mod render;
 mod review;
 mod share;
+#[cfg(test)]
+mod sources;
 mod syntax;
 mod tui;
 mod update;

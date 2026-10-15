@@ -591,9 +591,7 @@ mod tests {
     /// Every `pub` field of the config structs has its row, so a new key cannot ship undocumented.
     #[test]
     fn every_config_field_is_documented() {
-        let source =
-            [include_str!("config.rs"), include_str!("config/queue.rs"), include_str!("config/tui.rs"), include_str!("config/programs.rs")]
-                .concat();
+        let source: String = crate::sources::rust_files("config").into_iter().map(|file| file.text).collect();
         let tables = [
             ("Config", ""),
             ("Keys", "keys"),

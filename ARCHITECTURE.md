@@ -14,7 +14,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends; every method takes and returns the neutral model |
 | `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `reaction.rs` |
-| `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and `graphql.rs`, shared shapes and conversion in `wire.rs` |
+| `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and GraphQL (`graphql.rs` on GitLab, `graphql/` on GitHub), shared shapes and conversion in `wire.rs` |
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
 | `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
@@ -26,27 +26,28 @@ When a boundary or a flow changes, change this page in the same MR.
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |
 | `keymap.rs` | The user's `[keys]` on top of the defaults |
 | `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
-| `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied |
+| `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied; `outline/` is the outline pane's state |
 | `tui/actions.rs` | The action runner: one task per `Action`, answers sent back as `Incoming` |
-| `tui/backend.rs` | `Backend`: the parts behind the runner, one per concern, and `Homes`, each host's forge and cache |
+| `tui/backend/mod.rs` | `Backend`: the parts behind the runner, one per concern, and `Homes`, each host's forge and cache |
 | `tui/backend/saves.rs`, `queue.rs`, `reviews.rs` | What the reader keeps (`state.json`, pins, queue view); the queue of every host; opening an MR and loading ahead |
 | `tui/backend/drafts.rs`, `tui/lanes.rs` | Draft writes and publishing; one lane per MR so they run one at a time |
 | `tui/backend/ai.rs`, `files.rs`, `prune.rs` | Claude's answers and Jev's marks; files at a commit and pictures; the daily cache prune |
+| `tui/backend/cache_shapes.rs` | Tests only: one fixture per type written to the cache, so a change that stops reading an older file fails (the cache would drop it, and the reader's pins, viewed files and drafts with it); a new cached type adds its fixture here |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
-| `tui/diff_view.rs`, `tui/diff_view/` | The review pane: the visible window of rows in `diff_view.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
+| `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
 | `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies as light markdown in `body.rs` |
 | `tui/theme.rs`, `tui/screen.rs`, `tui/ground.rs` | The colour palette; the terminal in raw mode on the alternate screen; the terminal's background, asked once at startup |
-| `tui/field.rs`, `complete.rs`, `palette.rs`, `help.rs` | The input box, tab completion, the `ctrl-k` palette, the `?` overlay |
+| `tui/field.rs`, `complete.rs`, `palette.rs`, `help.rs`, `toward.rs` | The input box, tab completion, the `ctrl-k` palette, the `?` overlay, which way a move goes through a list that wraps around |
 | `tui/prose.rs`, `table.rs`, `images.rs` | Markdown files block by block, Markdown tables, pictures in the thread pane |
 | `tui/compose.rs`, `clipboard.rs`, `drag.rs`, `motion.rs` | `$EDITOR` for a comment, the clipboard through OSC 52, text selection by drag, how often the screen moves on its own |
-| `cache.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry |
-| `config.rs`, `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
+| `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
+| `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
 | `ai/` | Claude (`anthropic.rs`, questions with `a`; `context.rs`, what a question sends) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
 | `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
-| `docs.rs` | Writes `docs/reference/` from the code (`revu docs`) |
+| `docs.rs`, `sources.rs` | Writes `docs/reference/` from the code (`revu docs`); tests only, the crate's own source files for checks that read them |
 | `usage.rs`, `reactions.rs`, `log.rs` | Local usage counts, the reactions used most, the log file |
 | `mrref.rs`, `query.rs`, `fuzzy.rs`, `render.rs` | Parsing `group/project!42`, the filter language, fzf-style matching, terminal output |
 
@@ -127,7 +128,7 @@ The internals:
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
 - **A forge field**: the field in `forge/model/`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `cargo run -- docs`.
-- **A config key**: the field in `config.rs` or `config/` and a row in `docs::SETTINGS`; a test fails without it.
+- **A config key**: the field in `config/` and a row in `docs::SETTINGS`; a test fails without it.
 - **A syntax language**: see `AGENTS.md`.
 
 ## Glossary
