@@ -34,7 +34,7 @@ pub enum Source {
 
 /// What the resolution looks at around the process: token and host variables, and the host of
 /// the checkout it runs in. A struct, so tests build one without `set_var` or a git repo.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Env {
     /// `GITLAB_TOKEN`, for the `GITLAB_HOST` host, else gitlab.com.
     pub gitlab_token: Option<String>,
@@ -44,6 +44,18 @@ pub struct Env {
     pub host: Option<String>,
     /// The host of the `origin` remote of the checkout under the working directory.
     pub origin: Option<String>,
+}
+
+impl fmt::Debug for Env {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let redacted = |token: &Option<String>| token.as_ref().map(|_| "<redacted>");
+        f.debug_struct("Env")
+            .field("gitlab_token", &redacted(&self.gitlab_token))
+            .field("github_token", &redacted(&self.github_token))
+            .field("host", &self.host)
+            .field("origin", &self.origin)
+            .finish()
+    }
 }
 
 impl Env {
@@ -277,5 +289,12 @@ mod tests {
     fn debug_never_prints_the_token() {
         let creds = Credentials { host: "gitlab.com".into(), token: "glpat-secret".into() };
         assert!(!format!("{creds:?}").contains("secret"));
+    }
+
+    #[test]
+    fn debug_of_the_env_never_prints_its_tokens() {
+        let env = Env { gitlab_token: Some("glpat-xxxx".into()), github_token: Some("ghp_xxxx".into()), ..Env::default() };
+        let printed = format!("{env:?}");
+        assert!(!printed.contains("glpat-xxxx") && !printed.contains("ghp_xxxx"), "{printed}");
     }
 }

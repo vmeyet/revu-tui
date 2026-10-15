@@ -333,6 +333,15 @@ mod tests {
     use crate::config::Host;
 
     #[test]
+    fn a_connected_forge_never_prints_its_token() {
+        for (kind, host, token) in [(Kind::GitLab, "gitlab.com", "glpat-xxxx"), (Kind::GitHub, "github.com", "ghp_xxxx")] {
+            let forge = Forge::connect(kind, &Credentials { host: host.into(), token: token.into() }).unwrap();
+            let printed = format!("{forge:?}");
+            assert!(!printed.contains(token), "{printed}");
+        }
+    }
+
+    #[test]
     fn the_host_names_the_forge_unless_the_config_says_otherwise() {
         let config = Config::default();
         assert_eq!(Kind::for_host("github.com", &config), Kind::GitHub);
