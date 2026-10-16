@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.10.1 - 2026-10-16
+
 ### Fixed
 
 - **The queue refreshes even when GitLab is slow to count changed lines.**
