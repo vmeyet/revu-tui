@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 463
 expression: "render(&mut app, 120, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: "render(&mut app, 120, 24)"
 │                       │ to `slack send '#review'`                                            │                       │
 │   ── WATCHING · 1 ────│ ──────────────────────────────────────────────────────────────────── │                       │
 │   infra: new runner   │ [!42 feat: charge cards at                                           │                       │
-│   omar · !35 · +0 −0  │ checkout](https://gitlab.com/acme/widgets/-/merge_requests/42)       │                       │
+│   omar · !35          │ checkout](https://gitlab.com/acme/widgets/-/merge_requests/42)       │                       │
 │                       │ _needs a second pair of eyes_                                        │                       │
 │   ── ▸ DONE · 1 ──────│ ──────────────────────────────────────────────────────────────────── │                       │
 │                       │                                                                      │                       │

@@ -61,6 +61,13 @@ Reading an MR:
 4. The runner sends `Incoming::Review`; `App::apply` puts it in the state, and the last cursor spot follows as `Incoming::Resume`.
 5. `ui::draw` renders the state on each frame; heavy derived values are rebuilt only when their inputs change (`tui/app/kept.rs`).
 
+Loading the queue:
+
+1. `Forge::queue` asks my own lists and, when scoped, the project's open MRs, in parallel; on GitLab, each MR's size comes from queries of its own.
+2. Only my own lists can fail it: open MRs that do not load come back as `Fetched::missing`, and sizes that take more than a few seconds are left out, so the row shows none.
+3. `Queues::load` adds the other hosts, the pins and the ready command; each part that fails follows the queue as an `Incoming::Failed`.
+4. A queue that fails as a whole keeps the one on screen, its title marked `not refreshed` until one lands.
+
 Handling a key:
 
 1. `tui/mod.rs` reads a terminal event and calls `App::handle_key`.

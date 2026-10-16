@@ -516,7 +516,7 @@ mod tests {
         let mut app = with_review();
         app.rate = crate::forge::RateLimit { remaining: Some(4000), wait: Some(Duration::from_mins(20)) };
         app.apply(Incoming::Failed { what: Failure::Queue, message: "rate limited until 14:05".into() });
-        assert_eq!(app.live_toast().unwrap().text, "rate limited until 14:05 · r to retry");
+        assert_eq!(app.live_toast().unwrap().text, "queue not refreshed: rate limited until 14:05 · r to retry");
         assert_eq!(app.poll.queue_due, Some(app.now + Duration::from_mins(20)), "not five minutes, when it would fail again");
         app.now += Duration::from_mins(20);
         assert!(app.tick().contains(&Action::LoadQueue { scope: None, from_cache: false }));

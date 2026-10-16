@@ -59,7 +59,7 @@ impl Home {
 
     /// This host's queue across every project, each row tagged with the host.
     pub(crate) async fn queue(&self) -> Result<crate::forge::Queue> {
-        let queue = self.forge.queue(None).await?.on_host(&self.host);
+        let queue = self.forge.queue(None).await?.queue.on_host(&self.host);
         let (cache, saved) = (self.cache.clone(), queue.clone());
         crate::blocking::run(move || cache.write_entry(&crate::cache::keys::queue(None), &saved)).await.or_warn("caching the queue");
         Ok(queue)

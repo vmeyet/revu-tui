@@ -124,10 +124,11 @@ impl Saves {
         sections
             .all()
             .filter_map(|mr| {
+                let files = mr.size?.files as usize;
                 let key = mr.key();
                 let state: MrState = self.homes.cache_of(&key).read(&keys::state(&key))?;
                 let viewed: BTreeSet<String> = state.viewed_files.into_keys().collect();
-                (!viewed.is_empty()).then(|| (key, Progress::new(mr.files as usize, &viewed, &state.auto_folded)))
+                (!viewed.is_empty()).then(|| (key, Progress::new(files, &viewed, &state.auto_folded)))
             })
             .collect()
     }

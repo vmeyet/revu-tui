@@ -1,11 +1,12 @@
 ---
 source: src/tui/app/pin.rs
+assertion_line: 185
 expression: "render(&mut app, 100, 16)"
 ---
 ╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────╮
 │   ── PINNED · 1 ────────────── ││                                                                │
 │ ▎ infra: new runner          ⠋ ││                                                                │
-│ ▎ omar · !35 · +0 −0        2d ││                                                                │
+│ ▎ omar · !35                2d ││                                                                │
 │                                ││                                                                │
 │   ── TO REVIEW · 1 ─────────── ││                                                                │
 │   feat charge cards at ch…     ││                      open a merge request                      │

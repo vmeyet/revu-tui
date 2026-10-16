@@ -131,9 +131,9 @@ fn queue_state(mr: &QueueMr, now: DateTime<Utc>) -> Value {
         "conflicts": mr.conflicts,
         "labels": mr.labels,
         "unresolved_threads": mr.unresolved,
-        "files": mr.files,
-        "additions": mr.additions,
-        "deletions": mr.deletions,
+        "files": mr.size.map(|s| s.files),
+        "additions": mr.size.map(|s| s.additions),
+        "deletions": mr.size.map(|s| s.deletions),
     })
 }
 

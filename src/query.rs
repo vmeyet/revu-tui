@@ -54,14 +54,14 @@ impl Query {
             mr.author.to_lowercase().contains(&name) || mr.author_name.to_lowercase().contains(&name)
         };
         let label = |wanted: &String| mr.labels.iter().any(|l| l.to_lowercase().contains(wanted.as_str()));
-        let size = mr.additions + mr.deletions;
+        let lines = mr.size.map(crate::forge::Size::lines);
         (self.authors.is_empty() || self.authors.iter().any(author))
             && (self.numbers.is_empty() || self.numbers.contains(&mr.number))
             && self.labels.iter().all(label)
             && self.draft.is_none_or(|draft| mr.draft == draft)
             && self.size.is_none_or(|wanted| match wanted {
-                Size::Small => size <= SMALL,
-                Size::Large => size >= LARGE,
+                Size::Small => lines.is_some_and(|n| n <= SMALL),
+                Size::Large => lines.is_some_and(|n| n >= LARGE),
             })
             && (!self.failing || mr.conflicts || mr.pipeline == Some(PipelineStatus::Failed))
             && (!self.mine || mr.author == me)
@@ -173,9 +173,7 @@ mod tests {
             approvals_left: None,
             reviewers: vec![],
             pipeline: None,
-            additions: 10,
-            deletions: 5,
-            files: 1,
+            size: Some(crate::forge::Size { additions: 10, deletions: 5, files: 1 }),
             unresolved: 0,
             labels: vec!["infra".into(), "needs review".into()],
             notes: 0,
@@ -225,7 +223,13 @@ mod tests {
     #[test]
     fn matching_follows_each_term() {
         let loic = mr(42, "loic", "feat(slack): batch the users sync");
-        let nina = QueueMr { additions: 900, conflicts: true, draft: true, labels: vec![], ..mr(7, "nina", "fix: flaky cache") };
+        let nina = QueueMr {
+            size: Some(crate::forge::Size { additions: 900, deletions: 0, files: 1 }),
+            conflicts: true,
+            draft: true,
+            labels: vec![],
+            ..mr(7, "nina", "fix: flaky cache")
+        };
         let keeps = |text: &str, which: &QueueMr| Query::parse(text).unwrap().matches(which, "nina");
         assert!(keeps("@loic slack", &loic) && !keeps("@loic slack", &nina));
         assert!(keeps("@LOIC", &loic), "the display name counts too, case aside");

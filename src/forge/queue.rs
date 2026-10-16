@@ -47,9 +47,9 @@ pub(crate) struct QueueMr {
     pub(crate) reviewers: Vec<ReviewerState>,
     #[serde(serialize_with = "upper_case")]
     pub(crate) pipeline: Option<PipelineStatus>,
-    pub(crate) additions: u32,
-    pub(crate) deletions: u32,
-    pub(crate) files: u32,
+    /// `None` when the forge did not count the change in time; `revu list --json` then leaves out its three fields.
+    #[serde(flatten)]
+    pub(crate) size: Option<Size>,
     pub(crate) unresolved: u32,
     pub(crate) labels: Vec<String>,
     pub(crate) notes: u32,
@@ -65,6 +65,39 @@ pub(crate) struct QueueMr {
 #[expect(clippy::ref_option, clippy::trivially_copy_pass_by_ref, reason = "serde's serialize_with hands a reference")]
 fn upper_case<S: serde::Serializer>(status: &Option<PipelineStatus>, serializer: S) -> Result<S::Ok, S::Error> {
     status.map(|s| s.word().to_ascii_uppercase()).serialize(serializer)
+}
+
+/// How much an MR changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Size {
+    pub(crate) additions: u32,
+    pub(crate) deletions: u32,
+    pub(crate) files: u32,
+}
+
+impl Size {
+    pub(crate) fn lines(self) -> u32 {
+        self.additions + self.deletions
+    }
+}
+
+/// A queue the forge just answered, and the part of it that did not load, said for the reader.
+#[derive(Debug)]
+pub(crate) struct Fetched {
+    pub(crate) queue: Queue,
+    /// Set when the project's open MRs did not load: `queue.open` is then empty, my own lists are there.
+    pub(crate) missing: Option<String>,
+}
+
+impl Fetched {
+    /// `queue` scoped to `project`, with its open MRs when they loaded, else the reason they did not.
+    pub(crate) fn scoped(queue: Queue, project: &ProjectPath, open: anyhow::Result<Vec<QueueMr>>) -> Self {
+        let queue = Queue { project: Some(project.clone()), ..queue };
+        match open {
+            Ok(open) => Self { queue: Queue { open, ..queue }, missing: None },
+            Err(e) => Self { queue, missing: Some(format!("the open MRs of {project} did not load: {e:#}")) },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,9 +243,7 @@ impl QueueMr {
             approvals_left: Some(mr.approvals.approvals_left),
             reviewers: vec![],
             pipeline: mr.pipeline.as_ref().map(|p| p.status),
-            additions: 0,
-            deletions: 0,
-            files: 0,
+            size: None,
             unresolved: 0,
             labels: mr.labels.clone(),
             notes: 0,
@@ -242,12 +273,17 @@ impl Queue {
 
     /// Every row marked as coming from `host`, so opening it reaches the right forge.
     pub(crate) fn on_host(self, host: &str) -> Self {
-        let tag = |rows: Vec<QueueMr>| rows.into_iter().map(|mr| QueueMr { host: Some(host.to_owned()), ..mr }).collect();
+        self.map_rows(|mr| QueueMr { host: Some(host.to_owned()), ..mr })
+    }
+
+    /// Every row of every list through `change`.
+    pub(crate) fn map_rows(self, change: impl Fn(QueueMr) -> QueueMr) -> Self {
+        let each = |rows: Vec<QueueMr>| rows.into_iter().map(&change).collect();
         Self {
-            review_requested: tag(self.review_requested),
-            authored: tag(self.authored),
-            assigned: tag(self.assigned),
-            open: tag(self.open),
+            review_requested: each(self.review_requested),
+            authored: each(self.authored),
+            assigned: each(self.assigned),
+            open: each(self.open),
             ..self
         }
     }

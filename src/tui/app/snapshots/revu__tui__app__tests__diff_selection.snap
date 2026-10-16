@@ -1,6 +1,6 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 4145
+assertion_line: 620
 expression: "render_selected(&mut app, 120, 24)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
@@ -14,7 +14,7 @@ expression: "render_selected(&mut app, 120, 24)"
 │                                ││  ✓   13      -    ⟦let client = Client::new();⟧                                      │
 │   ── WATCHING · 1 ──────────── ││           13 +⟦    let client⟧ = Client::with_key(idempotency_key(card));            │
 │   infra: new runner          ⠋ ││           14 +    let attempt = Attempt::first();                                  │
-│   omar · !35 · +0 −0        2d ││      14   15      let response = client.charge(amount).await?;                     │
+│   omar · !35                2d ││      14   15      let response = client.charge(amount).await?;                     │
 │                                ││      15   16      audit::record(&response);                                        │
 │   ── ▸ DONE · 1 ────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                                         │
 │                                ││      40   41  fn idempotency_key(card: &Card) -> Key {                             │

@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### Fixed
+
+- **The queue refreshes even when GitLab is slow to count changed lines.**
+  In the queue and `revu list`, a row GitLab did not count in time shows no size, and `--json` leaves out its three size fields.
+  Open MRs that fail to load leave yours shown with a warning, and a queue that fails is titled `not refreshed` until `r` works.
+
 ## 0.10.0 - 2026-10-16
 
 ### Fixed

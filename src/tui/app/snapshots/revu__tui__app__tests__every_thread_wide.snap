@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 587
 expression: wide
 ---
 ╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ the whole MR · 3 threads ────────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: wide
 │                                          ││  ✓   13      -    let client = Client::new();    ││  lea · 1h                                                    │
 │   ── WATCHING · 1 ────────────────────── ││           13 +    let client = Client::with_key… ││  Should this retry on timeout?                               │
 │   infra: new runner                    ⠋ ││           14 +    let attempt = Attempt::first(… ││  ─────────────────────────────────────────────────────────── │
-│   omar · !35 · +0 −0                  2d ││      14   15      let response = client.charge(… ││  src/pay/charge.rs:-13                                       │
+│   omar · !35                          2d ││      14   15      let response = client.charge(… ││  src/pay/charge.rs:-13                                       │
 │                                          ││      15   16      audit::record(&response);      ││  let client = Client::new();                                 │
 │   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││  ✓ resolved                                                  │
 │                                          ││      40   41  fn idempotency_key(card: &Card) -… ││  you · 2h                                                    │

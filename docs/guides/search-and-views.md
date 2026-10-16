@@ -40,7 +40,7 @@ Press `/` in the queue and type a query.
 | `!42`, `#42` | Of that number |
 | `~infra` | With that label |
 | `draft:yes`, `draft:no` | That are drafts, or not |
-| `size:small`, `size:large` | Up to 100 changed lines, or 500 and more |
+| `size:small`, `size:large` | Up to 100 changed lines, or 500 and more; a row without a size matches neither |
 | `is:failing` | Whose pipeline failed, or that conflict |
 | `is:mine` | That you wrote |
 

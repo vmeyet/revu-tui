@@ -1,5 +1,6 @@
 ---
-source: src/tui/app/outline.rs
+source: src/tui/app/outline/mod.rs
+assertion_line: 427
 expression: "render(&mut app, 150, 20)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at che… ────────╮╭ Outline · list · public ─────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: "render(&mut app, 150, 20)"
 │                                ││       2    2      def total(self):                   ││   · Cart.total                                           │
 │   ── WATCHING · 1 ──────────── ││       3      -        return 1                       ││                                                          │
 │   infra: new runner          ⠋ ││            3 +        return pay(self, 2)            ││   ── ▸ TESTS · 1 ─────────────────────────────────────── │
-│   omar · !35 · +0 −0        2d ││       4    4                                         ││                                                          │
+│   omar · !35                2d ││       4    4                                         ││                                                          │
 │                                ││       5    5                                         ││                                                          │
 │   ── ▸ DONE · 1 ────────────── ││       6      -def pay(card):                         ││                                                          │
 │                                ││       7      -    return card.charge()               ││                                                          │

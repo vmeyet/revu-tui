@@ -16,7 +16,7 @@ pub(crate) use model::{
     MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange, Readiness,
     Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
-pub(crate) use queue::{Queue, QueueMr, ReviewState, ReviewerState, Sections};
+pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size};
 
 use crate::auth::Credentials;
 use crate::config::Config;
@@ -128,7 +128,8 @@ impl Forge {
     }
 
     /// Every MR waiting on me; with `project`, only that project's, plus all its other open MRs.
-    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
+    /// Only my own lists can fail it: the project's open MRs that do not load come back as `missing`.
+    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Fetched> {
         match self {
             Forge::GitLab(client) => client.queue(project).await,
             Forge::GitHub(client) => client.queue(project).await,

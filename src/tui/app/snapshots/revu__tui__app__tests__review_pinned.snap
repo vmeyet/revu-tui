@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 540
 expression: screen
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ──────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: screen
 │                                ││           77 +    let step_77 = 77;                                                │
 │   ── WATCHING · 1 ──────────── ││           78 +    let step_78 = 78;                                                │
 │   infra: new runner          ⠋ ││           79 +    let step_79 = 79;                                                │
-│   omar · !35 · +0 −0        2d ││           80 +    let step_80 = 80;                                                │
+│   omar · !35                2d ││           80 +    let step_80 = 80;                                                │
 │                                ││           81 +    let step_81 = 81;                                                │
 │   ── ▸ DONE · 1 ────────────── ││           82 +    let step_82 = 82;                                                │
 │                                ││           83 +    let step_83 = 83;                                                │

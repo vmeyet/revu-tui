@@ -76,6 +76,30 @@
           "lea",
           "nina"
         ]
+      },
+      {
+        "number": 43,
+        "project": "acme/widgets",
+        "title": "fix: round totals",
+        "description": "",
+        "draft": false,
+        "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/43",
+        "updated_at": "2026-03-02T11:00:00Z",
+        "created_at": "2026-03-02T09:00:00Z",
+        "source_branch": "fix/round",
+        "target_branch": "main",
+        "conflicts": false,
+        "author": "nina",
+        "author_name": "Nina",
+        "approved": false,
+        "approved_by": [],
+        "approvals_left": 1,
+        "reviewers": [],
+        "pipeline": null,
+        "unresolved": 0,
+        "labels": [],
+        "notes": 0,
+        "commenters": []
       }
     ],
     "assigned": [],

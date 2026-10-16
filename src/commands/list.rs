@@ -1,7 +1,7 @@
 use crate::cache::keys;
 use crate::cli::ListArgs;
 use crate::ctx::{Ctx, Home};
-use crate::forge::{Hosts, ProjectPath, Queue, QueueMr, Sections};
+use crate::forge::{Fetched, Hosts, ProjectPath, Queue, QueueMr, Sections};
 use crate::log::OrWarn as _;
 use crate::ready;
 use crate::render::{self, Cell, Style, Theme, cell, right};
@@ -12,7 +12,8 @@ const TITLE_W: usize = 64;
 
 /// Prints the queue, scoped to the checkout's project unless `--all`.
 /// Outside a checkout (or with `--all`) the other hosts I am logged in to join the list; one that
-/// fails to answer is named on stderr and left out, never the whole list.
+/// fails to answer is named on stderr and left out, never the whole list; so are the project's open
+/// MRs when they do not load.
 pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     let queue = if args.cached { cached(ctx)? } else { fetched(ctx).await? };
     let (labels, rules, now) = (&ctx.config.queue.watch_labels, &ctx.config.queue.rules, Utc::now());
@@ -69,7 +70,10 @@ fn cached(ctx: &Ctx) -> Result<Queue> {
 }
 
 async fn fetched(ctx: &Ctx) -> Result<Queue> {
-    let queue = ctx.forge.queue(ctx.project.as_ref()).await?;
+    let Fetched { queue, missing } = ctx.forge.queue(ctx.project.as_ref()).await?;
+    if let Some(missing) = missing {
+        eprintln!("! {missing}");
+    }
     ctx.cache.write_entry(&keys::queue(ctx.project.as_ref()), &queue)?;
     Ok(queue)
 }
@@ -114,8 +118,8 @@ fn row(hosts: &Hosts, mr: &QueueMr, mixed: bool, now: DateTime<Utc>) -> Vec<Cell
         cell(&mr.author, Style::Plain),
         right(render::age(mr.updated_at, now), Style::Dim),
         render::pipeline(mr.pipeline),
-        right(format!("+{}", mr.additions), Style::Ok),
-        right(format!("−{}", mr.deletions), Style::Bad),
+        right(mr.size.map(|s| format!("+{}", s.additions)).unwrap_or_default(), Style::Ok),
+        right(mr.size.map(|s| format!("−{}", s.deletions)).unwrap_or_default(), Style::Bad),
         cell(badges(mr), Style::Warn),
         cell(project, Style::Dim),
         cell(mr.reason.as_ref().map(ToString::to_string).unwrap_or_default(), Style::Dim),
@@ -154,7 +158,7 @@ mod tests {
             .await;
         let client =
             Client::with_base(&Credentials { host: "x".into(), token: "glpat-xxxx".into() }, &format!("{}/api/v4/", server.uri())).unwrap();
-        client.queue(None).await.unwrap().sections(&[])
+        client.queue(None).await.unwrap().queue.sections(&[])
     }
 
     #[tokio::test]

@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/tests.rs
+assertion_line: 306
 expression: "render(&mut app, 160, 24)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ charge.rs:-13 · 1 thread ────────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: "render(&mut app, 160, 24)"
 │                                          ││ ▎✓   13      -    let client = Client::new();    ││                                                              │
 │   ── WATCHING · 1 ────────────────────── ││           13 +    let client = Client::with_key… ││                                                              │
 │   infra: new runner                    ⠋ ││           14 +    let attempt = Attempt::first(… ││                                                              │
-│   omar · !35 · +0 −0                  2d ││      14   15      let response = client.charge(… ││                                                              │
+│   omar · !35                          2d ││      14   15      let response = client.charge(… ││                                                              │
 │                                          ││      15   16      audit::record(&response);      ││                                                              │
 │   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││                                                              │
 │                                          ││      40   41  fn idempotency_key(card: &Card) -… ││                                                              │

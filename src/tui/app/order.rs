@@ -108,7 +108,7 @@ pub(crate) fn sorted(mut rows: Vec<&QueueMr>, order: Order, urgency: impl Fn(&Qu
         Order::Updated => {}
         Order::Oldest => rows.sort_by_key(|mr| mr.created_at),
         Order::Author => rows.sort_by_key(|mr| mr.author.to_lowercase()),
-        Order::Size => rows.sort_by_key(|mr| mr.additions + mr.deletions),
+        Order::Size => rows.sort_by_key(|mr| mr.size.map_or(u32::MAX, crate::forge::Size::lines)),
         Order::Urgency => rows.sort_by(|a, b| urgency(b).total_cmp(&urgency(a))),
     }
     rows
@@ -142,9 +142,7 @@ mod tests {
             approvals_left: None,
             reviewers: vec![],
             pipeline: None,
-            additions: size,
-            deletions: 0,
-            files: 1,
+            size: Some(crate::forge::Size { additions: size, deletions: 0, files: 1 }),
             unresolved: 0,
             labels: vec![],
             notes: 0,

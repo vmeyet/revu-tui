@@ -432,6 +432,7 @@ impl App {
             Failure::SetReadiness => self.warn(format!("not changed: {message}")),
             Failure::React { thread, index, emoji, change } => self.react_failed(&thread, index, emoji, change, &message),
             Failure::Queue
+            | Failure::QueuePart
             | Failure::Open { .. }
             | Failure::Poll { .. }
             | Failure::Local

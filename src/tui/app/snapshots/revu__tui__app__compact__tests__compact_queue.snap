@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/compact.rs
+assertion_line: 87
 expression: phone(&mut app)
 ---
 ╭ Queue · all ───────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: phone(&mut app)
 │                                                │
 │   ── WATCHING · 1 ──────────────────────────── │
 │   infra: new runner                            │
-│   omar · !35 · +0 −0                    2d   ⠋ │
+│   omar · !35                            2d   ⠋ │
 │                                                │
 │   ── ▸ DONE · 1 ────────────────────────────── │
 │                                                │

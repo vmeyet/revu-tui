@@ -1,5 +1,6 @@
 ---
 source: src/tui/app/prose.rs
+assertion_line: 278
 expression: "render(&mut app, 180, 26)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────────────────────────────────────────────────────────────────────╮
@@ -13,7 +14,7 @@ expression: "render(&mut app, 180, 26)"
 │                                          ││ ▎ ▍ Install                                                                                                                          │
 │   ── WATCHING · 1 ────────────────────── ││                                                                                                                                      │
 │   infra: new runner                    ⠋ ││ ▎ Run the installer once.                                         ▎ Run the installer twice.                                         │
-│   omar · !35 · +0 −0                  2d ││                                                                                                                                      │
+│   omar · !35                          2d ││                                                                                                                                      │
 │                                          ││   • one                                                             • one                                                            │
 │   ── ▸ DONE · 1 ──────────────────────── ││                                                                                                                                      │
 │                                          ││   • two                                                             • two                                                            │

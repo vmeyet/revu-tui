@@ -25,7 +25,8 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let scope = app.scope().map_or_else(|| "all".to_owned(), |project| project.to_string());
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
-    let title = truncate(&format!("Queue · {scope}{view}"), area.width.saturating_sub(4) as usize);
+    let stale = if app.queue_failed && app.sections.is_some() { " · not refreshed" } else { "" };
+    let title = truncate(&format!("Queue · {scope}{view}{stale}"), area.width.saturating_sub(4) as usize);
     let block = pane(theme, &title, app.focus == Focus::Queue);
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -199,8 +200,12 @@ fn meta(app: &App, mr: &QueueMr, room: usize) -> (Vec<Span<'static>>, usize) {
     let number = number_of(app, mr);
     let age = short_age((app.today - mr.updated_at).to_std().unwrap_or_default());
     let host = app.host_tag(mr).map(|h| format!(" · {h}")).unwrap_or_default();
-    let size = format!(" · +{} −{}", mr.additions, mr.deletions);
-    let started = app.progress_of(&mr.key()).filter(|_| mr.files > 0).map(|p| format!(" · {}/{}", p.viewed, p.files)).unwrap_or_default();
+    let size = mr.size.map(|s| format!(" · +{} −{}", s.additions, s.deletions)).unwrap_or_default();
+    let started = app
+        .progress_of(&mr.key())
+        .filter(|_| mr.size.is_some_and(|s| s.files > 0))
+        .map(|p| format!(" · {}/{}", p.viewed, p.files))
+        .unwrap_or_default();
     let number = format!("{number}{started}");
     let base = number.width() + 3 + 1 + age.width();
     let who = truncate(who, room.saturating_sub(base).max(1));

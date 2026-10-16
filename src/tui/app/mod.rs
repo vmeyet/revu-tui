@@ -352,6 +352,8 @@ pub(crate) enum Input {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Failure {
     Queue,
+    /// The project's open MRs did not load; the queue shows my own lists without them.
+    QueuePart,
     /// Another host did not answer the queue; its rows are the ones it last answered.
     Host,
     /// Opening `key` failed; it matters only while `key` is the MR being opened.

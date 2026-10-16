@@ -2,7 +2,7 @@
 use super::saves::Saves;
 use super::{Homes, read_cache, run_blocking, write_cache};
 use crate::cache::keys;
-use crate::forge::{MrKey, ProjectPath, Queue, QueueMr, Sections};
+use crate::forge::{Fetched, MrKey, ProjectPath, Queue, QueueMr, Sections};
 use crate::ready::Source as ReadySource;
 use crate::tui::app::{self, Incoming};
 use anyhow::Result;
@@ -24,8 +24,8 @@ impl Queues {
     /// Every project's queue also asks the other hosts I am logged in to; one that fails to
     /// answer shows the rows it last answered rather than failing the whole queue. The ready command
     /// runs alongside; when it fails the queue still paints, with its last answer, and the reason comes
-    /// back apart. What follows the answer: the pins found merged or closed, that reason, and the hosts
-    /// that did not answer.
+    /// back apart. What follows the answer: the project's open MRs when they did not load, the pins found
+    /// merged or closed, that reason, and the hosts that did not answer.
     pub(in crate::tui) async fn load(&self, scope: Option<ProjectPath>) -> Result<(Incoming, Vec<Incoming>)> {
         let others = async {
             if scope.is_some() {
@@ -33,8 +33,8 @@ impl Queues {
             }
             self.other_queues().await
         };
-        let (queue, (others, silent), said) = tokio::join!(self.homes.forge.queue(scope.as_ref()), others, self.ask_ready());
-        let queue = queue?;
+        let (fetched, (others, silent), said) = tokio::join!(self.homes.forge.queue(scope.as_ref()), others, self.ask_ready());
+        let Fetched { queue, missing } = fetched?;
         let (wanted, saved) = (scope.clone(), queue.clone());
         write_cache("caching the queue", &self.homes, move |homes| homes.cache.write_entry(&keys::queue(wanted.as_ref()), &saved)).await;
         let (ready, failure) = match said {
@@ -46,6 +46,7 @@ impl Queues {
         let listed = std::iter::once(&queue).chain(&others).flat_map(Queue::listed).chain(held.map(QueueMr::key)).collect();
         let (pinned, gone) = self.pins_outside(scope.as_ref(), &listed).await;
         let follow = [
+            missing.map(|message| Incoming::Failed { what: app::Failure::QueuePart, message }),
             (!gone.is_empty()).then(|| Incoming::PinsGone { scope: scope.clone(), gone }),
             failure.map(|message| Incoming::Failed { what: app::Failure::Ready, message }),
             (!silent.is_empty()).then(|| Incoming::Failed { what: app::Failure::Host, message: silent_note(&silent) }),
@@ -270,5 +271,22 @@ mod tests {
         assert_eq!(there, sections.all().count() / 2, "the silent host keeps the rows it last had");
         let [Incoming::Failed { what: app::Failure::Host, message }] = follow.as_slice() else { panic!("{follow:?}") };
         assert_eq!(message, "git.acme.test did not answer · showing its last rows");
+    }
+
+    #[tokio::test]
+    async fn a_project_whose_open_mrs_fail_still_paints_my_lists_and_says_so() {
+        use wiremock::matchers::{method, path};
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(include_str!("../../forge/gitlab/fixtures/queue.json")))
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let queues = queues(homes_on(&server, dir.path()));
+        let (Incoming::Queue { sections, .. }, follow) = queues.load(Some("acme/widgets".into())).await.unwrap() else { panic!("a queue") };
+        assert_eq!(sections.to_review.iter().map(|mr| mr.number).collect::<Vec<_>>(), [42]);
+        let [Incoming::Failed { what: app::Failure::QueuePart, message }] = follow.as_slice() else { panic!("{follow:?}") };
+        assert!(message.starts_with("the open MRs of acme/widgets did not load"), "{message}");
     }
 }

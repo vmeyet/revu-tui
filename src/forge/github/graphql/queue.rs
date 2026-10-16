@@ -1,7 +1,7 @@
 //! The queue: every PR waiting on me in four searches, and which PRs are done.
 use crate::forge::github::wire::{Actor, Nodes, QueuePr};
 use crate::forge::github::{Client, owner_and_name};
-use crate::forge::{ProjectPath, Queue, QueueMr};
+use crate::forge::{Fetched, ProjectPath, Queue, QueueMr};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -96,16 +96,20 @@ fn queue_from(data: QueueData, project: Option<&ProjectPath>, open: Vec<QueueMr>
 
 impl Client {
     /// Every PR waiting on me; with `project`, only that repository's, plus all its other open PRs.
-    /// Two calls in parallel keep each query small.
-    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Queue> {
-        let (mine_query, open_query) = (format!("{QUEUE}{PR_FIELDS}"), format!("{OPEN}{PR_FIELDS}"));
+    /// Two calls in parallel keep each query small; when the repository's fails, my searches still answer.
+    pub(crate) async fn queue(&self, project: Option<&ProjectPath>) -> Result<Fetched> {
+        let mine_query = format!("{QUEUE}{PR_FIELDS}");
         let mine = self.graphql::<QueueData>(&mine_query, searches(project));
-        let Some(project) = project else { return Ok(queue_from(mine.await?, None, vec![])) };
+        let Some(project) = project else { return Ok(Fetched { queue: queue_from(mine.await?, None, vec![]), missing: None }) };
+        let (mine, open) = tokio::join!(mine, self.open_prs(project));
+        Ok(Fetched::scoped(queue_from(mine?, Some(project), vec![]), project, open))
+    }
+
+    async fn open_prs(&self, project: &ProjectPath) -> Result<Vec<QueueMr>> {
         let (owner, name) = owner_and_name(project)?;
-        let open = self.graphql::<OpenData>(&open_query, json!({"owner": owner, "name": name}));
-        let (mine, open) = tokio::try_join!(mine, open)?;
+        let open: OpenData = self.graphql(&format!("{OPEN}{PR_FIELDS}"), json!({"owner": owner, "name": name})).await?;
         let repository = open.repository.with_context(|| format!("repository {project} not found, or not visible with this token"))?;
-        Ok(queue_from(mine, Some(project), prs(repository.pull_requests)))
+        Ok(prs(repository.pull_requests))
     }
 
     /// Which of `numbers` in `project` are merged or closed: one query per fifty, each PR an alias.
@@ -171,6 +175,28 @@ mod tests {
         assert_eq!(sections.open, [] as [QueueMr; 0]);
         assert_eq!(numbers(&sections.drafts), [44], "a draft PR waits apart from the open ones");
         assert!(sections.watching.is_empty(), "acme/infra is out of scope");
+    }
+
+    #[tokio::test]
+    async fn a_repository_whose_open_prs_fail_leaves_my_searches_and_says_so() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("query Queue("))
+            .respond_with(ResponseTemplate::new(200).set_body_string(include_str!("../fixtures/queue.json")))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .and(body_string_contains("query Open("))
+            .respond_with(ResponseTemplate::new(502))
+            .mount(&server)
+            .await;
+        let Fetched { queue, missing } = client(&server).queue(Some(&"acme/widgets".into())).await.unwrap();
+        assert_eq!(numbers(&queue.review_requested), [42, 40, 39]);
+        assert_eq!(queue.open, [] as [QueueMr; 0]);
+        let missing = missing.expect("the missing part is named");
+        assert!(missing.starts_with("the open MRs of acme/widgets did not load"), "{missing}");
     }
 
     #[test]

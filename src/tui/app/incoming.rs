@@ -198,7 +198,7 @@ impl App {
             Failure::Queue => {
                 self.queue_loading = false;
                 self.queue_failed = true;
-                self.warn(format!("{message} · r to retry"));
+                self.warn(format!("queue not refreshed: {message} · r to retry"));
                 self.back_off();
             }
             Failure::Open { .. } => {
@@ -217,7 +217,7 @@ impl App {
                 self.offline = self.offline.or(Some(self.now));
                 self.back_off();
             }
-            Failure::Local => self.warn(message),
+            Failure::Local | Failure::QueuePart => self.warn(message),
             Failure::Host => self.toast(message),
             Failure::Triage => self.triage_failed(&message),
             other => self.apply_write_failure(other, message),
@@ -416,6 +416,25 @@ mod tests {
         let mut app = with_queue();
         app.apply(Incoming::Failed { what: Failure::Queue, message: "HTTP 502".into() });
         assert!(!render(&mut app, 100, 16).contains("did not load"));
+    }
+
+    #[test]
+    fn a_queue_failure_marks_the_queue_shown_as_not_refreshed_until_one_lands() {
+        let mut app = with_queue();
+        app.apply(Incoming::Failed { what: Failure::Queue, message: "timed out".into() });
+        assert_eq!(app.live_toast().unwrap().text, "queue not refreshed: timed out · r to retry");
+        app.now += Duration::from_secs(5);
+        assert!(render(&mut app, 100, 16).contains("Queue · all · not refreshed"), "the mark outlives the toast");
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
+        assert!(!render(&mut app, 100, 16).contains("not refreshed"));
+    }
+
+    #[test]
+    fn a_missing_part_of_the_queue_warns() {
+        let mut app = with_queue();
+        app.apply(Incoming::Failed { what: Failure::QueuePart, message: "the open MRs of acme/widgets did not load: timed out".into() });
+        let toast = app.live_toast().unwrap();
+        assert!(toast.danger && toast.text.contains("acme/widgets"));
     }
 
     #[test]
