@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.10.0 - 2026-10-16
+
 ### Fixed
 
 - **Failures revu works around now show in the log.**
