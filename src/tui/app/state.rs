@@ -234,7 +234,7 @@ pub(crate) struct App {
     /// What the editor's text turned into; the loop drains it after `apply`.
     pub(crate) composed: Vec<Action>,
     /// The key list, open.
-    pub(crate) help: Option<crate::tui::help::Help>,
+    pub(crate) help: Option<vtui::help::Help>,
     pub(crate) palette: Option<crate::tui::palette::Palette>,
     pub(crate) palette_history: Vec<String>,
     pub(crate) ground: Option<u32>,

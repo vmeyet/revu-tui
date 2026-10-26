@@ -13,7 +13,6 @@ pub mod ctx;
 mod diff;
 mod docs;
 mod forge;
-mod fuzzy;
 mod http;
 mod keymap;
 pub mod log;

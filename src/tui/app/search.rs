@@ -2,10 +2,10 @@
 //! walk the matches; a match inside a fold opens it, as vim's search does.
 use super::{App, Open};
 use crate::review::{Review, Row};
-use crate::tui::toward::Toward;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+use vtui::toward::Toward;
 
 /// What `/` looks for; `typing` while the line at the bottom takes the keys, `from` the row the
 /// search started on, where `esc` puts the cursor back.

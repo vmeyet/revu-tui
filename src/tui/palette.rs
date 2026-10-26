@@ -2,11 +2,9 @@
 //! character as VS Code does. Nothing typed finds MRs (`@author`, `!42`, `~label` narrow them, see
 //! `query`), `>` runs commands. `:` opens it on commands, with fuzzy tab completion, a ghost
 //! suggestion and history.
-use super::complete::{self, Cycle};
-use super::toward::Toward;
-use crate::act::{self, Act};
+use crate::act::{self, Act, Verb};
 use crate::forge::MrKey;
-use crate::fuzzy;
+use vtui::fuzzy;
 
 /// What the palette searches, from the first character typed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -19,6 +17,19 @@ pub(crate) enum Mode {
     /// The agent sessions that could be an MR's, `a g`.
     Sessions,
 }
+
+impl vtui::palette::Mode for Mode {
+    fn switched_by(self, first: char) -> Option<Self> {
+        (self == Mode::Mrs && first == '>').then_some(Mode::Commands)
+    }
+
+    fn takes_commands(self) -> bool {
+        self == Mode::Commands
+    }
+}
+
+/// The palette over revu's modes.
+pub(crate) type Palette = vtui::palette::Palette<Mode>;
 
 impl Mode {
     /// The character that switches to this mode, and the word the prompt shows.
@@ -49,8 +60,6 @@ pub(crate) struct Candidate {
     pub(crate) detail: String,
     pub(crate) target: Target,
 }
-
-pub(super) const MAX_SHOWN: usize = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Command {
@@ -125,17 +134,9 @@ impl Command {
     }
 }
 
-/// The commands the list shows for what is typed: all of them on an empty line, else ranked by
-/// how well their verb matches, at most `MAX_SHOWN`.
-pub(super) fn verbs_for(input: &str) -> Vec<(&'static str, &'static str)> {
-    let verb = input.split_whitespace().next().unwrap_or("");
-    let verbs = act::verbs().map(|verb| (verb.word, verb.does));
-    let ranked: Vec<(&str, &str)> = if verb.is_empty() {
-        verbs.collect()
-    } else {
-        fuzzy::rank(verb, verbs.map(|(v, what)| (v.to_owned(), (v, what)))).into_iter().map(|(_, pair)| pair).collect()
-    };
-    ranked.into_iter().take(MAX_SHOWN).collect()
+/// revu's commands that match what is typed, best first.
+pub(super) fn verbs_for(input: &str) -> Vec<Verb> {
+    vtui::palette::verbs_for(input, act::verbs())
 }
 
 pub(crate) fn parse(line: &str) -> Result<Command, String> {
@@ -212,146 +213,10 @@ pub(crate) fn slot(line: &str) -> Slot {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Palette {
-    pub(crate) mode: Mode,
-    /// What is typed after the mode's character.
-    pub(crate) input: String,
-    /// The highlighted row of the list, for MRs and files.
-    pub(crate) selected: usize,
-    pub(crate) history: Vec<String>,
-    history_at: Option<usize>,
-    cycle: Option<Cycling>,
-}
-
-/// A cycle over the last token, and the line before it that stays put.
-#[derive(Clone, Debug, PartialEq)]
-struct Cycling {
-    prefix: String,
-    cycle: Cycle,
-}
-
-impl Palette {
-    pub(crate) fn new(mode: Mode, history: Vec<String>) -> Self {
-        Self { mode, history, ..Self::default() }
-    }
-
-    /// `>` as the very first character switches the mode instead of being typed.
-    pub(super) fn type_char(&mut self, c: char) {
-        match (self.mode, self.input.is_empty(), c) {
-            (Mode::Mrs, true, '>') => self.mode = Mode::Commands,
-            _ => self.input.push(c),
-        }
-        self.selected = 0;
-        self.cycle = None;
-    }
-
-    /// Erases a character; on an empty line it steps back to MRs first. `false` once there is
-    /// nothing left to erase, which closes the palette.
-    pub(super) fn backspace(&mut self) -> bool {
-        self.selected = 0;
-        self.cycle = None;
-        if self.input.pop().is_some() {
-            return true;
-        }
-        let stepped = self.mode != Mode::Mrs;
-        self.mode = Mode::Mrs;
-        stepped
-    }
-
-    /// Still on the command's name: `↑ ↓` walk the list of commands, not the arguments.
-    pub(super) fn naming_command(&self) -> bool {
-        self.mode == Mode::Commands && !self.input.contains(char::is_whitespace)
-    }
-
-    /// Moves the highlight in a list of `len` rows, staying inside it.
-    pub(super) fn move_by(&mut self, delta: isize, len: usize) {
-        self.selected = if len == 0 { 0 } else { self.selected.saturating_add_signed(delta).min(len - 1) };
-    }
-
-    /// Replaces the token being typed with the next candidate for its slot.
-    pub(super) fn complete(&mut self, candidates: &[String], toward: Toward) {
-        let cycling = if let Some(mut cycling) = self.cycle.take() {
-            cycling.cycle.advance(toward);
-            cycling
-        } else {
-            let (prefix, token) = split_last_token(&self.input);
-            let Some(cycle) = Cycle::new(token, candidates) else { return };
-            Cycling { prefix: prefix.to_owned(), cycle }
-        };
-        let chosen = cycling.cycle.current();
-        let trailing = if chosen.ends_with('=') { "" } else { " " };
-        self.input = format!("{}{chosen}{trailing}", cycling.prefix);
-        self.cycle = Some(cycling);
-    }
-
-    /// The grey rest of the best completion for the token being typed, as a shell shows it.
-    pub(crate) fn ghost(&self, candidates: &[String]) -> Option<String> {
-        if self.cycle.is_some() {
-            return None;
-        }
-        let (_, token) = split_last_token(&self.input);
-        complete::ghost(token, candidates)
-    }
-
-    /// Accepts the ghost text, as `→` does in a shell.
-    pub(crate) fn accept(&mut self, candidates: &[String]) {
-        if let Some(rest) = self.ghost(candidates) {
-            self.input.push_str(&rest);
-            if !self.input.ends_with('=') {
-                self.input.push(' ');
-            }
-        }
-    }
-
-    pub(crate) fn hint(&self) -> Option<String> {
-        Some(self.cycle.as_ref()?.cycle.hint(str::to_owned))
-    }
-
-    pub(super) fn history_up(&mut self) {
-        if self.history.is_empty() {
-            return;
-        }
-        let at = self.history_at.map_or(self.history.len() - 1, |i| i.saturating_sub(1));
-        self.history_at = Some(at);
-        self.input.clone_from(&self.history[at]);
-        self.cycle = None;
-    }
-
-    pub(super) fn history_down(&mut self) {
-        let Some(at) = self.history_at else { return };
-        if at + 1 >= self.history.len() {
-            self.history_at = None;
-            self.input.clear();
-        } else {
-            self.history_at = Some(at + 1);
-            self.input.clone_from(&self.history[at + 1]);
-        }
-        self.cycle = None;
-    }
-
-    /// Takes the line, remembers it, and leaves the palette empty for the next command.
-    pub(super) fn submit(&mut self) -> String {
-        let line = std::mem::take(&mut self.input).trim().to_owned();
-        if !line.is_empty() && self.history.last() != Some(&line) {
-            self.history.push(line.clone());
-        }
-        self.history_at = None;
-        self.cycle = None;
-        line
-    }
-}
-
-fn split_last_token(input: &str) -> (&str, &str) {
-    match input.rfind(char::is_whitespace) {
-        Some(i) => (&input[..=i], &input[i + 1..]),
-        None => ("", input),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vtui::toward::Toward;
 
     fn typed(text: &str) -> Palette {
         let mut p = Palette::new(Mode::Commands, vec![]);
@@ -432,36 +297,10 @@ mod tests {
     }
 
     #[test]
-    fn the_highlight_stays_inside_the_list() {
-        let mut p = Palette::default();
-        p.move_by(5, 3);
-        assert_eq!(p.selected, 2);
-        p.move_by(-9, 3);
-        assert_eq!(p.selected, 0);
-        p.move_by(1, 0);
-        assert_eq!(p.selected, 0);
-    }
-
-    #[test]
     fn the_command_list_follows_the_typed_verb() {
-        assert_eq!(verbs_for("").len(), act::verbs().count().min(MAX_SHOWN));
-        assert_eq!(verbs_for("pub").first().map(|(v, _)| *v), Some("publish"));
-        assert_eq!(verbs_for("go !42").first().map(|(v, _)| *v), Some("go"));
+        assert_eq!(verbs_for("").len(), act::verbs().count().min(vtui::palette::MAX_SHOWN));
+        assert_eq!(verbs_for("pub").first().map(|verb| verb.word), Some("publish"));
+        assert_eq!(verbs_for("go !42").first().map(|verb| verb.word), Some("go"));
         assert!(typed("pu").naming_command() && !typed("go !4").naming_command());
-    }
-
-    #[test]
-    fn history_recall() {
-        let mut p = typed("go !1");
-        assert_eq!(p.submit(), "go !1");
-        p.input = "all".into();
-        p.submit();
-        p.history_up();
-        assert_eq!(p.input, "all");
-        p.history_up();
-        assert_eq!(p.input, "go !1");
-        p.history_down();
-        p.history_down();
-        assert_eq!(p.input, "");
     }
 }

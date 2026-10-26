@@ -1,10 +1,11 @@
 use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::review::Row;
-use crate::tui::help::{self, Help};
-use crate::tui::toward::Toward;
+use crate::tui::help;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
+use vtui::help::Help;
+use vtui::toward::Toward;
 
 const HALF_PAGE: isize = 10;
 /// Rows of one page still on screen after a full page down, as vim keeps them for context.

@@ -2,8 +2,8 @@
 //! it shows them, in zen or not; notifications wait until zen ends.
 use super::queue::QueueRow;
 use super::{Action, App, Focus, MrKey};
-use crate::tui::toward::Toward;
 use std::time::Instant;
+use vtui::toward::Toward;
 
 impl App {
     /// `zz`: into zen on an open MR, or back out of it.

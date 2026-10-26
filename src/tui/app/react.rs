@@ -46,7 +46,7 @@ impl Search {
     fn ranked(query: String, most_used: &[Emoji]) -> Self {
         let rest = Emoji::ALL.into_iter().chain(Emoji::others()).filter(|e| !most_used.contains(e));
         let names = most_used.iter().copied().chain(rest).map(|e| (e.gitlab().to_owned(), e));
-        let found = crate::fuzzy::rank(&query, names).into_iter().map(|(_, e)| e).collect();
+        let found = vtui::fuzzy::rank(&query, names).into_iter().map(|(_, e)| e).collect();
         Self { query, found }
     }
 }

@@ -37,7 +37,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
 | `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies as light markdown in `body.rs` |
 | `tui/theme.rs` | revu's colours over vtui's palette: the fills of a changed line and the colours of code |
-| `tui/complete.rs`, `palette.rs`, `help.rs`, `toward.rs` | Tab completion, the `ctrl-k` palette, the `?` overlay, which way a move goes through a list that wraps around |
+| `tui/palette.rs`, `palette_view.rs`, `help.rs` | revu's side of the `ctrl-k` palette (its modes, commands and what it lists) and of the `?` overlay (its groups of keys per pane) |
 | `tui/prose.rs`, `table.rs`, `images.rs` | Markdown files block by block, Markdown tables, pictures in the thread pane |
 | `tui/compose.rs`, `drag.rs` | `$EDITOR` for a comment, text selection by drag |
 | `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
@@ -49,8 +49,8 @@ When a boundary or a flow changes, change this page in the same MR.
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
 | `docs.rs`, `sources.rs` | Writes `docs/reference/` from the code (`revu docs`); tests only, the crate's own source files for checks that read them |
 | `usage.rs`, `reactions.rs`, `log.rs` | Local usage counts, the reactions used most, the log file |
-| `vtui` (crate) | The TUI pieces no app owns, shared with the other vmeyet TUIs: `screen` (raw mode, the alternate screen, `Screen::lend`), `ground` (the terminal's background, asked once at startup), `clipboard` (OSC 52), `motion` (how often the screen moves on its own), `field` (the input box), `text` (text cut to terminal columns), `theme` (the colour tokens and named palettes), `pane` (the frame of a pane or modal) |
-| `mrref.rs`, `query.rs`, `fuzzy.rs`, `render.rs` | Parsing `group/project!42`, the filter language, fzf-style matching, terminal output |
+| `vtui` (crate) | The TUI pieces no app owns, shared with the other vmeyet TUIs: `screen` (raw mode, the alternate screen, `Screen::lend`), `ground` (the terminal's background, asked once at startup), `clipboard` (OSC 52), `motion` (how often the screen moves on its own), `field` (the input box), `text` (text cut to terminal columns), `theme` (the colour tokens and named palettes), `pane` (the frame of a pane or modal), `fuzzy` (fzf-style matching), `toward` (which way a move goes through a list that wraps around), `palette` (the `ctrl-k` line with tab completion, generic over revu's modes), `help` (the `?` overlay over the groups revu builds) |
+| `mrref.rs`, `query.rs`, `render.rs` | Parsing `group/project!42`, the filter language, terminal output |
 
 ## Data flow
 

@@ -2,9 +2,9 @@ use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef, Sha};
 use crate::review::{Draft, Review, Row, Side};
-use crate::tui::toward::Toward;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use vtui::toward::Toward;
 
 /// The MR on screen: the review plus where the reader is in it.
 #[derive(Clone, Debug, PartialEq)]

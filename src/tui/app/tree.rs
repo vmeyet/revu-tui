@@ -5,9 +5,9 @@ use crate::diff::LineKind;
 use crate::diff::fold::Fold;
 use crate::review::tree::{self, TreeFolds, TreeRow};
 use crate::review::{File, Row};
-use crate::tui::toward::Toward;
 use crossterm::event::KeyEvent;
 use std::sync::Arc;
+use vtui::toward::Toward;
 
 /// The tree while it is open: which folders the reader flipped, and the row under the cursor.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
