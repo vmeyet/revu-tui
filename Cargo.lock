@@ -4023,6 +4023,7 @@ dependencies = [
 [[package]]
 name = "vtui"
 version = "0.1.0"
+source = "git+https://github.com/vmeyet/vtui?tag=v0.1.0#e388371e92b86e7403325cd9294e6d858314ee33"
 dependencies = [
  "base64 0.22.1",
  "crossterm",
