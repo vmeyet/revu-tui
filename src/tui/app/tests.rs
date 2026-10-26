@@ -393,7 +393,7 @@ fn moves_within_three_seconds(app: &mut App, width: u16, height: u16) -> bool {
 fn a_compact_queue_at_rest_draws_the_same_frame_second_after_second() {
     let (width, height) = PHONE;
     let mut app = queue_with_marks(width, height);
-    assert_eq!(app.motion(), crate::tui::motion::Motion::Calm);
+    assert_eq!(app.motion(), vtui::motion::Motion::Calm);
     assert!(!moves_within_three_seconds(&mut app, width, height));
     let mut forced = queue_with_marks(120, 40);
     forced.widths = crate::config::Widths { compact: u16::MAX, ..crate::config::Widths::default() };
@@ -405,7 +405,7 @@ fn a_compact_queue_at_rest_draws_the_same_frame_second_after_second() {
 fn a_wide_and_a_narrow_queue_pulse_their_marks_and_spin_the_running_badge() {
     for width in [160, 100] {
         let mut app = queue_with_marks(width, 40);
-        assert_eq!(app.motion(), crate::tui::motion::Motion::Lively, "{width} columns");
+        assert_eq!(app.motion(), vtui::motion::Motion::Lively, "{width} columns");
         let lit = cell_of(&cells(&mut app, width, 40), "●").fg;
         app.now += Duration::from_secs(1);
         let screen = render(&mut app, width, 40);
@@ -420,7 +420,7 @@ fn a_window_that_crosses_the_compact_width_changes_how_it_moves() {
     let mut app = queue_with_marks(120, 40);
     assert!(moves_within_three_seconds(&mut app, 120, 40));
     render(&mut app, 50, 30);
-    assert_eq!((app.motion(), app.motion().tick()), (crate::tui::motion::Motion::Calm, Duration::from_millis(250)));
+    assert_eq!((app.motion(), app.motion().tick()), (vtui::motion::Motion::Calm, Duration::from_millis(250)));
     assert!(!moves_within_three_seconds(&mut app, 50, 30), "calm as soon as it is compact");
     render(&mut app, 120, 40);
     assert_eq!(app.motion().tick(), Duration::from_millis(100));

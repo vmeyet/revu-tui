@@ -4,17 +4,14 @@ mod answer_view;
 mod app;
 mod backend;
 mod brief_view;
-mod clipboard;
 mod complete;
 mod compose;
 mod diff_view;
 mod drag;
 mod field;
-mod ground;
 pub(crate) mod help;
 mod images;
 mod lanes;
-mod motion;
 mod outline_view;
 mod palette;
 mod palette_view;
@@ -24,7 +21,6 @@ mod prose;
 mod prose_view;
 mod publish_view;
 mod queue_view;
-mod screen;
 mod share_view;
 mod table;
 mod taps_view;
@@ -51,6 +47,7 @@ use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
+use vtui::screen::Screen;
 
 /// A screen that stood still for a tick is looked at once a second: ages, toasts, pulses and polls need no more.
 const IDLE_TICK: Duration = Duration::from_secs(1);
@@ -62,7 +59,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
             .ok_or_else(|| anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", ")))?,
         None => theme::Theme::default(),
     };
-    let ground = ground::ask();
+    let ground = vtui::ground::ask();
     let pictures = if ctx.config.tui.images.unwrap_or(true) { images::ask_terminal() } else { None };
     let theme = ground.map_or(theme, |ground| theme.with_ground(ground));
     let others = ctx.others();
@@ -121,7 +118,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         let backend = backend.clone();
         async move { backend.homes.prune_daily().await }
     });
-    let (mut terminal, screen) = screen::Screen::enter();
+    let (mut terminal, screen) = Screen::enter();
     let outcome = event_loop(&mut terminal, &screen, &mut app, &backend, first).await;
     screen.leave();
     outcome
@@ -129,7 +126,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
 
 async fn event_loop(
     terminal: &mut ratatui::DefaultTerminal,
-    screen: &screen::Screen,
+    screen: &Screen,
     app: &mut App,
     backend: &Backend,
     first: Vec<Action>,
@@ -186,7 +183,7 @@ async fn event_loop(
                 }
                 other => {
                     if let Action::Copy { text, .. } = &other {
-                        clipboard::print(text);
+                        vtui::clipboard::print(text);
                     }
                     spawn(other, backend, tx.clone());
                 }
@@ -251,14 +248,14 @@ async fn save_usage(counts: crate::usage::Counts) {
 }
 
 /// The reader's program owns the terminal until it exits; the app, untouched, draws again after.
-fn view_inline(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, keys: &mut Keys, app: &mut App, view: crate::open::View) {
+fn view_inline(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, keys: &mut Keys, app: &mut App, view: crate::open::View) {
     let outcome = lend(terminal, screen, keys, || crate::open::run(&view.argv));
     wake(app);
     app.apply(Incoming::Viewed { view, outcome });
 }
 
 /// Another program owns the terminal and its keys while `run` lasts.
-fn lend<T>(terminal: &mut ratatui::DefaultTerminal, screen: &screen::Screen, keys: &mut Keys, run: impl FnOnce() -> T) -> T {
+fn lend<T>(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, keys: &mut Keys, run: impl FnOnce() -> T) -> T {
     keys.pause();
     let outcome = screen.lend(terminal, run);
     keys.resume();
@@ -274,7 +271,7 @@ fn wake(app: &mut App) {
 /// The editor owns the terminal for a while; the answer goes through `apply` like any other.
 fn compose_inline(
     terminal: &mut ratatui::DefaultTerminal,
-    screen: &screen::Screen,
+    screen: &Screen,
     keys: &mut Keys,
     app: &mut App,
     input: Input,

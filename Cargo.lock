@@ -2736,6 +2736,7 @@ dependencies = [
  "tree-sitter-typescript",
  "unicode-width",
  "url",
+ "vtui",
  "wiremock",
 ]
 
@@ -4017,6 +4018,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d9b2acfb050df409c972a37d3b8e08cdea3bddb0c09db9d53137e504cfabed0"
 dependencies = [
  "utf8parse",
+]
+
+[[package]]
+name = "vtui"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "crossterm",
+ "libc",
+ "ratatui",
+ "tracing",
+ "unicode-width",
 ]
 
 [[package]]
