@@ -110,7 +110,7 @@ fn summary(thread: &Thread, drafts: usize, look: Look<'_>) -> Line<'static> {
         Span::styled(SEPARATOR, faded),
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
         Span::styled(SEPARATOR, faded),
-        Span::raw(crate::tui::ui::truncate(words, width.saturating_sub(taken))),
+        Span::raw(vtui::text::truncate(words, width.saturating_sub(taken))),
         Span::styled(replies, faded),
         Span::styled(waiting, Style::default().fg(theme.accent)),
     ]);
@@ -164,7 +164,7 @@ pub(super) fn heading(review: &Review, conversation: &Conversation, look: Look<'
     };
     let place = Line::from(Span::styled(place, Style::default().fg(look.theme.muted)));
     let code =
-        code.map(|text| Line::from(Span::styled(crate::tui::ui::truncate(text.trim(), look.width), Style::default().fg(look.theme.faded))));
+        code.map(|text| Line::from(Span::styled(vtui::text::truncate(text.trim(), look.width), Style::default().fg(look.theme.faded))));
     std::iter::once(place).chain(code).collect()
 }
 

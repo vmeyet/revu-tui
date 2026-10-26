@@ -4,9 +4,7 @@ pub(super) use crate::forge::gitlab::fixture;
 pub(super) use crate::forge::{Approval, DiffFile, Discussion, Emoji, Kind, Mr, PipelineStatus};
 pub(super) use crate::review::{Place, Row};
 pub(super) use crate::tui::compose::Edited;
-pub(super) use crate::tui::help::Help;
 pub(super) use crate::tui::theme::Theme;
-pub(super) use crate::tui::toward::Toward;
 pub(super) use crate::tui::ui;
 pub(super) use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub(super) use ratatui::Terminal;
@@ -14,6 +12,8 @@ pub(super) use ratatui::backend::TestBackend;
 pub(super) use ratatui::style::Color;
 pub(super) use serde_json::json;
 pub(super) use std::time::Duration;
+pub(super) use vtui::help::Help;
+pub(super) use vtui::toward::Toward;
 
 pub(super) fn mr_key() -> MrKey {
     fixture::key()

@@ -4,9 +4,9 @@ use super::{Action, App, Focus, Open};
 use crate::act::{self, Act};
 use crate::forge::ThreadId;
 use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
-use crate::tui::toward::Toward;
 use crossterm::event::KeyEvent;
 use std::collections::BTreeSet;
+use vtui::toward::Toward;
 
 const HALF_PAGE: usize = 5;
 

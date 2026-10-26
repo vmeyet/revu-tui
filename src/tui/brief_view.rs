@@ -4,7 +4,7 @@ use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;
 use super::thread_view::body_lines;
-use super::ui::{DEPLOYED, Link, pane, short_age, truncate};
+use super::ui::{DEPLOYED, Link, short_age};
 use crate::forge::ReviewState;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -13,6 +13,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Padding, Paragraph, Wrap};
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
+use vtui::text::truncate;
 
 /// Share of the screen the cover takes each way, and the widest it gets: past that, lines are too long to read.
 const SIZE_PCT: u16 = 90;
@@ -43,7 +45,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         (true, None) => " j k move · p pipeline · o browser · y copy · esc close ".to_owned(),
         (false, _) => " enter open the MR · j k scroll · o browser · y copy · esc close ".to_owned(),
     };
-    let block = pane(theme, &format!("{}{} {}", brief.sigil, brief.number, brief.title), true)
+    let block = pane::framed(&theme, &format!("{}{} {}", brief.sigil, brief.number, brief.title), true)
         .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y))
         .title_bottom(Line::from(Span::styled(hint, Style::default().fg(theme.faded))));
     let inner = block.inner(popup);

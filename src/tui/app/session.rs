@@ -2,9 +2,10 @@
 //! when several could be the one, the search box lists them, a new one first.
 use super::{Action, App, Focus};
 use crate::agent::{Choice, Mr, Session};
-use crate::fuzzy;
 use crate::share::Fields;
-use crate::tui::palette::{Candidate, MAX_SHOWN, Mode, Target};
+use crate::tui::palette::{Candidate, Mode, Target};
+use vtui::fuzzy;
+use vtui::palette::MAX_SHOWN;
 
 /// The sessions the reader picks among, and the MR they are for.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -9,10 +9,10 @@ use crate::review::{File, FileKind, Place, Review, Row};
 use crate::syntax;
 use crate::tui::table::{self, TableLine};
 use crate::tui::theme::Theme;
-use crate::tui::ui::truncate;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 const INDENT: &str = "   ";
 

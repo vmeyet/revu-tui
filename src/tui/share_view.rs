@@ -2,12 +2,12 @@
 use super::app::{App, ShareStage, Sharing};
 use super::theme::Theme;
 use super::thread_view::draw_compose;
-use super::ui::pane;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
+use vtui::pane;
 
 const WIDTH: u16 = 72;
 const NOTE_ROWS: u16 = 5;
@@ -15,7 +15,7 @@ const NOTE_ROWS: u16 = 5;
 pub(crate) fn draw(f: &mut Frame<'_>, app: &App, sharing: &Sharing, area: Rect) {
     let theme = app.theme;
     let width = WIDTH.min(area.width.saturating_sub(4)).max(20);
-    let block = pane(theme, &sharing.title(), true)
+    let block = pane::framed(&theme, &sharing.title(), true)
         .title_bottom(Line::from(Span::styled(format!(" {} ", keys(sharing)), Style::default().fg(theme.faded))));
     let text_width = block.inner(Rect { width, height: 3, ..area }).width.max(1);
     let body = lines(sharing, theme, text_width);

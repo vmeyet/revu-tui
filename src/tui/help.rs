@@ -1,36 +1,15 @@
 //! The `?` overlay: the keys of the focused pane, or every key after a second `?`, grouped by task in the order a
-//! review goes, in one or two columns. In the compact layout the first `?` lists the keys of the tap bar alone.
+//! review goes. In the compact layout the first `?` lists the keys of the tap bar alone. vtui draws it.
 use super::app::{App, Focus};
-use super::ui::{pane, truncate};
 use crate::act::Group;
 use crate::keymap::Keymap;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, Padding, Paragraph};
-use unicode_width::UnicodeWidthStr;
+use vtui::help::{Help, Row, Section};
 
 /// The groups, in the order a review goes.
 pub(crate) const GROUPS: [Group; 8] =
     [Group::Move, Group::Queue, Group::View, Group::Comment, Group::Thread, Group::Outline, Group::Ask, Group::App];
-
-/// The overlay while open: how far it scrolled, and whether it lists every key or the focused pane's.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Help {
-    pub(crate) scroll: usize,
-    pub(crate) every_key: bool,
-}
-
-/// Padding inside the frame: two columns on each side, one row above and below.
-const PAD_X: u16 = 2;
-const PAD_Y: u16 = 1;
-/// Space between the two columns.
-const GUTTER: usize = 6;
-/// Space between a key and what it does.
-const KEY_GAP: usize = 2;
-/// From this overlay width the groups share two columns.
-const TWO_COLUMNS_FROM: u16 = 100;
 
 /// The panes whose first `?` shows the group.
 fn panes(group: Group) -> &'static [Focus] {
@@ -49,110 +28,28 @@ fn groups(every_key: bool, focus: Focus) -> impl Iterator<Item = Group> {
     GROUPS.into_iter().filter(move |g| every_key || panes(*g).contains(&focus))
 }
 
-/// The last row the list can scroll to: its groups in one column, so scrolling never stops short.
+/// The last row the list can scroll to.
 pub(super) fn last_row(app: &App, every_key: bool) -> usize {
-    column_height(&shown(app, every_key).iter().map(|(_, keys)| keys.len()).collect::<Vec<_>>()).saturating_sub(1)
-}
-
-/// Rows a column of groups takes: a header per group, its keys, one blank row between groups.
-fn column_height(sizes: &[usize]) -> usize {
-    sizes.iter().map(|n| n + 1).sum::<usize>() + sizes.len().saturating_sub(1)
-}
-
-/// How many groups go in the left column so both columns end as close as possible; order is kept.
-pub(crate) fn split(sizes: &[usize]) -> usize {
-    (1..sizes.len()).min_by_key(|&at| column_height(&sizes[..at]).max(column_height(&sizes[at..]))).unwrap_or(sizes.len())
+    vtui::help::last_row(&shown(app, every_key))
 }
 
 /// The groups with their keys as they are in effect: the user's bindings, `(`/`)` on AZERTY. In the compact layout,
 /// until every key is asked for, one group: the keys of the page's tap bar.
-fn shown(app: &App, every_key: bool) -> Vec<(&'static str, Vec<(String, &'static str)>)> {
+fn shown(app: &App, every_key: bool) -> Vec<Section> {
     let keymap: &Keymap = &app.keymap;
     if app.compact && !every_key {
         let page = app.page();
-        return vec![(page.name(), page.taps().iter().map(|tap| (keymap.label(tap.keys), tap.does)).collect())];
+        let rows = page.taps().iter().map(|tap| Row { keys: keymap.label(tap.keys), does: tap.does }).collect();
+        return vec![Section { title: page.name(), rows }];
     }
-    groups(every_key, app.focus).map(|g| (g.title(), g.lines().map(|line| (keymap.label(line.keys), line.does)).collect())).collect()
-}
-
-/// A column of groups as lines: faded uppercase headers, keys right-aligned in the accent.
-fn column_lines<'a>(groups: &[(&str, Vec<(String, &str)>)], width: usize, app: &App) -> Vec<Line<'a>> {
-    let theme = app.theme;
-    let key_w = groups.iter().flat_map(|(_, keys)| keys.iter().map(|(k, _)| k.width())).max().unwrap_or(0);
-    let what_w = width.saturating_sub(key_w + KEY_GAP);
-    let header = Style::default().fg(theme.faded).add_modifier(Modifier::BOLD);
-    let key = Style::default().fg(theme.accent).add_modifier(Modifier::BOLD);
-    let mut lines = vec![];
-    for (i, (title, keys)) in groups.iter().enumerate() {
-        if i > 0 {
-            lines.push(Line::default());
-        }
-        lines.push(Line::from(Span::styled(title.to_uppercase(), header)));
-        for (keys, what) in keys {
-            lines.push(Line::from(vec![
-                Span::styled(format!("{keys:>key_w$}"), key),
-                Span::raw(" ".repeat(KEY_GAP)),
-                Span::raw(truncate(what, what_w)),
-            ]));
-        }
-    }
-    lines
-}
-
-/// The widest line a column needs: its widest key, the gap, its widest description.
-fn natural_width(groups: &[(&str, Vec<(String, &str)>)]) -> usize {
-    let key_w = groups.iter().flat_map(|(_, keys)| keys.iter().map(|(k, _)| k.width())).max().unwrap_or(0);
-    let what_w = groups.iter().flat_map(|(_, keys)| keys.iter().map(|(_, w)| w.width())).max().unwrap_or(0);
-    let title_w = groups.iter().map(|(t, _)| t.width()).max().unwrap_or(0);
-    (key_w + KEY_GAP + what_w).max(title_w)
+    groups(every_key, app.focus)
+        .map(|g| Section { title: g.title(), rows: g.lines().map(|line| Row { keys: keymap.label(line.keys), does: line.does }).collect() })
+        .collect()
 }
 
 /// The overlay, centred, at most 90 % of the screen each way; it scrolls by `scroll` rows when taller than that.
 pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect, help: Help) {
-    let groups = shown(app, help.every_key);
-    let sizes: Vec<usize> = groups.iter().map(|(_, keys)| keys.len()).collect();
-    let max_w = area.width * 9 / 10;
-    let two = max_w >= TWO_COLUMNS_FROM;
-    let at = if two { split(&sizes) } else { groups.len() };
-    let (left, right) = groups.split_at(at);
-    let frame_x = usize::from(2 + 2 * PAD_X);
-    let natural = if two { natural_width(left) + GUTTER + natural_width(right) } else { natural_width(left) };
-    let width = ((natural + frame_x) as u16).min(max_w).max(area.width.min(40));
-    let inner_w = usize::from(width).saturating_sub(frame_x);
-    let (left_w, right_w) = if two {
-        let share = inner_w.saturating_sub(GUTTER);
-        let left_w = share * natural_width(left) / (natural_width(left) + natural_width(right)).max(1);
-        (left_w, share - left_w)
-    } else {
-        (inner_w, 0)
-    };
-    let left_lines = column_lines(left, left_w, app);
-    let right_lines = column_lines(right, right_w, app);
-    let rows = left_lines.len().max(right_lines.len());
-    let frame_y = usize::from(2 + 2 * PAD_Y);
-    let height = ((rows + frame_y) as u16).min(area.height * 9 / 10).max(area.height.min(8));
-    let visible = usize::from(height).saturating_sub(frame_y);
-    let top = help.scroll.min(rows.saturating_sub(visible));
-    let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
-    let more = if help.every_key { "" } else { "? every key · " };
-    let hint = if rows > visible {
-        format!(" {}–{} of {} · j k scroll · {more}esc close ", top + 1, (top + visible).min(rows), rows)
-    } else {
-        format!(" {more}esc close ")
-    };
-    let block = pane(app.theme, "keys", true)
-        .title_bottom(Line::from(Span::styled(hint, Style::default().fg(app.theme.faded))).right_aligned())
-        .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y));
-    let inner = block.inner(popup);
-    f.render_widget(Clear, popup);
-    f.render_widget(block.style(Style::default().bg(app.theme.surface)), popup);
-    let scroll_to = (top as u16, 0);
-    let left_area = Rect { width: left_w as u16, ..inner };
-    f.render_widget(Paragraph::new(left_lines).scroll(scroll_to), left_area);
-    if two {
-        let right_area = Rect { x: inner.x + (left_w + GUTTER) as u16, width: right_w as u16, ..inner };
-        f.render_widget(Paragraph::new(right_lines).scroll(scroll_to), right_area);
-    }
+    vtui::help::draw(f, &app.theme, area, help, &shown(app, help.every_key));
 }
 
 #[cfg(test)]
@@ -185,23 +82,6 @@ mod tests {
                 assert!(seen.insert(line.keys), "{} twice in {}", line.keys, group.title());
             }
         }
-    }
-
-    #[test]
-    fn two_columns_end_as_close_as_possible_without_reordering() {
-        assert_eq!(split(&[3, 3]), 1);
-        assert_eq!(split(&[20, 1, 1, 1]), 1, "one tall group stays alone on the left");
-        assert_eq!(split(&[1, 1, 1, 1, 10]), 4);
-        let sizes: Vec<usize> = GROUPS.iter().map(|g| g.lines().count()).collect();
-        let at = split(&sizes);
-        let (left, right) = (column_height(&sizes[..at]), column_height(&sizes[at..]));
-        assert!(left.abs_diff(right) <= 8, "left {left} rows, right {right}");
-    }
-
-    #[test]
-    fn a_column_counts_headers_and_the_blank_rows_between_groups() {
-        assert_eq!(column_height(&[2, 3]), 3 + 4 + 1);
-        assert_eq!(column_height(&[]), 0);
     }
 
     #[test]

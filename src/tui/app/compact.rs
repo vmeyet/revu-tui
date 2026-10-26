@@ -4,8 +4,8 @@
 use super::App;
 use crate::config::QueueLayout;
 use crate::review::Place;
-use crate::tui::motion::Motion;
 use std::time::Duration;
+use vtui::motion::Motion;
 
 impl App {
     /// The screen moves on its own as little as a phone link likes in the compact layout, freely anywhere else.

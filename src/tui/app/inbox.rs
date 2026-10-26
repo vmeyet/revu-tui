@@ -3,9 +3,9 @@
 //! shows how far each review went.
 use super::{Action, App, MrKey, Open};
 use crate::review::{Progress, Review, Row};
-use crate::tui::toward::Toward;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use vtui::toward::Toward;
 
 /// How long the cursor rests before its place is saved: moving through a file writes nothing.
 const SETTLE: Duration = Duration::from_secs(1);

@@ -141,12 +141,7 @@ pub(crate) struct Line {
     pub(crate) does: &'static str,
 }
 
-/// A palette command: the word typed after `:`, and what the list says it does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Verb {
-    pub(crate) word: &'static str,
-    pub(crate) does: &'static str,
-}
+pub(crate) use vtui::palette::Verb;
 
 /// What revu knows about one action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

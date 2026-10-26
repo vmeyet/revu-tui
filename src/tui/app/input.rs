@@ -11,7 +11,7 @@ impl App {
     pub(super) fn open_input(&mut self, input: Input, text: &str) {
         let kept = self.unsent.remove(&target_key(&input));
         let text = if text.is_empty() { kept.unwrap_or_default() } else { text.to_owned() };
-        self.buffer = crate::tui::field::Field::new(text);
+        self.buffer = vtui::field::Field::new(text);
         self.compose_from = self.focus;
         self.show_target(&input);
         self.input = Some(input);

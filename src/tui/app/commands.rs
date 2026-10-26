@@ -1,13 +1,14 @@
 //! The palette: MRs, the open MR's files, or commands, typed instead of walked to.
 use super::{Action, App, Focus, PinChange};
 use crate::forge::MrKey;
-use crate::fuzzy;
 use crate::query::Query;
-use crate::tui::help::Help;
-use crate::tui::palette::{self, Candidate, Command, MAX_SHOWN, Mode, Palette, Slot, Target};
+use crate::tui::palette::{self, Candidate, Command, Mode, Palette, Slot, Target};
 use crate::tui::theme::Theme;
-use crate::tui::toward::Toward;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vtui::fuzzy;
+use vtui::help::Help;
+use vtui::palette::MAX_SHOWN;
+use vtui::toward::Toward;
 
 impl App {
     /// `ctrl-k` and `⌘k` open it on MRs, `:` and `⌘⇧k` on commands.
@@ -53,7 +54,7 @@ impl App {
 
     fn palette_enter(&mut self, mut palette: Palette) -> Vec<Action> {
         if palette.naming_command() {
-            let picked = palette::verbs_for(&palette.input).get(palette.selected).map(|(verb, _)| (*verb).to_owned());
+            let picked = palette::verbs_for(&palette.input).get(palette.selected).map(|verb| verb.word.to_owned());
             if let Some(verb) = picked {
                 palette.input.clone_from(&verb);
                 if palette::parse(&verb).is_err() {
