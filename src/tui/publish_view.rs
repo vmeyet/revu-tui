@@ -1,6 +1,5 @@
 //! The publish modal: every draft on one screen, the approval tick, one key to send them all.
 use super::app::{App, Publish};
-use super::ui::pane;
 use crate::review::{Draft, Side};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -8,6 +7,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
 use vtui::text::truncate;
 
 const WIDTH: u16 = 64;
@@ -21,7 +21,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, publish: &Publish, area: Rect) 
     let width = WIDTH.min(area.width);
     let height = (drafts.len() as u16 + CHROME_ROWS).min(area.height);
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
-    let block = pane(theme, "Publish review", true);
+    let block = pane::framed(&theme, "Publish review", true);
     let inner = block.inner(popup);
     let room = inner.width as usize;
     let muted = Style::default().fg(theme.muted);

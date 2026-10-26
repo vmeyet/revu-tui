@@ -1,7 +1,6 @@
 //! The `?` overlay: the keys of the focused pane, or every key after a second `?`, grouped by task in the order a
 //! review goes, in one or two columns. In the compact layout the first `?` lists the keys of the tap bar alone.
 use super::app::{App, Focus};
-use super::ui::pane;
 use crate::act::Group;
 use crate::keymap::Keymap;
 use ratatui::Frame;
@@ -10,6 +9,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Padding, Paragraph};
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
 use vtui::text::truncate;
 
 /// The groups, in the order a review goes.
@@ -141,7 +141,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect, help: Help) {
     } else {
         format!(" {more}esc close ")
     };
-    let block = pane(app.theme, "keys", true)
+    let block = pane::framed(&app.theme, "keys", true)
         .title_bottom(Line::from(Span::styled(hint, Style::default().fg(app.theme.faded))).right_aligned())
         .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y));
     let inner = block.inner(popup);

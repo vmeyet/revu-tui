@@ -6,9 +6,10 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Padding, Paragraph};
+use ratatui::widgets::{Block, Borders, Padding, Paragraph};
 use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
 use vtui::text::truncate;
 
 /// What marks a review app: where the MR's branch runs.
@@ -283,20 +284,10 @@ fn zen_column(area: Rect, width: u16) -> Rect {
     Rect { x: area.x + (area.width - width) / 2, y: area.y + 1, width, height: area.height.saturating_sub(1) }
 }
 
-pub(crate) fn pane(theme: Theme, title: &str, focused: bool) -> Block<'static> {
-    let title_style =
-        if focused { Style::default().fg(theme.accent).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme.faded) };
-    Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(if focused { theme.border_focus } else { theme.border }))
-        .title(Span::styled(format!(" {title} "), title_style))
-        .padding(Padding::horizontal(1))
-}
-
 /// A right pane's frame; in zen, only a faded title line over the content, both where the diff's text starts.
 pub(super) fn side_pane(theme: Theme, title: &str, focused: bool, zen: bool) -> Block<'static> {
     if !zen {
-        return pane(theme, title, focused);
+        return pane::framed(&theme, title, focused);
     }
     Block::default().title(Span::styled(format!(" {title}"), Style::default().fg(theme.faded))).padding(Padding::new(1, 1, 1, 0))
 }

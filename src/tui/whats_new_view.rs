@@ -2,13 +2,13 @@
 use super::app::{App, WhatsNew};
 use super::theme::Theme;
 use super::thread_view::{inline, wrap};
-use super::ui::pane;
 use crate::changelog::{Entry, Section};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Padding, Paragraph};
+use vtui::pane;
 
 /// Share of the screen the page takes each way, and the widest it gets: past that, lines are too long to read.
 const SIZE_PCT: u16 = 90;
@@ -25,7 +25,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let width = (area.width * SIZE_PCT / 100).clamp(area.width.min(40), MAX_WIDTH).min(area.width);
     let lines = lines(&app.whats_new, theme, usize::from(width.saturating_sub(2 + 2 * PAD_X)));
     let popup = centred(area, width, lines.len());
-    let block = pane(theme, &format!("what's new · revu {}", app.whats_new.changelog.running), true)
+    let block = pane::framed(&theme, &format!("what's new · revu {}", app.whats_new.changelog.running), true)
         .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y))
         .title_bottom(Line::from(Span::styled(" j k scroll · esc close ", Style::default().fg(theme.faded))));
     let visible = usize::from(block.inner(popup).height);

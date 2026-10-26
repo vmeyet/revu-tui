@@ -2,13 +2,13 @@
 //! match what is typed.
 use super::app::App;
 use super::palette::{Mode, Palette, Target};
-use super::ui::pane;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
 use vtui::text::truncate;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) {
@@ -17,7 +17,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) 
     let height = (super::palette::MAX_SHOWN as u16 + 4).min(area.height);
     let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + area.height.saturating_sub(height) / 3, width, height };
     let (sign, what) = palette.mode.prompt();
-    let block = pane(theme, &format!("search · {what}"), true);
+    let block = pane::framed(&theme, &format!("search · {what}"), true);
     let inner = block.inner(popup);
     let room = inner.width.saturating_sub(4) as usize;
     let mut lines = vec![prompt(app, palette, sign), Line::default()];

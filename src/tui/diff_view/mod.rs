@@ -12,7 +12,7 @@ mod wrap;
 use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
 use super::theme::Theme;
 use super::thread_view;
-use super::ui::{draw_empty, pane, settle_scroll};
+use super::ui::{draw_empty, settle_scroll};
 use crate::review::{Review, Row};
 use anchors::{Anchors, focused_range};
 pub(super) use header::pipeline_glyph;
@@ -29,6 +29,7 @@ use select::text_rows;
 use side_by_side::{SIDE_BY_SIDE_MIN_W, side_by_side_lines};
 use std::collections::VecDeque;
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
 use vtui::text::{truncate, truncate_middle};
 use wrap::wrap_row;
 
@@ -112,7 +113,8 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
         None => "Review".to_owned(),
     };
     let zen = app.zen;
-    let block = if zen { Block::default().padding(Padding::horizontal(1)) } else { pane(theme, &title, app.focus == Focus::Review) };
+    let block =
+        if zen { Block::default().padding(Padding::horizontal(1)) } else { pane::framed(&theme, &title, app.focus == Focus::Review) };
     let block = match gutter.cursor_title(app.cursor_line(), theme) {
         Some(line) => block.title_top(line),
         None => block,

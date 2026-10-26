@@ -2,7 +2,7 @@
 //! `[tui] queue = "compact"`, outside the compact layout), and one author's chained MRs folded into a stack.
 use super::app::{App, Badge, Focus, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
-use super::ui::{Link, draw_empty, pane, short_age};
+use super::ui::{Link, draw_empty, short_age};
 use crate::config::QueueLayout;
 use crate::forge::QueueMr;
 use ratatui::Frame;
@@ -11,6 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
+use vtui::pane;
 use vtui::text::truncate;
 
 const SKELETON_ROWS: usize = 3;
@@ -28,7 +29,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
     let stale = if app.queue_failed && app.sections.is_some() { " · not refreshed" } else { "" };
     let title = truncate(&format!("Queue · {scope}{view}{stale}"), area.width.saturating_sub(4) as usize);
-    let block = pane(theme, &title, app.focus == Focus::Queue);
+    let block = pane::framed(&theme, &title, app.focus == Focus::Queue);
     let inner = block.inner(area);
     f.render_widget(block, area);
     if app.sections.is_none() && app.queue_failed {
