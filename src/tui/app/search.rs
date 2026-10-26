@@ -55,8 +55,8 @@ impl App {
         let Some(open) = &self.open else { return };
         let forward = toward == Toward::Next;
         let hits = self.matches();
-        let here = hit_at(open);
-        let after = |hit: &&Hit| if forward { Some(**hit) > here } else { Some(**hit) < here };
+        let here = hits_at(open);
+        let after = |hit: &&Hit| if forward { Some(**hit) > here.last().copied() } else { Some(**hit) < here.first().copied() };
         let next = if forward { hits.iter().find(after) } else { hits.iter().rev().find(after) };
         let wrapped = if forward { hits.first() } else { hits.last() };
         match (next, wrapped) {
@@ -79,8 +79,8 @@ impl App {
         let open = self.open.as_ref()?;
         let search = self.search.as_ref().filter(|s| !s.query.is_empty())?;
         let hits = hits(&open.review, &search.query);
-        let here = hit_at(open);
-        let at = hits.iter().position(|hit| Some(*hit) == here).map_or_else(|| "–".to_owned(), |i| (i + 1).to_string());
+        let here = hits_at(open);
+        let at = hits.iter().position(|hit| here.contains(hit)).map_or_else(|| "–".to_owned(), |i| (i + 1).to_string());
         Some(format!("{at}/{}", hits.len()))
     }
 
@@ -135,7 +135,7 @@ impl Open {
     }
 }
 
-/// Every match in the MR, in reading order: a file's path first, then its lines.
+/// Every match in the MR, in reading order: a file's path first, then the lines the view can show.
 fn hits(review: &Review, query: &str) -> Vec<Hit> {
     let mut found = vec![];
     for (f, file) in review.files.iter().enumerate() {
@@ -143,16 +143,22 @@ fn hits(review: &Review, query: &str) -> Vec<Hit> {
             found.push(Hit { file: f, hunk: None, line: None });
         }
         for (h, hunk) in file.hunks.iter().enumerate() {
-            let lines = hunk.lines.iter().enumerate().filter(|(_, line)| finds(&line.text, query));
+            let lines = hunk.lines.iter().enumerate().filter(|(_, line)| review.shows_line(line) && finds(&line.text, query));
             found.extend(lines.map(|(l, _)| Hit { file: f, hunk: Some(h), line: Some(l) }));
         }
     }
     found
 }
 
-/// Where the cursor is, in the order hits are read; `None` above the first file.
-fn hit_at(open: &Open) -> Option<Hit> {
-    open.row().and_then(hit_of)
+/// Where the cursor is, in the order hits are read: both lines of a pair, none above the first file.
+fn hits_at(open: &Open) -> Vec<Hit> {
+    match open.row() {
+        Some(&Row::Pair { file, hunk, removed, added }) => {
+            let line = |index| Hit { file, hunk: Some(hunk), line: Some(index) };
+            vec![line(removed.min(added)), line(removed.max(added))]
+        }
+        row => row.and_then(hit_of).into_iter().collect(),
+    }
 }
 
 fn hit_of(row: &Row) -> Option<Hit> {
@@ -310,5 +316,36 @@ mod tests {
         press(&mut app, "/CLIENT");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.live_toast().map(|t| t.text.clone()).as_deref(), Some("no match"));
+    }
+
+    #[test]
+    fn n_moves_on_from_a_match_on_the_added_half_of_a_pair() {
+        let mut app = with_review();
+        press(&mut app, "D");
+        render(&mut app, 200, 30);
+        press(&mut app, "/idempotency");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Pair { .. })), "{}", text_here(&app));
+        assert_eq!(app.search_count().as_deref(), Some("1/2"), "the pair counts as the match its new side holds");
+        press(&mut app, "n");
+        assert_eq!(app.search_count().as_deref(), Some("2/2"), "{}", text_here(&app));
+        assert!(text_here(&app).contains("fn idempotency_key"), "{}", text_here(&app));
+        press(&mut app, "N");
+        assert_eq!(app.search_count().as_deref(), Some("1/2"));
+    }
+
+    #[test]
+    fn a_peek_leaves_the_side_it_hides_out_of_the_search() {
+        let mut app = with_review();
+        press(&mut app, ">");
+        press(&mut app, "/let");
+        app.handle_key(code(KeyCode::Enter));
+        let mut seen = vec![app.search_count().unwrap()];
+        for _ in 0..2 {
+            press(&mut app, "n");
+            seen.push(app.search_count().unwrap());
+        }
+        assert_eq!(seen, ["1/3", "2/3", "3/3"], "the removed `let client` line is hidden, so n skips it");
+        assert!(text_here(&app).contains("let response"), "{}", text_here(&app));
     }
 }

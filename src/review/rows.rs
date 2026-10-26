@@ -75,7 +75,7 @@ impl Row {
 }
 
 impl Review {
-    fn shows_line(&self, line: &diff::Line) -> bool {
+    pub(crate) fn shows_line(&self, line: &diff::Line) -> bool {
         match self.peek {
             None => true,
             Some(Side::Old) => line.kind != LineKind::Added,
