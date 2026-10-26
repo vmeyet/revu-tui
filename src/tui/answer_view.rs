@@ -2,7 +2,7 @@
 use super::app::{Answer, AnswerState, App, Focus, Input};
 use super::theme::Theme;
 use super::thread_view::{body_lines, box_height, draw_compose, wrap};
-use super::ui::{side_pane, truncate};
+use super::ui::side_pane;
 use crate::ai::anthropic::{Outcome, Stop};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -10,6 +10,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;

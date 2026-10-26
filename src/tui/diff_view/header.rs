@@ -3,12 +3,13 @@ use crate::forge::{Deployment, Kind, PipelineStatus};
 use crate::review::{Review, Side};
 use crate::tui::app::{Open, progress_bar};
 use crate::tui::theme::Theme;
-use crate::tui::ui::{DEPLOYED, Link, short_age, truncate};
+use crate::tui::ui::{DEPLOYED, Link, short_age};
 use chrono::{DateTime, Utc};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 /// Cells of the viewed-files bar in the review header.
 const PROGRESS_W: usize = 10;

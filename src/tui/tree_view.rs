@@ -1,6 +1,6 @@
 //! The file tree pane: folders and files with the same counts and marks as the diff's file rows.
 use super::app::{App, Focus, List, ListRow};
-use super::ui::{settle_scroll, side_pane, truncate};
+use super::ui::{settle_scroll, side_pane};
 use crate::ai::triage::Risk;
 use crate::review::tree::TreeRow;
 use crate::review::{File, Review};
@@ -10,6 +10,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;

@@ -4,7 +4,7 @@ use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;
 use super::thread_view::body_lines;
-use super::ui::{DEPLOYED, Link, pane, short_age, truncate};
+use super::ui::{DEPLOYED, Link, pane, short_age};
 use crate::forge::ReviewState;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -13,6 +13,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Padding, Paragraph, Wrap};
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 /// Share of the screen the cover takes each way, and the widest it gets: past that, lines are too long to read.
 const SIZE_PCT: u16 = 90;

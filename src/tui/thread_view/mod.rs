@@ -4,7 +4,6 @@ mod conversation;
 
 use super::app::{App, ConversationList, Entry, Focus, List, ListRow, Open, Pane, ReviewInputs};
 use super::drag::{self, TextRow};
-use super::field::Field;
 use super::images::Thumbs;
 use super::theme::Theme;
 use super::ui::{rule_pane, side_pane};
@@ -19,6 +18,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
+use vtui::field::Field;
 
 pub(super) use body::{body_lines, inline};
 pub(super) use conversation::{InlineLayout, shown_ages};
@@ -264,7 +264,7 @@ fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl
     if matches!(thumbs.get(&image.url), Some(super::images::Thumb::Loading)) {
         return vec![(Line::from(Span::styled("… loading image", Style::default().fg(theme.faded))), None)];
     }
-    let text = super::ui::truncate(&fallback(&image), width);
+    let text = vtui::text::truncate(&fallback(&image), width);
     let mark = Mark::Link { text: text.clone(), url: web(&image.url) };
     vec![(Line::from(Span::styled(text, Style::default().fg(theme.link))), Some(mark))]
 }

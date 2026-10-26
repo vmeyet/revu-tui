@@ -12,7 +12,7 @@ mod wrap;
 use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
 use super::theme::Theme;
 use super::thread_view;
-use super::ui::{draw_empty, pane, settle_scroll, truncate, truncate_middle};
+use super::ui::{draw_empty, pane, settle_scroll};
 use crate::review::{Review, Row};
 use anchors::{Anchors, focused_range};
 pub(super) use header::pipeline_glyph;
@@ -29,6 +29,7 @@ use select::text_rows;
 use side_by_side::{SIDE_BY_SIDE_MIN_W, side_by_side_lines};
 use std::collections::VecDeque;
 use unicode_width::UnicodeWidthStr;
+use vtui::text::{truncate, truncate_middle};
 use wrap::wrap_row;
 
 const GUTTER_W: usize = 4;
@@ -240,7 +241,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
 
 /// The diff's `body` over the compose box, drawn at its foot while what is written has no row on screen to hang
 /// under and no pane shows the box.
-fn above_compose(f: &mut Frame<'_>, theme: Theme, label: &str, text: &super::field::Field, body: Rect) -> Rect {
+fn above_compose(f: &mut Frame<'_>, theme: Theme, label: &str, text: &vtui::field::Field, body: Rect) -> Rect {
     let rows = thread_view::box_height(text, body);
     let [body, compose] = Layout::vertical([Constraint::Min(0), Constraint::Length(rows)]).areas(body);
     thread_view::draw_compose(f, theme, label, text, compose);

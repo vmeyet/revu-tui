@@ -1,6 +1,6 @@
 //! The publish modal: every draft on one screen, the approval tick, one key to send them all.
 use super::app::{App, Publish};
-use super::ui::{pane, truncate};
+use super::ui::pane;
 use crate::review::{Draft, Side};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -8,6 +8,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 const WIDTH: u16 = 64;
 const CHROME_ROWS: u16 = 9;

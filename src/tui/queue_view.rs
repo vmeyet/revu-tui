@@ -2,7 +2,7 @@
 //! `[tui] queue = "compact"`, outside the compact layout), and one author's chained MRs folded into a stack.
 use super::app::{App, Badge, Focus, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
-use super::ui::{Link, draw_empty, pane, short_age, truncate};
+use super::ui::{Link, draw_empty, pane, short_age};
 use crate::config::QueueLayout;
 use crate::forge::QueueMr;
 use ratatui::Frame;
@@ -11,6 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 const SKELETON_ROWS: usize = 3;
 /// The cursor bar and the space after it, in front of every row.

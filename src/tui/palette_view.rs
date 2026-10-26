@@ -2,13 +2,14 @@
 //! match what is typed.
 use super::app::App;
 use super::palette::{Mode, Palette, Target};
-use super::ui::{pane, truncate};
+use super::ui::pane;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) {
     let theme = app.theme;

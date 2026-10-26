@@ -288,7 +288,7 @@ impl App {
             };
             self.update_open(|open| open.showing_answer(waiting));
         }
-        self.buffer = crate::tui::field::Field::default();
+        self.buffer = vtui::field::Field::default();
         self.compose_from = Focus::Side;
         self.focus = Focus::Side;
         self.input = Some(input);

@@ -2,8 +2,8 @@
 //! Nothing leaves before that `y`; `esc` at any step drops it all.
 use super::{Action, App, Focus};
 use crate::share::{Fields, Target, render};
-use crate::tui::field::Field;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vtui::field::Field;
 
 /// A post being prepared for one MR, on the host it lives on.
 #[derive(Clone, Debug, PartialEq)]

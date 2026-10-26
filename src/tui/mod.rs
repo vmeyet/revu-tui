@@ -8,7 +8,6 @@ mod complete;
 mod compose;
 mod diff_view;
 mod drag;
-mod field;
 pub(crate) mod help;
 mod images;
 mod lanes;

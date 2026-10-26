@@ -2,7 +2,7 @@
 use super::app::{App, Focus, List, ListRow, Outline, OutlineEntry, PaneLine, Symbols};
 use super::queue_view::rule;
 use super::theme::Theme;
-use super::ui::{counts, draw_empty, settle_scroll, side_pane, truncate};
+use super::ui::{counts, draw_empty, settle_scroll, side_pane};
 use crate::diff::words::Segment;
 use crate::outline::{Change, Direction, Item, Section, State};
 use ratatui::Frame;
@@ -11,6 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;

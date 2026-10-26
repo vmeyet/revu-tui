@@ -1,10 +1,10 @@
 use super::{Action, Brief, ConversationList, Focus, Input, MrKey, Open, Publish, Toast};
 use crate::forge::{ProjectPath, Sections};
-use crate::tui::field::Field;
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeSet, HashMap};
 use std::time::{Duration, Instant};
+use vtui::field::Field;
 
 const QUEUE_EVERY: Duration = Duration::from_secs(60);
 const MR_EVERY: Duration = Duration::from_secs(60);

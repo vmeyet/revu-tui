@@ -5,11 +5,11 @@ use crate::diff::{Line as DiffLine, LineKind};
 use crate::review::Side;
 use crate::syntax::Token;
 use crate::tui::theme::Theme;
-use crate::tui::ui::truncate_tabs;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
+use vtui::text::truncate_tabs;
 
 /// How one kind of changed line paints: sign, text colour, fills, and the colour of its meaning.
 pub(in crate::tui) struct Paint {
