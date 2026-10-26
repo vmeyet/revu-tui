@@ -160,3 +160,6 @@ unreadable_literal = "allow"
 
 [profile.dist]
 inherits = "release"
+# Release builds stay fast: revu waits on the network and the terminal, so fat LTO buys nothing a user feels.
+lto = "thin"
+codegen-units = 16
