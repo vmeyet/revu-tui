@@ -19,15 +19,18 @@ pub(super) struct Folder {
 /// The worktree of `repo` on `branch`. Origin's branch is fetched first. A worktree that has the
 /// branch checked out, the main checkout included, is used as it is; so is a branch the checkout
 /// holds, in a new worktree. revu never moves either: it says when they are behind origin or have
-/// left it. With neither, the new worktree starts from origin's branch.
+/// left it. With neither, the new worktree starts from origin's branch. A worktree whose folder was
+/// deleted is pruned first, so the branch gets a new one.
 pub(super) fn on_branch(run: &dyn Run, repo: &Path, branch: &str) -> Result<Folder> {
     if branch.starts_with('-') || branch.contains("..") {
         bail!("revu does not trust the branch name {}", branch.escape_debug());
     }
     let listed = git(run, repo, &["worktree", "list", "--porcelain"])?;
     let fetched = run.output(&git_call(repo, &["fetch", "origin", &format!("+refs/heads/{branch}:refs/remotes/origin/{branch}")]).slow());
-    if let Some(dir) = checked_out(&listed, branch) {
-        return Ok(Folder { dir, notice: fetched.is_ok().then(|| notice(run, repo, branch)).flatten() });
+    match checked_out(&listed, branch) {
+        Listed::In(dir) => return Ok(Folder { dir, notice: fetched.is_ok().then(|| notice(run, repo, branch)).flatten() }),
+        Listed::Gone => git(run, repo, &["worktree", "prune"]).map(drop)?,
+        Listed::Nowhere => {}
     }
     let dir = repo.join(WORKTREES).join(branch.replace('/', "+"));
     let place = dir.to_string_lossy();
@@ -78,11 +81,24 @@ fn git(run: &dyn Run, repo: &Path, args: &[&str]) -> Result<String> {
     run.output(&git_call(repo, args))
 }
 
-/// The folder of the worktree whose `branch` line names `branch`, in what `git worktree list --porcelain` printed.
-fn checked_out(listed: &str, branch: &str) -> Option<PathBuf> {
+/// Where `git worktree list --porcelain` has a branch checked out.
+enum Listed {
+    In(PathBuf),
+    /// In a folder deleted since, which git marks `prunable` until `git worktree prune` forgets it.
+    Gone,
+    Nowhere,
+}
+
+/// The worktree whose `branch` line names `branch`, in what `git worktree list --porcelain` printed.
+fn checked_out(listed: &str, branch: &str) -> Listed {
     let wanted = format!("branch refs/heads/{branch}");
-    let worktree = listed.split("\n\n").find(|worktree| worktree.lines().any(|line| line == wanted))?;
-    worktree.lines().find_map(|line| line.strip_prefix("worktree ")).map(PathBuf::from)
+    let Some(worktree) = listed.split("\n\n").find(|worktree| worktree.lines().any(|line| line == wanted)) else {
+        return Listed::Nowhere;
+    };
+    if worktree.lines().any(|line| line.starts_with("prunable")) {
+        return Listed::Gone;
+    }
+    worktree.lines().find_map(|line| line.strip_prefix("worktree ")).map_or(Listed::Nowhere, |dir| Listed::In(dir.into()))
 }
 
 #[cfg(test)]
@@ -119,6 +135,20 @@ mod tests {
             ]
         );
         assert!(!lines.iter().any(|line| line.starts_with("git worktree add")), "nothing is added");
+    }
+
+    #[test]
+    fn a_worktree_whose_folder_was_deleted_is_pruned_and_the_branch_gets_a_new_one() {
+        let stale = "worktree /code/widgets\nHEAD aaaa\nbranch refs/heads/main\n\nworktree /code/widgets/.claude/worktrees/feat+checkout\nHEAD bbbb\nbranch refs/heads/feat/checkout\nprunable gitdir file points to non-existent location\n";
+        let script = Script::default().says("git worktree list", stale).says("git rev-list", "0\t0\n");
+        let folder = on_branch(&script, Path::new(REPO), "feat/checkout").unwrap();
+        assert_eq!(folder, Folder { dir: NEW.into(), notice: None });
+        let add = "git worktree add /code/widgets/.claude/worktrees/feat+checkout feat/checkout";
+        let count = "git rev-list --left-right --count feat/checkout...origin/feat/checkout";
+        assert_eq!(
+            script.lines(),
+            [LIST, FETCH, "git worktree prune", "git rev-parse --verify --quiet refs/heads/feat/checkout", add, count]
+        );
     }
 
     #[test]
