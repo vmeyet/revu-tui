@@ -7,18 +7,7 @@ use std::ops::Range;
 use std::sync::OnceLock;
 use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
 
-/// What a piece of code is, as far as colour goes; each theme gives every token a colour.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Token {
-    Keyword,
-    String,
-    Comment,
-    Number,
-    Type,
-    Function,
-    Constant,
-    Punctuation,
-}
+pub(crate) use vtui::theme::Token;
 
 /// The coloured byte ranges of one line of text.
 pub(crate) type Spans = Vec<(Range<usize>, Token)>;

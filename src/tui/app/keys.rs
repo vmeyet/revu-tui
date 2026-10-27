@@ -1,3 +1,4 @@
+use super::receiver::Receiver;
 use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::review::Row;
@@ -29,49 +30,36 @@ impl App {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return self.quit_key(super::quit::QuitKey::CtrlC);
         }
-        if let Some(open) = self.help {
-            self.help = self.help_key(open, paged(key));
-            return vec![];
-        }
-        if let Some(answered) = self.answer_offer(key) {
+        let receiver = self.receiver();
+        if !matches!(receiver, Receiver::Help(_))
+            && let Some(answered) = self.answer_offer(key)
+        {
             return answered;
         }
-        if self.confirm.is_some() {
-            return self.handle_confirm_key(key);
+        match receiver {
+            Receiver::Help(open) => {
+                self.help = self.help_key(open, paged(key));
+                vec![]
+            }
+            Receiver::Confirm => self.handle_confirm_key(key),
+            Receiver::React => self.handle_react_key(key),
+            Receiver::Compose => self.handle_input_key(key),
+            Receiver::Share => self.handle_share_key(key),
+            Receiver::Palette => self.handle_palette_key(key),
+            Receiver::Publish => self.handle_publish_key(key),
+            Receiver::Brief => self.through_keymap(key, Self::handle_brief_key),
+            Receiver::NewsPage => self.through_keymap(key, Self::handle_news_page_key),
+            Receiver::Filter => self.handle_filter_key(key),
+            Receiver::Search => {
+                self.handle_search_key(key);
+                vec![]
+            }
+            Receiver::Panes if key.code == KeyCode::Esc && self.search.is_some() && self.focus == Focus::Review => {
+                self.clear_search();
+                vec![]
+            }
+            Receiver::Panes => self.through_keymap(key, Self::dispatch),
         }
-        if self.react.is_some() {
-            return self.handle_react_key(key);
-        }
-        if self.input.is_some() {
-            return self.handle_input_key(key);
-        }
-        if self.sharing.is_some() {
-            return self.handle_share_key(key);
-        }
-        if self.palette.is_some() {
-            return self.handle_palette_key(key);
-        }
-        if self.publish.is_some() {
-            return self.handle_publish_key(key);
-        }
-        if self.brief.is_some() {
-            return self.through_keymap(key, Self::handle_brief_key);
-        }
-        if self.news_page.is_some() {
-            return self.through_keymap(key, Self::handle_news_page_key);
-        }
-        if self.filtering {
-            return self.handle_filter_key(key);
-        }
-        if self.search.as_ref().is_some_and(|s| s.typing) {
-            self.handle_search_key(key);
-            return vec![];
-        }
-        if key.code == KeyCode::Esc && self.search.is_some() && self.focus == Focus::Review {
-            self.clear_search();
-            return vec![];
-        }
-        self.through_keymap(key, Self::dispatch)
     }
 
     /// A key after the user's bindings turned it into revu's own: the first of two is held, the rest handled.

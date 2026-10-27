@@ -94,6 +94,13 @@ impl App {
         vec![]
     }
 
+    /// A paste lands in the note box; picking a target or reading the preview takes none.
+    pub(super) fn paste_share_note(&mut self, text: &str) {
+        if let Some(Sharing { stage: Stage::Note { note, .. }, .. }) = &mut self.sharing {
+            note.paste(text);
+        }
+    }
+
     fn send_share(&mut self, host: String, fields: &Fields, target: Target, message: String) -> Vec<Action> {
         self.last_share = self.last_share.with(&host, target.name.as_deref());
         let remember = Action::RememberShare { host, target: target.name.clone() };

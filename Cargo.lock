@@ -757,7 +757,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2816,7 +2816,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2872,7 +2872,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3345,7 +3345,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4022,14 +4022,16 @@ dependencies = [
 
 [[package]]
 name = "vtui"
-version = "0.1.0"
-source = "git+https://github.com/vmeyet/vtui?tag=v0.1.0#e388371e92b86e7403325cd9294e6d858314ee33"
+version = "0.5.0"
+source = "git+https://github.com/vmeyet/vtui?tag=v0.5.0#1630eb07c45fba74d26598c853002c84093df821"
 dependencies = [
  "base64 0.22.1",
  "crossterm",
  "libc",
  "ratatui",
+ "tempfile",
  "tracing",
+ "unicode-segmentation",
  "unicode-width",
 ]
 
@@ -4260,7 +4262,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

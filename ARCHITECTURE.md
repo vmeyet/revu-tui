@@ -36,10 +36,10 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
 | `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies as light markdown in `body.rs` |
-| `tui/theme.rs` | revu's colours over vtui's palette: the fills of a changed line and the colours of code |
+| `tui/theme.rs` | revu's colours over vtui's palette: the fills of a changed line; code colours come from vtui's `Syntax` |
 | `tui/palette.rs`, `palette_view.rs`, `help.rs` | revu's side of the `ctrl-k` palette (its modes, commands and what it lists) and of the `?` overlay (its groups of keys per pane) |
 | `tui/prose.rs`, `table.rs`, `images.rs` | Markdown files block by block, Markdown tables, pictures in the thread pane |
-| `tui/compose.rs`, `drag.rs` | `$EDITOR` for a comment, text selection by drag |
+| `tui/drag.rs` | Text selection by drag; `$EDITOR` for a comment is `vtui::editor` |
 | `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
@@ -77,6 +77,8 @@ Handling a key:
 4. The loop hands each `Action` to `actions::spawn`, which runs it in its own task through `Backend`; only `Action::Compose` runs in the loop, which hands the terminal to the editor.
    `Action::Copy` also writes the terminal's clipboard from the loop before its task runs `pbcopy`.
 5. The answer comes back as an `Incoming`, applied like any other.
+
+A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/app/paste.rs`) types it whole into the box `App::receiver` (`tui/app/receiver.rs`) says takes the next key, and drops it where no box is open.
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `docs`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `Ctx` to `tui::run`.

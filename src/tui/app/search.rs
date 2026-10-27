@@ -50,6 +50,12 @@ impl App {
         }
     }
 
+    /// A paste goes on the end of the query, as typing it would.
+    pub(super) fn paste_search(&mut self, text: &str) {
+        let Some(search) = self.search.clone() else { return };
+        self.retype(&search, format!("{}{text}", search.query));
+    }
+
     /// `n` and `N`: the next or previous match, around the end of the MR back to its start.
     pub(super) fn search_step(&mut self, toward: Toward) {
         let Some(open) = &self.open else { return };

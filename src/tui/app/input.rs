@@ -2,8 +2,8 @@
 use super::{Action, App, Input, MrKey, Open, Post};
 use crate::forge::ThreadId;
 use crate::review::{Draft, DraftId, Place, Review};
-use crate::tui::compose::Edited;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use vtui::editor::Edited;
 
 impl App {
     /// Opens the compose box on `input`, in the pane at its line, or in the diff under the row it will land after
