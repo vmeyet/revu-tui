@@ -13,7 +13,7 @@ use crate::cache::{Cache, keys};
 use crate::config;
 use crate::forge::MrKey;
 use crate::share::Fields;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -144,12 +144,23 @@ fn reason<'a>(complained: &'a str, printed: &'a str) -> &'a str {
     marked.or(lines.last()).copied().unwrap_or("no message")
 }
 
+/// Why `call` did not start. The system reports a missing folder to run in as the program not
+/// found, so that case names the folder instead.
+fn not_started(call: &Call, error: std::io::Error) -> anyhow::Error {
+    match &call.dir {
+        Some(dir) if error.kind() == std::io::ErrorKind::NotFound && !dir.is_dir() => {
+            anyhow!("cannot run `{}`: the folder it runs in, {}, is missing", call.program(), dir.display())
+        }
+        _ => anyhow::Error::new(error).context(format!("cannot run `{}`", call.program())),
+    }
+}
+
 /// The programs of this machine.
 pub(crate) struct Programs;
 
 impl Run for Programs {
     fn output(&self, call: &Call) -> Result<String> {
-        let ended = timed::output_within(call.command(), call.limit).with_context(|| format!("cannot run `{}`", call.program()))?;
+        let ended = timed::output_within(call.command(), call.limit).map_err(|error| not_started(call, error))?;
         let output = ended.with_context(|| format!("`{}` took longer than {}s: revu stopped it", call.named(), call.limit.as_secs()))?;
         let (printed, complained) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
         if !output.status.success() {
@@ -650,5 +661,13 @@ mod tests {
         assert_eq!(Programs.output(&stuck).unwrap_err().to_string(), "`sh -c` took longer than 1s: revu stopped it");
         assert_eq!(Programs.foreground(&sh("exit 0")), Ok(()));
         assert!(Programs.foreground(&sh("exit 3")).unwrap_err().starts_with("sh ended with"));
+    }
+
+    #[test]
+    fn a_program_set_to_run_in_a_missing_folder_says_the_folder_is_missing_not_the_program() {
+        let root = tempfile::tempdir().unwrap();
+        let gone = root.path().join("feat+checkout");
+        let err = Programs.output(&sh("pwd").in_dir(&gone)).unwrap_err().to_string();
+        assert_eq!(err, format!("cannot run `sh`: the folder it runs in, {}, is missing", gone.display()));
     }
 }

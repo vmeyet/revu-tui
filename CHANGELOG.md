@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### Fixed
+
+- **A new session starts when the worktree of its branch was deleted.**
+  In `a g` and `:session`, revu prunes the deleted worktree and adds a new one on the branch.
+  A program set to run in a missing folder now names that folder instead of saying the program is not found.
+
 ## 0.10.2 - 2026-10-26
 
 ### Fixed
