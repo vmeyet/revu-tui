@@ -1,9 +1,8 @@
-//! revu's colours on top of vtui's palette: the fills of a changed line and the colours of code.
-//! vtui's tokens read through `Deref`, so a view writes `theme.accent` and `theme.added_fill` alike.
-use crate::syntax::Token;
+//! revu's colours on top of vtui's palette: the fills of a changed line.
+//! vtui's tokens and code colours read through `Deref`, so a view writes `theme.accent`, `theme.syntax` and `theme.added_fill` alike.
 use ratatui::style::Color;
 use std::ops::Deref;
-use vtui::theme::{mix, rgb};
+use vtui::theme::mix;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Theme {
@@ -19,8 +18,6 @@ pub(crate) struct Theme {
     pub(crate) removed_fill: Option<Color>,
     pub(crate) added_word: Option<Color>,
     pub(crate) removed_word: Option<Color>,
-    /// Code colours, from each palette's own upstream scheme; the diff keeps the fills underneath.
-    pub(crate) syntax: Syntax,
 }
 
 impl Deref for Theme {
@@ -28,75 +25,6 @@ impl Deref for Theme {
 
     fn deref(&self) -> &Self::Target {
         &self.ui
-    }
-}
-
-/// One colour per [`Token`]: what a keyword, a string or a comment looks like in this palette.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Syntax {
-    pub(crate) keyword: Color,
-    pub(crate) string: Color,
-    pub(crate) comment: Color,
-    pub(crate) number: Color,
-    pub(crate) kind: Color,
-    pub(crate) function: Color,
-    pub(crate) constant: Color,
-    pub(crate) punctuation: Color,
-}
-
-impl Syntax {
-    pub(crate) fn colour(&self, token: Token) -> Color {
-        match token {
-            Token::Keyword => self.keyword,
-            Token::String => self.string,
-            Token::Comment => self.comment,
-            Token::Number => self.number,
-            Token::Type => self.kind,
-            Token::Function => self.function,
-            Token::Constant => self.constant,
-            Token::Punctuation => self.punctuation,
-        }
-    }
-
-    /// The code colours of the palette called `name`; the terminal's ANSI colours for the default one.
-    fn of_palette(name: &str) -> Syntax {
-        match name {
-            "dracula" => code([0xff79c6, 0xf1fa8c, 0x6272a4, 0xbd93f9, 0x8be9fd, 0x50fa7b, 0xbd93f9, 0x9098bd]),
-            "catppuccin" => code([0xcba6f7, 0xa6e3a1, 0x9399b2, 0xfab387, 0xf9e2af, 0x89b4fa, 0xfab387, 0x9399b2]),
-            "catppuccin-latte" => code([0x8839ef, 0x40a02b, 0x7c7f93, 0xfe640b, 0xdf8e1d, 0x1e66f5, 0xfe640b, 0x7c7f93]),
-            "rosepine" => code([0x31748f, 0xf6c177, 0x6e6a86, 0xc4a7e7, 0x9ccfd8, 0xebbcba, 0xc4a7e7, 0x908caa]),
-            "rosepine-dawn" => code([0x286983, 0xea9d34, 0x9893a5, 0x907aa9, 0x56949f, 0xd7827e, 0x907aa9, 0x797593]),
-            "nord" => code([0x81a1c1, 0xa3be8c, 0x616e88, 0xb48ead, 0x8fbcbb, 0x88c0d0, 0xb48ead, 0x81a1c1]),
-            "tokyonight" => code([0xbb9af7, 0x9ece6a, 0x565f89, 0xff9e64, 0x2ac3de, 0x7aa2f7, 0xff9e64, 0x89ddff]),
-            "monokai" => code([0xf92672, 0xe6db74, 0x75715e, 0xae81ff, 0x66d9ef, 0xa6e22e, 0xae81ff, 0xa59f85]),
-            _ => ANSI_SYNTAX,
-        }
-    }
-}
-
-const ANSI_SYNTAX: Syntax = Syntax {
-    keyword: Color::Magenta,
-    string: Color::Green,
-    comment: Color::Indexed(244),
-    number: Color::Yellow,
-    kind: Color::Cyan,
-    function: Color::Blue,
-    constant: Color::Yellow,
-    punctuation: Color::Indexed(246),
-};
-
-/// A palette's code colours from hex values, in [`Syntax`] field order: keyword, string, comment,
-/// number, type, function, constant, then punctuation in the palette's muted tone.
-const fn code([keyword, string, comment, number, kind, function, constant, punctuation]: [u32; 8]) -> Syntax {
-    Syntax {
-        keyword: rgb(keyword),
-        string: rgb(string),
-        comment: rgb(comment),
-        number: rgb(number),
-        kind: rgb(kind),
-        function: rgb(function),
-        constant: rgb(constant),
-        punctuation: rgb(punctuation),
     }
 }
 
@@ -139,7 +67,6 @@ impl Theme {
             removed_fill: fill(red, FILL_PCT),
             added_word: fill(green, WORD_PCT),
             removed_word: fill(red, WORD_PCT),
-            syntax: Syntax::of_palette(ui.name),
         }
     }
 }
@@ -155,6 +82,7 @@ fn hex(colour: Color) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vtui::theme::rgb;
 
     #[test]
     fn rgb_themes_fill_changed_lines_and_the_default_theme_waits_for_the_ground() {
@@ -180,14 +108,6 @@ mod tests {
         assert_ne!(light.removed_fill, tinted.removed_fill, "a light terminal gets a light tint");
         let nord = Theme::named("nord").unwrap();
         assert_eq!(nord.with_ground(0xffffff), nord);
-    }
-
-    #[test]
-    fn every_palette_but_the_default_has_its_own_code_colours() {
-        for name in Theme::NAMES {
-            let own = Theme::named(name).unwrap().syntax != ANSI_SYNTAX;
-            assert_eq!(own, name != "default", "{name}");
-        }
     }
 
     /// Lines of `text`, above its test module, that paint a color by hand instead of asking the theme.

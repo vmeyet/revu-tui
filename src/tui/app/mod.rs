@@ -16,6 +16,7 @@ mod notify;
 mod order;
 mod outline;
 mod pane;
+mod paste;
 mod pin;
 mod pins;
 mod pipeline;
@@ -25,6 +26,7 @@ mod queue;
 pub(crate) mod quit;
 mod react;
 mod ready;
+mod receiver;
 mod repeat;
 mod review;
 mod search;
@@ -579,7 +581,7 @@ pub(crate) enum Incoming {
     /// What came back from the editor.
     Composed {
         input: Input,
-        edited: crate::tui::compose::Edited,
+        edited: vtui::editor::Edited,
     },
     /// A piece of Claude's answer `id` for the MR `key`.
     Answer {

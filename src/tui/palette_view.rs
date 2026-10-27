@@ -31,7 +31,7 @@ fn list_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
                 Target::Session(Some(_)) => ("●", theme.accent),
                 Target::Session(None) => ("+", theme.muted),
             };
-            Pick { icon, colour, label: &candidate.label, detail: &candidate.detail }
+            Pick { icon, colour, label: &candidate.label, detail: view::faded(theme, &candidate.detail) }
         })
         .collect();
     view::pick_lines(theme, &picks, palette.selected, room)

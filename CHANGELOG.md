@@ -13,6 +13,17 @@ Each entry says what changed, then where, then how to use it.
   In `a g` and `:session`, revu prunes the deleted worktree and adds a new one on the branch.
   A program set to run in a missing folder now names that folder instead of saying the program is not found.
 
+- **The screen is drawn again after the editor or another program closes.**
+  After `E` in the thread pane, `ctrl-o` in the compose box, the `^v` viewer or an agent session.
+  revu no longer comes back to a blank screen until the next key.
+
+- **A paste arrives whole.**
+  In the compose box, the share note, the `ctrl-k` palette, the queue filter and the diff search.
+  A pasted newline stays text instead of pressing `enter`, and a one-line box joins the lines.
+
+- **The palette keeps its footer on a short terminal.**
+  In the `ctrl-k` palette, the list loses its last rows first.
+
 ## 0.10.2 - 2026-10-26
 
 ### Fixed

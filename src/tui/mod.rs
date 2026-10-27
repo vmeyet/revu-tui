@@ -4,7 +4,6 @@ mod answer_view;
 mod app;
 mod backend;
 mod brief_view;
-mod compose;
 mod diff_view;
 mod drag;
 pub(crate) mod help;
@@ -155,6 +154,7 @@ async fn event_loop(
                 Event::Mouse(mouse) => { wake(app); app.handle_mouse(mouse) }
                 Event::FocusGained => { wake(app); app.terminal_focus(true); vec![] }
                 Event::FocusLost => { wake(app); app.terminal_focus(false); vec![] }
+                Event::Paste(text) => { wake(app); app.handle_paste(&text); vec![] }
                 _ => vec![],
             },
             Some(incoming) = rx.recv() => {
@@ -274,7 +274,7 @@ fn compose_inline(
     input: Input,
     draft: &str,
 ) -> Vec<Action> {
-    let edited = lend(terminal, screen, keys, || compose::edit(draft));
+    let edited = lend(terminal, screen, keys, || vtui::editor::edit(draft, "mr-").map_err(anyhow::Error::from));
     wake(app);
     match edited {
         Ok(edited) => app.apply(Incoming::Composed { input, edited }),
