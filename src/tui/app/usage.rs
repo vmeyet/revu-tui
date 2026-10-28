@@ -6,35 +6,12 @@ use crate::review::Row;
 use crate::tui::palette::Command;
 use crate::usage::Counts;
 use crossterm::event::KeyEvent;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// A walk this long that reached a hunk or a thread is worth a hint: a jump would have got there.
 const LONG_WALK: u32 = 15;
-/// Reading goes on this long after the last key, click or wheel; past it the screen is left alone, not read.
-const IDLE_AFTER: Duration = Duration::from_secs(60);
 /// Opening another MR from the queue this soon after leaving zen is changing MR, which `[m` `]m` do in zen.
 const ZEN_TO_QUEUE: Duration = Duration::from_secs(30);
-
-/// Up to when screen time was counted, the last input, and whether the terminal is in front.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Clock {
-    counted_to: Instant,
-    last_input: Instant,
-    focused: bool,
-}
-
-impl Clock {
-    pub(crate) fn starting(now: Instant) -> Self {
-        Self { counted_to: now, last_input: now, focused: true }
-    }
-
-    /// The screen time since the clock last counted, and the clock counted up to `now`.
-    fn count(self, now: Instant) -> (Duration, Self) {
-        let read_until = now.min(self.last_input + IDLE_AFTER);
-        let spent = if self.focused { read_until.saturating_duration_since(self.counted_to) } else { Duration::ZERO };
-        (spent, Self { counted_to: now, ..self })
-    }
-}
 
 /// The j or k in a row moving through the diff.
 #[derive(Clone, Copy, Debug, Default)]
@@ -166,24 +143,27 @@ impl App {
 
     /// Adds the time read since the clock last counted to the screen on show; called by `tick`.
     pub(super) fn count_time(&mut self) {
-        let (spent, clock) = self.usage_clock.count(self.now);
-        self.usage_clock = clock;
-        let screen = self.screen();
-        if let Some(tally) = &mut self.usage {
-            tally.spend(screen, spent);
-        }
+        let read = self.usage_clock.count(self.now);
+        self.spend(read);
     }
 
     /// A key, click or wheel: the time before it goes to the screen it was on, and reading goes on from now.
     pub(super) fn count_input(&mut self) {
-        self.count_time();
-        self.usage_clock = Clock { last_input: self.now, ..self.usage_clock };
+        let read = self.usage_clock.input(self.now);
+        self.spend(read);
     }
 
     /// The terminal came to the front or went to the background: the clock runs only while it is in front.
     pub(crate) fn terminal_focus(&mut self, focused: bool) {
-        self.count_time();
-        self.usage_clock = Clock { focused, last_input: self.now, ..self.usage_clock };
+        let read = if focused { self.usage_clock.to_front(self.now) } else { self.usage_clock.to_back(self.now) };
+        self.spend(read);
+    }
+
+    fn spend(&mut self, read: Duration) {
+        let screen = self.screen();
+        if let Some(tally) = &mut self.usage {
+            tally.spend(screen, read);
+        }
     }
 
     /// What the counts gathered since the last call add up to, for the runtime to write.
@@ -347,7 +327,7 @@ mod tests {
     #[test]
     fn a_hint_shows_as_a_toast_until_it_was_shown_three_times() {
         let mut app = counting();
-        let shown_twice = crate::usage::parse("{\"date\":\"2026-09-24\",\"version\":2,\"shown\":{\"long_walk\":2}}");
+        let shown_twice = crate::usage::rules().parse("{\"date\":\"2026-09-24\",\"version\":2,\"shown\":{\"long_walk\":2}}");
         app.usage = Some(crate::usage::Tally::after(&shown_twice));
         walk(&mut app, 0, 40);
         assert!(app.live_toast().is_some(), "the third time");

@@ -6,6 +6,7 @@ use crate::config::{Keys, Layout};
 use anyhow::{Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;
+use vtui::usage::Renamed;
 
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -306,8 +307,8 @@ fn label(keys: &[Key]) -> String {
     keys.iter().map(|k| k.label()).collect()
 }
 
-/// Actions renamed since a config or a usage file could name them, old name first.
-const RENAMED: &[(&str, &str)] = &[("split", "side_by_side")];
+/// Actions renamed since a config or a usage file could name them.
+pub(crate) const RENAMED: &[Renamed] = &[Renamed { old: "split", new: "side_by_side" }];
 
 /// Actions an older revu let `[keys.bind]` name and this one no longer has.
 const GONE: &[&str] = &[
@@ -333,7 +334,7 @@ pub(crate) fn ignored(keys: &Keys) -> Vec<String> {
 
 /// The name `action` goes by today: an old name reads as its new one.
 pub(crate) fn current(action: &str) -> &str {
-    RENAMED.iter().find(|(old, _)| *old == action).map_or(action, |(_, new)| new)
+    RENAMED.iter().find(|renamed| renamed.old == action).map_or(action, |renamed| renamed.new)
 }
 
 fn names() -> String {
