@@ -3,15 +3,16 @@ use crate::cache::Cache;
 use crate::cli::UsageArgs;
 use crate::config::Config;
 use crate::render::{Style, Theme};
-use crate::usage::{self, Report};
-use anyhow::Result;
+use crate::usage;
+use anyhow::{Result, anyhow};
 use std::fmt::Write as _;
+use vtui::usage::{RARELY, Report, Window};
 
 /// Prints what the `[usage]` counts say about the window asked for.
 pub fn run(args: &UsageArgs, json: bool) -> Result<()> {
-    let window = usage::since(&args.since)?;
+    let window: Window = args.since.parse().map_err(|err| anyhow!("--since {err}"))?;
     let enabled = Config::load()?.usage.enabled;
-    let report = usage::report(&usage::read(&Cache::shared()), chrono::Local::now().date_naive(), window);
+    let report = usage::rules().report(&usage::read(&Cache::shared()), chrono::Local::now().date_naive(), window);
     if json {
         return crate::ctx::emit(&report);
     }
@@ -37,30 +38,30 @@ fn text(report: &Report, since: &str, enabled: bool, theme: Theme) -> String {
         let _ = writeln!(out, "{}", theme.paint(&old, Style::Dim));
     }
     section(&mut out, theme, "NEVER USED");
-    for (group, names) in &report.never {
-        let _ = writeln!(out, "  {}  {}", theme.paint(&format!("{group:<18}"), Style::Dim), names.join("  "));
+    for unused in &report.never {
+        let _ = writeln!(out, "  {}  {}", theme.paint(&format!("{:<18}", unused.group), Style::Dim), unused.actions.join("  "));
     }
     if !report.rarely.is_empty() {
-        section(&mut out, theme, "RARELY USED (2 times or less)");
-        let rarely: Vec<String> = report.rarely.iter().map(|(name, n)| format!("{name} {n}")).collect();
+        section(&mut out, theme, &format!("RARELY USED ({RARELY} times or less)"));
+        let rarely: Vec<String> = report.rarely.iter().map(|count| format!("{} {}", count.action, count.count)).collect();
         let _ = writeln!(out, "  {}", rarely.join(" · "));
     }
     if !report.most.is_empty() {
         section(&mut out, theme, "MOST USED");
-        for (name, n) in &report.most {
-            let _ = writeln!(out, "  {name:<22}{}", theme.paint(&format!("{n:>6}"), Style::Accent));
+        for count in &report.most {
+            let _ = writeln!(out, "  {:<22}{}", count.action, theme.paint(&format!("{:>6}", count.count), Style::Accent));
         }
     }
     if !report.screens.is_empty() {
         section(&mut out, theme, "TIME");
-        for (screen, seconds) in &report.screens {
-            let _ = writeln!(out, "  {screen:<22}{:>6}", usage::duration(*seconds));
+        for time in &report.screens {
+            let _ = writeln!(out, "  {:<22}{:>6}", time.screen, vtui::usage::duration(time.seconds));
         }
     }
     if !report.hints.is_empty() {
         section(&mut out, theme, "HINTS");
-        for (_, n, hint) in &report.hints {
-            let _ = writeln!(out, "  {} {hint}", theme.paint(&format!("{n}×"), Style::Warn));
+        for hinted in &report.hints {
+            let _ = writeln!(out, "  {} {}", theme.paint(&format!("{}×", hinted.count), Style::Warn), hinted.text);
         }
     }
     out
@@ -75,11 +76,11 @@ mod tests {
     use super::*;
 
     fn report() -> Report {
-        let days = usage::parse(
+        let days = usage::rules().parse(
             "{\"date\":\"2026-09-23\",\"actions\":{\"next_thread\":1},\"screens\":{\"diff\":36000}}\n\
              {\"date\":\"2026-09-24\",\"version\":2,\"actions\":{\"next_thread\":40,\"zen\":2},\"screens\":{\"diff\":4320},\"hints\":{\"long_walk\":3}}\n",
         );
-        usage::report(&days, "2026-09-24".parse().unwrap(), Some(30))
+        usage::rules().report(&days, "2026-09-24".parse().unwrap(), Window::Days(30))
     }
 
     #[test]
@@ -98,7 +99,7 @@ mod tests {
 
     #[test]
     fn an_empty_log_says_how_to_switch_it_on() {
-        let text = text(&usage::report(&[], "2026-09-24".parse().unwrap(), Some(30)), "30d", false, Theme::plain());
+        let text = text(&usage::rules().report(&[], "2026-09-24".parse().unwrap(), Window::Days(30)), "30d", false, Theme::plain());
         assert!(text.contains("0 days counted") && text.contains("[usage] enabled = true"), "{text}");
         assert!(!text.contains("NEVER USED"));
     }

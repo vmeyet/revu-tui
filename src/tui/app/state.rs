@@ -176,7 +176,7 @@ pub(crate) struct App {
     /// What this session counted since the last flush; `None` when `[usage]` is off.
     pub(crate) usage: Option<crate::usage::Tally>,
     /// Up to when screen time is counted, and what stops it.
-    pub(crate) usage_clock: super::usage::Clock,
+    pub(crate) usage_clock: vtui::usage::Clock,
     /// The j or k in a row moving through the diff.
     pub(crate) walk: super::usage::Walk,
     /// When zen was left with a key, and on which MR.
@@ -340,7 +340,7 @@ impl App {
             quitting: None,
             quit_confirm: settings.quit_confirm,
             usage: settings.usage,
-            usage_clock: super::usage::Clock::starting(now),
+            usage_clock: vtui::usage::Clock::starting(now),
             walk: super::usage::Walk::default(),
             left_zen: None,
             key_did: None,
