@@ -1,4 +1,4 @@
-//! A Markdown file drawn as mrk renders it, block by block, each block marked same, added, removed or changed.
+//! Markdown drawn by mrk: a file block by block, each block marked same, added, removed or changed, and a note's text.
 use super::prose_view::Rows;
 use super::theme::Theme;
 use mrk::diff::BlockChange;
@@ -71,6 +71,31 @@ pub(crate) fn settings(theme: Theme, width: usize) -> Settings {
         ..base.palette
     };
     Settings { width, theme: mrk::theme::Theme { palette, ..base }, cell: None, hyperlinks: false, jumbo_title: None }
+}
+
+/// One span of Markdown as mrk draws it, and the target it links to.
+pub(super) struct Linked {
+    pub(super) span: Span<'static>,
+    pub(super) link: Option<String>,
+}
+
+/// Whether a link shows its text alone, in a pane where it clicks, or its target after it.
+#[derive(Clone, Copy)]
+pub(super) enum Links {
+    Clickable,
+    Printed,
+}
+
+/// `text` as mrk draws it `width` columns wide, row by row, in revu's colours.
+pub(super) fn markdown(text: &str, width: usize, links: Links, theme: Theme) -> Vec<Vec<Linked>> {
+    let settings = Settings { hyperlinks: matches!(links, Links::Clickable), ..settings(theme, width) };
+    let colour = settings.theme.palette.text;
+    let lines = mrk::markdown::render(text, &settings).blocks.into_iter().flat_map(|block| match block {
+        Block::Lines(lines) | Block::DoubleHeight(lines) => lines,
+        Block::Picture(_) => vec![],
+    });
+    let linked = |span: document::Span| Linked { span: Span::styled(span.text, style(span.style, colour)), link: span.link };
+    lines.map(|line| line.spans.into_iter().map(linked).collect()).collect()
 }
 
 /// What the rows are drawn with: revu's theme for the bars and fills, mrk's palette for the text.

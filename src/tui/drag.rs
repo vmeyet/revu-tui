@@ -48,18 +48,15 @@ pub(super) fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
     cells
 }
 
-/// Markdown the note drawing drops or turns into a glyph of its own: backticks, emphasis, pipes, bullets, quotes.
-const MARKUP: [char; 10] = ['`', '|', ' ', '-', '*', '_', '~', '>', '#', '\t'];
-
-/// The bytes of `raw` under each cell of `drawn`, the light markdown drawing of it: each drawn
-/// character is found in `raw` past the markup the drawing dropped, and past the bytes of `dropped`
-/// whatever they hold; a glyph of its own stands for nothing.
-pub(crate) fn aligned(drawn: &str, raw: &str, dropped: &[Range<usize>]) -> Vec<Range<usize>> {
+/// The bytes of `raw` under each cell of `drawn`, the note pane's drawing of it: each drawn
+/// character is found in `raw` past the blanks the drawing dropped; a glyph of its own, such as
+/// a code line's indent or sign, stands for nothing.
+pub(crate) fn aligned(drawn: &str, raw: &str) -> Vec<Range<usize>> {
     let mut cells = vec![];
     let mut at = 0;
     for (_, c, width) in drawn_cells(drawn) {
-        let mut kept = raw[at..].char_indices().map(|(i, r)| (at + i, r)).filter(|(i, _)| !dropped.iter().any(|d| d.contains(i)));
-        let found = kept.find(|&(_, r)| r == c || !MARKUP.contains(&r)).filter(|&(_, r)| r == c);
+        let found =
+            raw[at..].char_indices().map(|(i, r)| (at + i, r)).find(|&(_, r)| r == c || !matches!(r, ' ' | '\t')).filter(|&(_, r)| r == c);
         let bytes = match found {
             Some((i, r)) => i..i + r.len_utf8(),
             None => at..at,
@@ -201,27 +198,18 @@ mod tests {
 
     /// The raw text under each drawn cell that stands for some.
     fn under(drawn: &str, raw: &str) -> Vec<String> {
-        aligned(drawn, raw, &[]).into_iter().filter(|bytes| !bytes.is_empty()).map(|bytes| raw[bytes].to_owned()).collect()
+        aligned(drawn, raw).into_iter().filter(|bytes| !bytes.is_empty()).map(|bytes| raw[bytes].to_owned()).collect()
     }
 
     #[test]
-    fn a_note_line_finds_its_drawn_characters_past_the_markdown_it_dropped() {
-        assert_eq!(under("• one", "- one"), [" ", "o", "n", "e"], "the bullet glyph stands for nothing");
-        assert_eq!(under("a b", "`a` b"), ["a", " ", "b"]);
-        assert_eq!(aligned("x │ y", "| x | y |", &[])[2], 4..4, "a table line drawn over its pipes");
-        assert_eq!(aligned("  let", "let", &[])[..2], [0..0, 0..0], "the code indent stands for nothing");
-    }
-
-    #[test]
-    fn a_link_drawn_as_its_text_finds_the_text_past_the_markup_it_dropped() {
-        let (raw, dropped) = ("see [docs](https://x/a) now", [4..5, 9..23]);
-        let copied: Vec<&str> = aligned("see docs now", raw, &dropped).into_iter().map(|bytes| &raw[bytes]).collect();
-        assert_eq!(copied, ["s", "e", "e", " ", "d", "o", "c", "s", " ", "n", "o", "w"]);
+    fn a_code_line_finds_its_drawn_characters_past_its_indent_and_sign() {
+        assert_eq!(aligned("  let", "let")[..2], [0..0, 0..0], "the code indent stands for nothing");
+        assert_eq!(under("+ \tx", "\tx"), ["\t", "x"], "the sign stands for nothing");
     }
 
     #[test]
     fn a_wide_emoji_takes_the_cells_the_terminal_draws_it_on() {
-        assert_eq!(aligned("⚠️ a", "⚠️ a", &[]).len(), "⚠️ a".width());
+        assert_eq!(aligned("⚠️ a", "⚠️ a").len(), "⚠️ a".width());
         assert_eq!(text_on_cells("⚠️ see docs", 7..11), "docs");
     }
 

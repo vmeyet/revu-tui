@@ -15,7 +15,7 @@ expression: "render(&mut app, 60, 20)"
 │  │  NEW                                               │  │
 │  │  • Read a Markdown file as a page.                 │⠋ │
 │  │    In the diff, on a Markdown file.                │  │
-│  │    v opens the page, and v again goes back.        │─ │
+│  │     v  opens the page, and  v  again goes back.    │─ │
 │  │  • Move a full page at a time.                     │  │
 │  │    In the queue and the diff.                      │  │
 │  │                                                    │  │

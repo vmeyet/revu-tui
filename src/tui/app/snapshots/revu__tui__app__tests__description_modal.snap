@@ -14,11 +14,11 @@ expression: "render(&mut app, 120, 40)"
 │   ──│                                                                                                          │     │
 │   in│  omar  feat/checkout → main  2h                                                                          │     │
 │   om│                                                                                                          │     │
-│     │  ## Why                                                                                                  │     │
+│     │  ▍ Why                                                                                                   │     │
 │   ──│                                                                                                          │     │
 │     │  Cards were charged twice.                                                                               │     │
 │     │                                                                                                          │     │
-│     │  • retry with idempotency_key                                                                            │     │
+│     │  • retry with  idempotency_key                                                                           │     │
 │     │  • log the attempt                                                                                       │     │
 │     │                                                                                                          │     │
 │     │  CHECKS                                                                                                  │     │

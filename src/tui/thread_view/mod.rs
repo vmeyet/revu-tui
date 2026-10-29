@@ -1,4 +1,4 @@
-//! The right pane: every conversation of one place, or of the MR, notes in order, bodies as light markdown.
+//! The right pane: every conversation of one place, or of the MR, notes in order, bodies drawn as Markdown.
 mod body;
 mod conversation;
 
@@ -292,8 +292,7 @@ fn written_rows(
     web: &impl Fn(&str) -> String,
 ) -> Vec<(Line<'static>, Vec<Mark>)> {
     let drawn: String = line.spans.iter().map(|span| span.content.as_ref()).collect();
-    let dropped: Vec<Range<usize>> = links.iter().flat_map(|link| link.markup.clone()).collect();
-    let cells = drag::aligned(&drawn, raw, &dropped);
+    let cells = drag::aligned(&drawn, raw);
     let rows = wrap(line, width).into_iter().scan(0, |start, row| {
         let end = (*start + row.width()).min(cells.len());
         let written = Mark::Written { raw: raw.to_owned(), cells: cells[*start..end].to_vec() };

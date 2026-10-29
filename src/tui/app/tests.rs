@@ -635,7 +635,7 @@ fn a_drag_in_the_diff_copies_only_the_code_text_and_lights_it() {
 }
 
 #[test]
-fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
+fn a_drag_in_the_thread_pane_copies_the_note_as_drawn_without_its_header() {
     let mut app = with_review();
     walk_to_any_thread(&mut app, Toward::Next);
     app.handle_key(code(KeyCode::Enter));
@@ -649,8 +649,8 @@ fn a_drag_in_the_thread_pane_copies_the_note_as_written_without_its_header() {
     assert_eq!(word, vec![Action::Copy { text: "plain".into(), done: "copied 1 line".into() }]);
     let (x, y) = spot(&mut app, "Why drop", 120, 24);
     let actions = drag(&mut app, (x, y), (x + 60, y + 5), 120, 24);
-    let text = "Why drop the `plain` client?\n- keep `Client::new`".to_owned();
-    assert_eq!(actions, vec![Action::Copy { text, done: "copied 2 lines".into() }]);
+    let text = "Why drop the  plain  client?\n\n• keep  Client::new ".to_owned();
+    assert_eq!(actions, vec![Action::Copy { text, done: "copied 3 lines".into() }]);
     insta::assert_snapshot!("thread_selection", render_selected(&mut app, 120, 24));
 }
 

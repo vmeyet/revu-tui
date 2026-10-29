@@ -17,6 +17,10 @@ Each entry says what changed, then where, then how to use it.
   In the diff for `.sh`, `.bash`, `.zsh`, `.tf`, `.tfvars` and `.hcl` files, and in code blocks of comments.
   Tag a code block `bash`, `sh`, `zsh`, `terraform` or `hcl` to colour it.
 
+- **Comments read as full Markdown: headings, lists, quotes, tables and links, wrapped to the pane.**
+  In the thread pane, under a diff line, the description and the answer pane; code blocks and suggestions keep the diff's colours.
+  Nothing to do: write Markdown as on the forge, and a drag copies the text as it is drawn.
+
 ## 0.11.0 - 2026-10-29
 
 ### New
