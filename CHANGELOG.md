@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **Bold, italic and struck text in comments read as they do on the forge.**
+  In the thread pane, the description, the answer pane and tables.
+  Write `**bold**`, `_italic_` or `~~struck~~`; a marker inside a word or a code span stays as written.
+
 ## 0.11.0 - 2026-10-29
 
 ### New

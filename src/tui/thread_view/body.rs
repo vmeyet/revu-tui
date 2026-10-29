@@ -1,4 +1,4 @@
-//! A note's body as light markdown: code spans, links, bullets, quotes, tables, pictures and fenced code.
+//! A note's body as light markdown: code spans, links, emphasis, bullets, quotes, tables, pictures and fenced code.
 use super::{Piece, fallback};
 use crate::diff::LineKind;
 use crate::review::Review;
@@ -7,7 +7,7 @@ use crate::syntax::{self, Language};
 use crate::tui::diff_view::{coloured, paint};
 use crate::tui::table::table_lines;
 use crate::tui::theme::Theme;
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
@@ -145,7 +145,7 @@ fn prose(raw: &str, links: Links, theme: Theme) -> Vec<Piece> {
 fn in_raw(anchors: Vec<Anchor>, raw: &str) -> Vec<Anchor> {
     let markups = runs(raw, Links::Drawn).into_iter().filter_map(|run| match run {
         Run::Link { markup, .. } => Some(markup),
-        Run::Plain(_) | Run::Code(_) => None,
+        Run::Plain(_) | Run::Code(_) | Run::Open(_) | Run::Close => None,
     });
     anchors.into_iter().zip(markups).map(|(anchor, markup)| Anchor { markup, ..anchor }).collect()
 }
@@ -181,7 +181,7 @@ pub(super) struct Anchor {
     pub(super) url: LinkUrl,
 }
 
-/// One line of prose: bullets, quotes, code spans and links.
+/// One line of prose: bullets, quotes, code spans, links and emphasis.
 fn text_line(raw: &str, links: Links, theme: Theme) -> (Line<'static>, Vec<Anchor>) {
     match raw.trim_start() {
         rest if rest.starts_with("- ") || rest.starts_with("* ") => marked(&format!("• {}", &rest[2..]), links, theme),
@@ -190,7 +190,7 @@ fn text_line(raw: &str, links: Links, theme: Theme) -> (Line<'static>, Vec<Ancho
     }
 }
 
-/// `text` drawn with its code spans and links, and where each link sits.
+/// `text` drawn with its code spans, links and emphasis, and where each link sits.
 fn marked(text: &str, links: Links, theme: Theme) -> (Line<'static>, Vec<Anchor>) {
     let runs = runs(text, links);
     let mut column = 0;
@@ -205,37 +205,54 @@ fn marked(text: &str, links: Links, theme: Theme) -> (Line<'static>, Vec<Anchor>
     (Line::from(spans(&runs, theme)), anchors)
 }
 
-/// Code spans drawn, the rest as written, links too: the panes that call it cannot click them.
+/// Code spans and emphasis drawn, the rest as written, links too: the panes that call it cannot click them.
 pub(in crate::tui) fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
     spans(&runs(text, Links::Literal), theme)
 }
 
 fn spans<'a>(runs: &[Run<'_>], theme: Theme) -> Vec<Span<'a>> {
-    let span = |run: &Run<'_>| match run {
-        Run::Plain(text) => Span::raw((*text).to_owned()),
-        Run::Code(code) => Span::styled((*code).to_owned(), Style::default().fg(theme.code).bg(theme.surface)),
-        Run::Link { text, .. } => Span::styled((*text).to_owned(), Style::default().fg(theme.link)),
-    };
-    runs.iter().map(span).collect()
+    let mut open: Vec<Modifier> = vec![];
+    let mut spans = vec![];
+    for run in runs {
+        let style = match run {
+            Run::Open(emphasis) => {
+                open.push(open.last().copied().unwrap_or_default() | *emphasis);
+                continue;
+            }
+            Run::Close => {
+                open.pop();
+                continue;
+            }
+            Run::Plain(_) => Style::default(),
+            Run::Code(_) => Style::default().fg(theme.code).bg(theme.surface),
+            Run::Link { .. } => Style::default().fg(theme.link),
+        };
+        spans.push(Span::styled(run.shown().to_owned(), style.add_modifier(open.last().copied().unwrap_or_default())));
+    }
+    spans
 }
 
-/// A stretch of a prose line: text as written, a code span, or a markdown link with the bytes of
-/// the line its `[` and `](url)` take.
+/// A stretch of a prose line: text as written, a code span, a markdown link with the bytes of
+/// the line its `[` and `](url)` take, or the dropped marker that opens or closes emphasis.
 enum Run<'a> {
     Plain(&'a str),
     Code(&'a str),
     Link { text: &'a str, url: LinkUrl, markup: [Range<usize>; 2] },
+    Open(Modifier),
+    Close,
 }
 
 impl Run<'_> {
     fn shown(&self) -> &str {
         match self {
             Self::Plain(text) | Self::Code(text) | Self::Link { text, .. } => text,
+            Self::Open(_) | Self::Close => "",
         }
     }
 }
 
-/// A line split on its backticks into code spans, and the text between them into its links where `links` draws them.
+/// A line split on its backticks into code spans, the text between them into its links where `links`
+/// draws them, and that text's emphasis markers.
 fn runs(text: &str, links: Links) -> Vec<Run<'_>> {
     let starts = text.split('`').scan(0, |at, part| {
         let start = *at;
@@ -243,13 +260,133 @@ fn runs(text: &str, links: Links) -> Vec<Run<'_>> {
         Some(start)
     });
     let parts = text.split('`').zip(starts).enumerate().filter(|(_, (part, _))| !part.is_empty());
-    parts
+    let runs = parts
         .flat_map(|(i, (part, start))| match (i % 2 == 1, links) {
             (true, _) => vec![Run::Code(part)],
             (false, Links::Literal) => vec![Run::Plain(part)],
             (false, Links::Drawn) => link_runs(part, start),
         })
+        .collect();
+    emphasised(runs)
+}
+
+/// `runs` with the `**bold**`, `__bold__`, `*italic*`, `_italic_` and `~~struck~~` of their plain
+/// text drawn: a marker opens before a word and closes after one, never inside it, so
+/// `snake_case` and `2*3*4` stay text, and so does a marker left unclosed.
+fn emphasised(runs: Vec<Run<'_>>) -> Vec<Run<'_>> {
+    let mut markers = matched(&delimiters(&runs)).into_iter().peekable();
+    runs.into_iter()
+        .enumerate()
+        .flat_map(|(at, run)| match run {
+            Run::Plain(text) => split_at_markers(text, std::iter::from_fn(|| markers.next_if(|marker| marker.run == at))),
+            run => vec![run],
+        })
         .collect()
+}
+
+/// A stretch of one emphasis marker in a plain run, which may open or close emphasis.
+struct Delimiter<'a> {
+    run: usize,
+    bytes: Range<usize>,
+    marker: &'a str,
+    emphasis: Modifier,
+    opens: bool,
+    closes: bool,
+}
+
+/// What sits beside a marker; a code span or a link beside it reads as punctuation, as its backtick or bracket would.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Beside {
+    Space,
+    Punctuation,
+    Word,
+}
+
+impl Beside {
+    fn of(c: char) -> Self {
+        match c {
+            c if c.is_whitespace() => Self::Space,
+            c if c.is_alphanumeric() => Self::Word,
+            _ => Self::Punctuation,
+        }
+    }
+}
+
+/// Every stretch of `*`, `_` or `~` in the plain runs that could open or close emphasis.
+fn delimiters<'a>(runs: &[Run<'a>]) -> Vec<Delimiter<'a>> {
+    let edge = |at: usize, outer: usize| if at == outer { Beside::Space } else { Beside::Punctuation };
+    let last = runs.len().saturating_sub(1);
+    let plain = runs.iter().enumerate().filter_map(|(at, run)| match run {
+        Run::Plain(text) => Some((at, *text)),
+        _ => None,
+    });
+    plain
+        .flat_map(|(at, text)| {
+            let stretches = text.as_bytes().chunk_by(|a, b| a == b).scan(0, |end, chunk| {
+                let start = *end;
+                *end += chunk.len();
+                Some(start..*end)
+            });
+            stretches.filter_map(move |bytes| {
+                let marker = text.get(bytes.clone())?;
+                let emphasis = emphasis_of(marker)?;
+                let before = text[..bytes.start].chars().next_back().map_or(edge(at, 0), Beside::of);
+                let after = text[bytes.end..].chars().next().map_or(edge(at, last), Beside::of);
+                let (opens, closes) = (before != Beside::Word && after != Beside::Space, before != Beside::Space && after != Beside::Word);
+                Some(Delimiter { run: at, bytes, marker, emphasis, opens, closes })
+            })
+        })
+        .collect()
+}
+
+fn emphasis_of(marker: &str) -> Option<Modifier> {
+    match marker {
+        "*" | "_" => Some(Modifier::ITALIC),
+        "**" | "__" => Some(Modifier::BOLD),
+        "~~" => Some(Modifier::CROSSED_OUT),
+        _ => None,
+    }
+}
+
+/// A delimiter that opens or closes emphasis, as the run it is drawn as.
+struct Marker {
+    run: usize,
+    bytes: Range<usize>,
+    drawn: Run<'static>,
+}
+
+/// The delimiters that pair up, in order: a closer takes the nearest opener of its marker, and the
+/// openers left between them stay text, so emphasis always nests.
+fn matched(delimiters: &[Delimiter<'_>]) -> Vec<Marker> {
+    let mut drawn: Vec<Option<Run<'static>>> = std::iter::repeat_with(|| None).take(delimiters.len()).collect();
+    let mut openers: Vec<usize> = vec![];
+    for (at, delimiter) in delimiters.iter().enumerate() {
+        let opener = openers.iter().rposition(|&opener| delimiters[opener].marker == delimiter.marker).filter(|_| delimiter.closes);
+        match opener {
+            Some(position) => {
+                drawn[openers[position]] = Some(Run::Open(delimiter.emphasis));
+                drawn[at] = Some(Run::Close);
+                openers.truncate(position);
+            }
+            None if delimiter.opens => openers.push(at),
+            None => {}
+        }
+    }
+    let pairs = delimiters.iter().zip(drawn);
+    pairs.filter_map(|(delimiter, drawn)| Some(Marker { run: delimiter.run, bytes: delimiter.bytes.clone(), drawn: drawn? })).collect()
+}
+
+/// `text` as plain runs around the `markers` that take its bytes, in order.
+fn split_at_markers(text: &str, markers: impl Iterator<Item = Marker>) -> Vec<Run<'_>> {
+    let mut runs = vec![];
+    let mut at = 0;
+    for Marker { bytes, drawn, .. } in markers {
+        runs.extend((bytes.start > at).then(|| Run::Plain(&text[at..bytes.start])));
+        runs.push(drawn);
+        at = bytes.end;
+    }
+    runs.extend((at < text.len()).then(|| Run::Plain(&text[at..])));
+    runs
 }
 
 /// `text`, which starts at byte `start` of its line, as its markdown links `[text](url)` and what
@@ -424,6 +561,76 @@ mod tests {
     #[test]
     fn a_link_without_text_stays_literal() {
         assert_eq!(text(&in_thread("[](https://x/a) then")), ["[](https://x/a) then"]);
+    }
+
+    #[test]
+    fn two_stars_or_two_underscores_draw_bold() {
+        let lines = in_thread("a **strong** and __loud__ word");
+        assert_eq!(text(&lines), ["a strong and loud word"]);
+        assert_eq!(style_of(&lines[0], "strong").add_modifier, Modifier::BOLD);
+        assert_eq!(style_of(&lines[0], "loud").add_modifier, Modifier::BOLD);
+    }
+
+    #[test]
+    fn a_nitpick_in_underscores_reads_in_italic() {
+        let lines = in_thread("_Nitpick_: rename it");
+        assert_eq!(text(&lines), ["Nitpick: rename it"]);
+        assert_eq!(style_of(&lines[0], "Nitpick").add_modifier, Modifier::ITALIC);
+    }
+
+    #[test]
+    fn two_tildes_cross_the_text_out() {
+        let lines = in_thread("~~old~~ new");
+        assert_eq!(text(&lines), ["old new"]);
+        assert_eq!(style_of(&lines[0], "old").add_modifier, Modifier::CROSSED_OUT);
+    }
+
+    #[test]
+    fn markers_inside_words_or_between_spaces_stay_literal() {
+        let body = "snake_case_name, a * b * c, 2*3*4 and foo__init__";
+        let lines = in_thread(body);
+        assert_eq!(text(&lines), [body]);
+        assert!(lines[0].spans.iter().all(|span| span.style.add_modifier.is_empty()), "{lines:?}");
+    }
+
+    #[test]
+    fn an_unclosed_marker_stays_literal() {
+        assert_eq!(text(&in_thread("**half and _open")), ["**half and _open"]);
+    }
+
+    #[test]
+    fn a_marker_inside_a_code_span_stays_literal() {
+        let lines = in_thread("call `__init__` and `*args*`");
+        assert_eq!(text(&lines), ["call __init__ and *args*"]);
+        assert_eq!(style_of(&lines[0], "*args*").add_modifier, Modifier::empty());
+    }
+
+    #[test]
+    fn emphasis_around_a_link_keeps_its_colour_and_its_click() {
+        let lines = in_thread("**[docs](https://x/a)**");
+        assert_eq!(text(&lines), ["docs"]);
+        let docs = style_of(&lines[0], "docs");
+        assert_eq!((docs.fg, docs.add_modifier), (Some(Theme::default().link), Modifier::BOLD));
+        assert_eq!(clicks("**[docs](https://x/a)**", 80), [(0, 0, "docs".into(), "https://x/a".into())]);
+    }
+
+    #[test]
+    fn emphasis_is_drawn_in_a_pane_that_cannot_click() {
+        let lines = body_lines("- **Heads up**: soon", 80, Theme::default());
+        assert_eq!(text(&lines), ["• Heads up: soon"]);
+        assert_eq!(style_of(&lines[0], "Heads up").add_modifier, Modifier::BOLD);
+    }
+
+    #[test]
+    fn a_drag_over_an_emphasised_word_copies_its_raw_letters() {
+        let raw = "a **bold** _it_ ~~gone~~";
+        let pieces = body_pieces(raw, &Fences::Coloured(&Replaced::default()), 80, Theme::default());
+        let [Piece::Written { line, links, .. }] = pieces.as_slice() else { panic!("one written line") };
+        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, links, 80, &str::to_owned).remove(0).1.pop() else {
+            panic!("a written row")
+        };
+        let copied: String = cells.into_iter().map(|bytes| &raw[bytes]).collect();
+        assert_eq!(copied, "a bold it gone");
     }
 
     #[test]
