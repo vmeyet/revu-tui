@@ -1,4 +1,4 @@
-//! A note's body as light markdown: code spans, bullets, quotes, tables, pictures and fenced code.
+//! A note's body as light markdown: code spans, links, bullets, quotes, tables, pictures and fenced code.
 use super::{Piece, fallback};
 use crate::diff::LineKind;
 use crate::review::Review;
@@ -9,6 +9,8 @@ use crate::tui::table::table_lines;
 use crate::tui::theme::Theme;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+use std::ops::Range;
+use unicode_width::UnicodeWidthStr;
 
 /// Code spans, bullets, quotes and tables `width` columns at most; the rest is the text as written,
 /// wrapped by the widget. Pictures read as their `[image: …]` line, for the panes that never draw them.
@@ -41,15 +43,20 @@ impl Replaced {
 /// How a body's fences read.
 pub(super) enum Fences<'a> {
     /// In panes drawn each frame, where highlighting is too slow to repeat: code in `theme.code`,
-    /// a suggestion as its `+` lines only.
+    /// a suggestion as its `+` lines only. Nothing clicks there, so links stay written out.
     Plain,
-    /// In the thread pane, whose rows are kept: code in syntax colours, a suggestion over what it replaces.
+    /// In the thread pane, whose rows are kept: code in syntax colours, a suggestion over what it
+    /// replaces, and links drawn as their text, which clicks.
     Coloured(&'a Replaced),
 }
 
 /// A body as pieces, with a suggestion block drawn as a small diff (the replaced lines struck as
 /// `-`, the suggested ones as `+`, in the diff colours) and each picture under its line.
 pub(super) fn body_pieces(body: &str, fences: &Fences<'_>, width: usize, theme: Theme) -> Vec<Piece> {
+    let links = match fences {
+        Fences::Plain => Links::Literal,
+        Fences::Coloured(_) => Links::Drawn,
+    };
     let mut lines = vec![];
     let mut raws = body.lines().peekable();
     while let Some(raw) = raws.next() {
@@ -60,13 +67,13 @@ pub(super) fn body_pieces(body: &str, fences: &Fences<'_>, width: usize, theme: 
             continue;
         }
         if !opener.starts_with('|') {
-            lines.extend(prose(raw, theme));
+            lines.extend(prose(raw, links, theme));
             continue;
         }
         let run: Vec<&str> = std::iter::once(raw).chain(std::iter::from_fn(|| raws.next_if(|l| l.trim_start().starts_with('|')))).collect();
         match table_lines(&run, width, theme) {
-            Some(table) => lines.extend(table.into_iter().zip(&run).map(|(line, raw)| written(line, raw))),
-            None => lines.extend(run.iter().flat_map(|raw| prose(raw, theme))),
+            Some(table) => lines.extend(table.into_iter().zip(&run).map(|(line, raw)| written(line, raw, vec![]))),
+            None => lines.extend(run.iter().flat_map(|raw| prose(raw, links, theme))),
         }
     }
     lines
@@ -75,7 +82,7 @@ pub(super) fn body_pieces(body: &str, fences: &Fences<'_>, width: usize, theme: 
 /// A fenced block in the syntax colours of the language its tag names, all in `theme.code` where none;
 /// a suggestion in its file's language, over the diff's signs and fills.
 fn fence_pieces(tag: &str, block: &[&str], fences: &Fences<'_>, theme: Theme) -> Vec<Piece> {
-    let written_all = |lines: Vec<Line<'static>>| lines.into_iter().zip(block).map(|(line, raw)| written(line, raw));
+    let written_all = |lines: Vec<Line<'static>>| lines.into_iter().zip(block).map(|(line, raw)| written(line, raw, vec![]));
     let (replaced, file_language, named) = match fences {
         Fences::Plain => (&[][..], None, None),
         Fences::Coloured(replaced) => {
@@ -116,38 +123,187 @@ fn code_lines(
     texts.iter().enumerate().map(line).collect()
 }
 
+/// Whether a line draws its markdown links as their text or leaves them written out.
+#[derive(Clone, Copy)]
+enum Links {
+    Literal,
+    Drawn,
+}
+
 /// A line outside fences and tables, each picture under it.
-fn prose(raw: &str, theme: Theme) -> Vec<Piece> {
+fn prose(raw: &str, links: Links, theme: Theme) -> Vec<Piece> {
     let (text, pictures) = image::split(raw);
-    let line = (pictures.is_empty() || !text.trim().is_empty()).then(|| written(text_line(&text, theme), raw));
+    let line = (pictures.is_empty() || !text.trim().is_empty()).then(|| {
+        let (line, anchors) = text_line(&text, links, theme);
+        written(line, raw, in_raw(anchors, raw))
+    });
     line.into_iter().chain(pictures.into_iter().map(Piece::Picture)).collect()
 }
 
-fn written(line: Line<'static>, raw: &str) -> Piece {
-    Piece::Written { line, raw: raw.to_owned() }
+/// `anchors` found in a drawing of `raw`, their markup moved to its bytes in `raw`: the drawing
+/// took out pictures and turned a bullet into a glyph, but keeps its links in the same order.
+fn in_raw(anchors: Vec<Anchor>, raw: &str) -> Vec<Anchor> {
+    let markups = runs(raw, Links::Drawn).into_iter().filter_map(|run| match run {
+        Run::Link { markup, .. } => Some(markup),
+        Run::Plain(_) | Run::Code(_) => None,
+    });
+    anchors.into_iter().zip(markups).map(|(anchor, markup)| Anchor { markup, ..anchor }).collect()
 }
 
-/// One line of prose: bullets, quotes and code spans.
-fn text_line(raw: &str, theme: Theme) -> Line<'static> {
-    match raw.trim_start() {
-        rest if rest.starts_with("- ") || rest.starts_with("* ") => Line::from(inline(&format!("• {}", &rest[2..]), theme)),
-        rest if rest.starts_with("> ") => Line::from(Span::styled(format!("▏{}", &rest[2..]), Style::default().fg(theme.muted))),
-        _ => Line::from(inline(raw, theme)),
+fn written(line: Line<'static>, raw: &str, links: Vec<Anchor>) -> Piece {
+    Piece::Written { line, raw: raw.to_owned(), links }
+}
+
+/// Where a markdown link points as written: a web address or a path on the forge's host.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct LinkUrl(String);
+
+impl LinkUrl {
+    /// A link revu can open: `http(s)://…` or an absolute `/path`; a relative path, an `#anchor`
+    /// or a `mailto:` would open the wrong page, so they stay text.
+    fn parse(url: &str) -> Option<Self> {
+        let web = url.starts_with("http://") || url.starts_with("https://");
+        let path = url.starts_with('/') && !url.starts_with("//");
+        (web || path).then(|| Self(url.to_owned()))
+    }
+
+    pub(super) fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
+/// A link drawn in a body line: the cells its text takes, the bytes of its line as written its
+/// drawing drops (the `[` and the `](url)`), and where it points.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Anchor {
+    pub(super) cells: Range<usize>,
+    pub(super) markup: [Range<usize>; 2],
+    pub(super) url: LinkUrl,
+}
+
+/// One line of prose: bullets, quotes, code spans and links.
+fn text_line(raw: &str, links: Links, theme: Theme) -> (Line<'static>, Vec<Anchor>) {
+    match raw.trim_start() {
+        rest if rest.starts_with("- ") || rest.starts_with("* ") => marked(&format!("• {}", &rest[2..]), links, theme),
+        rest if rest.starts_with("> ") => (Line::from(Span::styled(format!("▏{}", &rest[2..]), Style::default().fg(theme.muted))), vec![]),
+        _ => marked(raw, links, theme),
+    }
+}
+
+/// `text` drawn with its code spans and links, and where each link sits.
+fn marked(text: &str, links: Links, theme: Theme) -> (Line<'static>, Vec<Anchor>) {
+    let runs = runs(text, links);
+    let mut column = 0;
+    let mut anchors = vec![];
+    for run in &runs {
+        let width = run.shown().width();
+        if let Run::Link { url, markup, .. } = run {
+            anchors.push(Anchor { cells: column..column + width, markup: markup.clone(), url: url.clone() });
+        }
+        column += width;
+    }
+    (Line::from(spans(&runs, theme)), anchors)
+}
+
+/// Code spans drawn, the rest as written, links too: the panes that call it cannot click them.
 pub(in crate::tui) fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
-    text.split('`')
-        .enumerate()
-        .filter(|(_, part)| !part.is_empty())
-        .map(|(i, part)| {
-            if i % 2 == 1 {
-                Span::styled(part.to_owned(), Style::default().fg(theme.code).bg(theme.surface))
-            } else {
-                Span::raw(part.to_owned())
-            }
+    spans(&runs(text, Links::Literal), theme)
+}
+
+fn spans<'a>(runs: &[Run<'_>], theme: Theme) -> Vec<Span<'a>> {
+    let span = |run: &Run<'_>| match run {
+        Run::Plain(text) => Span::raw((*text).to_owned()),
+        Run::Code(code) => Span::styled((*code).to_owned(), Style::default().fg(theme.code).bg(theme.surface)),
+        Run::Link { text, .. } => Span::styled((*text).to_owned(), Style::default().fg(theme.link)),
+    };
+    runs.iter().map(span).collect()
+}
+
+/// A stretch of a prose line: text as written, a code span, or a markdown link with the bytes of
+/// the line its `[` and `](url)` take.
+enum Run<'a> {
+    Plain(&'a str),
+    Code(&'a str),
+    Link { text: &'a str, url: LinkUrl, markup: [Range<usize>; 2] },
+}
+
+impl Run<'_> {
+    fn shown(&self) -> &str {
+        match self {
+            Self::Plain(text) | Self::Code(text) | Self::Link { text, .. } => text,
+        }
+    }
+}
+
+/// A line split on its backticks into code spans, and the text between them into its links where `links` draws them.
+fn runs(text: &str, links: Links) -> Vec<Run<'_>> {
+    let starts = text.split('`').scan(0, |at, part| {
+        let start = *at;
+        *at += part.len() + 1;
+        Some(start)
+    });
+    let parts = text.split('`').zip(starts).enumerate().filter(|(_, (part, _))| !part.is_empty());
+    parts
+        .flat_map(|(i, (part, start))| match (i % 2 == 1, links) {
+            (true, _) => vec![Run::Code(part)],
+            (false, Links::Literal) => vec![Run::Plain(part)],
+            (false, Links::Drawn) => link_runs(part, start),
         })
         .collect()
+}
+
+/// `text`, which starts at byte `start` of its line, as its markdown links `[text](url)` and what
+/// lies between them; a picture's `![` is not a link.
+fn link_runs(text: &str, start: usize) -> Vec<Run<'_>> {
+    let mut runs = vec![];
+    let mut at = 0;
+    while let Some((open, link)) = next_link(&text[at..]) {
+        let open = at + open;
+        runs.extend((open > at).then(|| Run::Plain(&text[at..open])));
+        let close = open + 1 + link.text.len();
+        at = open + link.len;
+        runs.push(Run::Link { text: link.text, url: link.url, markup: [start + open..start + open + 1, start + close..start + at] });
+    }
+    runs.extend((at < text.len()).then(|| Run::Plain(&text[at..])));
+    runs
+}
+
+/// A markdown link as written: its text, where it points, and how many bytes it takes from its `[`.
+struct LinkMarkdown<'a> {
+    text: &'a str,
+    url: LinkUrl,
+    len: usize,
+}
+
+/// The first link in `text` and the byte its `[` sits at.
+fn next_link(text: &str) -> Option<(usize, LinkMarkdown<'_>)> {
+    let mut opens = text.match_indices('[').map(|(at, _)| at).filter(|&at| !text[..at].ends_with('!'));
+    opens.find_map(|at| link_at(&text[at..]).map(|link| (at, link)))
+}
+
+/// The link `[text](url "title")` `text` starts with; the title is dropped. Empty text or a url
+/// revu cannot open leaves it text.
+fn link_at(text: &str) -> Option<LinkMarkdown<'_>> {
+    let (shown, target) = text[1..].split_once(']')?;
+    let inside = target.strip_prefix('(')?;
+    let close = closing_paren(inside)?;
+    let url = LinkUrl::parse(inside[..close].split_whitespace().next()?.trim_matches(['<', '>']))?;
+    let len = 1 + shown.len() + 2 + close + 1;
+    (!shown.is_empty()).then_some(LinkMarkdown { text: shown, url, len })
+}
+
+/// The byte of the `)` that closes `text`, past the parentheses opened and closed inside it.
+fn closing_paren(text: &str) -> Option<usize> {
+    let mut depth = 0_usize;
+    for (at, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return Some(at),
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -198,6 +354,76 @@ mod tests {
         let body = "Use `Key::from` here.\n- one\n> said\n```\nlet x = 1;\n```";
         let lines = text(&body_lines(body, 80, Theme::default()));
         assert_eq!(lines, ["Use Key::from here.", "• one", "▏said", "  let x = 1;"]);
+    }
+
+    /// A body as the thread pane draws it, where links click.
+    fn in_thread(body: &str) -> Vec<Line<'static>> {
+        texts(body_pieces(body, &Fences::Coloured(&Replaced::default()), 80, Theme::default()))
+    }
+
+    /// Each link a one-line body clicks through to as the thread pane lays it out `width` wide:
+    /// its row, its column, the text it covers and its url.
+    fn clicks(body: &str, width: usize) -> Vec<(usize, u16, String, String)> {
+        let pieces = body_pieces(body, &Fences::Coloured(&Replaced::default()), 80, Theme::default());
+        let [Piece::Written { line, raw, links }] = pieces.as_slice() else { panic!("one written line") };
+        let rows = written_rows(line.clone(), raw, links, width, &str::to_owned);
+        let marks = rows.into_iter().enumerate().flat_map(|(at, (_, marks))| marks.into_iter().map(move |mark| (at, mark)));
+        marks
+            .filter_map(|(at, mark)| match mark {
+                Mark::Link { column, text, url } => Some((at, column, text, url)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_link_shows_its_text_in_the_link_colour() {
+        let lines = in_thread("see [the docs](https://x/a \"title\") now");
+        assert_eq!(text(&lines), ["see the docs now"]);
+        assert_eq!(style_of(&lines[0], "the docs").fg, Some(Theme::default().link));
+    }
+
+    #[test]
+    fn a_link_stays_written_out_in_a_pane_that_cannot_click_it() {
+        assert_eq!(text(&body_lines("see [the docs](https://x/a) now", 80, Theme::default())), ["see [the docs](https://x/a) now"]);
+    }
+
+    #[test]
+    fn a_link_inside_a_code_span_or_a_fence_stays_literal() {
+        let lines = text(&in_thread("use `[a](https://x/a)` here\n```\n[b](https://x/b)\n```"));
+        assert_eq!(lines, ["use [a](https://x/a) here", "  [b](https://x/b)"]);
+    }
+
+    #[test]
+    fn a_link_clicks_through_on_each_row_its_text_is_drawn_on() {
+        let guide = "https://x/guide".to_owned();
+        assert_eq!(
+            clicks("read [the guide](https://x/guide) first", 10),
+            [(0, 5, "the ".into(), guide.clone()), (1, 0, "guide".into(), guide)]
+        );
+    }
+
+    #[test]
+    fn a_link_after_a_wide_emoji_clicks_on_its_own_text() {
+        assert_eq!(clicks("⚠️ see [docs](https://x/a) now", 80), [(0, 7, "docs".into(), "https://x/a".into())]);
+    }
+
+    #[test]
+    fn a_link_url_keeps_its_balanced_parentheses() {
+        let body = "see [w](https://x/a_(b)) now";
+        assert_eq!(text(&in_thread(body)), ["see w now"]);
+        assert_eq!(clicks(body, 80), [(0, 4, "w".into(), "https://x/a_(b)".into())]);
+    }
+
+    #[test]
+    fn only_a_web_address_or_an_absolute_path_makes_a_link() {
+        let body = "[a](docs/x.md) [b](#top) [c](mailto:nina@x) [d](//x/y) [e](/acme/widgets)";
+        assert_eq!(text(&in_thread(body)), ["[a](docs/x.md) [b](#top) [c](mailto:nina@x) [d](//x/y) e"]);
+    }
+
+    #[test]
+    fn a_link_without_text_stays_literal() {
+        assert_eq!(text(&in_thread("[](https://x/a) then")), ["[](https://x/a) then"]);
     }
 
     #[test]
@@ -279,9 +505,11 @@ mod tests {
     #[test]
     fn a_coloured_line_still_copies_as_written() {
         let pieces = body_pieces("```ts\n\tconst x = 1;\n```", &Fences::Coloured(&Replaced::default()), 80, tokyonight());
-        let [Piece::Written { line, raw }] = pieces.as_slice() else { panic!("one written line") };
+        let [Piece::Written { line, raw, .. }] = pieces.as_slice() else { panic!("one written line") };
         assert_eq!(raw, "\tconst x = 1;");
-        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, 80).remove(0).1 else { panic!("a written row") };
+        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, &[], 80, &str::to_owned).remove(0).1.pop() else {
+            panic!("a written row")
+        };
         assert_eq!(cells.last(), Some(&(12..13)), "the last cell copies the last byte");
     }
 
