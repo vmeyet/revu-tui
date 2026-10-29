@@ -139,8 +139,8 @@ mod tests {
         on_line(&mut app);
         press(&mut app, "c");
         type_text(&mut app, "nit");
-        press(&mut app, "qq");
-        assert_eq!(app.quit_prompt().as_deref(), Some("1 draft unsaved · q again to quit"), "the first q closed the pane");
+        press(&mut app, "q");
+        assert_eq!(app.quit_prompt().as_deref(), Some("1 draft unsaved · q again to quit"));
         press(&mut app, "c");
         press(&mut app, "half");
         app.handle_key(ctrl('c'));

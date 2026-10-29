@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **The pane closes once a new comment is written from the diff.**
+  In the diff, for a comment opened with `c`, `C` or `s`, saved with `enter` or posted with `⌘enter`.
+  Go on reading the code; a reply, or a comment written in the pane, keeps the pane open.
+
 ### Fixed
 
 - **The reply box sits under the thread it answers.**

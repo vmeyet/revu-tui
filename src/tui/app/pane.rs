@@ -534,6 +534,7 @@ mod tests {
         on_line(&mut app);
         press(&mut app, "Vjjc");
         type_text(&mut app, "these three lines");
+        press(&mut app, "l");
         let screen = render(&mut app, 160, 24);
         let line_12 = screen.lines().find(|l| l.contains("12   12")).expect("line 12 on screen");
         assert!(line_12.contains("│   12"), "the first line of the range shows the bar: {line_12}");

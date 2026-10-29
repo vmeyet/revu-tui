@@ -30,6 +30,7 @@ The comment box sits at the bottom of the right pane.
 In a narrow window and in zen it sits in the diff, under the line or the thread you write on.
 `enter` saves the draft.
 `⌘enter` posts a new comment or a reply at once, with no draft; `ctrl-s` does the same where the terminal keeps `⌘enter` for itself.
+A new comment written from the diff closes the pane once saved or posted; a reply keeps it open.
 `⌥enter` adds a new line, `↑` and `↓` move between lines.
 `⌥←` and `⌥→` jump a word, `⌥⌫` deletes the word before the cursor.
 `ctrl-o` moves the text to `$EDITOR`.

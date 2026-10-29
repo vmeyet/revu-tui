@@ -1,6 +1,6 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
 use super::{Action, App, Input, MrKey, Open, Post};
-use crate::forge::ThreadId;
+use crate::forge::{Position, ThreadId};
 use crate::review::{Draft, DraftId, Place, Review};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vtui::editor::Edited;
@@ -111,6 +111,9 @@ impl App {
             return vec![];
         }
         self.leave_input();
+        if let Post::Thread(position) = &to {
+            self.close_pane_of_new_thread(position);
+        }
         vec![Action::Post { key, to, body }]
     }
 
@@ -160,10 +163,23 @@ impl App {
             return vec![];
         }
         match input {
-            Input::Comment { position } => self.add_draft(Draft::on(*position, text)),
+            Input::Comment { position } => {
+                self.close_pane_of_new_thread(&position);
+                self.add_draft(Draft::on(*position, text))
+            }
             Input::Reply { thread } => self.add_draft(Draft::reply(thread, text)),
             Input::EditDraft { draft } => self.change_draft(draft, text),
             question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
+        }
+    }
+
+    /// With the keys back on the diff, a new thread written there closes the pane showing its line, so reading goes on
+    /// in the code; a failed post opens the box again, and the pane with it.
+    fn close_pane_of_new_thread(&mut self, position: &Position) {
+        let Some(open) = self.open.as_ref().filter(|_| self.focus == super::Focus::Review) else { return };
+        let line = place_of_position(&open.review, position);
+        if open.pane.as_ref().is_some_and(|pane| Some(&pane.place) == line.as_ref()) {
+            self.close_pane();
         }
     }
 
@@ -255,7 +271,7 @@ impl Post {
 }
 
 /// The pane place a position hangs on: its end line, with both numbers it carries.
-fn place_of_position(review: &Review, position: &crate::forge::Position) -> Option<Place> {
+fn place_of_position(review: &Review, position: &Position) -> Option<Place> {
     let file = review.files.iter().position(|f| f.new_path == position.new_path || f.old_path == position.old_path)?;
     Some(Place::Line { file, new: position.line.new, old: position.line.old })
 }
@@ -413,6 +429,32 @@ mod tests {
         app.apply(Incoming::Failed { what: Failure::Post { key: key.clone(), to: to.clone() }, message: "HTTP 403".into() });
         assert!(app.live_toast().unwrap().danger);
         assert_eq!((app.input_label().as_str(), app.buffer.text()), ("new thread · charge.rs:12", "nit"));
+        assert_eq!(listed_place(&app), Some(Place::Line { file: 0, new: Some(12), old: Some(12) }), "the pane shows the line again");
+    }
+
+    #[test]
+    fn a_new_thread_written_from_the_diff_closes_the_pane_and_gives_the_keys_back_to_the_code() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        assert_eq!(app.focus, Focus::Side, "the box lives in the pane");
+        type_text(&mut app, "nit");
+        assert_eq!((listed_place(&app), app.focus), (None, Focus::Review));
+        press(&mut app, "c");
+        press(&mut app, "nit");
+        app.handle_key(cmd_enter());
+        assert_eq!((listed_place(&app), app.focus), (None, Focus::Review), "posting at once closes it too");
+    }
+
+    #[test]
+    fn a_reply_keeps_the_pane_open_on_its_thread() {
+        let mut app = with_review();
+        walk_to_any_thread(&mut app, Toward::Next);
+        app.handle_key(code(KeyCode::Enter));
+        let place = listed_place(&app);
+        press(&mut app, "r");
+        type_text(&mut app, "agreed");
+        assert_eq!((listed_place(&app), app.focus), (place, Focus::Side));
     }
 
     #[test]
