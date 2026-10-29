@@ -48,8 +48,8 @@ pub(super) fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
     cells
 }
 
-/// Markdown the note drawing drops or turns into a glyph of its own: backticks, pipes, bullets, quotes.
-const MARKUP: [char; 8] = ['`', '|', ' ', '-', '*', '>', '#', '\t'];
+/// Markdown the note drawing drops or turns into a glyph of its own: backticks, emphasis, pipes, bullets, quotes.
+const MARKUP: [char; 10] = ['`', '|', ' ', '-', '*', '_', '~', '>', '#', '\t'];
 
 /// The bytes of `raw` under each cell of `drawn`, the light markdown drawing of it: each drawn
 /// character is found in `raw` past the markup the drawing dropped, and past the bytes of `dropped`
