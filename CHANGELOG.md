@@ -13,6 +13,10 @@ Each entry says what changed, then where, then how to use it.
   In the thread pane, the description, the answer pane and tables.
   Write `**bold**`, `_italic_` or `~~struck~~`; a marker inside a word or a code span stays as written.
 
+- **Bash and Terraform code is coloured.**
+  In the diff for `.sh`, `.bash`, `.zsh`, `.tf`, `.tfvars` and `.hcl` files, and in code blocks of comments.
+  Tag a code block `bash`, `sh`, `zsh`, `terraform` or `hcl` to colour it.
+
 ## 0.11.0 - 2026-10-29
 
 ### New
