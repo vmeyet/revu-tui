@@ -1,5 +1,5 @@
 //! The cover page, centred over the panes: calm sections under faded headers, the description in
-//! the same light markdown as notes, a cursor bar on the thread rows `enter` jumps to.
+//! the same Markdown as notes, a cursor bar on the thread rows `enter` jumps to.
 use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;

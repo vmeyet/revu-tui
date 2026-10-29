@@ -131,7 +131,7 @@ mod tests {
         let screen = render(&mut app, 100, 14);
         let last = app.news_page.unwrap();
         assert!(last > 0 && last < 40, "the view stops the scroll at the last page: {last}");
-        assert!(screen.contains("b pins or unpins it."), "the last entry is on screen:\n{screen}");
+        assert!(screen.contains("b  pins or unpins it."), "the last entry is on screen:\n{screen}");
         press(&mut app, "g");
         assert_eq!(app.news_page, Some(0));
     }

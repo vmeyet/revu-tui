@@ -1,8 +1,0 @@
----
-source: src/tui/table.rs
-expression: "draw(rows, 80).unwrap().join(\"\\n\")"
----
-Name  │ Count │ State 
-──────┼───────┼───────
-alpha │     3 │   ok  
-beta  │    12 │ failed

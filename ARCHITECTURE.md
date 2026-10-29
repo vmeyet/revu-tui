@@ -35,10 +35,10 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/backend/cache_shapes.rs` | Tests only: one fixture per type written to the cache, so a change that stops reading an older file fails (the cache would drop it, and the reader's pins, viewed files and drafts with it); a new cached type adds its fixture here |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
-| `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies as light markdown in `body.rs` |
+| `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies in `body.rs`: revu draws fenced code, suggestions and pictures, `prose.rs` draws the Markdown between them with mrk (plain text without the `prose` feature) |
 | `tui/theme.rs` | revu's colours over vtui's palette: the fills of a changed line; code colours come from vtui's `Syntax` |
 | `tui/palette.rs`, `palette_view.rs`, `help.rs` | revu's side of the `ctrl-k` palette (its modes, commands and what it lists) and of the `?` overlay (its groups of keys per pane) |
-| `tui/prose.rs`, `table.rs`, `images.rs` | Markdown files block by block, Markdown tables, pictures in the thread pane |
+| `tui/prose.rs`, `table.rs`, `images.rs` | Markdown drawn by mrk (files block by block, note bodies), the tables of a Markdown file in the diff, pictures in the thread pane |
 | `tui/drag.rs` | Text selection by drag; `$EDITOR` for a comment is `vtui::editor` |
 | `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
