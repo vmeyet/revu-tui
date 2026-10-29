@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Position;
 use ratatui::style::Modifier;
 use std::ops::Range;
-use unicode_width::UnicodeWidthChar;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// One screen row of text a drag can select, as the last frame drew it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,20 +52,48 @@ pub(super) fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
 const MARKUP: [char; 8] = ['`', '|', ' ', '-', '*', '>', '#', '\t'];
 
 /// The bytes of `raw` under each cell of `drawn`, the light markdown drawing of it: each drawn
-/// character is found in `raw` past the markup the drawing dropped; a glyph of its own stands for nothing.
-pub(crate) fn aligned(drawn: &str, raw: &str) -> Vec<Range<usize>> {
+/// character is found in `raw` past the markup the drawing dropped, and past the bytes of `dropped`
+/// whatever they hold; a glyph of its own stands for nothing.
+pub(crate) fn aligned(drawn: &str, raw: &str, dropped: &[Range<usize>]) -> Vec<Range<usize>> {
     let mut cells = vec![];
     let mut at = 0;
-    for c in drawn.chars() {
-        let found = raw[at..].char_indices().find(|&(_, r)| r == c || !MARKUP.contains(&r)).filter(|&(_, r)| r == c);
+    for (_, c, width) in drawn_cells(drawn) {
+        let mut kept = raw[at..].char_indices().map(|(i, r)| (at + i, r)).filter(|(i, _)| !dropped.iter().any(|d| d.contains(i)));
+        let found = kept.find(|&(_, r)| r == c || !MARKUP.contains(&r)).filter(|&(_, r)| r == c);
         let bytes = match found {
-            Some((i, r)) => at + i..at + i + r.len_utf8(),
+            Some((i, r)) => i..i + r.len_utf8(),
             None => at..at,
         };
         at = bytes.end;
-        cells.extend(std::iter::repeat_n(bytes, c.width().unwrap_or(0)));
+        cells.extend(std::iter::repeat_n(bytes, width));
     }
     cells
+}
+
+/// Each character of `text` with its byte offset and the cells it adds as the terminal draws the
+/// line: together they make `text.width()`, so the selector that widens an emoji counts for its cell.
+fn drawn_cells(text: &str) -> impl Iterator<Item = (usize, char, usize)> + '_ {
+    text.char_indices().scan(0, move |before, (at, c)| {
+        let upto = text[..at + c.len_utf8()].width();
+        let width = upto.saturating_sub(*before);
+        *before = (*before).max(upto);
+        Some((at, c, width))
+    })
+}
+
+/// The part of `text` drawn on its cells `cells`, counted as `aligned` counts them.
+pub(crate) fn text_on_cells(text: &str, cells: Range<usize>) -> &str {
+    let starts: Vec<(usize, usize)> = drawn_cells(text)
+        .filter(|&(_, _, width)| width > 0)
+        .scan(0, |column, (at, _, width)| {
+            let start = *column;
+            *column += width;
+            Some((start, at))
+        })
+        .collect();
+    let byte_at = |cell: usize| starts.iter().find(|&&(start, _)| start >= cell).map_or(text.len(), |&(_, at)| at);
+    let from = byte_at(cells.start);
+    &text[from..byte_at(cells.end).max(from)]
 }
 
 /// What a drag covers: from the cell it started on to the cell under the pointer, in one column.
@@ -173,15 +201,28 @@ mod tests {
 
     /// The raw text under each drawn cell that stands for some.
     fn under(drawn: &str, raw: &str) -> Vec<String> {
-        aligned(drawn, raw).into_iter().filter(|bytes| !bytes.is_empty()).map(|bytes| raw[bytes].to_owned()).collect()
+        aligned(drawn, raw, &[]).into_iter().filter(|bytes| !bytes.is_empty()).map(|bytes| raw[bytes].to_owned()).collect()
     }
 
     #[test]
     fn a_note_line_finds_its_drawn_characters_past_the_markdown_it_dropped() {
         assert_eq!(under("• one", "- one"), [" ", "o", "n", "e"], "the bullet glyph stands for nothing");
         assert_eq!(under("a b", "`a` b"), ["a", " ", "b"]);
-        assert_eq!(aligned("x │ y", "| x | y |")[2], 4..4, "a table line drawn over its pipes");
-        assert_eq!(aligned("  let", "let")[..2], [0..0, 0..0], "the code indent stands for nothing");
+        assert_eq!(aligned("x │ y", "| x | y |", &[])[2], 4..4, "a table line drawn over its pipes");
+        assert_eq!(aligned("  let", "let", &[])[..2], [0..0, 0..0], "the code indent stands for nothing");
+    }
+
+    #[test]
+    fn a_link_drawn_as_its_text_finds_the_text_past_the_markup_it_dropped() {
+        let (raw, dropped) = ("see [docs](https://x/a) now", [4..5, 9..23]);
+        let copied: Vec<&str> = aligned("see docs now", raw, &dropped).into_iter().map(|bytes| &raw[bytes]).collect();
+        assert_eq!(copied, ["s", "e", "e", " ", "d", "o", "c", "s", " ", "n", "o", "w"]);
+    }
+
+    #[test]
+    fn a_wide_emoji_takes_the_cells_the_terminal_draws_it_on() {
+        assert_eq!(aligned("⚠️ a", "⚠️ a", &[]).len(), "⚠️ a".width());
+        assert_eq!(text_on_cells("⚠️ see docs", 7..11), "docs");
     }
 
     #[test]

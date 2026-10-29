@@ -20,6 +20,7 @@ use std::ops::Range;
 use unicode_width::UnicodeWidthStr;
 use vtui::field::Field;
 
+use body::Anchor;
 pub(super) use body::{body_lines, inline};
 pub(super) use conversation::{InlineLayout, shown_ages};
 
@@ -30,10 +31,11 @@ const COMPOSE_ROWS: usize = 8;
 /// the rows its thumbnail needs, or a line of its own when it cannot be drawn.
 enum Piece {
     Text(Line<'static>),
-    /// A line of a body, and the text as written that a drag copies.
+    /// A line of a body, the text as written that a drag copies, and the links drawn in it.
     Written {
         line: Line<'static>,
         raw: String,
+        links: Vec<Anchor>,
     },
     Picture(Image),
 }
@@ -49,8 +51,9 @@ pub(super) struct Placement {
 enum Mark {
     /// The first of the rows reserved for a ready picture.
     Picture { url: String, size: ratatui::layout::Size },
-    /// A picture shown as its `[image: …]` line, clickable to its web link.
-    Link { text: String, url: String },
+    /// A link's text `column` cells into its row, clickable to its web link: a markdown link,
+    /// or a picture shown as its `[image: …]` line.
+    Link { column: u16, text: String, url: String },
     /// A row of a body line, and the bytes of the line as written under each of its cells.
     Written { raw: String, cells: Vec<Range<usize>> },
 }
@@ -184,7 +187,9 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
                 placements.push(Placement { url: url.clone(), area: Rect::new(x, y, size.width.min(width), size.height) });
             }
             Mark::Picture { .. } => {}
-            Mark::Link { text, url } => app.links.push(super::ui::Link { x, y, text: text.clone(), url: url.clone() }),
+            Mark::Link { column, text, url } => {
+                app.links.push(super::ui::Link { x: x + column, y, text: text.clone(), url: url.clone() });
+            }
             Mark::Written { raw, cells } => {
                 app.text_rows.push(TextRow { at: Position::new(x, y), width, line: *piece, text: raw.clone(), cells: cells.clone() });
             }
@@ -241,10 +246,8 @@ fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
     let mut rows: Vec<(Option<Entry>, Line<'static>)> = vec![];
     let mut marks: Vec<(usize, usize, Mark)> = vec![];
     for (index, (entry, piece)) in lines.into_iter().enumerate() {
-        for (line, mark) in lay_out(piece, &app.thumbs, width, theme, &web) {
-            if let Some(mark) = mark {
-                marks.push((rows.len(), index, mark));
-            }
+        for (line, row_marks) in lay_out(piece, &app.thumbs, width, theme, &web) {
+            marks.extend(row_marks.into_iter().map(|mark| (rows.len(), index, mark)));
             rows.push((entry, line));
         }
     }
@@ -258,38 +261,60 @@ fn at_cursor(open: &Open, pane: &Pane) -> bool {
 
 /// A piece as rows: text wrapped to `width`; a ready picture as blank rows its thumbnail covers;
 /// any other picture as one line, still loading or `[image: alt]`, which clicks through to it.
-fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl Fn(&str) -> String) -> Vec<(Line<'static>, Option<Mark>)> {
+fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl Fn(&str) -> String) -> Vec<(Line<'static>, Vec<Mark>)> {
     let image = match piece {
-        Piece::Text(line) => return wrap(line, width).into_iter().map(|l| (l, None)).collect(),
-        Piece::Written { line, raw } => return written_rows(line, &raw, width),
+        Piece::Text(line) => return wrap(line, width).into_iter().map(|l| (l, vec![])).collect(),
+        Piece::Written { line, raw, links } => return written_rows(line, &raw, &links, width, web),
         Piece::Picture(image) => image,
     };
     let cols = u16::try_from(width).unwrap_or(u16::MAX);
     if let Some(size) = thumbs.cells(&image.url, cols) {
         let mark = Mark::Picture { url: image.url, size };
-        let mut rows = vec![(Line::default(), Some(mark))];
-        rows.extend((1..size.height).map(|_| (Line::default(), None)));
+        let mut rows = vec![(Line::default(), vec![mark])];
+        rows.extend((1..size.height).map(|_| (Line::default(), vec![])));
         return rows;
     }
     if matches!(thumbs.get(&image.url), Some(super::images::Thumb::Loading)) {
-        return vec![(Line::from(Span::styled("… loading image", Style::default().fg(theme.faded))), None)];
+        return vec![(Line::from(Span::styled("… loading image", Style::default().fg(theme.faded))), vec![])];
     }
     let text = vtui::text::truncate(&fallback(&image), width);
-    let mark = Mark::Link { text: text.clone(), url: web(&image.url) };
-    vec![(Line::from(Span::styled(text, Style::default().fg(theme.link))), Some(mark))]
+    let mark = Mark::Link { column: 0, text: text.clone(), url: web(&image.url) };
+    vec![(Line::from(Span::styled(text, Style::default().fg(theme.link))), vec![mark])]
 }
 
-/// A body line wrapped to `width`, each row with the bytes of `raw` under its cells.
-fn written_rows(line: Line<'static>, raw: &str, width: usize) -> Vec<(Line<'static>, Option<Mark>)> {
+/// A body line wrapped to `width`, each row with the bytes of `raw` under its cells and the part
+/// of each link it shows.
+fn written_rows(
+    line: Line<'static>,
+    raw: &str,
+    links: &[Anchor],
+    width: usize,
+    web: &impl Fn(&str) -> String,
+) -> Vec<(Line<'static>, Vec<Mark>)> {
     let drawn: String = line.spans.iter().map(|span| span.content.as_ref()).collect();
-    let cells = drag::aligned(&drawn, raw);
+    let dropped: Vec<Range<usize>> = links.iter().flat_map(|link| link.markup.clone()).collect();
+    let cells = drag::aligned(&drawn, raw, &dropped);
     let rows = wrap(line, width).into_iter().scan(0, |start, row| {
         let end = (*start + row.width()).min(cells.len());
-        let mark = Mark::Written { raw: raw.to_owned(), cells: cells[*start..end].to_vec() };
+        let written = Mark::Written { raw: raw.to_owned(), cells: cells[*start..end].to_vec() };
+        let shown = links.iter().filter_map(|link| link_in_row(&row, *start..end, link, web));
+        let marks = std::iter::once(written).chain(shown).collect();
         *start = end;
-        Some((row, Some(mark)))
+        Some((row, marks))
     });
     rows.collect()
+}
+
+/// The part of `link` a row covering the line's cells `row_cells` shows, if any.
+fn link_in_row(row: &Line<'_>, row_cells: Range<usize>, link: &Anchor, web: &impl Fn(&str) -> String) -> Option<Mark> {
+    let shown = link.cells.start.max(row_cells.start)..link.cells.end.min(row_cells.end);
+    if shown.is_empty() {
+        return None;
+    }
+    let (from, to) = (shown.start - row_cells.start, shown.end - row_cells.start);
+    let drawn: String = row.spans.iter().map(|span| span.content.as_ref()).collect();
+    let text = drag::text_on_cells(&drawn, from..to).to_owned();
+    Some(Mark::Link { column: u16::try_from(from).ok()?, text, url: web(link.url.as_str()) })
 }
 
 /// How a picture reads where it cannot be drawn.
@@ -481,7 +506,7 @@ mod tests {
         let image = Image { alt: "the chart".into(), url: "/uploads/ab12/chart.png".into() };
         let rows = lay_out(Piece::Picture(image), &thumbs, 40, Theme::default(), &web);
         assert_eq!(text(&[rows[0].0.clone()]), ["[image: the chart]"]);
-        let Some(Mark::Link { url, .. }) = &rows[0].1 else { panic!("a link") };
+        let [Mark::Link { url, .. }] = rows[0].1.as_slice() else { panic!("a link") };
         assert_eq!(url, "https://gitlab.com/acme/widgets/uploads/ab12/chart.png");
         assert_eq!(fallback(&Image { alt: " ".into(), url: "u".into() }), "[image]");
         assert_eq!(text(&body_lines("![c](https://x/c.png)", 80, Theme::default())), ["[image: c]"], "other panes show the line");
@@ -494,8 +519,8 @@ mod tests {
         let image = Image { alt: String::new(), url: "https://x/a.png".into() };
         let rows = lay_out(Piece::Picture(image.clone()), &thumbs, 40, Theme::default(), &|u: &str| u.to_owned());
         assert_eq!(rows.len(), 5, "200x100 pixels at a 10x20 font is 20x5 cells");
-        assert!(matches!(&rows[0].1, Some(Mark::Picture { size, .. }) if size.width == 20 && size.height == 5));
-        assert!(rows[1..].iter().all(|(_, mark)| mark.is_none()));
+        assert!(matches!(rows[0].1.as_slice(), [Mark::Picture { size, .. }] if size.width == 20 && size.height == 5));
+        assert!(rows[1..].iter().all(|(_, marks)| marks.is_empty()));
         thumbs.request_new(["https://x/b.png".to_owned()]);
         let loading =
             lay_out(Piece::Picture(Image { url: "https://x/b.png".into(), ..image }), &thumbs, 40, Theme::default(), &|u: &str| {

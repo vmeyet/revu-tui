@@ -43,6 +43,7 @@ use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::StreamExt;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
+use unicode_width::UnicodeWidthStr;
 use vtui::screen::Screen;
 
 /// A screen that stood still for a tick is looked at once a second: ages, toasts, pulses and polls need no more.
@@ -321,17 +322,25 @@ struct Hyperlink {
 fn hyperlinks(buffer: &ratatui::buffer::Buffer, links: &[ui::Link]) -> Vec<Hyperlink> {
     links
         .iter()
-        .filter(|link| {
-            link.text
-                .chars()
-                .enumerate()
-                .all(|(i, c)| buffer.cell((link.x + i as u16, link.y)).is_some_and(|cell| cell.symbol().chars().eq(std::iter::once(c))))
-        })
+        .filter(|link| drawn_at(buffer, link).is_some_and(|drawn| drawn == link.text))
         .filter_map(|link| {
             let cell = buffer.cell((link.x, link.y))?;
             Some(Hyperlink { link: link.clone(), fg: cell.fg, bg: cell.bg })
         })
         .collect()
+}
+
+/// The text `buffer` holds on the cells `link` takes, each symbol once however many cells it is wide.
+fn drawn_at(buffer: &ratatui::buffer::Buffer, link: &ui::Link) -> Option<String> {
+    let end = link.x.checked_add(u16::try_from(link.text.width()).ok()?)?;
+    let mut drawn = String::new();
+    let mut x = link.x;
+    while x < end {
+        let symbol = buffer.cell((x, link.y))?.symbol();
+        drawn.push_str(symbol);
+        x = x.saturating_add(u16::try_from(symbol.width().max(1)).ok()?);
+    }
+    Some(drawn)
 }
 
 /// OSC 8 over the text ratatui drew; terminals without it show the same text, unchanged.
@@ -459,5 +468,13 @@ mod tests {
         let printed = hyperlinks(&buffer, &[link(0), link(1)]);
         assert_eq!(printed.len(), 1, "the clipped `!4…` stays plain text");
         assert_eq!(printed[0].link.y, 0);
+    }
+
+    #[test]
+    fn a_link_of_wide_characters_prints_where_ratatui_drew_them() {
+        let mut buffer = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 10, 1));
+        buffer.set_string(1, 0, "文 🚀 ok", ratatui::style::Style::default());
+        let link = ui::Link { x: 1, y: 0, text: "文 🚀 ok".into(), url: "https://x/a".into() };
+        assert_eq!(hyperlinks(&buffer, &[link]).len(), 1);
     }
 }
