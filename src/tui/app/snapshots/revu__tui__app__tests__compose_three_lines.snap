@@ -7,11 +7,11 @@ expression: "render(&mut app, 160, 24)"
 │   ── TO REVIEW · 1 ───────────────────── ││  omar · 2h · +5 −3 · 2 files · ✓ success         ││ ▎✓ resolved                                                  │
 │ ▎ feat charge cards at checkout          ││   1 of 2 approvals · 3 threads, 1 unresolved     ││ ▎you · 2h                                                    │
 │ ▎ omar · !42 · +412 −38               2h ││  ◆ 1 on the MR  enter opens                      ││ ▎Why drop the plain client?                                  │
-│                                          ││                                                  ││                                                              │
-│   ── MINE · 1 ────────────────────────── ││  ▾ src/pay/charge.rs      +4 −2  ✓1 · 1 outdated ││                                                              │
-│   fix flaky cache test                 D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge      ││                                                              │
-│   nina · !41 · +3 −1                  4h ││      12   12  pub async fn charge(card: &Card, … ││                                                              │
-│                                          ││ ▎✓   13      -    let client = Client::new();    ││                                                              │
+│                                          ││                                                  ││ ╭ reply to nina ───────────────────────────────────────────╮ │
+│   ── MINE · 1 ────────────────────────── ││  ▾ src/pay/charge.rs      +4 −2  ✓1 · 1 outdated ││ │agreed                                                    │ │
+│   fix flaky cache test                 D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge      ││ │keys are per card                                         │ │
+│   nina · !41 · +3 −1                  4h ││      12   12  pub async fn charge(card: &Card, … ││ │and per amount                                            │ │
+│                                          ││ ▎✓   13      -    let client = Client::new();    ││ ╰ enter save · ⌘enter post · ⌥enter newline ───────────────╯ │
 │   ── WATCHING · 1 ────────────────────── ││           13 +    let client = Client::with_key… ││                                                              │
 │   infra: new runner                    ⠋ ││           14 +    let attempt = Attempt::first(… ││                                                              │
 │   omar · !35                          2d ││      14   15      let response = client.charge(… ││                                                              │
@@ -20,10 +20,10 @@ expression: "render(&mut app, 160, 24)"
 │                                          ││      40   41  fn idempotency_key(card: &Card) -… ││                                                              │
 │                                          ││      41      -    Key::from(card.number())       ││                                                              │
 │                                          ││           42 +    Key::from((card.number(), car… ││                                                              │
-│                                          ││           43 +    // hunk two, line 43 is new    ││ ╭ reply to nina ───────────────────────────────────────────╮ │
-│                                          ││      42   44  }                                  ││ │agreed                                                    │ │
-│                                          ││                                                  ││ │keys are per card                                         │ │
-│                                          ││  ▸ Cargo.lock                      +1 −1  folded ││ │and per amount                                            │ │
-│                                          ││                                                  ││ ╰ enter save · ⌘enter post · ⌥enter newline ───────────────╯ │
+│                                          ││           43 +    // hunk two, line 43 is new    ││                                                              │
+│                                          ││      42   44  }                                  ││                                                              │
+│                                          ││                                                  ││                                                              │
+│                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││                                                  ││                                                              │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                                                                                        ? help

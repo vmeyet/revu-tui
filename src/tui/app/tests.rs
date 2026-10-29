@@ -590,6 +590,18 @@ fn snapshot_every_thread() {
     insta::assert_snapshot!("every_thread_zen", render(&mut app, 160, 30));
 }
 
+#[test]
+fn in_every_thread_the_reply_box_sits_under_the_thread_it_answers() {
+    let mut app = with_review();
+    press(&mut app, "Tragreed");
+    let screen = render(&mut app, 160, 30);
+    let pane: Vec<&str> = screen.lines().map(|line| line.rsplit("││").next().unwrap_or_default()).collect();
+    let answered = pane.iter().position(|line| line.contains("Looks good overall")).unwrap();
+    assert!(pane[answered + 1].contains("╭ reply to lea"), "{screen}");
+    assert!(pane[answered + 5..].iter().any(|line| line.contains("src/pay/charge.rs:57")), "the next thread follows the box:\n{screen}");
+    insta::assert_snapshot!("every_thread_reply", screen);
+}
+
 /// The screen with each run of reversed cells between `⟦` and `⟧`.
 fn render_selected(app: &mut App, width: u16, height: u16) -> String {
     let buffer = cells(app, width, height);
@@ -763,4 +775,15 @@ fn in_a_narrow_window_a_drag_and_a_search_start_where_the_text_does() {
     type_text(&mut app, "/pub");
     let found = render_selected(&mut app, 100, 24);
     assert!(found.contains("12  ⟦pub⟧ async fn charge"), "{found}");
+}
+
+#[test]
+fn in_every_thread_the_wheel_moves_the_view_to_a_thread_away_from_the_reply_box() {
+    let mut app = with_review();
+    press(&mut app, "Tragreed");
+    render(&mut app, 160, 12);
+    wheel(&mut app, true, 130, 5);
+    wheel(&mut app, true, 130, 5);
+    let screen = render(&mut app, 160, 12);
+    assert!(screen.contains("▎src/pay/charge.rs:-13"), "the cursor shows on the last thread:\n{screen}");
 }

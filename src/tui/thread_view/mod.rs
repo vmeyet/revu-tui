@@ -126,51 +126,61 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
     }
     let Some(PaneLayout { laid: Laid { title, rows, marks }, .. }) = &app.pane_layout else { return vec![] };
     f.render_widget(block(title), area);
-    let inner = if app.composes_outside_the_diff() {
-        let height = if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) };
-        let [list, box_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(inner);
-        draw_compose(f, theme, &app.input_label(), &app.buffer, box_area);
-        list
-    } else {
-        inner
+    let compose = app
+        .composes_outside_the_diff()
+        .then(|| if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) });
+    let label = compose.map(|_| app.input_label()).unwrap_or_default();
+    let thread = compose.and(app.input.as_ref()).and_then(|input| app.open.as_ref()?.thread_written_in(input));
+    let view = app.open.as_ref().and_then(|open| app.kept.pane_view(open));
+    let (entries, current) = view.map(|view| (view.entries.as_slice(), view.focused)).unwrap_or_default();
+    let replied = view.zip(thread).and_then(|(view, thread)| view.conversations.iter().position(|c| c.thread.as_ref() == Some(&thread)));
+    let under = replied.and_then(|conversation| last_row_of(conversation, rows));
+    let (inner, gap) = match (compose, under) {
+        (Some(height), Some(last)) => (inner, Some(Gap { at: last + 1, height: usize::from(height) })),
+        (Some(height), None) => {
+            let [list, box_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(inner);
+            draw_compose(f, theme, &label, &app.buffer, box_area);
+            (list, None)
+        }
+        (None, _) => (inner, None),
     };
     let height = inner.height as usize;
-    let (entries, current) =
-        app.open.as_ref().and_then(|open| app.kept.pane_view(open)).map(|view| (view.entries.as_slice(), view.focused)).unwrap_or_default();
     let on = |entry: &Option<Entry>| entry.is_some() && *entry == current;
-    let first = rows.iter().position(|(entry, _)| on(entry)).unwrap_or(0);
-    let last = rows.iter().rposition(|(entry, _)| on(entry)).unwrap_or(0);
+    let first = shown(rows.iter().position(|(entry, _)| on(entry)).unwrap_or(0), gap);
+    let last = shown(rows.iter().rposition(|(entry, _)| on(entry)).unwrap_or(0), gap);
+    let in_replied = current.is_some_and(|entry| Some(entry.conversation) == replied);
+    let (first, last) = with_box_in_view(first, last, gap.filter(|_| in_replied), height);
     let Some(pane) = app.open.as_mut().and_then(|open| open.pane.as_mut()) else { return vec![] };
     let scroll = settle(pane.scroll, first, last, height);
     pane.scroll = scroll;
-    let drawn: Vec<Line<'_>> = rows
+    let y_of = |row: usize| shown(row, gap).checked_sub(scroll).filter(|y| *y < height).map(|y| inner.y + y as u16);
+    let visible: Vec<(u16, &Option<Entry>, &Line<'static>)> =
+        rows.iter().enumerate().filter_map(|(row, (entry, line))| Some((y_of(row)?, entry, line))).collect();
+    for (y, entry, line) in &visible {
+        let bar = Span::styled(if on(entry) { "▎" } else { " " }, Style::default().fg(theme.accent));
+        let drawn = Line::from(std::iter::once(bar).chain(line.spans.iter().cloned()).collect::<Vec<_>>());
+        f.render_widget(drawn, Rect { y: *y, height: 1, ..inner });
+    }
+    if let Some(gap) = gap {
+        let top = inner.y + gap.at.saturating_sub(scroll) as u16;
+        let box_area = Rect { y: top, height: gap.height as u16, ..inner }.intersection(inner);
+        draw_compose(f, theme, &label, &app.buffer, box_area);
+    }
+    let list_rows: Vec<ListRow> = visible
         .iter()
-        .skip(scroll)
-        .take(height)
-        .map(|(entry, line)| {
-            let bar = Span::styled(if on(entry) { "▎" } else { " " }, Style::default().fg(theme.accent));
-            Line::from(std::iter::once(bar).chain(line.spans.iter().cloned()).collect::<Vec<_>>())
-        })
-        .collect();
-    f.render_widget(Paragraph::new(drawn), inner);
-    let list_rows: Vec<ListRow> = rows
-        .iter()
-        .skip(scroll)
-        .take(height)
-        .zip(inner.y..)
-        .filter_map(|((entry, _), y)| {
-            let index = entries.iter().position(|e| Some(*e) == *entry)?;
-            Some(ListRow { area: Rect { y, height: 1, ..inner }, list: List::Threads, index })
+        .filter_map(|(y, entry, _)| {
+            let index = entries.iter().position(|e| Some(*e) == **entry)?;
+            Some(ListRow { area: Rect { y: *y, height: 1, ..inner }, list: List::Threads, index })
         })
         .collect();
     app.list_rows.extend(list_rows);
     let width = inner.width.saturating_sub(1);
     let mut placements = vec![];
     for (row, piece, mark) in marks {
-        let Some(y) = row.checked_sub(scroll).filter(|y| *y < height) else { continue };
-        let (x, y) = (inner.x + 1, inner.y + y as u16);
+        let Some(y) = y_of(*row) else { continue };
+        let x = inner.x + 1;
         match mark {
-            Mark::Picture { url, size } if row + usize::from(size.height) <= scroll + height => {
+            Mark::Picture { url, size } if shown(*row, gap) + usize::from(size.height) <= scroll + height => {
                 placements.push(Placement { url: url.clone(), area: Rect::new(x, y, size.width.min(width), size.height) });
             }
             Mark::Picture { .. } => {}
@@ -332,6 +342,34 @@ pub(super) fn draw_compose(f: &mut Frame<'_>, theme: Theme, label: &str, field: 
     let height = inner.height as usize;
     let scroll = (caret_row + 1).saturating_sub(height);
     f.render_widget(Paragraph::new(rows.into_iter().skip(scroll).take(height).collect::<Vec<_>>()), inner);
+}
+
+/// The last of the pane's `rows` showing the conversation at index `conversation`.
+fn last_row_of(conversation: usize, rows: &[(Option<Entry>, Line<'static>)]) -> Option<usize> {
+    rows.iter().rposition(|(entry, _)| entry.is_some_and(|e| e.conversation == conversation))
+}
+
+/// Where the compose box sits among the pane's rows: under the thread it answers, before row `at`.
+#[derive(Clone, Copy)]
+struct Gap {
+    at: usize,
+    height: usize,
+}
+
+/// The pane position of row `row`, once the box makes room among the rows.
+fn shown(row: usize, gap: Option<Gap>) -> usize {
+    match gap {
+        Some(gap) if row >= gap.at => row + gap.height,
+        _ => row,
+    }
+}
+
+/// The span to keep in view: the cursor's lines and, while the cursor is in the thread the box answers, the whole box
+/// with as much of the thread above it as fits.
+fn with_box_in_view(first: usize, last: usize, gap: Option<Gap>, height: usize) -> (usize, usize) {
+    let Some(Gap { at, height: rows }) = gap else { return (first, last) };
+    let end = at + rows;
+    (first.min(at).max(end.saturating_sub(height)), last.max(end - 1))
 }
 
 /// Keeps the cursor's lines in view: the top of the entry first, then as much of it as fits.
@@ -497,5 +535,14 @@ mod tests {
         assert_eq!(settle(0, 12, 14, 10), 5);
         assert_eq!(settle(8, 3, 4, 10), 3);
         assert_eq!(settle(0, 2, 30, 10), 2, "a long entry shows from its top");
+    }
+
+    #[test]
+    fn the_box_under_a_thread_stays_in_view_with_the_thread_above_it() {
+        let gap = Some(Gap { at: 12, height: 4 });
+        assert_eq!((shown(11, gap), shown(12, gap)), (11, 16), "rows after the box move down by its height");
+        assert_eq!(with_box_in_view(8, 11, gap, 10), (8, 15), "thread and box fit");
+        assert_eq!(with_box_in_view(2, 11, gap, 10), (6, 15), "the box shows whole, the thread as much as fits");
+        assert_eq!(with_box_in_view(2, 3, None, 10), (2, 3));
     }
 }
