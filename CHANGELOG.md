@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.11.0 - 2026-10-29
+
 ### New
 
 - **The pane closes once a new comment is written from the diff.**
