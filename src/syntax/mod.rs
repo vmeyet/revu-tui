@@ -44,13 +44,15 @@ impl Language {
 }
 
 /// Every language revu colours. Order matters only when two claim one extension: the first wins.
-pub(crate) static LANGUAGES: [Language; 7] = [
+pub(crate) static LANGUAGES: [Language; 9] = [
     Language::new("TypeScript", &["ts", "mts", "cts"], typescript),
     Language::new("TSX", &["tsx"], tsx),
     Language::new("JavaScript", &["js", "mjs", "cjs", "jsx"], javascript),
     Language::new("Python", &["py", "pyi"], python),
     Language::new("JSON", &["json", "jsonc"], json),
     Language::new("SQL", &["sql"], sql),
+    Language::new("Bash", &["sh", "bash", "zsh"], bash),
+    Language::new("Terraform", &["tf", "tfvars", "hcl"], hcl),
     Language::new(MARKDOWN, &["md", "markdown"], markdown),
 ];
 
@@ -203,6 +205,33 @@ fn sql() -> Option<HighlightConfiguration> {
     build(tree_sitter_sequel::LANGUAGE.into(), "sql", &format!("{LITERALS}{}", kept.join("\n\n")), "")
 }
 
+fn bash() -> Option<HighlightConfiguration> {
+    build(tree_sitter_bash::LANGUAGE.into(), "bash", tree_sitter_bash::HIGHLIGHT_QUERY, "")
+}
+
+/// The grammar crate ships no highlight query, so this one is written here.
+fn hcl() -> Option<HighlightConfiguration> {
+    const HIGHLIGHTS: &str = r#"(comment) @comment
+(block (identifier) @keyword)
+(attribute (identifier) @property)
+(object_elem key: (expression (variable_expr (identifier) @property)))
+(function_call (identifier) @function)
+(get_attr (identifier) @property)
+((variable_expr (identifier) @variable.builtin)
+  (#match? @variable.builtin "^(var|local|module|data|path|each|count|self|terraform)$"))
+[(string_lit) (quoted_template) (heredoc_template)] @string
+(numeric_lit) @number
+(bool_lit) @boolean
+(null_lit) @constant
+["for" "endfor" "in" "if" "else" "endif"] @keyword
+[(template_interpolation_start) (template_interpolation_end) (template_directive_start) (template_directive_end)] @punctuation.special
+["!" "!=" "%" "&&" "*" "+" "-" "/" "<" "<=" "==" "=>" ">" ">=" "?" ":" "||" "="] @operator
+["(" ")" "[" "]" "{" "}"] @punctuation.bracket
+["," "." ".*" "[*]"] @punctuation.delimiter
+"#;
+    build(tree_sitter_hcl::LANGUAGE.into(), "hcl", HIGHLIGHTS, "")
+}
+
 /// The block grammar, handing each block's text to [`MARKDOWN_INLINE`]. The block lexer already
 /// cuts backticks and brackets out of that text as children, so the injection must keep them.
 /// Upstream colours no table: here its pipes and delimiter row are punctuation, its cells inline.
@@ -243,6 +272,11 @@ mod tests {
             ("web/index.mjs", Some("JavaScript")),
             ("tools/build.py", Some("Python")),
             ("package.json", Some("JSON")),
+            ("scripts/release.sh", Some("Bash")),
+            ("dotfiles/prompt.zsh", Some("Bash")),
+            ("infra/main.tf", Some("Terraform")),
+            ("infra/prod.tfvars", Some("Terraform")),
+            ("deploy/job.hcl", Some("Terraform")),
             ("src/main.rs", None),
             ("Makefile", None),
             ("archive.tar.gz", None),
@@ -264,6 +298,12 @@ mod tests {
             ("JSON", Some("JSON")),
             ("sql", Some("SQL")),
             ("md", Some("Markdown")),
+            ("bash", Some("Bash")),
+            ("sh", Some("Bash")),
+            ("zsh", Some("Bash")),
+            ("terraform", Some("Terraform")),
+            ("hcl", Some("Terraform")),
+            ("tf", Some("Terraform")),
             ("rust", None),
             ("", None),
         ];
@@ -307,6 +347,35 @@ mod tests {
         let tokens = tokens_of(json, &highlight(by_name("JSON"), json)[0]);
         assert!(tokens.contains(&("\"revu\"", Token::String)), "{tokens:?}");
         assert!(tokens.contains(&("3", Token::Number)) && tokens.contains(&("false", Token::Constant)), "{tokens:?}");
+    }
+
+    #[test]
+    fn bash_colours_keywords_strings_and_comments() {
+        let sh = "if [ -n \"$TOKEN\" ]; then # set by ci\n  echo 'ready'\nfi\n";
+        let lines = highlight(by_name("Bash"), sh);
+        let line = |i: usize| tokens_of(sh.lines().nth(i).unwrap(), &lines[i]);
+        assert!(line(0).contains(&("if", Token::Keyword)) && line(0).contains(&("then", Token::Keyword)), "{:?}", line(0));
+        assert!(line(0).contains(&("# set by ci", Token::Comment)), "{:?}", line(0));
+        assert!(line(1).contains(&("echo", Token::Function)) && line(1).contains(&("'ready'", Token::String)), "{:?}", line(1));
+        assert!(line(2).contains(&("fi", Token::Keyword)), "{:?}", line(2));
+    }
+
+    #[test]
+    fn terraform_colours_blocks_strings_numbers_and_comments() {
+        let tf = "resource \"acme_widget\" \"main\" { # the one widget\n  count = 2\n  name  = var.name\n  tags  = merge(local.tags, { team = \"nina\" })\n}\n";
+        let lines = highlight(by_name("Terraform"), tf);
+        let line = |i: usize| tokens_of(tf.lines().nth(i).unwrap(), &lines[i]);
+        assert!(line(0).contains(&("resource", Token::Keyword)) && line(0).contains(&("\"acme_widget\"", Token::String)), "{:?}", line(0));
+        assert!(line(0).contains(&("# the one widget", Token::Comment)), "{:?}", line(0));
+        assert!(line(1).contains(&("count", Token::Function)) && line(1).contains(&("2", Token::Number)), "{:?}", line(1));
+        assert!(line(2).contains(&("var", Token::Constant)) && line(2).contains(&("name", Token::Function)), "{:?}", line(2));
+        assert!(
+            line(3).contains(&("team", Token::Function))
+                && line(3).contains(&("merge", Token::Function))
+                && line(3).contains(&("\"nina\"", Token::String)),
+            "{:?}",
+            line(3)
+        );
     }
 
     #[test]
