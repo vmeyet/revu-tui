@@ -84,14 +84,18 @@ impl Open {
         }
     }
 
-    /// The thread `input` writes in, unfolded so the notes it answers show.
-    fn with_thread_shown(self, input: &Input) -> Self {
-        let thread = match input {
+    /// The thread `input` writes in: the one a reply answers, or the one of an edited draft reply.
+    pub(crate) fn thread_written_in(&self, input: &Input) -> Option<ThreadId> {
+        match input {
             Input::Reply { thread } => Some(thread.clone()),
             Input::EditDraft { draft } => self.review.drafts.iter().find(|d| d.is(*draft)).and_then(|d| d.reply_to.clone()),
             Input::Comment { .. } | Input::Ask { .. } | Input::FollowUp => None,
-        };
-        match thread.filter(|id| !self.review.unfolded.contains(id)) {
+        }
+    }
+
+    /// The thread `input` writes in, unfolded so the notes it answers show.
+    fn with_thread_shown(self, input: &Input) -> Self {
+        match self.thread_written_in(input).filter(|id| !self.review.unfolded.contains(id)) {
             Some(id) => self.relaid(|review| {
                 let unfolded = review.unfolded.iter().cloned().chain([id]).collect();
                 review.with_unfolded(unfolded)

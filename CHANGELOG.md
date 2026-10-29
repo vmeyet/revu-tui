@@ -9,6 +9,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **The reply box sits under the thread it answers.**
+  In the thread pane and `T`, the box opens after the last note of that thread instead of at the bottom.
+
 - **A new session starts when the worktree of its branch was deleted.**
   In `a g` and `:session`, revu prunes the deleted worktree and adds a new one on the branch.
   A program set to run in a missing folder now names that folder instead of saying the program is not found.
