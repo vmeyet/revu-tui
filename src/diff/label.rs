@@ -225,6 +225,28 @@ mod tests {
     }
 
     #[test]
+    fn a_run_over_the_alignment_cap_with_few_pairs_by_position_never_reads_as_rewritten() {
+        let alike = |i: usize| format!("let total{i} = sum(items, 1);");
+        let unlike = |i: usize| format!("return Err(Refused::At({i}).into_report());");
+        let diff = run_of(51, alike, |i| if i < 5 { format!("let total{i} = sum(items, 2);") } else { unlike(i) });
+        assert_eq!(words::mark(&parse(&diff)[0]).pairs.len(), 5);
+        assert_eq!(label_of(&diff), Some(ChangeLabel::Edited));
+    }
+
+    #[test]
+    fn a_run_too_heavy_to_align_never_reads_as_rewritten() {
+        let heavy = |word: &str, i: usize| format!("{i} {}", word.repeat(800));
+        assert_eq!(label_of(&run_of(10, |i| heavy("old_call(); ", i), |i| heavy("new, ", i))), Some(ChangeLabel::Edited));
+    }
+
+    #[test]
+    fn a_one_line_change_that_shares_a_word_reads_as_edited() {
+        let diff = "@@ -1 +1 @@\n-charge(card, total);\n+let receipt = charge(card).with_total(total).await?;\n";
+        assert_eq!(words::mark(&parse(diff)[0]).pairs.len(), 1);
+        assert_eq!(label_of(diff), Some(ChangeLabel::Edited));
+    }
+
+    #[test]
     fn a_run_over_the_alignment_cap_still_reads_as_whitespace_when_proven() {
         let reindented = run_of(51, |i| format!("  a{i};"), |i| format!("    a{i};"));
         assert_eq!(label_of(&reindented), Some(ChangeLabel::Whitespace));
