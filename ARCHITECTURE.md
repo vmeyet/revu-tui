@@ -21,6 +21,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, word highlighting inside lines, fold state; `arbitrary.rs` builds diffs for property tests |
+| `lockfile/` | What a lockfile change means by package, pure: one parser per format (`cargo.rs`, `npm.rs`) and a row in `FORMATS` |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
 | `outline/` | The changed functions and classes of an MR and the calls between them (`O`) |
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |

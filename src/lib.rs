@@ -15,6 +15,7 @@ mod docs;
 mod forge;
 mod http;
 mod keymap;
+mod lockfile;
 pub mod log;
 mod mrref;
 mod open;

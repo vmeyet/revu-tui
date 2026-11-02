@@ -1,0 +1,27 @@
+{
+  "name": "widgets",
+  "lockfileVersion": 3,
+  "packages": {
+    "": { "name": "widgets", "version": "1.0.1" },
+    "node_modules/@acme/left-pad": {
+      "version": "1.3.0",
+      "resolved": "https://registry.npmjs.org/@acme/left-pad/-/left-pad-1.3.0.tgz",
+      "integrity": "sha512-ffff"
+    },
+    "node_modules/debug": {
+      "version": "4.3.4",
+      "resolved": "https://registry.npmjs.org/debug/-/debug-4.3.4.tgz",
+      "integrity": "sha512-bbbb"
+    },
+    "node_modules/ms": {
+      "version": "2.1.2",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.2.tgz",
+      "integrity": "sha512-cccc"
+    },
+    "node_modules/other/node_modules/ms": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
+      "integrity": "sha512-dddd"
+    }
+  }
+}
