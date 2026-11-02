@@ -232,6 +232,23 @@ impl Review {
         self.file_of(anchor) == Some(file) && number == Some(anchor.line)
     }
 
+    /// The threads still on the lines of `file`.
+    pub(crate) fn threads_in_file<'a>(&'a self, file: &'a super::File) -> impl Iterator<Item = &'a Thread> {
+        self.threads.iter().filter(|t| !t.outdated && t.anchor.as_ref().is_some_and(|a| a.path == file.new_path || a.path == file.old_path))
+    }
+
+    /// The drafts starting a thread on the lines of `file`.
+    pub(crate) fn new_drafts_in_file<'a>(&'a self, file: &'a super::File) -> impl Iterator<Item = &'a Draft> {
+        let in_file = |a: &Anchor| a.path == file.new_path || a.path == file.old_path;
+        self.drafts.iter().filter(move |d| d.reply_to.is_none() && d.anchor.as_ref().is_some_and(in_file))
+    }
+
+    /// The threads and new drafts on the lines of the file at `path`.
+    pub(crate) fn threads_on_file(&self, path: &str) -> usize {
+        let Some(file) = self.files.iter().find(|f| f.new_path == path || f.old_path == path) else { return 0 };
+        self.threads_in_file(file).count() + self.new_drafts_in_file(file).count()
+    }
+
     /// Threads anchored in the diff that `place` does not show: the footer's "n more in this file".
     pub(crate) fn others_in_file(&self, place: &Place) -> usize {
         let Place::Line { file, .. } = place else { return 0 };

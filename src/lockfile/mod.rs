@@ -20,7 +20,6 @@ fn format_of(path: &str) -> Option<&'static Format> {
     FORMATS.iter().find(|format| format.file_name == file_name)
 }
 
-#[expect(dead_code, reason = "the diff view does not call it yet")]
 pub(crate) fn is_lockfile(path: &str) -> bool {
     format_of(path).is_some()
 }
@@ -52,7 +51,6 @@ impl Version {
     }
 
     /// Whether both are semver and this one comes before `other`.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the diff view does not call it yet"))]
     pub(crate) fn is_older_than(&self, other: &Self) -> bool {
         self.numbers().zip(other.numbers()).is_some_and(|(mine, theirs)| mine < theirs)
     }
@@ -168,7 +166,6 @@ pub(crate) struct Summary {
 }
 
 /// The summary between the two sides of the lockfile at `path`; a side is `None` where the file does not exist.
-#[cfg_attr(not(test), expect(dead_code, reason = "the diff view does not call it yet"))]
 pub(crate) fn summarize(path: &str, base: Option<&str>, head: Option<&str>) -> Result<Summary> {
     let format = format_of(path).with_context(|| format!("{path} is not a lockfile"))?;
     let read = |text: Option<&str>| text.map_or_else(|| Ok(vec![]), format.parse);

@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **A lockfile reads as its packages: updates, additions, removals, and a warning when a version keeps its number but not its code.**
+  In the diff, on `Cargo.lock` and `package-lock.json`, which now open folded.
+  `enter` or `v` on the file shows the packages; `v` again shows the raw diff, where comments and threads work as usual.
+
 - **Bold, italic and struck text in comments read as they do on the forge.**
   In the thread pane, the description, the answer pane and tables.
   Write `**bold**`, `_italic_` or `~~struck~~`; a marker inside a word or a code span stays as written.

@@ -174,7 +174,7 @@ pub(crate) enum Pane {
     Pipeline,
     /// Claude's answer in the right pane.
     Answer,
-    /// The prose view of a Markdown file, after `Page`.
+    /// The prose view of a Markdown file or the packages of a lockfile, after `Page`.
     Prose,
     /// A page that only scrolls: the prose view, the `?` help, the news.
     Page,
@@ -352,7 +352,7 @@ pub(crate) const ROWS: &[Row] = &[
         .panes(&[Pane::Diff, Pane::Outline])
         .section(Section::View),
     bound(Act::Prose, "prose", &["v"])
-        .help(&[line(Group::View, "v", "prose: the Markdown file rendered, its blocks marked")])
+        .help(&[line(Group::View, "v", "Markdown rendered; a lockfile's packages or raw diff")])
         .panes(&[Pane::Diff, Pane::Prose])
         .section(Section::View),
     bound(Act::Wrap, "wrap", &["w"])

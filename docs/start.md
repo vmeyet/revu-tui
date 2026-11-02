@@ -51,6 +51,7 @@ Under 70 columns revu shows one page at a time, see [Review from a phone](guides
 | `]c` `[c` | Next, previous change |
 | `tab` | Next file |
 | `za` | Fold or unfold the file or change under the cursor |
+| `enter` on a lockfile | Its packages: what changed, with a warning when a version keeps its number but not its code; `v` shows the raw diff |
 | `i` | The MR cover: description, checks, reviews, open threads, files |
 
 ## 5. Leave a comment

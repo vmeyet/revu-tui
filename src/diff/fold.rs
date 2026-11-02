@@ -37,10 +37,12 @@ pub(crate) struct FoldState {
 }
 
 impl FoldState {
-    /// Closes what nobody wants to read first: huge files, binaries and the configured globs.
+    /// Closes what nobody wants to read first: huge files, binaries, lockfiles and the configured globs.
     pub(crate) fn initial(files: &[FileMeta], fold_globs: &[String]) -> Self {
         let patterns: Vec<glob::Pattern> = fold_globs.iter().filter_map(|g| glob::Pattern::new(g).ok()).collect();
-        let closed = |file: &FileMeta| file.too_large || file.binary || patterns.iter().any(|p| p.matches(&file.path));
+        let closed = |file: &FileMeta| {
+            file.too_large || file.binary || crate::lockfile::is_lockfile(&file.path) || patterns.iter().any(|p| p.matches(&file.path))
+        };
         let files = files.iter().filter(|f| closed(f)).map(|f| (f.path.clone(), Fold::Closed)).collect();
         Self { files, hunks: BTreeMap::new() }
     }
@@ -89,6 +91,11 @@ mod tests {
 
     fn file(path: &str) -> FileMeta {
         FileMeta { path: path.into(), too_large: false, binary: false }
+    }
+
+    #[test]
+    fn a_lockfile_opens_folded_without_any_glob() {
+        assert!(!FoldState::initial(&[file("web/package-lock.json")], &[]).file_is_open("web/package-lock.json"));
     }
 
     #[test]

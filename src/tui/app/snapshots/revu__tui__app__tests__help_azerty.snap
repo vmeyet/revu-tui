@@ -37,7 +37,7 @@ expression: "render(&mut app, 160, 45)"
 │            │          T  every thread of the MR                                            s  the whole stack, unchanged calls too             │             │
 │            │          p  pipeline                                                          a  public symbols only, or all                      │             │
 │            │          O  outline: the symbols the MR changes                        zo zc za  open, close, toggle the branch                   │             │
-│            │          v  prose: the Markdown file rendered, its blocks marked          enter  the call in the diff, the definition, a section  │             │
+│            │          v  Markdown rendered; a lockfile's packages or raw diff          enter  the call in the diff, the definition, a section  │             │
 │            │         zz  zen: the diff alone, quiet                                                                                            │             │
 │            │        w W  wrap long lines, hide whitespace changes                  ASK CLAUDE                                                  │             │
 │            │        = +  more lines, react on a thread                                   a a  ask anything about the cursor                    │             │

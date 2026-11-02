@@ -131,12 +131,10 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, gutter: Gutter, widt
         None => (String::new(), file.new_path.clone()),
     };
     let counts = format!("+{} −{}", file.additions, file.deletions);
-    let in_file = |a: &crate::review::Anchor| a.path == file.new_path || a.path == file.old_path;
-    let on_lines: Vec<&crate::review::Thread> =
-        review.threads.iter().filter(|t| !t.outdated && t.anchor.as_ref().is_some_and(in_file)).collect();
+    let on_lines: Vec<&crate::review::Thread> = review.threads_in_file(file).collect();
     let resolved = on_lines.iter().filter(|t| t.resolved).count();
     let unresolved = on_lines.len() - resolved;
-    let drafts = review.drafts.iter().filter(|d| d.reply_to.is_none() && d.anchor.as_ref().is_some_and(in_file)).count();
+    let drafts = review.new_drafts_in_file(file).count();
     let outdated = review.outdated(&file.new_path).len();
     let (warn, faded) = (Style::default().fg(theme.warn), Style::default().fg(theme.faded));
     let anchors: Vec<(String, Style)> = [

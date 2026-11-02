@@ -128,6 +128,20 @@ pub(crate) struct Sides {
     pub(crate) head: Option<String>,
 }
 
+impl Sides {
+    pub(crate) fn of(file: &crate::review::File) -> Self {
+        Self {
+            base: (file.kind != crate::review::FileKind::Added).then(|| file.old_path.clone()),
+            head: (file.kind != crate::review::FileKind::Deleted).then(|| file.new_path.clone()),
+        }
+    }
+
+    /// The file's path at head, at base for a deleted file.
+    pub(crate) fn path(&self) -> &str {
+        self.head.as_deref().or(self.base.as_deref()).unwrap_or_default()
+    }
+}
+
 /// One syntax language with a tags query, named as in [`syntax::LANGUAGES`], which says which files it reads.
 struct Tags {
     language: &'static str,

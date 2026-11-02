@@ -175,6 +175,14 @@ impl Forge {
         }
     }
 
+    /// The commit the MR's diff starts from, given its `base` and `head`.
+    pub(crate) async fn merge_base(&self, key: &MrKey, base: &Sha, head: &Sha) -> Result<Sha> {
+        match self {
+            Forge::GitLab(_) => Ok(base.clone()),
+            Forge::GitHub(client) => client.merge_base(&key.project, base, head).await,
+        }
+    }
+
     /// The bytes of a picture a note of `key` points at, `url` as the note wrote it. Links off
     /// the forge are refused, and a slow one gives up after [`image::TIMEOUT`].
     pub(crate) async fn image(&self, key: &MrKey, url: &str) -> Result<Vec<u8>> {

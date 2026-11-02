@@ -10,6 +10,7 @@ pub(crate) mod help;
 mod images;
 mod lanes;
 mod outline_view;
+mod packages_view;
 mod palette;
 mod palette_view;
 mod pipeline_view;

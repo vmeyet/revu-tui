@@ -47,7 +47,7 @@ pub(crate) struct Review {
     pub(crate) mr: Arc<Mr>,
     pub(crate) files: Arc<[File]>,
     pub(crate) threads: Arc<[Thread]>,
-    /// The files that open folded (configured globs, too large, binary): they only count once viewed.
+    /// The files that open folded (configured globs, lockfiles, too large, binary): they only count once viewed.
     pub(crate) auto_folded: Arc<BTreeSet<String>>,
     /// Replaced whole on every change, so a copy compared by identity tells whether they changed.
     pub(crate) drafts: Arc<[Draft]>,

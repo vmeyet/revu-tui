@@ -30,6 +30,8 @@ pub(crate) struct Open {
     pub(crate) outline: Option<super::Outline>,
     /// The Markdown file drawn rendered, when it holds the diff area.
     pub(crate) prose: Option<super::Prose>,
+    /// The packages of a lockfile, when they hold the diff area.
+    pub(crate) packages: Option<super::Packages>,
     /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
     pub(crate) pinned_file: Option<usize>,
     /// Where the branch was deployed; `None` until the forge was asked.
@@ -54,6 +56,7 @@ impl Open {
             pipeline: None,
             outline: None,
             prose: None,
+            packages: None,
             pinned_file: None,
             deployments: None,
         }
@@ -73,7 +76,8 @@ impl Open {
     /// The reader's inline or side by side choice outlives the refresh; the lines read around hunks only while the head stays.
     pub(super) fn with_review(self, review: Review) -> Self {
         let same_head = review.mr.refs.head == self.review.mr.refs.head;
-        self.relaid(|old| Review {
+        let packages = self.packages.filter(|_| same_head);
+        Self { packages, ..self }.relaid(|old| Review {
             side_by_side: old.side_by_side,
             wide: old.wide,
             peek: old.peek,
@@ -457,6 +461,14 @@ impl App {
         if self.toggle_threads_here() || self.open_pane_here() {
             return vec![];
         }
+        let on_folded_lockfile = self.open.as_ref().is_some_and(|o| match o.row() {
+            Some(Row::File { index, open: false }) => crate::lockfile::is_lockfile(&o.review.files[*index].new_path),
+            _ => false,
+        });
+        if on_folded_lockfile {
+            self.key_did = Some(crate::act::Act::Prose);
+            return self.open_packages();
+        }
         match self.open.as_ref().and_then(|o| o.row().cloned()) {
             Some(Row::File { .. } | Row::Hunk { .. }) => {
                 self.key_did = Some(crate::act::Act::FoldToggle);
@@ -686,7 +698,7 @@ mod tests {
     #[test]
     fn a_folded_file_is_highlighted_only_once_unfolded_and_drawn() {
         let mut app = with_review();
-        let review = Review::new(mr(), &[json_file("package-lock.json"), json_file("config.json")], vec![], &["package-lock.json".into()]);
+        let review = Review::new(mr(), &[json_file("vendor.json"), json_file("config.json")], vec![], &["vendor.json".into()]);
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
         render(&mut app, 120, 40);
         let coloured =

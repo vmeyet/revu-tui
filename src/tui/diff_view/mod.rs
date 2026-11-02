@@ -154,6 +154,9 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     if open.prose.is_some() {
         return super::prose_view::draw(f, app, body);
     }
+    if open.packages.is_some() {
+        return super::packages_view::draw(f, app, body);
+    }
     let body = if composes_at_foot { above_compose(f, theme, &compose_label, &app.buffer, body) } else { body };
     let compose_box = gutter.thread_box(body);
     let compose = compose_row.map(|row| (row, usize::from(thread_view::box_height(&app.buffer, compose_box))));

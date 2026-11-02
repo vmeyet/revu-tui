@@ -3,6 +3,7 @@ use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::blocking;
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
+use crate::lockfile::Summary;
 use crate::log::OrWarn as _;
 use crate::tui::app::{Incoming, Versions};
 use crate::tui::images;
@@ -55,7 +56,7 @@ impl Files {
     ) -> Result<crate::outline::Reading> {
         let files: Vec<(String, String, String)> = futures_util::stream::iter(files)
             .map(|sides| async move {
-                let path = sides.head.clone().or_else(|| sides.base.clone()).unwrap_or_default();
+                let path = sides.path().to_owned();
                 let (old, new) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
                 Ok::<_, anyhow::Error>((path, old, new))
             })
@@ -69,6 +70,21 @@ impl Files {
     pub(in crate::tui) async fn prose(&self, key: &MrKey, base: &Sha, head: &Sha, sides: crate::outline::Sides) -> Result<Versions> {
         let (base, head) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
         Ok(Versions { base, head })
+    }
+
+    /// What the lockfile of `sides` changes, from where the MR's diff starts to `head`; parsed off the loop.
+    pub(in crate::tui) async fn packages(&self, key: &MrKey, base: &Sha, head: &Sha, sides: crate::outline::Sides) -> Result<Summary> {
+        let start = match sides.base {
+            Some(_) => self.homes.forge_of(key).merge_base(key, base, head).await.context("finding where the MR starts")?,
+            None => base.clone(),
+        };
+        let (old, new) =
+            futures_util::try_join!(self.side_text(key, sides.base.clone(), &start), self.side_text(key, sides.head.clone(), head))?;
+        blocking::run(move || {
+            let (old, new) = (sides.base.as_ref().map(|_| old.as_str()), sides.head.as_ref().map(|_| new.as_str()));
+            crate::lockfile::summarize(sides.path(), old, new)
+        })
+        .await
     }
 
     /// The file at `sha`, empty when it does not exist on that side.
@@ -134,6 +150,24 @@ mod tests {
     use crate::forge::gitlab::fixture::key;
     use crate::tui::backend::test_support::homes_on;
     use std::collections::BTreeMap;
+
+    #[tokio::test]
+    async fn an_added_lockfile_reads_only_its_head() {
+        use wiremock::matchers::{method, path_regex, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex("/Cargo.lock/raw$"))
+            .and(query_param("ref", "bbbb"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(include_str!("../../lockfile/fixtures/cargo_head.lock")))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let files = Files { homes: homes_on(&server, dir.path()).into(), open: crate::config::Open::default(), checkout: None };
+        let sides = crate::outline::Sides { base: None, head: Some("Cargo.lock".to_owned()) };
+        assert_eq!(files.packages(&key(), &"aaaa".into(), &"bbbb".into(), sides).await.unwrap().changes.len(), 4);
+    }
 
     #[tokio::test]
     async fn a_viewed_file_is_fetched_once_copied_read_only_and_handed_to_the_program() {

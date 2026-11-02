@@ -230,16 +230,8 @@ impl App {
 /// Every file the outline can read, each with its path at base and at head, absent on the side it does not exist.
 fn load(open: &Open) -> Action {
     let refs = &open.review.mr.refs;
-    let files = open
-        .review
-        .files
-        .iter()
-        .filter(|f| !f.binary && crate::outline::readable(&f.new_path))
-        .map(|f| crate::outline::Sides {
-            base: (f.kind != crate::review::FileKind::Added).then(|| f.old_path.clone()),
-            head: (f.kind != crate::review::FileKind::Deleted).then(|| f.new_path.clone()),
-        })
-        .collect();
+    let files =
+        open.review.files.iter().filter(|f| !f.binary && crate::outline::readable(&f.new_path)).map(crate::outline::Sides::of).collect();
     Action::LoadOutline { key: open.key.clone(), base: refs.base.clone(), head: refs.head.clone(), files }
 }
 

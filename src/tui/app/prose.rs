@@ -2,7 +2,6 @@
 use super::{Action, App, MrKey, Open};
 use crate::act::{Act, Pane};
 use crate::outline::Sides;
-use crate::review::FileKind;
 use crossterm::event::KeyEvent;
 use std::sync::Arc;
 
@@ -19,7 +18,7 @@ pub(crate) struct Prose {
 impl Prose {
     /// The file's path at head, at base for a deleted file.
     pub(crate) fn path(&self) -> &str {
-        self.sides.head.as_deref().or(self.sides.base.as_deref()).unwrap_or_default()
+        self.sides.path()
     }
 }
 
@@ -49,17 +48,16 @@ impl App {
         self.open.as_ref().is_some_and(|o| o.prose.is_some())
     }
 
-    /// `v`: the Markdown file under the cursor as prose.
+    /// `v`: the file under the cursor drawn rendered: a Markdown file as prose, a lockfile as its packages.
     pub(super) fn open_prose(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(file) = open.row().and_then(crate::review::Row::file).map(|i| &open.review.files[i]) else { return vec![] };
-        let sides = Sides {
-            base: (file.kind != FileKind::Added).then(|| file.old_path.clone()),
-            head: (file.kind != FileKind::Deleted).then(|| file.new_path.clone()),
-        };
-        let prose = Prose { sides, texts: Texts::Waiting, scroll: 0, unfolded: false };
+        let prose = Prose { sides: Sides::of(file), texts: Texts::Waiting, scroll: 0, unfolded: false };
+        if crate::lockfile::is_lockfile(prose.path()) {
+            return self.open_packages();
+        }
         if !crate::syntax::is_markdown(prose.path()) {
-            self.toast("prose shows Markdown files only");
+            self.toast("v shows Markdown files and lockfiles only");
             return vec![];
         }
         self.read_prose(prose)
@@ -104,7 +102,9 @@ impl App {
             self.did(act);
         }
         match act {
-            Some(Act::UnfoldAll | Act::FoldAll) => self.update_prose(|prose| Prose { unfolded: act == Some(Act::UnfoldAll), ..prose }),
+            Some(Act::UnfoldAll | Act::FoldAll) if self.prose_open() => {
+                self.update_prose(|prose| Prose { unfolded: act == Some(Act::UnfoldAll), ..prose });
+            }
             Some(Act::Zen) => return self.toggle_zen(),
             _ => self.did_nothing(),
         }
@@ -134,6 +134,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::review::FileKind;
     use crate::tui::app::test_support::*;
 
     const BASE: &str = "# Widgets\n\nAcme widgets.\n";
@@ -204,7 +205,7 @@ mod tests {
     fn v_on_a_file_that_is_not_markdown_says_so() {
         let mut app = with_review();
         assert_eq!(press(&mut app, "v"), vec![]);
-        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("prose shows Markdown files only"));
+        assert_eq!(app.live_toast().map(|t| t.text.as_str()), Some("v shows Markdown files and lockfiles only"));
     }
 
     #[test]

@@ -281,6 +281,9 @@ impl App {
         if self.prose_open() {
             return self.handle_prose_key(key);
         }
+        if self.packages_open() {
+            return self.handle_packages_key(key);
+        }
         if self.on_thread_row()
             && let Some(actions) = self.handle_thread_key(key)
         {
@@ -407,7 +410,7 @@ impl App {
             self.fold_outline(act);
             return vec![];
         }
-        if self.prose_open() {
+        if self.prose_open() || self.packages_open() {
             return self.prose_prefixed(act);
         }
         act.map(|act| self.diff_prefixed(act)).unwrap_or_default()

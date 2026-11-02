@@ -45,7 +45,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `T` | every thread of the MR |
 | `p` | pipeline |
 | `O` | outline: the symbols the MR changes |
-| `v` | prose: the Markdown file rendered, its blocks marked |
+| `v` | Markdown rendered; a lockfile's packages or raw diff |
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `=` `+` | more lines, react on a thread |

@@ -4,7 +4,7 @@ use super::Client;
 use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
 use crate::forge::http::HttpError;
-use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, ProjectPath, ThreadId};
+use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, ProjectPath, Sha, ThreadId};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
@@ -29,6 +29,16 @@ struct DeploymentStatus {
     state: String,
     #[serde(default)]
     environment_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Compared {
+    merge_base_commit: ComparedCommit,
+}
+
+#[derive(Deserialize)]
+struct ComparedCommit {
+    sha: Sha,
 }
 
 #[derive(Deserialize)]
@@ -303,6 +313,13 @@ impl Client {
         self.get_raw(&format!("{}?ref={}", contents_path(project, path), encode(sha))).await
     }
 
+    /// GitHub's base sha is the tip of the target branch, which may have moved on since the PR's branch left it.
+    pub(crate) async fn merge_base(&self, project: &ProjectPath, base: &Sha, head: &Sha) -> Result<Sha> {
+        let path = format!("{}/compare/{}...{}?per_page=1", repo_path(project), encode(base.as_str()), encode(head.as_str()));
+        let compared: Compared = self.http.get(&path).await?;
+        Ok(compared.merge_base_commit.sha)
+    }
+
     pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         let files: Vec<File> = self.http.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
@@ -479,6 +496,18 @@ mod tests {
         assert!(on_line.notes[0].resolvable && on_line.notes[0].position.is_some());
         let plain = client.comment(&key(), "hi", None).await.unwrap();
         assert_eq!((plain.id.as_str(), plain.notes[0].id), ("N_8", 8));
+    }
+
+    #[tokio::test]
+    async fn the_merge_base_comes_from_comparing_base_and_head() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/compare/aaaa...bbbb"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"merge_base_commit": {"sha": "cccc"}})))
+            .mount(&server)
+            .await;
+        let found = client(&server).merge_base(&"acme/widgets".into(), &"aaaa".into(), &"bbbb".into()).await.unwrap();
+        assert_eq!(found.as_str(), "cccc");
     }
 
     #[tokio::test]

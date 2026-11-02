@@ -15,6 +15,7 @@ mod mouse;
 mod notify;
 mod order;
 mod outline;
+mod packages;
 mod pane;
 mod paste;
 mod pin;
@@ -60,6 +61,7 @@ pub(crate) use kept::{Kept, ReviewInputs};
 pub(crate) use mouse::{Areas, List, ListRow};
 pub(crate) use order::{QueueView, ViewChange, with_member};
 pub(crate) use outline::{Entry as OutlineEntry, Outline, PaneLine, Symbols};
+pub(crate) use packages::Packages;
 pub(crate) use pane::{ConversationList, Pane};
 pub(crate) use pin::PinChange;
 pub(crate) use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
@@ -274,6 +276,13 @@ pub(crate) enum Action {
         head: Sha,
         sides: crate::outline::Sides,
     },
+    /// `v` on a lockfile: what the file of `sides` changes between `base` and `head`.
+    LoadPackages {
+        key: MrKey,
+        base: Sha,
+        head: Sha,
+        sides: crate::outline::Sides,
+    },
     /// The review apps of the MR of `branch`, `head` telling which run it as it is now.
     LoadDeployments {
         key: MrKey,
@@ -401,6 +410,8 @@ pub(crate) enum Failure {
     Outline,
     /// The Markdown file could not be read; the prose view says why.
     Prose,
+    /// The lockfile could not be summed up; the raw diff shows instead.
+    Packages,
     /// The suggestion was not committed.
     Apply,
     /// The forge did not merge the MR.
@@ -545,6 +556,13 @@ pub(crate) enum Incoming {
         key: MrKey,
         sides: crate::outline::Sides,
         versions: Versions,
+    },
+    /// What the lockfile of `sides` changes at `head`.
+    Packages {
+        key: MrKey,
+        head: Sha,
+        sides: crate::outline::Sides,
+        summary: crate::lockfile::Summary,
     },
     /// The answers kept for the MR, newest first.
     PastAnswers {
