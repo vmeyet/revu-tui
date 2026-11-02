@@ -59,13 +59,13 @@ You can approve in the same step.
 
 ### Change label
 
-The word at the end of a file row or a hunk row, saying how much the change matters.
+The word at the end of a file row or a hunk row, saying how much the change matters; an ordinary edit shows none.
 
 | Label | Means |
 |---|---|
 | `whitespace` | Only whitespace differs |
 | `formatting` | The same code, laid out on other lines |
-| `edited` | Small changes, new code, removed code, or anything revu cannot be sure about |
+| no label | An ordinary edit: small changes, new code, removed code, or anything revu cannot be sure about |
 | `rewritten` | Removed and added code with little in common |
 
 A hunk reads as its worst block of changed lines, and a file as its worst hunk.

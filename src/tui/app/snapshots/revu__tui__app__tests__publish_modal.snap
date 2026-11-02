@@ -7,21 +7,21 @@ expression: "render(&mut app, 120, 24)"
 │ ▎ feat charge cards at ch…     ││   1 of 2 approvals · 3 threads, 1 unresolved                                       │
 │ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                                                        │
 │                                ││                                                                                    │
-│   ── MINE · 1 ──────────────── ││  ▾ src/pay/charge.rs                             +4 −2  ✓1 ◇2 · 1 outdated  edited │
-│   fix flaky cache test    ╭ Publish review ──────────────────────────────────────────────╮                    edited │
+│   ── MINE · 1 ──────────────── ││  ▾ src/pay/charge.rs                                     +4 −2  ✓1 ◇2 · 1 outdated │
+│   fix flaky cache test    ╭ Publish review ──────────────────────────────────────────────╮                           │
 │   nina · !41 · +3 −1      │                                                              │oney) -> Result<Receipt> { │
 │                           │ 2 drafts on 1 file                                           │                           │
 │   ── WATCHING · 1 ────────│                                                              │ncy_key(card));            │
 │   infra: new runner       │   charge.rs:12         nit                                   │                           │
 │   omar · !35              │ ▎ charge.rs:13         second one, a bit longer so the moda… │wait?;                     │
 │                           │                                                              │                           │
-│   ── ▸ DONE · 1 ──────────│ [x] approve  a to toggle                                     │                    edited │
+│   ── ▸ DONE · 1 ──────────│ [x] approve  a to toggle                                     │                           │
 │                           │                                                              │                           │
 │                           │  enter publish · e edit · d delete · esc back                │)))                        │
 │                           ╰──────────────────────────────────────────────────────────────╯                           │
 │                                ││      42   44  }                                                                    │
 │                                ││                                                                                    │
-│                                ││  ▸ Cargo.lock                                                +1 −1  folded  edited │
+│                                ││  ▸ Cargo.lock                                                        +1 −1  folded │
 │                                ││                                                                                    │
 │                                ││                                                                                    │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯

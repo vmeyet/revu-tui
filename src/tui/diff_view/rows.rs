@@ -181,11 +181,12 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, gutter: Gutter, widt
 }
 
 /// A row's label and the two cells before it, if `spare` cells are free: it never takes room from a path or a count.
+/// `Edited` draws nothing: it is the common case, so a row without a word reads as an ordinary edit.
 pub(crate) fn label_span(label: Option<ChangeLabel>, spare: usize, theme: Theme) -> Option<Span<'static>> {
     let label = label?;
     let style = match label {
         ChangeLabel::Whitespace | ChangeLabel::Formatting => Style::default().fg(theme.faded),
-        ChangeLabel::Edited => Style::default(),
+        ChangeLabel::Edited => return None,
         ChangeLabel::Rewritten => Style::default().fg(theme.warn),
     };
     let span = Span::styled(format!("  {}", label.word()), style);
@@ -399,10 +400,24 @@ mod tests {
         assert!(drawn.ends_with("+0 −0  binary"), "{drawn}");
     }
 
+    const EDIT: &str = "@@ -1 +1 @@ fn charge()\n-let a = 1;\n+let a = 2;\n";
+
     #[test]
-    fn snapshot_labels_read_dim_plain_or_warned() {
+    fn an_edited_hunk_row_draws_no_label() {
+        let drawn = spans_text(&hunk_spans(&labelled_file("a.rs", EDIT), 0, true, 60, Theme::default()));
+        assert_eq!(drawn, "   ▾ @@ -1 +1 @@ fn charge()");
+    }
+
+    #[test]
+    fn an_edited_file_row_draws_no_label() {
+        let drawn = drawn_file_row(&labelled_file("src/a.rs", EDIT), 60);
+        assert!(drawn.ends_with("+1 −1") && drawn.starts_with("▾ src/a.rs "), "{drawn}");
+    }
+
+    #[test]
+    fn snapshot_labels_read_dim_or_warned() {
         let theme = Theme::named("tokyonight").unwrap();
-        let labels = [ChangeLabel::Whitespace, ChangeLabel::Formatting, ChangeLabel::Edited, ChangeLabel::Rewritten];
+        let labels = [ChangeLabel::Whitespace, ChangeLabel::Formatting, ChangeLabel::Rewritten];
         let drawn: Vec<Span<'_>> = labels.into_iter().filter_map(|label| label_span(Some(label), 20, theme)).collect();
         insta::assert_snapshot!("change_labels", painted(&drawn));
     }

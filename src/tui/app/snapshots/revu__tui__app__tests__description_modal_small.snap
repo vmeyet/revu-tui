@@ -8,7 +8,7 @@ expression: "render(&mut app, 80, 24)"
 │  ◆│  omar  feat/checkout → main  2h                                      │   │
 │   │                                                                      │   │
 │ ▎▾│  ▍ Why                                                               │ed │
-│   │                                                                      │ed │
+│   │                                                                      │   │
 │   │  Cards were charged twice.                                           │>… │
 │  ✓│                                                                      │   │
 │   │  • retry with  idempotency_key                                       │   │
@@ -16,7 +16,7 @@ expression: "render(&mut app, 80, 24)"
 │   │                                                                      │   │
 │   │  CHECKS                                                              │   │
 │   │  ✓ success                                                           │   │
-│   │                                                                      │ed │
+│   │                                                                      │   │
 │   │  REVIEW                                                              │   │
 │   │  1 of 2 approvals  ·  you are not a reviewer                         │   │
 │   │                                                                      │   │

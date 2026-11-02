@@ -1,5 +1,6 @@
 //! How much a change matters, so a reviewer sees where to spend attention: a label for a hunk, the worst of its runs.
 //! A run is one `-` block and the `+` block after it. Labels only inform: nothing hides, sorts or counts by them.
+//! Rows draw no word for `Edited`, the common case, so no label on a row means an ordinary edit.
 use super::words::{MIN_LINE_SIMILARITY, changes, code_tokens, similarity, too_large_to_align};
 use super::{Hunk, Line};
 use std::ops::Range;

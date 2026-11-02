@@ -26,7 +26,7 @@ expression: phone(&mut app)
 │    +    // hunk two, line 43 is new            │
 │     }                                          │
 │                                                │
-│  ▸ Cargo.lock            +1 −1  folded  edited │
+│  ▸ Cargo.lock                    +1 −1  folded │
 │                                                │
 │                                                │
 ╰────────────────────────────────────────────────╯

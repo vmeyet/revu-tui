@@ -7,21 +7,21 @@ expression: "render(&mut app, 120, 24)"
 │   1 of 2 approvals · 3 threads, 1 unresolved                         ││ ▎you · 2h                                    │
 │  ◆ 1 on the MR  enter opens                                          ││ ▎Why drop the plain client?                  │
 │                                                                      ││  you · draft ◇                               │
-│  ▾ src/pay/charge.rs                  +4 −2  ✓1 · 1 outdated  edited ││  agreed, keys are per card                   │
-│     ▾ @@ -12,4 +12,5 @@ pub async fn charge                   edited ││                                              │
+│  ▾ src/pay/charge.rs                          +4 −2  ✓1 · 1 outdated ││  agreed, keys are per card                   │
+│     ▾ @@ -12,4 +12,5 @@ pub async fn charge                          ││                                              │
 │      12   12  pub async fn charge(card: &Card, amount: Money) -> Re… ││                                              │
 │ ▎◇   13      -    let client = Client::new();                        ││                                              │
 │           13 +    let client = Client::with_key(idempotency_key(car… ││                                              │
 │           14 +    let attempt = Attempt::first();                    ││                                              │
 │      14   15      let response = client.charge(amount).await?;       ││                                              │
 │      15   16      audit::record(&response);                          ││                                              │
-│     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                    edited ││                                              │
+│     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                           ││                                              │
 │      40   41  fn idempotency_key(card: &Card) -> Key {               ││                                              │
 │      41   42 ~    Key::from((card.number(), card.expiry()))          ││                                              │
 │           43 +    // hunk two, line 43 is new                        ││                                              │
 │      42   44  }                                                      ││                                              │
 │                                                                      ││                                              │
-│  ▸ Cargo.lock                                  +1 −1  folded  edited ││                                              │
+│  ▸ Cargo.lock                                          +1 −1  folded ││                                              │
 │                                                                      ││                                              │
 │                                                                      ││                                              │
 ╰──────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────╯

@@ -7,8 +7,8 @@ expression: "render(&mut app, 100, 24)"
 │   1 of 2 approvals╭ search · commands ───────────────────────────────────────╮                   │
 │  ◆ 1 on the MR  en│ > pu▌blish                                               │                   │
 │                   │                                                          │                   │
-│ ▎▾ src/pay/charge.│ ▸ publish  publish every draft, in the publish modal     │1 outdated  edited │
-│     ▾ @@ -12,4 +12│   ↑↓ pick · tab completes · ^p history · esc             │            edited │
+│ ▎▾ src/pay/charge.│ ▸ publish  publish every draft, in the publish modal     │2  ✓1 · 1 outdated │
+│     ▾ @@ -12,4 +12│   ↑↓ pick · tab completes · ^p history · esc             │                   │
 │      12  pub async│                                                          │                   │
 │  ✓   13 -    let c│                                                          │                   │
 │        │ ✓ resolve│                                                          │                   │
@@ -16,13 +16,13 @@ expression: "render(&mut app, 100, 24)"
 │      14 +    let a│                                                          │                   │
 │      15      let r│                                                          │                   │
 │      16      audit│                                                          │                   │
-│     ▾ @@ -40,3 +41│                                                          │            edited │
+│     ▾ @@ -40,3 +41│                                                          │                   │
 │      41  fn idempo│                                                          │                   │
 │      42 ~    Key::│                                                          │                   │
 │      43 +    // hu│                                                          │                   │
 │      44  }        ╰──────────────────────────────────────────────────────────╯                   │
 │                                                                                                  │
-│  ▸ Cargo.lock                                                              +1 −1  folded  edited │
+│  ▸ Cargo.lock                                                                      +1 −1  folded │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help
