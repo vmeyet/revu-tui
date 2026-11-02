@@ -18,12 +18,12 @@ expression: "render(&mut app, 100, 30)"
 │      16      │      ]n [n  next, previous open conversation                      │               │
 │     ▾ @@ -40,│        n N  the same, while no search is on                       │               │
 │      41  fn i│      ]m [m  next, previous MR in the queue                        │               │
-│      41 -    │                                                                   │               │
-│      42 +    │  VIEW                                                             │               │
-│      43 +    │      / n N  find text in the MR, next, previous                   │               │
-│      44  }   │          i  the MR cover page                                     │               │
-│              │          D  inline or side by side, diff and prose                │               │
-│  ▸ Cargo.lock│        > <  the code after, before, alone                         │ +1 −1  folded │
+│      42 ~    │                                                                   │               │
+│      43 +    │  VIEW                                                             │               │
+│      44  }   │      / n N  find text in the MR, next, previous                   │               │
+│              │          i  the MR cover page                                     │               │
+│  ▸ Cargo.lock│          D  inline or side by side, diff and prose                │ +1 −1  folded │
+│              │        > <  the code after, before, alone                         │               │
 │              │          t  file tree                                             │               │
 │              │          T  every thread of the MR                                │               │
 │              │          p  pipeline                                              │               │

@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **A changed line is compared with the line most like it, not the one at the same place.**
+  In the diff, inline and side by side, for blocks up to 50 lines a side.
+  Nothing to do: a line added or removed in a block keeps the marks on the others, and a rewrite stays plain.
+
 - **A changed line marks the code that changed, not what is stuck to it.**
   In the diff and the outline's signatures, where more small edits now read as one row.
   Nothing to do: `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`.

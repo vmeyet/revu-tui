@@ -21,8 +21,8 @@ expression: "render(&mut app, 120, 40)"
 │     │  • retry with  idempotency_key                                                                           │     │
 │     │  • log the attempt                                                                                       │     │
 │     │                                                                                                          │     │
-│     │  CHECKS                                                                                                  │     │
-│     │  ✓ success                                                                                               │lded │
+│     │  CHECKS                                                                                                  │lded │
+│     │  ✓ success                                                                                               │     │
 │     │                                                                                                          │     │
 │     │  REVIEW                                                                                                  │     │
 │     │  1 of 2 approvals  ·  you are not a reviewer                                                             │     │

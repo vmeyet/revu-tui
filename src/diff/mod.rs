@@ -24,12 +24,21 @@ pub(crate) struct Line {
     pub(crate) no_newline: bool,
 }
 
+/// A removed line and its added twin, as indexes into their hunk's lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LinePair {
+    pub(crate) removed: usize,
+    pub(crate) added: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Hunk {
     pub(crate) header: String,
     pub(crate) old_start: u32,
     pub(crate) new_start: u32,
     pub(crate) lines: Vec<Line>,
+    /// The twins among `lines` in reading order, never crossing, filled by `words::mark`.
+    pub(crate) pairs: Vec<LinePair>,
 }
 
 const NO_NEWLINE: &str = "\\ No newline at end of file";
@@ -61,7 +70,7 @@ fn parse_header(line: &str) -> Option<Hunk> {
     let rest = line.strip_prefix("@@ -")?;
     let (old, rest) = rest.split_once(" +")?;
     let (new, _) = rest.split_once(" @@")?;
-    Some(Hunk { header: line.to_owned(), old_start: start_of(old)?, new_start: start_of(new)?, lines: vec![] })
+    Some(Hunk { header: line.to_owned(), old_start: start_of(old)?, new_start: start_of(new)?, lines: vec![], pairs: vec![] })
 }
 
 fn start_of(range: &str) -> Option<u32> {

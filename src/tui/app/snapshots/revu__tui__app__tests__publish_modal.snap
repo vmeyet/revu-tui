@@ -17,12 +17,12 @@ expression: "render(&mut app, 120, 24)"
 │                           │                                                              │                           │
 │   ── ▸ DONE · 1 ──────────│ [x] approve  a to toggle                                     │                           │
 │                           │                                                              │                           │
-│                           │  enter publish · e edit · d delete · esc back                │                           │
-│                           ╰──────────────────────────────────────────────────────────────╯)))                        │
-│                                ││           43 +    // hunk two, line 43 is new                                      │
+│                           │  enter publish · e edit · d delete · esc back                │)))                        │
+│                           ╰──────────────────────────────────────────────────────────────╯                           │
 │                                ││      42   44  }                                                                    │
 │                                ││                                                                                    │
 │                                ││  ▸ Cargo.lock                                                        +1 −1  folded │
+│                                ││                                                                                    │
 │                                ││                                                                                    │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved · 2 drafts (1 unsaved) · P to publish                                          ? help

@@ -21,13 +21,13 @@ expression: phone(&mut app)
 │         audit::record(&response);              │
 │     ▾ @@ -40,3 +41,4 @@ fn idempotency_key     │
 │     fn idempotency_key(card: &Card) -> Key {   │
-│    -    Key::from(card.number())               │
-│    +    Key::from((card.number(), card.expiry( │
+│    ~    Key::from((card.number(), card.expiry( │
 │     )))                                        │
 │    +    // hunk two, line 43 is new            │
 │     }                                          │
 │                                                │
 │  ▸ Cargo.lock                    +1 −1  folded │
+│                                                │
 │                                                │
 ╰────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved          ? help

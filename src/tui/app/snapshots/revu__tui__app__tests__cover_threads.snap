@@ -22,8 +22,8 @@ expression: screen
 │    │  ✓ success                                                                             │    │
 │    │                                                                                        │    │
 │    │  REVIEW                                                                                │    │
-│    │  1 of 2 approvals  ·  you are not a reviewer                                           │    │
-│  ▸ │                                                                                        │ded │
+│  ▸ │  1 of 2 approvals  ·  you are not a reviewer                                           │ded │
+│    │                                                                                        │    │
 │    │  THREADS  2 open                                                                       │    │
 │    │  ▎ nina · should this retry on timeout, the provider says keys are safe to reuse       │    │
 │    │  ▎ syncSlackUsers.ts:10                                                                │    │

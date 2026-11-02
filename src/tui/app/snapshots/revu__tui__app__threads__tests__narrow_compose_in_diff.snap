@@ -29,6 +29,6 @@ expression: "render(&mut app, 100, 30)"
 │      16      audit::record(&response);                                                           │
 │     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                                                       │
 │      41  fn idempotency_key(card: &Card) -> Key {                                                │
-│      41 -    Key::from(card.number())                                                            │
+│      42 ~    Key::from((card.number(), card.expiry()))                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 3 unresolved                                                            ? help

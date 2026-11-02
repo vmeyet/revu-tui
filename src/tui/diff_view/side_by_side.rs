@@ -135,6 +135,14 @@ mod tests {
     }
 
     #[test]
+    fn side_by_side_sets_a_twin_beside_its_line_past_the_lines_without_one() {
+        let review = side_by_side_of("@@ -1,2 +1,2 @@\n-drop_me();\n-let b = 2;\n+fresh();\n+more();\n+let b = 20;\n", "a.txt");
+        let rows = halves_of(&review, Overflow::Cut(41));
+        let expected = [("     1 -drop_me();", "     1 +fresh();"), ("", "     2 +more();"), ("     2 -let b = 2;", "     3 +let b = 20;")];
+        assert_eq!(rows, expected.map(|(old, new)| (old.to_owned(), new.to_owned())));
+    }
+
+    #[test]
     fn side_by_side_wraps_each_half_under_its_own_text() {
         let review = side_by_side_of(&format!("@@ -1 +1 @@\n-{}\n+short\n", "x".repeat(30)), "a.txt");
         let rows = halves_of(&review, Overflow::Wrap(41));

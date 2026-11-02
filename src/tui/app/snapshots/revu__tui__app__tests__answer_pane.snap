@@ -17,8 +17,8 @@ expression: "render(&mut app, 150, 20)"
 │                                ││      15   16      audit::record(&response);          ││                                                          │
 │   ── ▸ DONE · 1 ────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key           ││                                                          │
 │                                ││      40   41  fn idempotency_key(card: &Card) -> Ke… ││                                                          │
-│                                ││      41      -    Key::from(card.number())           ││                                                          │
-│                                ││           42 +    Key::from((card.number(), card.ex… ││                                                          │
-│                                ││           43 +    // hunk two, line 43 is new        ││  claude-opus-5 · 1.2k cached · 40 out                    │
+│                                ││      41   42 ~    Key::from((card.number(), card.ex… ││                                                          │
+│                                ││           43 +    // hunk two, line 43 is new        ││                                                          │
+│                                ││      42   44  }                                      ││  claude-opus-5 · 1.2k cached · 40 out                    │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────╯
  ✓ asking Claude (claude-opus-5) · this MR goes to Anthropic                                                                                   ? help

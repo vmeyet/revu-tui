@@ -92,6 +92,26 @@ fn kind() -> impl Strategy<Value = LineKind> {
     prop_oneof![3 => Just(LineKind::Context), 2 => Just(LineKind::Added), 2 => Just(LineKind::Removed)]
 }
 
+/// One hunk of changed lines close enough to each other for pairs to form in many shapes.
+pub(crate) fn alike_diff() -> impl Strategy<Value = String> {
+    let line = prop_oneof![
+        Just(" keep();"),
+        Just("-let a = 1;"),
+        Just("+let a = 2;"),
+        Just("-let b = call(a, 2);"),
+        Just("+let b = call(a, 3);"),
+        Just("+    let b = call(a, 2);"),
+        Just("-gone_for_good(now);"),
+        Just("+brand_new(call);"),
+        Just("-}"),
+        Just("+};"),
+        Just("+"),
+        Just("-   "),
+        Just("+nothing else alike here"),
+    ];
+    prop::collection::vec(line, 1..20).prop_map(|lines| format!("@@ -1 +1 @@\n{}\n", lines.join("\n")))
+}
+
 /// Up to four hunks, each starting past where the previous one ended on both sides.
 pub(crate) fn diff() -> impl Strategy<Value = Generated> {
     let part = (0u32..40, any::<bool>(), "[a-z_ (){}]{0,16}", prop::collection::vec((kind(), text()), 1..30));

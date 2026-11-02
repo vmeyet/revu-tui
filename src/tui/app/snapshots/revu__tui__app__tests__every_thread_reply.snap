@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 602
 expression: screen
 ---
 ╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ the whole MR · 3 threads ────────────────────────────────────╮
@@ -18,12 +17,12 @@ expression: screen
 │                                          ││      15   16      audit::record(&response);      ││  Should this retry on timeout?                               │
 │   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││  ─────────────────────────────────────────────────────────── │
 │                                          ││      40   41  fn idempotency_key(card: &Card) -… ││  src/pay/charge.rs:-13                                       │
-│                                          ││      41      -    Key::from(card.number())       ││  let client = Client::new();                                 │
-│                                          ││           42 +    Key::from((card.number(), car… ││  ✓ resolved                                                  │
-│                                          ││           43 +    // hunk two, line 43 is new    ││  you · 2h                                                    │
-│                                          ││      42   44  }                                  ││  Why drop the plain client?                                  │
-│                                          ││                                                  ││                                                              │
+│                                          ││      41   42 ~    Key::from((card.number(), car… ││  let client = Client::new();                                 │
+│                                          ││           43 +    // hunk two, line 43 is new    ││  ✓ resolved                                                  │
+│                                          ││      42   44  }                                  ││  you · 2h                                                    │
+│                                          ││                                                  ││  Why drop the plain client?                                  │
 │                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │

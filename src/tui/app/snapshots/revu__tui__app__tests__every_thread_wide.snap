@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 587
 expression: wide
 ---
 ╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ the whole MR · 3 threads ────────────────────────────────────╮
@@ -18,12 +17,12 @@ expression: wide
 │                                          ││      15   16      audit::record(&response);      ││  let client = Client::new();                                 │
 │   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││  ✓ resolved                                                  │
 │                                          ││      40   41  fn idempotency_key(card: &Card) -… ││  you · 2h                                                    │
-│                                          ││      41      -    Key::from(card.number())       ││  Why drop the plain client?                                  │
-│                                          ││           42 +    Key::from((card.number(), car… ││                                                              │
+│                                          ││      41   42 ~    Key::from((card.number(), car… ││  Why drop the plain client?                                  │
 │                                          ││           43 +    // hunk two, line 43 is new    ││                                                              │
 │                                          ││      42   44  }                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │

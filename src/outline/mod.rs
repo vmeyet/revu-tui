@@ -5,6 +5,7 @@ mod tree;
 
 pub(crate) use tree::{Branch, Direction, Item, Section, Shape, Site};
 
+use crate::diff::words::similarity;
 use crate::forge::Side;
 use crate::syntax;
 use std::collections::BTreeMap;
@@ -393,7 +394,7 @@ fn renamed_to(before: &Symbol, added: &[Symbol]) -> Option<usize> {
         .iter()
         .enumerate()
         .filter(|(_, after)| after.kind == before.kind && scope(&after.name) == scope(&before.name))
-        .map(|(index, after)| (index, similarity(&before.body, &after.body)))
+        .map(|(index, after)| (index, similarity(&words(&before.body), &words(&after.body))))
         .filter(|(_, ratio)| *ratio >= RENAME_SIMILARITY)
         .max_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(index, _)| index)
@@ -401,15 +402,6 @@ fn renamed_to(before: &Symbol, added: &[Symbol]) -> Option<usize> {
 
 fn scope(name: &str) -> &str {
     name.rsplit_once('.').map_or("", |(scope, _)| scope)
-}
-
-/// How much of two bodies' words they share, from 0 to 1; nothing alike when either has none.
-fn similarity(old: &str, new: &str) -> f32 {
-    let (old, new) = (words(old), words(new));
-    if old.is_empty() || new.is_empty() {
-        return 0.0;
-    }
-    similar::TextDiff::from_slices(&old, &new).ratio()
 }
 
 fn words(text: &str) -> Vec<&str> {

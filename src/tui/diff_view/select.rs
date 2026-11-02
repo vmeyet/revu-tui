@@ -94,7 +94,7 @@ fn screen_rows(cells: &[Range<usize>], room: usize, wrap: bool) -> Vec<&[Range<u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tui::diff_view::test_support::{long_added_line, total_pair};
+    use crate::tui::diff_view::test_support::{long_added_line, side_by_side_of, total_pair};
 
     #[test]
     fn a_drag_starts_where_the_text_does_whatever_the_gutter() {
@@ -111,6 +111,16 @@ mod tests {
         let cells = pair_cells(&hunk.lines[0], &hunk.lines[1]);
         assert_eq!(cells.len(), "const total = 12;".len());
         assert_eq!(cells[14..], [14..14, 14..15, 15..16]);
+    }
+
+    #[test]
+    fn an_inline_pair_past_an_added_line_selects_as_its_own_added_line() {
+        let diff = "@@ -1 +1,2 @@\n-let b = 2;\n+fresh_line(here);\n+let b = 20;\n";
+        let review = side_by_side_of(diff, "a.txt").with_side_by_side(false);
+        let row = Row::Pair { file: 0, hunk: 0, removed: 0, added: 2 };
+        let (text, cells) = inline_text(&review, &row).unwrap();
+        assert_eq!(text, "let b = 20;");
+        assert_eq!(cells.len(), "let b = 220;".len(), "the struck old word takes its cells too");
     }
 
     #[test]
