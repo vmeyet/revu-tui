@@ -2,7 +2,7 @@
 use super::app::App;
 use super::theme::Theme;
 use super::ui::{self, draw_empty};
-use crate::lockfile::{Bump, Change, ChangeKind, Drift, Summary};
+use crate::lockfile::{Alert, Bump, Change, ChangeKind, Summary};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -47,9 +47,9 @@ fn counts<'a>(summary: &Summary, theme: Theme) -> Line<'a> {
     let count = |of: fn(&ChangeKind) -> bool| summary.changes.iter().filter(|c| of(&c.kind)).count();
     ui::counts(
         &[
-            (count(|k| matches!(k, ChangeKind::Warning { .. })), "changed in place", theme.warn),
-            (count(|k| matches!(k, ChangeKind::Updated { .. })), "updated", theme.muted),
-            (count(|k| matches!(k, ChangeKind::Added { .. })), "added", theme.success),
+            (count(ChangeKind::warns), "to check", theme.warn),
+            (count(|k| matches!(k, ChangeKind::Updated { .. }) && !k.warns()), "updated", theme.muted),
+            (count(|k| matches!(k, ChangeKind::Added { .. }) && !k.warns()), "added", theme.success),
             (count(|k| matches!(k, ChangeKind::Removed { .. })), "removed", theme.danger),
         ],
         theme,
@@ -66,27 +66,57 @@ fn way_to_raw_diff(threads: usize) -> String {
 
 fn versions(kind: &ChangeKind) -> String {
     match kind {
-        ChangeKind::Warning { version, .. } | ChangeKind::Added { version } | ChangeKind::Removed { version } => version.to_string(),
+        ChangeKind::SameVersion { version, .. } | ChangeKind::Added { version, .. } | ChangeKind::Removed { version } => {
+            version.to_string()
+        }
         ChangeKind::Updated { from, to, .. } => format!("{from} → {to}"),
     }
 }
 
+fn alert_text(alert: &Alert) -> String {
+    match alert {
+        Alert::ChecksumChanged => "checksum changed".to_owned(),
+        Alert::SourceChanged => "source changed".to_owned(),
+        Alert::InstallScript => "install script added".to_owned(),
+        Alert::SourceMoved { to } => format!("source moved to {to}"),
+        Alert::ChecksumLost => "checksum gone".to_owned(),
+        Alert::OffRegistry { from } => format!("from {from}"),
+    }
+}
+
+fn bump_word(bump: Bump) -> &'static str {
+    match bump {
+        Bump::Breaking => "breaking",
+        Bump::Minor => "minor",
+        Bump::Patch => "patch",
+        Bump::Other => "",
+    }
+}
+
+/// What the row says after its versions, the warning first in view.
+fn note(kind: &ChangeKind) -> String {
+    let lead = match kind {
+        ChangeKind::SameVersion { .. } => "same version",
+        ChangeKind::Updated { bump, .. } => bump_word(*bump),
+        ChangeKind::Added { .. } | ChangeKind::Removed { .. } => "",
+    };
+    let alerts = kind.alerts().iter().map(alert_text);
+    std::iter::once(lead.to_owned()).filter(|lead| !lead.is_empty()).chain(alerts).collect::<Vec<_>>().join(", ")
+}
+
 fn row<'a>(change: &Change, name_w: usize, versions_w: usize, theme: Theme) -> Line<'a> {
-    let (glyph, colour, note) = match &change.kind {
-        ChangeKind::Warning { drift: Drift::Checksum, .. } => ("⚠", theme.warn, "same version, checksum changed"),
-        ChangeKind::Warning { drift: Drift::Source, .. } => ("⚠", theme.warn, "same version, source changed"),
-        ChangeKind::Warning { drift: Drift::ChecksumAndSource, .. } => ("⚠", theme.warn, "same version, checksum and source changed"),
-        ChangeKind::Updated { from, to, bump } => {
-            let glyph = if to.is_older_than(from) { "↓" } else { "↑" };
+    let (glyph, colour) = match &change.kind {
+        kind if kind.warns() => ("⚠", theme.warn),
+        ChangeKind::Updated { from, to, bump, .. } => (
+            if to.is_older_than(from) { "↓" } else { "↑" },
             match bump {
-                Bump::Breaking => (glyph, theme.danger, "breaking"),
-                Bump::Minor => (glyph, theme.accent, "minor"),
-                Bump::Patch => (glyph, theme.muted, "patch"),
-                Bump::Other => (glyph, theme.muted, ""),
-            }
-        }
-        ChangeKind::Added { .. } => ("+", theme.success, ""),
-        ChangeKind::Removed { .. } => ("-", theme.danger, ""),
+                Bump::Breaking => theme.danger,
+                Bump::Minor => theme.accent,
+                Bump::Patch | Bump::Other => theme.muted,
+            },
+        ),
+        ChangeKind::SameVersion { .. } | ChangeKind::Added { .. } => ("+", theme.success),
+        ChangeKind::Removed { .. } => ("-", theme.danger),
     };
     let style = Style::default().fg(colour);
     let name = format!("{:<name_w$}", change.name.to_string());
@@ -95,6 +125,6 @@ fn row<'a>(change: &Change, name_w: usize, versions_w: usize, theme: Theme) -> L
         Span::styled(format!("{glyph} "), style),
         Span::styled(format!("{name}  "), style.add_modifier(Modifier::BOLD)),
         Span::raw(format!("{versions}  ")),
-        Span::styled(note, style),
+        Span::styled(note(&change.kind), style),
     ])
 }

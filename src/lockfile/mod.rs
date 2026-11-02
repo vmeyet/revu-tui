@@ -54,7 +54,58 @@ impl Version {
     pub(crate) fn is_older_than(&self, other: &Self) -> bool {
         self.numbers().zip(other.numbers()).is_some_and(|(mine, theirs)| mine < theirs)
     }
+
+    /// The version without its build metadata or anything a reader cannot see: two with the same one read as the same.
+    fn release(&self) -> String {
+        self.0.split('+').next().unwrap_or_default().chars().filter(char::is_ascii_graphic).collect()
+    }
 }
+
+/// What kind of place a source is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum SourceKind {
+    Registry,
+    Git,
+    Link,
+    Other,
+}
+
+/// Where a source points: its kind and host. A move inside a site is routine, a move between sites is not.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Site {
+    kind: SourceKind,
+    host: String,
+}
+
+impl Site {
+    /// Cargo writes `registry+`, `sparse+` and `git+`; npm a tarball URL, whose path holds `/-/` on a registry.
+    fn of(source: &str) -> Self {
+        let (kind, place) = if let Some(target) = source.strip_prefix(LINK) {
+            (SourceKind::Link, target)
+        } else if let Some(url) = source.strip_prefix("registry+").or_else(|| source.strip_prefix("sparse+")) {
+            (SourceKind::Registry, url)
+        } else if let Some(url) = source.strip_prefix("git+") {
+            (SourceKind::Git, url)
+        } else if source.starts_with("http") && source.contains("/-/") {
+            (SourceKind::Registry, source)
+        } else {
+            (SourceKind::Other, source)
+        };
+        let host = url::Url::parse(place).ok().and_then(|url| url.host_str().map(str::to_owned));
+        Self { kind, host: host.unwrap_or_else(|| place.to_owned()) }
+    }
+
+    fn describe(&self) -> String {
+        match self.kind {
+            SourceKind::Git => format!("git on {}", self.host),
+            SourceKind::Link => format!("a link to {}", self.host),
+            SourceKind::Registry | SourceKind::Other => self.host.clone(),
+        }
+    }
+}
+
+/// How a parser spells a source that is a link to a folder.
+const LINK: &str = "link:";
 
 /// What a lockfile pins a version to; the same version with another origin is other code.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -69,6 +120,18 @@ struct Package {
     name: PackageName,
     version: Version,
     origin: Origin,
+    /// Runs code when it installs.
+    install_script: bool,
+    /// The copy a project's own `require` finds, at the top of the tree.
+    at_top: bool,
+    /// Shipped inside another package, so it has no origin of its own.
+    bundled: bool,
+}
+
+impl Package {
+    fn new(name: String, version: String, origin: Origin) -> Self {
+        Self { name: PackageName(name), version: Version(version), origin, install_script: false, at_top: false, bundled: false }
+    }
 }
 
 /// How far an update goes, the biggest first.
@@ -98,44 +161,78 @@ impl Bump {
     }
 }
 
-/// What differs under one version.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Drift {
-    Checksum,
-    Source,
-    ChecksumAndSource,
+/// Why a row warns.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Alert {
+    ChecksumChanged,
+    SourceChanged,
+    InstallScript,
+    /// The new version comes from another kind of place or host than the old one.
+    SourceMoved {
+        to: String,
+    },
+    ChecksumLost,
+    /// A new package from somewhere that is no registry the lockfile already used.
+    OffRegistry {
+        from: String,
+    },
 }
 
-impl Drift {
-    fn between(base: &BTreeSet<&Origin>, head: &BTreeSet<&Origin>) -> Self {
-        fn checksums<'a>(set: &BTreeSet<&'a Origin>) -> BTreeSet<Option<&'a str>> {
-            set.iter().map(|o| o.checksum.as_deref()).collect()
+impl Alert {
+    /// The alerts between the copies of one release, whatever its version text says.
+    fn of_same_release(base: &Copies<'_>, head: &Copies<'_>) -> Vec<Self> {
+        let (checksums, sources) = (base.checksums() != head.checksums(), base.sources() != head.sources());
+        let moved = base.origins != head.origins;
+        let mut alerts = vec![];
+        if checksums || (moved && !sources) {
+            alerts.push(Self::ChecksumChanged);
         }
-        fn sources<'a>(set: &BTreeSet<&'a Origin>) -> BTreeSet<Option<&'a str>> {
-            set.iter().map(|o| o.source.as_deref()).collect()
+        if sources || (moved && !checksums) {
+            alerts.push(Self::SourceChanged);
         }
-        match (checksums(base) != checksums(head), sources(base) != sources(head)) {
-            (true, false) => Self::Checksum,
-            (false, true) => Self::Source,
-            _ => Self::ChecksumAndSource,
+        alerts.extend(Self::of_install_script(base, head));
+        alerts
+    }
+
+    fn of_install_script(base: &Copies<'_>, head: &Copies<'_>) -> Option<Self> {
+        (head.install_script && !base.install_script).then_some(Self::InstallScript)
+    }
+
+    /// The alerts of a move from `from` to `to`.
+    fn of_update(from: &Version, to: &Version, base: &Copies<'_>, head: &Copies<'_>) -> Vec<Self> {
+        if from.release() == to.release() {
+            return Self::of_same_release(base, head);
         }
+        let moved = (base.sites() != head.sites()).then(|| Self::SourceMoved { to: head.describe_sites() });
+        let lost =
+            (base.checksums().iter().any(Option::is_some) && !head.checksums().iter().all(Option::is_some)).then_some(Self::ChecksumLost);
+        moved.into_iter().chain(lost).chain(Self::of_install_script(base, head)).collect()
+    }
+
+    /// A new copy warns off a registry, or on a host the old side never used; a source of no kind is the project's own.
+    fn of_added(head: &Copies<'_>, known_hosts: &BTreeSet<String>) -> Vec<Self> {
+        let unknown = |site: &Site| !known_hosts.is_empty() && !known_hosts.contains(&site.host);
+        let odd = head.sites().iter().any(|site| site.kind != SourceKind::Registry || unknown(site));
+        odd.then(|| Self::OffRegistry { from: head.describe_sites() }).into_iter().collect()
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ChangeKind {
     /// The same version, other code: the row a reader must not miss.
-    Warning {
+    SameVersion {
         version: Version,
-        drift: Drift,
+        alerts: Vec<Alert>,
     },
     Updated {
         from: Version,
         to: Version,
         bump: Bump,
+        alerts: Vec<Alert>,
     },
     Added {
         version: Version,
+        alerts: Vec<Alert>,
     },
     Removed {
         version: Version,
@@ -143,9 +240,22 @@ pub(crate) enum ChangeKind {
 }
 
 impl ChangeKind {
+    /// Why the row warns; a row with no alert is routine.
+    pub(crate) fn alerts(&self) -> &[Alert] {
+        match self {
+            Self::SameVersion { alerts, .. } | Self::Updated { alerts, .. } | Self::Added { alerts, .. } => alerts,
+            Self::Removed { .. } => &[],
+        }
+    }
+
+    pub(crate) fn warns(&self) -> bool {
+        !self.alerts().is_empty()
+    }
+
     fn rank(&self) -> u8 {
         match self {
-            Self::Warning { .. } => 0,
+            Self::SameVersion { .. } => 0,
+            _ if self.warns() => 0,
             Self::Updated { bump, .. } => 1 + *bump as u8,
             Self::Added { .. } => 5,
             Self::Removed { .. } => 6,
@@ -172,25 +282,65 @@ pub(crate) fn summarize(path: &str, base: Option<&str>, head: Option<&str>) -> R
     Ok(compare(&read(base)?, &read(head)?))
 }
 
-type Versions<'a> = BTreeMap<&'a Version, BTreeSet<&'a Origin>>;
+/// The copies of one version of a package; a bundled copy has no origin of its own, so it adds none.
+#[derive(Default)]
+struct Copies<'a> {
+    origins: BTreeSet<&'a Origin>,
+    install_script: bool,
+}
+
+impl Copies<'_> {
+    fn checksums(&self) -> BTreeSet<Option<&str>> {
+        self.origins.iter().map(|o| o.checksum.as_deref()).collect()
+    }
+
+    fn sources(&self) -> BTreeSet<Option<&str>> {
+        self.origins.iter().map(|o| o.source.as_deref()).collect()
+    }
+
+    fn sites(&self) -> BTreeSet<Site> {
+        self.origins.iter().filter_map(|o| o.source.as_deref()).map(Site::of).collect()
+    }
+
+    fn describe_sites(&self) -> String {
+        let sites: Vec<String> = self.sites().iter().map(Site::describe).collect();
+        if sites.is_empty() { "no source".to_owned() } else { sites.join(", ") }
+    }
+}
+
+/// Every copy of one package name on one side.
+#[derive(Default)]
+struct Installed<'a> {
+    versions: BTreeMap<&'a Version, Copies<'a>>,
+    at_top: Option<&'a Version>,
+}
 
 /// Copies of a version collapse into one: moving a copy in the tree changes nothing a reader cares about.
-fn by_name(packages: &[Package]) -> BTreeMap<&PackageName, Versions<'_>> {
-    let mut names: BTreeMap<&PackageName, Versions<'_>> = BTreeMap::new();
+fn by_name(packages: &[Package]) -> BTreeMap<&PackageName, Installed<'_>> {
+    let mut names: BTreeMap<&PackageName, Installed<'_>> = BTreeMap::new();
     for package in packages {
-        names.entry(&package.name).or_default().entry(&package.version).or_default().insert(&package.origin);
+        let installed = names.entry(&package.name).or_default();
+        let copies = installed.versions.entry(&package.version).or_default();
+        copies.install_script |= package.install_script;
+        if !package.bundled {
+            copies.origins.insert(&package.origin);
+        }
+        if package.at_top {
+            installed.at_top = Some(&package.version);
+        }
     }
     names
 }
 
 fn compare(base: &[Package], head: &[Package]) -> Summary {
+    let known_hosts: BTreeSet<String> = base.iter().filter_map(|p| p.origin.source.as_deref()).map(|s| Site::of(s).host).collect();
     let (base, head) = (by_name(base), by_name(head));
-    let none = Versions::new();
+    let none = Installed::default();
     let names: BTreeSet<_> = base.keys().chain(head.keys()).copied().collect();
     let mut changes: Vec<Change> = names
         .into_iter()
         .flat_map(|name| {
-            let kinds = package_changes(base.get(name).unwrap_or(&none), head.get(name).unwrap_or(&none));
+            let kinds = package_changes(base.get(name).unwrap_or(&none), head.get(name).unwrap_or(&none), &known_hosts);
             kinds.into_iter().map(|kind| Change { name: name.clone(), kind })
         })
         .collect();
@@ -198,39 +348,65 @@ fn compare(base: &[Package], head: &[Package]) -> Summary {
     Summary { changes }
 }
 
-fn package_changes(base: &Versions<'_>, head: &Versions<'_>) -> Vec<ChangeKind> {
-    let warnings = base.iter().filter_map(|(&version, origins)| {
-        let now = head.get(version).filter(|now| *now != origins)?;
-        Some(ChangeKind::Warning { version: version.clone(), drift: Drift::between(origins, now) })
+fn package_changes(base: &Installed<'_>, head: &Installed<'_>, known_hosts: &BTreeSet<String>) -> Vec<ChangeKind> {
+    let same_versions = base.versions.iter().filter_map(|(&version, copies)| {
+        let alerts = Alert::of_same_release(copies, head.versions.get(version)?);
+        (!alerts.is_empty()).then(|| ChangeKind::SameVersion { version: version.clone(), alerts })
     });
-    warnings.chain(moved_versions(only_in(base, head), only_in(head, base))).collect()
+    let mut changes: Vec<ChangeKind> = same_versions.chain(moved_versions(base, head, known_hosts)).collect();
+    changes.extend(top_copy_swap(base, head, &changes));
+    changes
 }
 
-fn only_in<'a>(versions: &Versions<'a>, other: &Versions<'a>) -> Vec<&'a Version> {
-    let mut only: Vec<&Version> = versions.keys().filter(|v| !other.contains_key(*v)).copied().collect();
+fn updated(from: &Version, to: &Version, base: &Installed<'_>, head: &Installed<'_>) -> ChangeKind {
+    let none = Copies::default();
+    let (old, new) = (base.versions.get(from).unwrap_or(&none), head.versions.get(to).unwrap_or(&none));
+    ChangeKind::Updated { from: from.clone(), to: to.clone(), bump: Bump::between(from, to), alerts: Alert::of_update(from, to, old, new) }
+}
+
+/// The copy a project loads changed version though both versions stay somewhere in the tree.
+fn top_copy_swap(base: &Installed<'_>, head: &Installed<'_>, changes: &[ChangeKind]) -> Option<ChangeKind> {
+    let (from, to) = base.at_top.zip(head.at_top).filter(|(from, to)| from != to)?;
+    let shown = changes.iter().any(|change| matches!(change, ChangeKind::Updated { from: f, to: t, .. } if f == from && t == to));
+    (!shown).then(|| updated(from, to, base, head))
+}
+
+fn only_in<'a>(versions: &Installed<'a>, other: &Installed<'a>) -> Vec<&'a Version> {
+    let mut only: Vec<&Version> = versions.versions.keys().filter(|v| !other.versions.contains_key(*v)).copied().collect();
     only.sort_by_key(|v| (v.numbers(), v.0.as_str()));
     only
 }
 
 /// A gone version pairs with a new one it is compatible with; what is left pairs only when the counts match,
 /// since an extra version is a package added or removed, not an update.
-fn moved_versions(gone: Vec<&Version>, mut new: Vec<&Version>) -> Vec<ChangeKind> {
-    let updated = |from: &Version, to: &Version| ChangeKind::Updated { from: from.clone(), to: to.clone(), bump: Bump::between(from, to) };
+fn moved_versions(base: &Installed<'_>, head: &Installed<'_>, known_hosts: &BTreeSet<String>) -> Vec<ChangeKind> {
+    let mut new = only_in(head, base);
     let mut changes = vec![];
     let mut left = vec![];
-    for from in gone {
+    for from in only_in(base, head) {
         match new.iter().position(|to| Bump::between(from, to) != Bump::Breaking) {
-            Some(at) => changes.push(updated(from, new.remove(at))),
+            Some(at) => changes.push(updated(from, new.remove(at), base, head)),
             None => left.push(from),
         }
     }
     if left.len() == new.len() {
-        changes.extend(left.into_iter().zip(new).map(|(from, to)| updated(from, to)));
+        changes.extend(left.into_iter().zip(new).map(|(from, to)| updated(from, to, base, head)));
         return changes;
     }
-    changes.extend(new.into_iter().map(|v| ChangeKind::Added { version: v.clone() }));
+    let added = |version: &Version| {
+        let alerts = head.versions.get(version).map_or_else(Vec::new, |copies| Alert::of_added(copies, known_hosts));
+        ChangeKind::Added { version: version.clone(), alerts }
+    };
+    changes.extend(new.into_iter().map(added));
     changes.extend(left.into_iter().map(|v| ChangeKind::Removed { version: v.clone() }));
     changes
+}
+
+/// The names of the rows that warn, for a format's tests.
+#[cfg(test)]
+fn warned_names(path: &str, base: &str, head: &str) -> Vec<String> {
+    let summary = summarize(path, Some(base), Some(head)).unwrap();
+    summary.changes.iter().filter(|c| c.kind.warns()).map(|c| c.name.to_string()).collect()
 }
 
 #[cfg(test)]
@@ -238,8 +414,8 @@ mod tests {
     use super::*;
 
     fn package(name: &str, version: &str, checksum: &str) -> Package {
-        let origin = Origin { checksum: Some(checksum.into()), source: Some("registry".into()) };
-        Package { name: PackageName(name.into()), version: Version(version.into()), origin }
+        let origin = Origin { checksum: Some(checksum.into()), source: Some("registry+https://index.example".into()) };
+        Package::new(name.into(), version.into(), origin)
     }
 
     fn sourced(version: &str, source: &str) -> Package {
@@ -252,7 +428,7 @@ mod tests {
     }
 
     fn updated(from: &str, to: &str, bump: Bump) -> ChangeKind {
-        ChangeKind::Updated { from: version(from), to: version(to), bump }
+        ChangeKind::Updated { from: version(from), to: version(to), bump, alerts: vec![] }
     }
 
     fn kinds(base: &[Package], head: &[Package]) -> Vec<ChangeKind> {
@@ -297,18 +473,18 @@ mod tests {
 
     #[test]
     fn the_same_version_with_another_checksum_or_source_warns() {
-        let warning = |drift| vec![ChangeKind::Warning { version: version("1.0.0"), drift }];
-        assert_eq!(kinds(&[package("a", "1.0.0", "x")], &[package("a", "1.0.0", "y")]), warning(Drift::Checksum));
-        assert_eq!(kinds(&[sourced("1.0.0", "x")], &[sourced("1.0.0", "y")]), warning(Drift::Source));
+        let warning = |alerts| vec![ChangeKind::SameVersion { version: version("1.0.0"), alerts }];
+        assert_eq!(kinds(&[package("a", "1.0.0", "x")], &[package("a", "1.0.0", "y")]), warning(vec![Alert::ChecksumChanged]));
+        assert_eq!(kinds(&[sourced("1.0.0", "x")], &[sourced("1.0.0", "y")]), warning(vec![Alert::SourceChanged]));
         let bare = Package { origin: Origin { checksum: None, source: None }, ..package("a", "1.0.0", "x") };
-        assert_eq!(kinds(&[package("a", "1.0.0", "x")], &[bare]), warning(Drift::ChecksumAndSource));
+        assert_eq!(kinds(&[package("a", "1.0.0", "x")], &[bare]), warning(vec![Alert::ChecksumChanged, Alert::SourceChanged]));
     }
 
     #[test]
     fn a_warning_stays_when_the_same_package_also_updates_another_version() {
         let base = [package("a", "1.0.0", "x"), package("a", "2.0.0", "x")];
         let head = [package("a", "1.0.0", "y"), package("a", "2.1.0", "x")];
-        let warning = ChangeKind::Warning { version: version("1.0.0"), drift: Drift::Checksum };
+        let warning = ChangeKind::SameVersion { version: version("1.0.0"), alerts: vec![Alert::ChecksumChanged] };
         assert_eq!(kinds(&base, &head), vec![warning, updated("2.0.0", "2.1.0", Bump::Minor)]);
     }
 
@@ -316,7 +492,7 @@ mod tests {
     fn a_second_version_of_a_name_is_an_addition_not_an_update() {
         let base = [package("rand", "0.8.5", "x")];
         let head = [package("rand", "0.8.5", "x"), package("rand", "0.9.0", "x")];
-        assert_eq!(kinds(&base, &head), vec![ChangeKind::Added { version: version("0.9.0") }]);
+        assert_eq!(kinds(&base, &head), vec![ChangeKind::Added { version: version("0.9.0"), alerts: vec![] }]);
     }
 
     #[test]
