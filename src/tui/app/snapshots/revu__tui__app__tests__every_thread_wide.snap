@@ -21,7 +21,7 @@ expression: wide
 │                                          ││           43 +    // hunk two, line 43 is new    ││                                                              │
 │                                          ││      42   44  }                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
-│                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││  ▸ Cargo.lock              +1 −1  folded  edited ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │

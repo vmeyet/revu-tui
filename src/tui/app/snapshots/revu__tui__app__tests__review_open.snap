@@ -7,21 +7,21 @@ expression: "render(&mut app, 120, 24)"
 │ ▎ feat charge cards at ch…     ││   1 of 2 approvals · 3 threads, 1 unresolved                                       │
 │ ▎ omar · !42 · +412 −38     2h ││  ◆ 1 on the MR  enter opens                                                        │
 │                                ││                                                                                    │
-│   ── MINE · 1 ──────────────── ││  ▾ src/pay/charge.rs                                        +4 −2  ✓1 · 1 outdated │
-│   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                                        │
+│   ── MINE · 1 ──────────────── ││  ▾ src/pay/charge.rs                                +4 −2  ✓1 · 1 outdated  edited │
+│   fix flaky cache test       D ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                                 edited │
 │   nina · !41 · +3 −1        4h ││ ▎    12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> { │
 │                                ││  ✓   13      -    let client = Client::new();                                      │
 │   ── WATCHING · 1 ──────────── ││           13 +    let client = Client::with_key(idempotency_key(card));            │
 │   infra: new runner          ⠋ ││           14 +    let attempt = Attempt::first();                                  │
 │   omar · !35                2d ││      14   15      let response = client.charge(amount).await?;                     │
 │                                ││      15   16      audit::record(&response);                                        │
-│   ── ▸ DONE · 1 ────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                                         │
+│   ── ▸ DONE · 1 ────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                                  edited │
 │                                ││      40   41  fn idempotency_key(card: &Card) -> Key {                             │
 │                                ││      41   42 ~    Key::from((card.number(), card.expiry()))                        │
 │                                ││           43 +    // hunk two, line 43 is new                                      │
 │                                ││      42   44  }                                                                    │
 │                                ││                                                                                    │
-│                                ││  ▸ Cargo.lock                                                        +1 −1  folded │
+│                                ││  ▸ Cargo.lock                                                +1 −1  folded  edited │
 │                                ││                                                                                    │
 │                                ││                                                                                    │
 ╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────╯

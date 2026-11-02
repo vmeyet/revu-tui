@@ -21,7 +21,7 @@ expression: screen
 │                                          ││           43 +    // hunk two, line 43 is new    ││  ✓ resolved                                                  │
 │                                          ││      42   44  }                                  ││  you · 2h                                                    │
 │                                          ││                                                  ││  Why drop the plain client?                                  │
-│                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││  ▸ Cargo.lock              +1 −1  folded  edited ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │

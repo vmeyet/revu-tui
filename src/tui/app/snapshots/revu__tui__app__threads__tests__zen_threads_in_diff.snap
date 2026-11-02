@@ -7,8 +7,8 @@ expression: "render(&mut app, 138, 34)"
 
            ◆ 1 on the MR  enter opens
 
-           ▾ src/pay/charge.rs                                                                         +4 −2  ◆2 ✓1 · 1 outdated
-              ▾ @@ -12,4 +12,5 @@ pub async fn charge
+           ▾ src/pay/charge.rs                                                                 +4 −2  ◆2 ✓1 · 1 outdated  edited
+              ▾ @@ -12,4 +12,5 @@ pub async fn charge                                                                     edited
                12   12  pub async fn charge(card: &Card, amount: Money) -> Result<Receipt> {
            ✓   13      -    let client = Client::new();
                       │ ✓ resolved · you · Why drop the plain client?
@@ -27,10 +27,10 @@ expression: "render(&mut app, 138, 34)"
                     14 +    let attempt = Attempt::first();
                14   15      let response = client.charge(amount).await?;
                15   16      audit::record(&response);
-              ▾ @@ -40,3 +41,4 @@ fn idempotency_key
+              ▾ @@ -40,3 +41,4 @@ fn idempotency_key                                                                      edited
                40   41  fn idempotency_key(card: &Card) -> Key {
                41   42 ~    Key::from((card.number(), card.expiry()))
                     43 +    // hunk two, line 43 is new
                42   44  }
 
-           ▸ Cargo.lock                                                                                            +1 −1  folded
+           ▸ Cargo.lock                                                                                    +1 −1  folded  edited

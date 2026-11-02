@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **Each file and hunk says how much its change matters: `whitespace`, `formatting`, `edited` or `rewritten`.**
+  In the diff's file and hunk rows and the file tree, whenever the row has room for the word.
+  Nothing to do: a label only informs, and whatever cannot be proven harmless reads `edited`.
+
 - **A changed line is compared with the line most like it, not the one at the same place.**
   In the diff, inline and side by side, for blocks up to 50 lines a side.
   Nothing to do: a line added or removed in a block keeps the marks on the others, and a rewrite stays plain.

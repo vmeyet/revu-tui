@@ -24,6 +24,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Padding, Paragraph};
+pub(super) use rows::label_span;
 use rows::row_line;
 use select::text_rows;
 use side_by_side::{SIDE_BY_SIDE_MIN_W, side_by_side_lines};

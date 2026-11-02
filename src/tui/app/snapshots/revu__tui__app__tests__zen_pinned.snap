@@ -5,7 +5,7 @@ expression: screen
 
                      !42 feat: charge cards at checkout · omar · +61 −1 ✓
 
-                      ▾ src/pay/charge.rs                                                                                            +60 −0
+                      ▾ src/pay/charge.rs                                                                                    +60 −0  edited
                                17 +    let step_17 = 17;
                                18 +    let step_18 = 18;
                                19 +    let step_19 = 19;
@@ -20,7 +20,7 @@ expression: screen
                                28 +    let step_28 = 28;
                                29 +    let step_29 = 29;
                                30 +    let step_30 = 30;
-                         ▾ @@ -40,0 +71,30 @@ fn refund
+                         ▾ @@ -40,0 +71,30 @@ fn refund                                                                              edited
                                71 +    let step_71 = 71;
                                72 +    let step_72 = 72;
                                73 +    let step_73 = 73;
