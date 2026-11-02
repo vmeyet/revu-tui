@@ -1,14 +1,16 @@
 //! `package-lock.json`, the `packages` map of lockfile versions 2 and 3.
-use super::{Origin, Package};
+use super::{LINK, Origin, Package, Version};
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Deserialize)]
 struct Lock {
     #[serde(rename = "lockfileVersion")]
     version: u32,
     packages: Option<BTreeMap<String, Entry>>,
+    #[serde(default)]
+    dependencies: BTreeMap<String, Legacy>,
 }
 
 #[derive(Deserialize)]
@@ -18,29 +20,73 @@ struct Entry {
     integrity: Option<String>,
     #[serde(default)]
     link: bool,
+    #[serde(default, rename = "inBundle")]
+    bundled: bool,
+    #[serde(default, rename = "hasInstallScript")]
+    install_script: bool,
 }
+
+/// A row of the older `dependencies` section version 2 keeps beside `packages`, for older npm.
+#[derive(Deserialize)]
+struct Legacy {
+    version: String,
+    resolved: Option<String>,
+    integrity: Option<String>,
+    #[serde(default)]
+    bundled: bool,
+    #[serde(default)]
+    dependencies: BTreeMap<String, Legacy>,
+}
+
+/// What `packages` says of a package; the older section must say the same.
+type Listed<'a> = BTreeSet<(&'a str, &'a str, Option<&'a str>, Option<&'a str>)>;
 
 pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     let lock: Lock = serde_json::from_str(text).context("package-lock.json does not parse")?;
     ensure!(matches!(lock.version, 2 | 3), "package-lock.json version {} is not supported", lock.version);
     let packages = lock.packages.context("package-lock.json has no packages")?;
-    packages.into_iter().filter_map(|(path, entry)| package_at(&path, entry)).collect()
+    let packages: Vec<Package> = packages.into_iter().filter_map(|(path, entry)| package_at(&path, entry)).collect::<Result<_>>()?;
+    let listed: Listed<'_> = packages
+        .iter()
+        .map(|p| (p.name.0.as_str(), p.version.0.as_str(), p.origin.checksum.as_deref(), p.origin.source.as_deref()))
+        .collect();
+    ensure_agrees(&lock.dependencies, &listed)?;
+    Ok(packages)
 }
 
-/// The package installed at `path`; the project, its workspace folders and links to them install nothing.
-fn package_at(path: &str, entry: Entry) -> Option<Result<Package>> {
-    if entry.link {
-        return None;
+/// Older npm installs from `dependencies`, which the summary does not read: a row `packages` does not explain is refused.
+/// A version that is not semver (git, a folder, an alias) has no row to compare with.
+fn ensure_agrees(dependencies: &BTreeMap<String, Legacy>, listed: &Listed<'_>) -> Result<()> {
+    for (name, entry) in dependencies {
+        let row = (name.as_str(), entry.version.as_str(), entry.integrity.as_deref(), entry.resolved.as_deref());
+        let explained = entry.bundled || Version(entry.version.clone()).numbers().is_none() || listed.contains(&row);
+        ensure!(explained, "the dependencies section of package-lock.json disagrees with its packages on {name}");
+        ensure_agrees(&entry.dependencies, listed)?;
     }
-    let (_, name) = path.rsplit_once("node_modules/")?;
-    let origin = Origin { checksum: entry.integrity, source: entry.resolved };
-    let package = |version| Package::new(name.to_owned(), version, origin);
-    Some(entry.version.map(package).with_context(|| format!("{path} has no version")))
+    Ok(())
+}
+
+/// The package installed at `path`; the project and its workspace folders install nothing, a link installs its target.
+fn package_at(path: &str, entry: Entry) -> Option<Result<Package>> {
+    let (folder, name) = path.rsplit_once("node_modules/")?;
+    let origin = if entry.link {
+        Origin { checksum: None, source: Some(format!("{LINK}{}", entry.resolved.unwrap_or_default())) }
+    } else {
+        Origin { checksum: entry.integrity, source: entry.resolved }
+    };
+    let version = if entry.link { Some("link".to_owned()) } else { entry.version };
+    let Some(version) = version else { return Some(Err(anyhow::anyhow!("{path} has no version"))) };
+    Some(Ok(Package {
+        install_script: entry.install_script,
+        at_top: folder.is_empty(),
+        bundled: entry.bundled,
+        ..Package::new(name.to_owned(), version, origin)
+    }))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ChangeKind, compare, warned_names};
+    use super::super::{ChangeKind, compare, summarize, warned_names};
     use super::*;
 
     fn named<'a>(packages: &'a [Package], name: &str) -> Vec<&'a Package> {
@@ -52,7 +98,7 @@ mod tests {
         let packages = parse(include_str!("fixtures/package_base.json")).unwrap();
         assert_eq!(named(&packages, "ms").len(), 2, "the top copy and the one nested under debug");
         assert_eq!(named(&packages, "@acme/left-pad")[0].origin.checksum.as_deref(), Some("sha512-aaaa"));
-        assert_eq!((named(&packages, "widgets").len(), named(&packages, "tool").len()), (0, 0));
+        assert_eq!(named(&packages, "widgets"), Vec::<&Package>::new());
     }
 
     #[test]
@@ -73,6 +119,7 @@ mod tests {
 
     const PATH: &str = "package-lock.json";
     const GOOD: &str = r#""version":"1.0.0","resolved":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-aaaa""#;
+    const NESTED_LINK: &str = r#""node_modules/a":{"resolved":"../../evil","link":true},"node_modules/b/node_modules/a":{GOOD}"#;
 
     fn lock(entries: &str) -> String {
         format!(r#"{{"lockfileVersion":3,"packages":{{"":{{"name":"widgets"}},{}}}}}"#, entries.replace("GOOD", GOOD))
@@ -138,6 +185,97 @@ mod tests {
         let head = lock(
             "\"node_modules/a\":{\"version\":\"1.0.0\u{200b}\",\"resolved\":\"https://registry.npmjs.org/a/-/a-1.0.0.tgz\",\"integrity\":\"sha512-evil\"}",
         );
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["a"]);
+    }
+
+    #[test]
+    fn a_top_copy_turned_link_warns_while_a_nested_copy_stays() {
+        let base = lock(r#""node_modules/a":{GOOD},"node_modules/b/node_modules/a":{GOOD}"#);
+        assert!(warned_names(PATH, &base, &lock(NESTED_LINK)).contains(&"a".to_owned()));
+    }
+
+    #[test]
+    fn the_only_copy_turned_link_warns() {
+        let head = lock(r#""node_modules/a":{"resolved":"vendor/evil","link":true},"vendor/evil":{"version":"1.0.0"}"#);
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["a"]);
+    }
+
+    #[test]
+    fn a_link_turned_registry_copy_warns() {
+        let base = lock(r#""node_modules/a":{"resolved":"vendor/a","link":true}"#);
+        assert_eq!(warned_names(PATH, &base, &good_a()), ["a"]);
+    }
+
+    #[test]
+    fn a_new_dependency_that_is_a_link_warns() {
+        let head = lock(r#""node_modules/a":{GOOD},"node_modules/b":{"resolved":"../../evil","link":true}"#);
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["b"]);
+    }
+
+    #[test]
+    fn an_unchanged_link_does_not_warn() {
+        let both = lock(r#""node_modules/a":{"resolved":"vendor/a","link":true}"#);
+        assert_eq!(warned_names(PATH, &both, &both), [""; 0]);
+    }
+
+    #[test]
+    fn swapping_the_top_copy_with_a_nested_one_shows_the_downgrade() {
+        let one = r#""version":"1.0.0","resolved":"https://registry.npmjs.org/a/-/a-1.tgz","integrity":"sha512-one""#;
+        let two = r#""version":"2.0.0","resolved":"https://registry.npmjs.org/a/-/a-2.tgz","integrity":"sha512-two""#;
+        let tree = |top: &str, nested: &str| lock(&format!(r#""node_modules/a":{{{top}}},"node_modules/b/node_modules/a":{{{nested}}}"#));
+        let summary = summarize(PATH, Some(&tree(two, one)), Some(&tree(one, two))).unwrap();
+        assert_eq!(summary.changes.len(), 1, "{summary:?}");
+        assert!(matches!(&summary.changes[0].kind, ChangeKind::Updated { from, to, .. } if from.0 == "2.0.0" && to.0 == "1.0.0"));
+    }
+
+    fn lock_v2(dependency: &str) -> String {
+        format!(r#"{{"lockfileVersion":2,"packages":{{"node_modules/a":{{{GOOD}}}}},"dependencies":{{"a":{{{dependency}}}}}}}"#)
+    }
+
+    #[test]
+    fn a_v2_dependencies_section_that_disagrees_with_packages_is_refused() {
+        assert!(parse(&lock_v2(r#""version":"1.0.0","resolved":"https://evil.example/x.tgz","integrity":"sha512-evil""#)).is_err());
+    }
+
+    #[test]
+    fn a_nested_v2_dependency_that_disagrees_with_packages_is_refused() {
+        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"9.0.0"}}}}"#);
+        assert!(parse(&lock_v2(&nested)).is_err());
+    }
+
+    #[test]
+    fn a_v2_dependencies_section_that_agrees_with_packages_reads() {
+        assert_eq!(parse(&lock_v2(GOOD)).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn an_install_script_going_true_warns() {
+        assert_eq!(warned_names(PATH, &good_a(), &lock(r#""node_modules/a":{GOOD,"hasInstallScript":true}"#)), ["a"]);
+    }
+
+    #[test]
+    fn an_install_script_going_away_makes_no_row() {
+        let base = lock(r#""node_modules/a":{GOOD,"hasInstallScript":true}"#);
+        assert_eq!(summarize(PATH, Some(&base), Some(&good_a())).unwrap().changes, vec![]);
+    }
+
+    #[test]
+    fn a_new_name_or_dependency_list_makes_no_row() {
+        let head = lock(r#""node_modules/a":{"name":"other",GOOD,"dependencies":{"c":"*"}}"#);
+        assert_eq!(summarize(PATH, Some(&good_a()), Some(&head)).unwrap().changes, vec![]);
+    }
+
+    #[test]
+    fn a_bundled_copy_of_a_known_version_does_not_warn() {
+        let head = lock(
+            r#""node_modules/a":{GOOD},"node_modules/x":{"version":"1.0.0","resolved":"https://registry.npmjs.org/x/-/x-1.0.0.tgz","integrity":"sha512-x"},"node_modules/x/node_modules/a":{"version":"1.0.0","inBundle":true}"#,
+        );
+        assert_eq!(warned_names(PATH, &good_a(), &head), [""; 0]);
+    }
+
+    #[test]
+    fn a_copy_turning_bundled_warns() {
+        let head = lock(r#""node_modules/x/node_modules/a":{"version":"1.0.0","inBundle":true}"#);
         assert_eq!(warned_names(PATH, &good_a(), &head), ["a"]);
     }
 
