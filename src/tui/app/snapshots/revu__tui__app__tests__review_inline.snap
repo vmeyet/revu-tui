@@ -11,7 +11,7 @@ expression: "render(&mut app, 100, 18)"
 │     ▾ @@ -1,6 +1,6 @@ fn main                                                                    │
 │       1  fn main() {                                                                             │
 │       2      let a = 1;                                                                          │
-│ ▎◆    3 ~    let b = 2;20;                                                                       │
+│ ▎◆    3 ~    let b = 220;                                                                        │
 │        │ ◆ unresolved · lea · Why twenty?                                                        │
 │       4      println!("{}", a + b);                                                              │
 │       5 -    let d = 4;                                                                          │

@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **A changed line marks the code that changed, not what is stuck to it.**
+  In the diff and the outline's signatures, where more small edits now read as one row.
+  Nothing to do: `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`.
+
 - **Bold, italic and struck text in comments read as they do on the forge.**
   In the thread pane, the description, the answer pane and tables.
   Write `**bold**`, `_italic_` or `~~struck~~`; a marker inside a word or a code span stays as written.

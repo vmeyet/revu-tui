@@ -109,8 +109,8 @@ mod tests {
     fn an_inline_pair_selects_as_the_added_line_its_struck_words_standing_for_nothing() {
         let hunk = total_pair();
         let cells = pair_cells(&hunk.lines[0], &hunk.lines[1]);
-        assert_eq!(cells.len(), "const total = 1;2;".len());
-        assert_eq!(cells[14..], [14..14, 14..14, 14..15, 15..16]);
+        assert_eq!(cells.len(), "const total = 12;".len());
+        assert_eq!(cells[14..], [14..14, 14..15, 15..16]);
     }
 
     #[test]

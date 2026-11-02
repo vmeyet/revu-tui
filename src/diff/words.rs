@@ -1,6 +1,7 @@
 //! Intra-line highlighting: a run of removed lines followed by an equal run of added lines pairs up
 //! line by line, the rule GitHub and delta use. Unequal runs stay plain.
-//! `similar` tokenises on whitespace, so `Client::new();` is one word and a changed word never drags its space along.
+//! A line is cut like code, into identifiers, whitespace runs and single punctuation characters, so
+//! `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`, and a changed word never drags its space along.
 use super::{Hunk, Line, LineKind};
 use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
@@ -80,8 +81,13 @@ pub(crate) fn segments(old: &Line, new: &Line) -> Vec<Segment> {
 }
 
 pub(crate) fn text_segments(old: &str, new: &str) -> Vec<Segment> {
+    merge_close_changes(token_runs(old, new))
+}
+
+fn token_runs(old: &str, new: &str) -> Vec<Segment> {
+    let (old_tokens, new_tokens) = (tokens(old), tokens(new));
     let mut found: Vec<Segment> = Vec::new();
-    for change in TextDiff::from_words(old, new).iter_all_changes() {
+    for change in TextDiff::from_slices(&old_tokens, &new_tokens).iter_all_changes() {
         let text = change.value();
         match (found.last_mut(), change.tag()) {
             (Some(Segment::Same(run)), ChangeTag::Equal)
@@ -95,6 +101,55 @@ pub(crate) fn text_segments(old: &str, new: &str) -> Vec<Segment> {
         }
     }
     found
+}
+
+/// Cuts `line` into identifier runs, whitespace runs and single punctuation characters.
+fn tokens(line: &str) -> Vec<&str> {
+    let mut found = Vec::new();
+    let mut rest = line;
+    while let Some(first) = rest.chars().next() {
+        let len = match first {
+            c if is_word_char(c) => prefix_len(rest, is_word_char),
+            c if c.is_whitespace() => prefix_len(rest, char::is_whitespace),
+            c => c.len_utf8(),
+        };
+        let (token, after) = rest.split_at(len);
+        found.push(token);
+        rest = after;
+    }
+    found
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+fn prefix_len(text: &str, keep: fn(char) -> bool) -> usize {
+    text.find(|c| !keep(c)).unwrap_or(text.len())
+}
+
+/// Joins two replacements with only a thin gap between them, the gap turning into old and new text.
+/// Both must replace text: a change on one side only keeps its gap, so `new()` to `with_key(key)`
+/// never marks an unchanged bracket on the old line just to join `with_key` and `key`.
+fn merge_close_changes(runs: Vec<Segment>) -> Vec<Segment> {
+    let mut found = Vec::new();
+    for run in runs {
+        found.push(run);
+        if let [.., Segment::Old(old), Segment::New(new), Segment::Same(gap), Segment::Old(next_old), Segment::New(next_new)] =
+            found.as_mut_slice()
+            && is_thin_gap(gap)
+        {
+            old.extend([gap.as_str(), next_old]);
+            new.extend([gap.as_str(), next_new]);
+            found.truncate(found.len() - 3);
+        }
+    }
+    found
+}
+
+/// Only whitespace, or one punctuation character.
+fn is_thin_gap(gap: &str) -> bool {
+    matches!(tokens(gap).as_slice(), [token] if !token.starts_with(is_word_char))
 }
 
 /// When a changed pair reads better as one row: few changed words, and most of both lines kept.
@@ -236,6 +291,16 @@ mod tests {
             }
 
             #[test]
+            fn no_thin_gap_is_left_between_two_replacements(old in line(), new in line()) {
+                let parts = text_segments(&old, &new);
+                for window in parts.windows(5) {
+                    if let [Segment::Old(_), Segment::New(_), Segment::Same(gap), Segment::Old(_), Segment::New(_)] = window {
+                        prop_assert!(!is_thin_gap(gap), "{gap:?} in {parts:?}");
+                    }
+                }
+            }
+
+            #[test]
             fn changed_ranges_sit_on_character_boundaries_in_order(old in line(), new in line()) {
                 let (old_words, new_words) = changed_ranges(&old, &new);
                 for (text, ranges) in [(&old, &old_words), (&new, &new_words)] {
@@ -282,8 +347,8 @@ mod tests {
     #[test]
     fn a_single_pair_marks_only_what_changed() {
         let hunk = mark(&parse(include_str!("fixtures/two_hunks.diff"))[0]);
-        assert_eq!(words_of(&hunk.lines[1]), vec!["Client::new();"]);
-        assert_eq!(words_of(&hunk.lines[2]), vec!["Client::with_key(key);"]);
+        assert_eq!(words_of(&hunk.lines[1]), vec!["new"]);
+        assert_eq!(words_of(&hunk.lines[2]), vec!["with_key", "key"]);
         assert!(hunk.lines[0].words.is_empty() && hunk.lines[3].words.is_empty());
     }
 
@@ -321,7 +386,57 @@ mod tests {
     #[test]
     fn segments_keep_the_shared_text_between_the_changes() {
         let [old, new] = marked_pair("let b = 2;", "let b = 20;");
-        assert_eq!(segments(&old, &new), vec![Segment::Same("let b = ".into()), Segment::Old("2;".into()), Segment::New("20;".into())]);
+        assert_eq!(
+            segments(&old, &new),
+            vec![Segment::Same("let b = ".into()), Segment::Old("2".into()), Segment::New("20".into()), Segment::Same(";".into())]
+        );
+    }
+
+    fn same(text: &str) -> Segment {
+        Segment::Same(text.into())
+    }
+
+    fn old(text: &str) -> Segment {
+        Segment::Old(text.into())
+    }
+
+    fn new(text: &str) -> Segment {
+        Segment::New(text.into())
+    }
+
+    #[test]
+    fn a_line_cuts_into_identifiers_whitespace_runs_and_single_punctuation() {
+        assert_eq!(tokens("é_1  🦀::x"), ["é_1", "  ", "🦀", ":", ":", "x"]);
+    }
+
+    #[test]
+    fn replacements_with_only_whitespace_between_them_merge() {
+        assert_eq!(text_segments("a foo  bar;", "a baz  qux;"), [same("a "), old("foo  bar"), new("baz  qux"), same(";")]);
+    }
+
+    #[test]
+    fn replacements_with_one_punctuation_character_between_them_merge() {
+        assert_eq!(text_segments("a.b", "x.y"), [old("a.b"), new("x.y")]);
+    }
+
+    #[test]
+    fn a_chain_of_close_replacements_merges_into_one() {
+        assert_eq!(text_segments("a b.c", "x y.z"), [old("a b.c"), new("x y.z")]);
+    }
+
+    #[test]
+    fn a_comma_and_its_space_keep_two_replacements_apart() {
+        assert_eq!(text_segments("f(a, b)", "f(x, y)"), [same("f("), old("a"), new("x"), same(", "), old("b"), new("y"), same(")")]);
+    }
+
+    #[test]
+    fn an_identifier_keeps_two_replacements_apart() {
+        assert_eq!(text_segments("(x)", "[x]"), [old("("), new("["), same("x"), old(")"), new("]")]);
+    }
+
+    #[test]
+    fn a_change_on_one_side_keeps_its_gap_unmarked() {
+        assert_eq!(text_segments("new()", "with_key(key)"), [old("new"), new("with_key"), same("("), new("key"), same(")")]);
     }
 
     #[test]
@@ -331,7 +446,8 @@ mod tests {
             ("let b = 2;", "let b = 20;", true, "one word"),
             ("let total = price * qty;", "let total = cost * count;", true, "two words, most kept"),
             ("a b c d e f g h", "a x c y e z g h", false, "three changed words"),
-            ("Key::from(card.number())", "Key::from((card.number(), card.expiry()))", false, "one token is the whole line"),
+            ("Key::from(card.number())", "Key::from((card.number(), card.expiry()))", false, "too much of the new line is added"),
+            ("old words here", "new terms there", false, "a merged rewrite keeps nothing"),
             ("let a = 1;", "let a = 1;", false, "nothing changed"),
             ("", "x", false, "an empty side keeps nothing"),
         ];

@@ -8,7 +8,7 @@ expression: "drawn.map(|line| spans_text(&line.spans)).collect::<Vec<_>>().join(
               │      │       │ billing for │
               │      │       │ each        │
               │      │       │ workspace   │
-           3 +│ Team │ 12    │ shared      │
+           3 +│ Team │ 12    │ team        │
               │      │       │ billing for │
               │      │       │ all         │
               │      │       │ workspaces  │
