@@ -1,7 +1,7 @@
 //! The rows of the review pane in reading order, after folds, pairs, peeks and context.
 use super::{File, Markers, Place, Review, Side};
 use crate::diff::words;
-use crate::diff::{self, Hunk, LineKind};
+use crate::diff::{self, Hunk, LineKind, LinePair};
 
 /// One row of the review pane, in reading order, after folds. Indexes point into `Review`, so a row is tiny.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,16 +84,36 @@ impl Review {
     }
 
     /// The removed and added lines of `hunk` read as one row; none while a peek shows one side.
-    fn pairs(&self, hunk: &Hunk) -> Vec<(usize, usize)> {
+    fn pairs(&self, hunk: &Hunk) -> Vec<LinePair> {
         if self.peek.is_some() {
             return vec![];
         }
-        let mut pairs = if self.shows_side_by_side() { words::side_by_side_pairs(hunk) } else { words::inline_pairs(hunk, self.inline) };
-        if self.quiet_whitespace {
-            let quiet: Vec<(usize, usize)> = words::whitespace_pairs(hunk).into_iter().filter(|pair| !pairs.contains(pair)).collect();
-            pairs.extend(quiet);
+        if self.shows_side_by_side() {
+            return words::side_by_side_pairs(hunk);
         }
-        pairs
+        if self.quiet_whitespace { words::inline_or_whitespace_pairs(hunk, self.inline) } else { words::inline_pairs(hunk, self.inline) }
+    }
+
+    /// The rows of a hunk's lines. An added line waiting ahead of a later twin reads before that twin's row,
+    /// so the numbers of both sides only go up.
+    fn line_rows(&self, file: usize, hunk_index: usize, hunk: &Hunk) -> Vec<Row> {
+        let lines = &hunk.lines;
+        let line_row = |index| Row::Line { file, hunk: hunk_index, index };
+        let unread = |index: usize, read_added: usize| {
+            (lines[index].kind != LineKind::Added || index >= read_added) && self.shows_line(&lines[index])
+        };
+        let mut rows = Vec::with_capacity(lines.len());
+        let (mut next, mut read_added) = (0, 0);
+        for LinePair { removed, added } in self.pairs(hunk) {
+            let before_removed = (next..removed).filter(|&index| unread(index, read_added));
+            let before_added = (read_added.max(removed + 1)..added).filter(|&index| lines[index].kind == LineKind::Added);
+            rows.extend(before_removed.chain(before_added).map(line_row));
+            rows.push(Row::Pair { file, hunk: hunk_index, removed, added });
+            (next, read_added) = (removed + 1, added + 1);
+        }
+        let rest = (next..lines.len()).filter(|&index| unread(index, read_added));
+        rows.extend(rest.map(line_row));
+        rows
     }
 
     pub(crate) fn rows(&self) -> Vec<Row> {
@@ -145,17 +165,7 @@ impl Review {
                 let offset = i64::from(hunk.old_start) - i64::from(hunk.new_start);
                 rows.extend((from..hunk.new_start).map(|new| context_row(index, hunk_index, offset, new)));
             }
-            let pairs = self.pairs(hunk);
-            for (line_index, line) in hunk.lines.iter().enumerate() {
-                if !self.shows_line(line) || pairs.iter().any(|&(_, added)| added == line_index) {
-                    continue;
-                }
-                if let Some(&(removed, added)) = pairs.iter().find(|&&(removed, _)| removed == line_index) {
-                    rows.push(Row::Pair { file: index, hunk: hunk_index, removed, added });
-                } else {
-                    rows.push(Row::Line { file: index, hunk: hunk_index, index: line_index });
-                }
-            }
+            rows.extend(self.line_rows(index, hunk_index, hunk));
             let last_new = hunk.lines.iter().filter_map(|l| l.new).max().unwrap_or(hunk.new_start.saturating_sub(1));
             let last_old = hunk.lines.iter().filter_map(|l| l.old).max().unwrap_or(hunk.old_start.saturating_sub(1));
             shown_until = last_new;
@@ -193,7 +203,12 @@ mod tests {
         assert_eq!(rows[2], Row::File { index: 0, open: true });
         assert_eq!(rows[3], Row::Hunk { file: 0, index: 0, open: true });
         let lines = review.files[0].hunks.iter().map(|h| h.lines.len()).sum::<usize>();
-        assert_eq!(rows.len(), 1 + 2 + 2 + 2 + lines, "header, gaps, files, hunks and lines only: conversations live in the pane");
+        let inline_pairs = 1;
+        assert_eq!(
+            rows.len(),
+            1 + 2 + 2 + 2 + lines - inline_pairs,
+            "header, gaps, files, hunks and lines only: conversations live in the pane"
+        );
         assert_eq!(rows.last(), Some(&Row::File { index: 1, open: false }), "the lock file starts folded");
         assert_eq!(rows.iter().filter(|r| matches!(r, Row::Gap)).count(), 2);
     }
@@ -282,6 +297,100 @@ mod tests {
         assert!(narrow.side_by_side && !narrow.shows_side_by_side(), "the choice stays");
         assert_eq!(line_rows(&narrow), line_rows(&review));
         assert_eq!(line_rows(&narrow.with_wide(true)), [(0, 2), (1, 1)]);
+    }
+
+    const SKIPPED_LINE: &str = "@@ -1,3 +1,2 @@\n-let a = 1;\n-drop_this(now);\n-let c = 3;\n+let a = 10;\n+let c = 30;\n";
+    const LATE_TWIN: &str = "@@ -1 +1,2 @@\n-let b = 2;\n+fresh_line(here);\n+let b = 20;\n";
+
+    #[test]
+    fn inline_a_removed_line_without_a_twin_reads_between_the_pairs_around_it() {
+        assert_eq!(line_rows(&review_of_one(SKIPPED_LINE)), [(0, 3), (1, 1), (2, 4)]);
+    }
+
+    #[test]
+    fn inline_an_added_line_ahead_of_a_twin_reads_before_the_pair() {
+        assert_eq!(line_rows(&review_of_one(LATE_TWIN)), [(1, 1), (0, 2)]);
+    }
+
+    #[test]
+    fn side_by_side_a_removed_line_without_a_twin_gets_a_row_of_its_own() {
+        assert_eq!(line_rows(&review_of_one(SKIPPED_LINE).with_side_by_side(true)), [(0, 3), (1, 1), (2, 4)]);
+    }
+
+    #[test]
+    fn side_by_side_an_added_line_ahead_of_a_twin_gets_a_row_of_its_own() {
+        assert_eq!(line_rows(&review_of_one(LATE_TWIN).with_side_by_side(true)), [(1, 1), (0, 2)]);
+    }
+
+    #[test]
+    fn a_reindented_twin_past_an_added_line_reads_quiet_under_w() {
+        let review = review_of_one("@@ -1 +1,2 @@\n-\t\t\tone();\n+fresh_line(here);\n+            one();\n");
+        assert_eq!(line_rows(&review.with_quiet_whitespace(true)), [(1, 1), (0, 2)]);
+    }
+
+    #[test]
+    fn a_pair_that_skipped_a_line_stands_for_the_numbers_of_its_own_two_lines() {
+        let review = review_of_one(SKIPPED_LINE);
+        let anchor = |side, line| Anchor { path: "a.rs".into(), side, line };
+        let second = Row::Pair { file: 0, hunk: 0, removed: 2, added: 4 };
+        assert_eq!(review.place_of(&second), Some(Place::Line { file: 0, new: Some(2), old: Some(3) }));
+        assert!(review.row_holds(&second, &anchor(Side::Old, 3)) && review.row_holds(&second, &anchor(Side::New, 2)));
+        let skipped = Row::Line { file: 0, hunk: 0, index: 1 };
+        assert_eq!(review.place_of(&skipped), Some(Place::Line { file: 0, new: None, old: Some(2) }));
+        assert!(review.row_holds(&skipped, &anchor(Side::Old, 2)) && !review.row_holds(&second, &anchor(Side::Old, 2)));
+    }
+
+    #[test]
+    fn a_draft_on_a_line_without_a_twin_marks_that_row_alone() {
+        let draft = Draft::new(Some(Anchor { path: "a.rs".into(), side: Side::Old, line: 2 }), "nit");
+        let review = review_of_one(SKIPPED_LINE).with_drafts(vec![draft]);
+        let markers = review.markers();
+        let marked: Vec<Row> = review.rows().into_iter().filter(|row| review.marker_of(&markers, row).is_some()).collect();
+        assert_eq!(marked, [Row::Line { file: 0, hunk: 0, index: 1 }]);
+    }
+
+    mod properties {
+        use super::super::*;
+        use super::review_of_one;
+        use crate::diff::arbitrary;
+        use proptest::prelude::*;
+
+        fn lines_read(rows: &[Row]) -> Vec<usize> {
+            rows.iter()
+                .flat_map(|row| match row {
+                    Row::Line { index, .. } => vec![*index],
+                    Row::Pair { removed, added, .. } => vec![*removed, *added],
+                    _ => vec![],
+                })
+                .collect()
+        }
+
+        fn layouts(review: Review) -> [Review; 4] {
+            [
+                review.clone(),
+                review.clone().with_quiet_whitespace(true),
+                review.clone().with_side_by_side(true),
+                review.with_side_by_side(true).with_quiet_whitespace(true),
+            ]
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            #[test]
+            fn every_line_reads_once_and_the_numbers_of_both_sides_only_go_up(diff in arbitrary::alike_diff()) {
+                for review in layouts(review_of_one(&diff)) {
+                    let lines = &review.files[0].hunks[0].lines;
+                    let read = lines_read(&review.rows());
+                    let mut sorted = read.clone();
+                    sorted.sort_unstable();
+                    prop_assert_eq!(sorted, (0..lines.len()).collect::<Vec<_>>());
+                    for numbers in [read.iter().filter_map(|&i| lines[i].old).collect::<Vec<_>>(), read.iter().filter_map(|&i| lines[i].new).collect()] {
+                        prop_assert!(numbers.is_sorted(), "{numbers:?}");
+                    }
+                }
+            }
+        }
     }
 
     fn contexts(review: &Review) -> Vec<(usize, u32, u32)> {

@@ -1,26 +1,106 @@
-//! Intra-line highlighting: a run of removed lines followed by an equal run of added lines pairs up
-//! line by line, the rule GitHub and delta use. Unequal runs stay plain.
+//! Intra-line highlighting: each run of removed lines is aligned with the run of added lines after it, so a line
+//! pairs with its most alike twin wherever it sits; pairs never cross, and a line with no twin stays plain.
 //! A line is cut like code, into identifiers, whitespace runs and single punctuation characters, so
 //! `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`, and a changed word never drags its space along.
-use super::{Hunk, Line, LineKind};
+use super::{Hunk, Line, LineKind, LinePair};
 use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
 
+/// Least similarity, over a line's code tokens, for two lines to count as twins.
+const MIN_LINE_SIMILARITY: f32 = 0.6;
+/// Longest run, on either side, that is aligned: aligning costs one word diff per pair of lines.
+const MAX_ALIGNED_RUN: usize = 50;
+/// Most work an alignment may take, as the bytes of the `-` run times the bytes of the `+` run, what the
+/// word diffs of all its pairs of lines add up to: this much is 50 lines of 630 bytes a side, about 200ms.
+const MAX_ALIGNED_WORK: usize = 1_000_000_000;
+
 pub(crate) fn mark(hunk: &Hunk) -> Hunk {
+    let pairs = aligned_pairs(&hunk.lines);
     let mut lines = hunk.lines.clone();
-    for (removed, added) in pairs(&hunk.lines) {
-        for (r, a) in removed.zip(added) {
-            let (old_words, new_words) = changed_ranges(&hunk.lines[r].text, &hunk.lines[a].text);
-            lines[r].words = old_words;
-            lines[a].words = new_words;
-        }
+    for &LinePair { removed, added } in &pairs {
+        let (old_words, new_words) = changed_ranges(&hunk.lines[removed].text, &hunk.lines[added].text);
+        lines[removed].words = old_words;
+        lines[added].words = new_words;
     }
-    Hunk { lines, ..hunk.clone() }
+    Hunk { lines, pairs, ..hunk.clone() }
 }
 
-/// Index ranges of each `-` run and the `+` run right after it, kept only when both are as long.
-fn pairs(lines: &[Line]) -> Vec<(Range<usize>, Range<usize>)> {
-    changes(lines).into_iter().filter(|(removed, added)| !removed.is_empty() && removed.len() == added.len()).collect()
+fn aligned_pairs(lines: &[Line]) -> Vec<LinePair> {
+    let both_sides = changes(lines).into_iter().filter(|(removed, added)| !removed.is_empty() && !added.is_empty());
+    both_sides.flat_map(|(removed, added)| align_run(lines, removed, added)).collect()
+}
+
+/// The twins of a `-` run in the `+` run after it. A run too large to align still keeps its whitespace-only
+/// changes by position, so a reindented block reads quiet under `W`.
+fn align_run(lines: &[Line], removed: Range<usize>, added: Range<usize>) -> Vec<LinePair> {
+    let (old, new) = (&lines[removed.clone()], &lines[added.clone()]);
+    if too_large_to_align(old, new) {
+        return pairs_by_position(removed, added)
+            .filter(|pair| same_but_whitespace(&lines[pair.removed].text, &lines[pair.added].text))
+            .collect();
+    }
+    let in_hunk = |pair: LinePair| LinePair { removed: removed.start + pair.removed, added: added.start + pair.added };
+    best_alignment(&twin_scores(old, new)).into_iter().map(in_hunk).collect()
+}
+
+fn pairs_by_position(removed: Range<usize>, added: Range<usize>) -> impl Iterator<Item = LinePair> {
+    removed.zip(added).map(|(removed, added)| LinePair { removed, added })
+}
+
+fn too_large_to_align(removed: &[Line], added: &[Line]) -> bool {
+    let bytes = |run: &[Line]| run.iter().map(|line| line.text.len()).sum::<usize>();
+    removed.len() > MAX_ALIGNED_RUN || added.len() > MAX_ALIGNED_RUN || bytes(removed) * bytes(added) > MAX_ALIGNED_WORK
+}
+
+/// How alike each removed line is to each added line, `0` below the bar for twins.
+fn twin_scores(removed: &[Line], added: &[Line]) -> Vec<Vec<f32>> {
+    let old_tokens: Vec<Vec<&str>> = removed.iter().map(|line| code_tokens(&line.text)).collect();
+    let new_tokens: Vec<Vec<&str>> = added.iter().map(|line| code_tokens(&line.text)).collect();
+    let score = |r: usize, a: usize| {
+        let alike = if same_but_whitespace(&removed[r].text, &added[a].text) { 1.0 } else { similarity(&old_tokens[r], &new_tokens[a]) };
+        if alike >= MIN_LINE_SIMILARITY { alike } else { 0.0 }
+    };
+    (0..removed.len()).map(|r| (0..added.len()).map(|a| score(r, a)).collect()).collect()
+}
+
+/// The pairs of `scores` rows and columns with the highest total that never cross, all above `0`; ties go to the earliest pair.
+fn best_alignment(scores: &[Vec<f32>]) -> Vec<LinePair> {
+    let (olds, news) = (scores.len(), scores.first().map_or(0, Vec::len));
+    let mut best = vec![vec![0.0_f32; news + 1]; olds + 1];
+    for old in (0..olds).rev() {
+        for new in (0..news).rev() {
+            let taken = if scores[old][new] > 0.0 { scores[old][new] + best[old + 1][new + 1] } else { 0.0 };
+            best[old][new] = taken.max(best[old + 1][new]).max(best[old][new + 1]);
+        }
+    }
+    let mut found = Vec::new();
+    let (mut old, mut new) = (0, 0);
+    while old < olds && new < news {
+        let skipped = best[old + 1][new].max(best[old][new + 1]);
+        if scores[old][new] > 0.0 && scores[old][new] + best[old + 1][new + 1] >= skipped {
+            found.push(LinePair { removed: old, added: new });
+            old += 1;
+            new += 1;
+        } else if best[old + 1][new] >= best[old][new + 1] {
+            old += 1;
+        } else {
+            new += 1;
+        }
+    }
+    found
+}
+
+/// How much of two token lists match in order, from 0 to 1; nothing alike when either is empty.
+pub(crate) fn similarity(old: &[&str], new: &[&str]) -> f32 {
+    if old.is_empty() || new.is_empty() {
+        return 0.0;
+    }
+    TextDiff::from_slices(old, new).ratio()
+}
+
+/// The tokens that make a line's code what it is: indentation and spacing say nothing about which line it is.
+fn code_tokens(line: &str) -> Vec<&str> {
+    tokens(line).into_iter().filter(|token| !token.starts_with(char::is_whitespace)).collect()
 }
 
 /// Index ranges of each `-` run and the `+` run right after it, either one possibly empty.
@@ -177,28 +257,35 @@ impl InlineRule {
     }
 }
 
-/// The `(removed, added)` line indexes of the pairs in `hunk` that `rule` lets read as one row.
-pub(crate) fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<(usize, usize)> {
-    pairs(&hunk.lines)
-        .into_iter()
-        .flat_map(|(removed, added)| removed.zip(added))
-        .filter(|&(r, a)| rule.fits(&hunk.lines[r], &hunk.lines[a]))
-        .collect()
+/// The pairs `mark` found in `hunk` that `rule` lets read as one row.
+pub(crate) fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<LinePair> {
+    pairs_where(hunk, |old, new| rule.fits(old, new))
 }
 
-/// The `(removed, added)` rows of a side by side diff: each `-` run beside the `+` run after it,
-/// line by line, the longer run's extra lines left without a twin.
-pub(crate) fn side_by_side_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
-    changes(&hunk.lines).into_iter().flat_map(|(removed, added)| removed.zip(added)).collect()
+/// The pairs `inline_pairs` finds, and those whose lines differ in whitespace only, which read as one row under `W`.
+pub(crate) fn inline_or_whitespace_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<LinePair> {
+    pairs_where(hunk, |old, new| rule.fits(old, new) || same_but_whitespace(&old.text, &new.text))
 }
 
-/// Every equal-run pair whose lines differ in whitespace only.
-pub(crate) fn whitespace_pairs(hunk: &Hunk) -> Vec<(usize, usize)> {
-    pairs(&hunk.lines)
-        .into_iter()
-        .flat_map(|(removed, added)| removed.zip(added))
-        .filter(|&(r, a)| same_but_whitespace(&hunk.lines[r].text, &hunk.lines[a].text))
-        .collect()
+fn pairs_where(hunk: &Hunk, keep: impl Fn(&Line, &Line) -> bool) -> Vec<LinePair> {
+    hunk.pairs.iter().copied().filter(|pair| keep(&hunk.lines[pair.removed], &hunk.lines[pair.added])).collect()
+}
+
+/// The rows of a side by side diff holding both sides: the pairs `mark` found, and between them the lines
+/// without a twin set beside each other by position, the longer side's extra lines left alone.
+pub(crate) fn side_by_side_pairs(hunk: &Hunk) -> Vec<LinePair> {
+    let mut marked = hunk.pairs.iter().copied().peekable();
+    let mut found = Vec::new();
+    for (removed, added) in changes(&hunk.lines) {
+        let (mut old_at, mut new_at) = (removed.start, added.start);
+        while let Some(pair) = marked.next_if(|pair| removed.contains(&pair.removed)) {
+            found.extend(pairs_by_position(old_at..pair.removed, new_at..pair.added));
+            found.push(pair);
+            (old_at, new_at) = (pair.removed + 1, pair.added + 1);
+        }
+        found.extend(pairs_by_position(old_at..removed.end, new_at..added.end));
+    }
+    found
 }
 
 /// Equal once every space, tab and line ending is taken out.
@@ -240,10 +327,15 @@ mod tests {
     use super::*;
     use crate::diff::parse;
 
-    /// A removed line and its added twin, marked as a review loads them.
+    /// Two lines read as twins whatever their similarity, each holding the ranges `mark` stores on a pair.
     fn marked_pair(old: &str, new: &str) -> [Line; 2] {
-        let hunk = mark(&parse(&format!("@@ -1 +1 @@\n-{old}\n+{new}\n"))[0]);
-        [hunk.lines[0].clone(), hunk.lines[1].clone()]
+        let hunk = &parse(&format!("@@ -1 +1 @@\n-{old}\n+{new}\n"))[0];
+        let (old_words, new_words) = changed_ranges(old, new);
+        [Line { words: old_words, ..hunk.lines[0].clone() }, Line { words: new_words, ..hunk.lines[1].clone() }]
+    }
+
+    fn pair(removed: usize, added: usize) -> LinePair {
+        LinePair { removed, added }
     }
 
     fn words_of(line: &Line) -> Vec<&str> {
@@ -258,6 +350,10 @@ mod tests {
 
         fn line() -> impl Strategy<Value = String> {
             "[a-z0-9 \t(){};=.,éü🦀]{0,40}"
+        }
+
+        fn alike_hunk() -> impl Strategy<Value = Hunk> {
+            arbitrary::alike_diff().prop_map(|text| parse(&text).remove(0))
         }
 
         fn joined(parts: &[Segment], keep: impl Fn(&Segment) -> Option<&str>) -> String {
@@ -332,14 +428,53 @@ mod tests {
             }
 
             #[test]
-            fn an_inline_pair_is_always_a_removed_line_then_its_added_twin(generated in arbitrary::diff()) {
-                for hunk in parse(&generated.text()) {
-                    for (removed, added) in inline_pairs(&hunk, InlineRule::default()) {
-                        prop_assert_eq!(hunk.lines[removed].kind, LineKind::Removed);
-                        prop_assert_eq!(hunk.lines[added].kind, LineKind::Added);
-                        prop_assert!(removed < added);
+            fn an_inline_pair_is_always_a_removed_line_then_its_added_twin(hunk in alike_hunk()) {
+                let hunk = mark(&hunk);
+                for LinePair { removed, added } in inline_pairs(&hunk, InlineRule::default()) {
+                    prop_assert_eq!(hunk.lines[removed].kind, LineKind::Removed);
+                    prop_assert_eq!(hunk.lines[added].kind, LineKind::Added);
+                    prop_assert!(removed < added);
+                }
+            }
+
+            #[test]
+            fn every_marked_pair_reads_back_as_a_fresh_word_diff(hunk in alike_hunk()) {
+                let hunk = mark(&hunk);
+                for LinePair { removed, added } in &hunk.pairs {
+                    let (old, new) = (&hunk.lines[*removed], &hunk.lines[*added]);
+                    prop_assert_eq!(segments(old, new), text_segments(&old.text, &new.text));
+                }
+            }
+
+            #[test]
+            fn only_a_paired_line_holds_changed_ranges(hunk in alike_hunk()) {
+                let hunk = mark(&hunk);
+                for (index, line) in hunk.lines.iter().enumerate() {
+                    if !line.words.is_empty() {
+                        prop_assert!(hunk.pairs.iter().any(|pair| pair.removed == index || pair.added == index));
                     }
                 }
+            }
+
+            #[test]
+            fn marked_pairs_never_cross_and_stay_inside_one_change(hunk in alike_hunk()) {
+                let hunk = mark(&hunk);
+                for neighbours in hunk.pairs.windows(2) {
+                    prop_assert!(neighbours[0].removed < neighbours[1].removed && neighbours[0].added < neighbours[1].added);
+                }
+                for LinePair { removed, added } in &hunk.pairs {
+                    prop_assert!(hunk.lines[*removed..*added].iter().all(|line| line.kind != LineKind::Context));
+                }
+            }
+
+            #[test]
+            fn side_by_side_pairs_never_cross_and_hold_every_marked_pair(hunk in alike_hunk()) {
+                let hunk = mark(&hunk);
+                let rows = side_by_side_pairs(&hunk);
+                for neighbours in rows.windows(2) {
+                    prop_assert!(neighbours[0].removed < neighbours[1].removed && neighbours[0].added < neighbours[1].added);
+                }
+                prop_assert!(hunk.pairs.iter().all(|pair| rows.contains(pair)));
             }
         }
     }
@@ -353,18 +488,132 @@ mod tests {
     }
 
     #[test]
-    fn unequal_runs_get_no_ranges() {
-        let hunk = mark(&parse(include_str!("fixtures/tabs.diff"))[0]);
-        assert!(hunk.lines.iter().all(|l| l.words.is_empty()), "one removed, two added");
-    }
-
-    #[test]
-    fn equal_runs_pair_line_by_line() {
-        let hunk = mark(&parse("@@ -1,2 +1,2 @@\n-a b c\n-x y z\n+a B c\n+x y Z\n")[0]);
+    fn runs_of_alike_lines_pair_each_line_with_its_twin() {
+        let hunk = mark(&parse("@@ -1,2 +1,2 @@\n-a b c d\n-w x y z\n+a B c d\n+w x y Z\n")[0]);
+        assert_eq!(hunk.pairs, [pair(0, 2), pair(1, 3)]);
         assert_eq!(words_of(&hunk.lines[0]), vec!["b"]);
         assert_eq!(words_of(&hunk.lines[2]), vec!["B"]);
         assert_eq!(words_of(&hunk.lines[1]), vec!["z"]);
         assert_eq!(words_of(&hunk.lines[3]), vec!["Z"]);
+    }
+
+    /// `-` and `+` lines for each text of `old` and `new`, in a single change.
+    fn change_of(old: &[impl AsRef<str>], new: &[impl AsRef<str>]) -> Hunk {
+        let removed = old.iter().map(|text| format!("-{}\n", text.as_ref()));
+        let added = new.iter().map(|text| format!("+{}\n", text.as_ref()));
+        let body: String = removed.chain(added).collect();
+        mark(&parse(&format!("@@ -1 +1 @@\n{body}"))[0])
+    }
+
+    #[test]
+    fn a_run_one_line_longer_on_one_side_still_marks_its_twin() {
+        let hunk = mark(&parse(include_str!("fixtures/tabs.diff"))[0]);
+        assert_eq!(hunk.pairs, [pair(1, 2)]);
+        assert_eq!(words_of(&hunk.lines[1]), vec!["2"]);
+        assert_eq!(words_of(&hunk.lines[2]), vec!["3"]);
+        assert_eq!(words_of(&hunk.lines[3]), [] as [&str; 0]);
+    }
+
+    #[test]
+    fn a_line_inserted_and_another_deleted_leave_the_lines_between_with_their_own_twins() {
+        let hunk = change_of(
+            &["let a = 1;", "let b = 2;", "let c = 3;", "gone_for_good(now);"],
+            &["brand_new(call);", "let a = 10;", "let b = 20;", "let c = 30;"],
+        );
+        assert_eq!(hunk.pairs, [pair(0, 5), pair(1, 6), pair(2, 7)]);
+        assert_eq!(words_of(&hunk.lines[6]), vec!["20"]);
+    }
+
+    #[test]
+    fn a_full_rewrite_gets_no_ranges() {
+        let hunk = change_of(&["let total = price * qty;", "return total;"], &["for item in cart {", "    charge(item)?;"]);
+        assert_eq!(hunk.pairs, []);
+        assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
+    }
+
+    #[test]
+    fn a_removed_line_with_no_twin_between_two_pairs_gets_no_ranges() {
+        let hunk = change_of(&["let a = 1;", "drop_this(now);", "let c = 3;"], &["let a = 10;", "let c = 30;"]);
+        assert_eq!(hunk.pairs, [pair(0, 3), pair(2, 4)]);
+        assert_eq!(words_of(&hunk.lines[1]), [] as [&str; 0]);
+    }
+
+    #[test]
+    fn lines_alike_only_in_their_indentation_are_no_twins() {
+        let hunk = change_of(&["    one    "], &["    two    "]);
+        assert_eq!(hunk.pairs, []);
+    }
+
+    #[test]
+    fn lines_of_punctuation_alone_can_be_twins() {
+        let hunk = change_of(&["});"], &["})"]);
+        assert_eq!(hunk.pairs, [pair(0, 1)]);
+        assert_eq!(words_of(&hunk.lines[0]), vec![";"]);
+    }
+
+    #[test]
+    fn a_blank_line_that_lost_its_spaces_pairs_with_its_twin() {
+        assert_eq!(change_of(&["    "], &[""]).pairs, [pair(0, 1)]);
+    }
+
+    fn numbered_lines(count: usize, end: &str) -> Vec<String> {
+        (0..count).map(|n| format!("let value{n} = compute({n}){end}")).collect()
+    }
+
+    #[test]
+    fn a_run_at_the_cap_is_aligned() {
+        let (old, new) = (numbered_lines(MAX_ALIGNED_RUN, ";"), numbered_lines(MAX_ALIGNED_RUN, "?;"));
+        assert_eq!(change_of(&old, &new).pairs.len(), MAX_ALIGNED_RUN);
+    }
+
+    #[test]
+    fn a_run_past_the_cap_on_one_side_stays_unmarked() {
+        let (old, new) = (numbered_lines(2, ";"), numbered_lines(MAX_ALIGNED_RUN + 1, "?;"));
+        let hunk = change_of(&old, &new);
+        assert_eq!(hunk.pairs, []);
+        assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
+    }
+
+    #[test]
+    fn a_run_of_lines_too_heavy_to_diff_stays_unmarked() {
+        let heavy = |end: &str| format!("{} {end}", "word ".repeat(MAX_ALIGNED_WORK.isqrt() / 5 + 1));
+        let hunk = change_of(&[heavy("a")], &[heavy("b")]);
+        assert_eq!(hunk.pairs, []);
+        assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
+    }
+
+    #[test]
+    fn a_reindented_run_past_the_cap_still_pairs_its_whitespace_changes_by_position() {
+        let old = numbered_lines(MAX_ALIGNED_RUN + 1, ";");
+        let new: Vec<String> = old.iter().map(|line| format!("    {line}")).collect();
+        let hunk = change_of(&old, &new);
+        assert_eq!(hunk.pairs.len(), MAX_ALIGNED_RUN + 1);
+    }
+
+    #[test]
+    fn the_alignment_takes_the_best_total_over_the_best_single_pair() {
+        let scores = [vec![0.7, 0.9], vec![0.0, 0.7]];
+        assert_eq!(best_alignment(&scores), [pair(0, 0), pair(1, 1)]);
+    }
+
+    #[test]
+    fn the_alignment_of_a_tie_takes_the_earliest_pair() {
+        let scores = [vec![0.8, 0.8]];
+        assert_eq!(best_alignment(&scores), [pair(0, 0)]);
+    }
+
+    #[test]
+    fn the_alignment_of_crossing_lines_keeps_the_better_of_the_two() {
+        let scores = [vec![0.0, 0.9], vec![0.7, 0.0]];
+        assert_eq!(best_alignment(&scores), [pair(0, 1)]);
+    }
+
+    #[test]
+    fn similarity_is_the_share_of_tokens_matched_in_order_and_nothing_when_a_side_is_empty() {
+        assert!((similarity(&["a", "b"], &["a", "c"]) - 0.5).abs() < f32::EPSILON);
+        assert!((similarity(&["a"], &["a"]) - 1.0).abs() < f32::EPSILON);
+        assert!(similarity(&[], &[]).abs() < f32::EPSILON);
+        assert!(similarity(&["a"], &[]).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -460,21 +709,29 @@ mod tests {
     }
 
     #[test]
-    fn only_equal_runs_that_fit_the_rule_are_inline_pairs() {
-        let rule = InlineRule::default();
+    fn only_twins_that_fit_the_rule_are_inline_pairs() {
         let hunk =
             mark(&parse("@@ -1,3 +1,3 @@\n-let b = 2;\n-completely old text\n+let b = 20;\n+something else entirely\n let c = 3;\n")[0]);
-        assert_eq!(inline_pairs(&hunk, rule), vec![(0, 2)]);
-        let unequal = parse(include_str!("fixtures/tabs.diff"))[0].clone();
-        assert!(inline_pairs(&unequal, rule).is_empty(), "one removed, two added");
+        assert_eq!(inline_pairs(&hunk, InlineRule::default()), vec![pair(0, 2)]);
     }
 
     #[test]
-    fn side_by_side_pairs_each_removed_run_with_the_added_run_after_it_whatever_their_lengths() {
-        let hunk = &parse("@@ -1,7 +1,6 @@\n a\n-b\n-c\n-d\n+B\n e\n-f\n+F\n+G\n+H\n")[0];
-        assert_eq!(side_by_side_pairs(hunk), [(1, 4), (6, 7)], "three removed beside one added, one removed beside three added");
-        let added_only = &parse("@@ -1 +1,2 @@\n a\n+b\n")[0];
-        assert!(side_by_side_pairs(added_only).is_empty(), "an added run alone has no twin");
+    fn side_by_side_sets_lines_without_a_twin_beside_each_other_by_position() {
+        let hunk = mark(&parse("@@ -1,7 +1,6 @@\n a\n-b\n-c\n-d\n+B\n e\n-f\n+F\n+G\n+H\n")[0]);
+        assert_eq!(hunk.pairs, []);
+        assert_eq!(side_by_side_pairs(&hunk), [pair(1, 4), pair(6, 7)], "three removed beside one added, one removed beside three added");
+        let added_only = mark(&parse("@@ -1 +1,2 @@\n a\n+b\n")[0]);
+        assert!(side_by_side_pairs(&added_only).is_empty(), "an added run alone has no twin");
+    }
+
+    #[test]
+    fn side_by_side_keeps_twins_on_one_row_and_fills_the_gaps_around_them() {
+        let hunk = change_of(
+            &["drop this", "let a = 1;", "drop that", "let c = 3;"],
+            &["brand new", "another one", "let a = 10;", "let c = 30;", "and more"],
+        );
+        assert_eq!(hunk.pairs, [pair(1, 6), pair(3, 7)]);
+        assert_eq!(side_by_side_pairs(&hunk), [pair(0, 4), pair(1, 6), pair(3, 7)]);
     }
 
     #[test]
@@ -483,7 +740,7 @@ mod tests {
         assert!(same_but_whitespace("\tif x {", "    if x {"));
         assert!(!same_but_whitespace("let a = 1;", "let a = 1;"), "an unchanged line is no whitespace change");
         assert!(!same_but_whitespace("let a = 1;", "let a = 2;"));
-        let hunk = &parse("@@ -1,2 +1,2 @@\n-\tone();\n-two();\n+    one();\n+three();\n")[0];
-        assert_eq!(whitespace_pairs(hunk), [(0, 2)]);
+        let hunk = mark(&parse("@@ -1,2 +1,2 @@\n-\tone();\n-two();\n+    one();\n+three();\n")[0]);
+        assert_eq!(inline_or_whitespace_pairs(&hunk, InlineRule::default()), [pair(0, 2)]);
     }
 }

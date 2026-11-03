@@ -1,6 +1,5 @@
 ---
 source: src/tui/app/tests.rs
-assertion_line: 306
 expression: "render(&mut app, 160, 24)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ acme/widgets!42 · feat: charge cards at… ────────╮╭ charge.rs:-13 · 1 thread ────────────────────────────────────╮
@@ -18,12 +17,12 @@ expression: "render(&mut app, 160, 24)"
 │                                          ││      15   16      audit::record(&response);      ││                                                              │
 │   ── ▸ DONE · 1 ──────────────────────── ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key       ││                                                              │
 │                                          ││      40   41  fn idempotency_key(card: &Card) -… ││                                                              │
-│                                          ││      41      -    Key::from(card.number())       ││                                                              │
-│                                          ││           42 +    Key::from((card.number(), car… ││                                                              │
+│                                          ││      41   42 ~    Key::from((card.number(), car… ││                                                              │
 │                                          ││           43 +    // hunk two, line 43 is new    ││                                                              │
 │                                          ││      42   44  }                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 │                                          ││  ▸ Cargo.lock                      +1 −1  folded ││                                                              │
+│                                          ││                                                  ││                                                              │
 │                                          ││                                                  ││                                                              │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                                                                                        ? help
