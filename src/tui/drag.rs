@@ -195,6 +195,12 @@ mod tests {
     }
 
     #[test]
+    fn an_emoji_with_a_skin_tone_takes_the_cells_it_is_drawn_on() {
+        let text = "\u{1F44D}\u{1F3FD}x";
+        assert_eq!(cells_of(text, 4).len(), UnicodeWidthStr::width(text));
+    }
+
+    #[test]
     fn an_emoji_sequence_takes_the_cells_it_is_drawn_on() {
         let text = "\u{1F469}\u{200D}\u{1F4BB}x";
         assert_eq!(cells_of(text, 4).len(), UnicodeWidthStr::width(text));

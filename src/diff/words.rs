@@ -9,6 +9,7 @@ use unicode_width::UnicodeWidthChar;
 
 /// Glues two emoji into one drawn character.
 const JOINER: char = '\u{200D}';
+const SKIN_TONES: std::ops::RangeInclusive<char> = '\u{1F3FB}'..='\u{1F3FF}';
 
 /// `hunks`, one file's, with their twins and what changed between them, as far as the file's budget of work goes.
 pub(crate) fn mark_file(hunks: &[Hunk]) -> Vec<Hunk> {
@@ -151,9 +152,9 @@ fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-/// Draws in the cell of the character before it: a combining mark, a variation selector, a joiner.
+/// Draws in the cell of the character before it: a combining mark, a variation selector, a joiner, a skin tone.
 fn is_mark(c: char) -> bool {
-    c.width() == Some(0)
+    c.width() == Some(0) || SKIN_TONES.contains(&c)
 }
 
 /// How many bytes at the start of `after` belong to the character before it: its marks, and whatever a joiner glues on.
@@ -534,6 +535,11 @@ pub(super) mod tests {
     #[test]
     fn a_joiner_keeps_an_emoji_sequence_in_one_token() {
         assert_eq!(tokens("\u{1F469}\u{200D}\u{1F4BB};"), ["\u{1F469}\u{200D}\u{1F4BB}", ";"]);
+    }
+
+    #[test]
+    fn a_skin_tone_stays_with_the_emoji_before_it() {
+        assert_eq!(tokens("\u{1F44D}\u{1F3FD};"), ["\u{1F44D}\u{1F3FD}", ";"]);
     }
 
     #[test]

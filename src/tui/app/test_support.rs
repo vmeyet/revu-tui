@@ -256,18 +256,18 @@ pub(super) fn sum_review() -> Review {
 /// An app on a review of one file, `path`, changed by `diff`.
 pub(super) fn with_review_of(path: &str, diff: &str) -> App {
     let file = DiffFile { diff: diff.into(), new_path: path.into(), old_path: path.into(), ..Default::default() };
-    let mut app = with_queue();
-    app.queue_move(0);
-    app.handle_key(code(KeyCode::Enter));
-    app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(mr(), &[file], vec![], &[])), cached: None });
-    app
+    with_opened(Review::new(mr(), &[file], vec![], &[]))
 }
 
 pub(super) fn with_sum_review() -> App {
+    with_opened(sum_review())
+}
+
+fn with_opened(review: Review) -> App {
     let mut app = with_queue();
     app.queue_move(0);
     app.handle_key(code(KeyCode::Enter));
-    app.apply(Incoming::Review { key: mr_key(), review: Box::new(sum_review()), cached: None });
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
     app
 }
 

@@ -118,12 +118,15 @@ impl Review {
 
     /// The lines of a hunk the view shows, as its rows read them: both lines of a pair together, wherever they sit.
     pub(crate) fn lines_in_reading_order(&self, file: usize, hunk_index: usize, hunk: &Hunk) -> Vec<usize> {
-        let of_row = |row: Row| match row {
-            Row::Pair { removed, added, .. } => vec![removed, added],
-            Row::Line { index, .. } => vec![index],
-            _ => vec![],
-        };
-        self.line_rows(file, hunk_index, hunk).into_iter().flat_map(of_row).collect()
+        let mut reading = Vec::with_capacity(hunk.lines.len());
+        for row in self.line_rows(file, hunk_index, hunk) {
+            match row {
+                Row::Pair { removed, added, .. } => reading.extend([removed, added]),
+                Row::Line { index, .. } => reading.push(index),
+                _ => {}
+            }
+        }
+        reading
     }
 
     pub(crate) fn rows(&self) -> Vec<Row> {
