@@ -1,10 +1,12 @@
 //! Unified diffs as GitLab sends them: hunks only, no `---`/`+++` header.
+mod align;
 #[cfg(test)]
 pub(crate) mod arbitrary;
 pub(crate) mod fold;
 pub(crate) mod label;
 pub(crate) mod words;
 
+pub(crate) use align::similarity;
 use label::ChangeLabel;
 use std::ops::Range;
 

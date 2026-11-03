@@ -1,6 +1,6 @@
 //! Generated unified diffs for property tests: what the forges send, built from parts we know,
 //! so a test can compare what `parse` finds with what went in.
-use super::words::MAX_ALIGNED_RUN;
+use super::align::MAX_ALIGNED_RUN;
 use super::{Hunk, LineKind};
 use proptest::prelude::*;
 
