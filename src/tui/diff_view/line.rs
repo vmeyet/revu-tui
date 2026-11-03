@@ -238,12 +238,12 @@ mod tests {
         let theme = Theme::named("tokyonight").unwrap();
         let spans = pair_spans(old, new, &code, false, Gutter::Both, 80, theme);
         let style_of = |text: &str| spans.iter().find(|s| s.content == text).map(|s| s.style).unwrap();
-        assert_eq!(spans_text(&spans).trim_end(), "   1    1 ~const total = 1;2;");
+        assert_eq!(spans_text(&spans).trim_end(), "   1    1 ~const total = 12;");
         assert_eq!(style_of("const").fg, Some(theme.syntax.colour(Token::Keyword)), "kept text takes its syntax colour");
         assert_eq!(style_of(" total = ").fg, None);
-        assert_eq!(style_of("1;").fg, Some(theme.danger), "the old word keeps the diff colour");
-        assert!(style_of("1;").add_modifier.contains(Modifier::CROSSED_OUT));
-        assert_eq!(style_of("2;").fg, Some(theme.success), "the new word keeps the diff colour");
+        assert_eq!(style_of("1").fg, Some(theme.danger), "the old word keeps the diff colour");
+        assert!(style_of("1").add_modifier.contains(Modifier::CROSSED_OUT));
+        assert_eq!(style_of("2").fg, Some(theme.success), "the new word keeps the diff colour");
     }
 
     #[test]

@@ -237,9 +237,9 @@ fn snapshot_review_side_by_side_in_a_narrow_window() {
 fn the_old_word_is_struck_through_in_red_and_the_new_one_green() {
     let mut app = with_sum_review();
     let buffer = cells(&mut app, 100, 18);
-    let row = cell_of(&buffer, "let b = 2;20;");
+    let row = cell_of(&buffer, "let b = 220;");
     assert_eq!(row.fg, Color::Reset, "the kept text reads like context");
-    let old = cell_of(&buffer, "2;20;");
+    let old = cell_of(&buffer, "220;");
     assert_eq!(old.fg, Color::Red);
     assert!(old.modifier.contains(ratatui::style::Modifier::CROSSED_OUT));
     let new = cell_of(&buffer, "20;");

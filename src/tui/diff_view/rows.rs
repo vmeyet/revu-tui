@@ -281,7 +281,7 @@ mod tests {
                    | Plan | Seats | Notes                             |\n \
                    |:-----|------:|:----------------------------------|\n\
                    -| Team |    10 | shared billing for each workspace |\n\
-                   +| Team |    12 | shared billing for all workspaces |\n \
+                   +| Team |    12 | team billing for all workspaces   |\n \
                    | Solo |     1 | one seat                          |\n"
                 .into(),
             old_path: "docs/plans.md".into(),
