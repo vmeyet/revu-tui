@@ -381,4 +381,372 @@ mod tests {
         assert!(parse(r#"{"lockfileVersion": 3}"#).is_err());
         assert!(parse(r#"{"lockfileVersion": 3, "packages": {"node_modules/a": {}}}"#).is_err());
     }
+
+    const PUBLIC: &str = PUBLIC_REGISTRY;
+
+    fn entry(path: &str, fields: &str) -> String {
+        format!(r#""{path}":{{{fields}}}"#)
+    }
+
+    fn at(version: &str, resolved: &str) -> String {
+        format!(r#""version":"{version}","resolved":"{resolved}","integrity":"sha512-any""#)
+    }
+
+    fn public(name: &str, version: &str) -> String {
+        let base_name = name.rsplit('/').next().unwrap_or(name);
+        at(version, &format!("{PUBLIC}/{name}/-/{base_name}-{version}.tgz"))
+    }
+
+    fn a_is(fields: &str) -> String {
+        lock(&entry("node_modules/a", fields))
+    }
+
+    /// The rows that warn when `a` bumps from the public 1.0.0 to `version` at `url`.
+    fn bump_to(version: &str, url: &str) -> Vec<String> {
+        warned_names(PATH, &good_a(), &a_is(&at(version, url)))
+    }
+
+    /// The rows that warn when `path` appears beside the public `a` with these fields.
+    fn new_at(path: &str, fields: &str) -> Vec<String> {
+        warned_names(PATH, &good_a(), &lock(&format!(r#""node_modules/a":{{GOOD}},{}"#, entry(path, fields))))
+    }
+
+    fn new_package(fields: &str) -> Vec<String> {
+        new_at("node_modules/new", fields)
+    }
+
+    /// The names that warn in a recorded case, read as added when it has no base.
+    macro_rules! case {
+        ($stem:literal) => {
+            warned_names(
+                PATH,
+                include_str!(concat!("fixtures/npm_cases/", $stem, ".base.json")),
+                include_str!(concat!("fixtures/npm_cases/", $stem, ".head.json")),
+            )
+        };
+        (added $stem:literal) => {
+            warned_when_added(include_str!(concat!("fixtures/npm_cases/", $stem, ".head.json")))
+        };
+    }
+
+    fn warned_when_added(head: &str) -> Vec<String> {
+        let summary = summarize(PATH, None, Some(head)).unwrap();
+        summary.changes.iter().filter(|c| c.kind.warns()).map(|c| c.name.to_string()).collect()
+    }
+
+    #[test]
+    fn an_added_lock_on_the_public_registry_does_not_warn() {
+        assert_eq!(case!(added "control"), [""; 0]);
+    }
+
+    #[test]
+    fn a_bump_resolved_to_another_package_on_the_same_registry_warns() {
+        assert_eq!(case!("x01_other_pkg_same_registry"), ["a"]);
+    }
+
+    #[test]
+    fn a_bump_to_another_package_warns_with_a_name_field_too() {
+        assert_eq!(case!("x01b_with_name_field"), ["a"]);
+    }
+
+    #[test]
+    fn a_new_transitive_copy_from_another_host_flagged_bundled_warns() {
+        assert_eq!(case!("x02_new_transitive_inbundle_evil"), ["b", "new"], "the parent's own tarball changed in this case too");
+    }
+
+    #[test]
+    fn a_direct_dependency_from_another_host_flagged_bundled_warns() {
+        assert_eq!(case!(added "x02_direct_dep_inbundle_evil"), ["new"]);
+    }
+
+    #[test]
+    fn a_top_copy_flagged_bundled_warns_while_a_nested_copy_stays_good() {
+        assert_eq!(case!("x02c_top_copy_evil_inbundle_nested_stays"), ["a"]);
+    }
+
+    #[test]
+    fn an_added_lock_on_another_host_shaped_like_the_registry_warns() {
+        assert_eq!(case!(added "x03_added_lock_registry_shaped_evil"), ["a"]);
+    }
+
+    #[test]
+    fn a_bump_from_https_to_http_warns() {
+        assert_eq!(case!("x06_http"), ["a"]);
+    }
+
+    #[test]
+    fn a_v_prefixed_version_warns() {
+        assert_eq!(case!("x07_v_prefix_version"), ["a"]);
+    }
+
+    #[test]
+    fn an_entry_with_a_source_outside_node_modules_warns() {
+        assert_eq!(case!("x09_outside_node_modules"), ["vendor/x"]);
+    }
+
+    #[test]
+    fn a_workspace_folder_with_no_source_makes_no_row() {
+        let head = lock(r#""node_modules/a":{GOOD},"packages/tool":{"version":"0.1.0"}"#);
+        assert_eq!(summarize(PATH, Some(&good_a()), Some(&head)).unwrap().changes, vec![]);
+    }
+
+    #[test]
+    fn a_slash_dash_slash_elsewhere_in_the_url_proves_nothing() {
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/-/a-1.0.1.tgz")), ["a"]);
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/a/-/evil/a-1.0.1.tgz")), ["a"]);
+    }
+
+    #[test]
+    fn a_url_for_another_version_warns() {
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/a/-/a-1.0.0.tgz")), ["a"]);
+    }
+
+    #[test]
+    fn a_url_with_a_query_or_fragment_warns() {
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/a/-/a-1.0.1.tgz?x=1")), ["a"]);
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/a/-/a-1.0.1.tgz#x")), ["a"]);
+    }
+
+    #[test]
+    fn a_url_with_credentials_or_a_port_warns() {
+        assert_eq!(bump_to("1.0.1", "https://nina@registry.npmjs.org/a/-/a-1.0.1.tgz"), ["a"]);
+        assert_eq!(bump_to("1.0.1", "https://registry.npmjs.org:8443/a/-/a-1.0.1.tgz"), ["a"]);
+    }
+
+    #[test]
+    fn a_url_a_parser_would_rewrite_warns() {
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/evil/../a/-/a-1.0.1.tgz")), ["a"]);
+        assert_eq!(bump_to("1.0.1", "https://REGISTRY.npmjs.org/a/-/a-1.0.1.tgz"), ["a"]);
+    }
+
+    /// The rows that warn on a bump inside `base`, which the old side already used: only a form that proves nothing can warn.
+    fn bump_inside(base: &str) -> Vec<String> {
+        let a = |version: &str| a_is(&at(version, &format!("{base}/a/-/a-{version}.tgz")));
+        warned_names(PATH, &a("1.0.0"), &a("1.0.1"))
+    }
+
+    #[test]
+    fn a_base_that_already_used_http_stays_unproven() {
+        assert_eq!(bump_inside("http://npm.acme.example"), ["a"]);
+    }
+
+    #[test]
+    fn a_base_that_already_held_credentials_stays_unproven() {
+        assert_eq!(bump_inside("https://nina@npm.acme.example"), ["a"]);
+        assert_eq!(bump_inside("https://:secret@npm.acme.example"), ["a"]);
+    }
+
+    #[test]
+    fn a_base_that_already_held_a_query_or_fragment_stays_unproven() {
+        assert_eq!(bump_inside("https://npm.acme.example/x?y="), ["a"]);
+        assert_eq!(bump_inside("https://npm.acme.example/x#y"), ["a"]);
+    }
+
+    #[test]
+    fn a_base_a_parser_would_rewrite_stays_unproven() {
+        assert_eq!(bump_inside("https://npm.acme.example/evil/.."), ["a"]);
+    }
+
+    #[test]
+    fn a_url_going_on_past_the_tarball_path_warns() {
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/a/-/a-1.0.1.tgz/evil.tgz")), ["a"]);
+    }
+
+    #[test]
+    fn a_name_with_a_slash_and_no_scope_warns() {
+        assert_eq!(new_at("node_modules/x/y", &at("1.0.0", &format!("{PUBLIC}/x/y/-/y-1.0.0.tgz"))), ["x/y"]);
+    }
+
+    #[test]
+    fn a_name_field_other_than_the_path_warns_though_the_url_fits_the_path() {
+        assert_eq!(new_package(&format!(r#""name":"evil",{}"#, public("new", "1.0.0"))), ["new"]);
+    }
+
+    #[test]
+    fn a_folder_merely_ending_like_node_modules_installs_nothing() {
+        let head = lock(r#""node_modules/a":{GOOD},"vendor_node_modules/x":{"version":"1.0.0"}"#);
+        assert_eq!(summarize(PATH, Some(&good_a()), Some(&head)).unwrap().changes, vec![]);
+    }
+
+    #[test]
+    fn a_prefix_on_the_public_host_is_another_base_and_warns() {
+        assert_eq!(bump_to("1.0.1", &format!("{PUBLIC}/evil/a/-/a-1.0.1.tgz")), ["a"]);
+    }
+
+    #[test]
+    fn a_package_on_a_private_registry_the_base_already_uses_does_not_warn() {
+        let private = "https://npm.acme.example/api/npm/virtual";
+        let a = |version: &str| entry("node_modules/a", &at(version, &format!("{private}/a/-/a-{version}.tgz")));
+        let new = entry("node_modules/b", &at("1.0.0", &format!("{private}/b/-/b-1.0.0.tgz")));
+        assert_eq!(warned_names(PATH, &lock(&a("1.0.0")), &lock(&format!("{},{new}", a("1.0.1")))), [""; 0]);
+    }
+
+    #[test]
+    fn a_first_private_registry_warns() {
+        assert_eq!(new_package(&at("1.0.0", "https://npm.acme.example/new/-/new-1.0.0.tgz")), ["new"]);
+    }
+
+    #[test]
+    fn another_prefix_on_a_known_private_host_warns() {
+        let base = a_is(&at("1.0.0", "https://npm.acme.example/one/a/-/a-1.0.0.tgz"));
+        let head = a_is(&at("1.0.1", "https://npm.acme.example/two/a/-/a-1.0.1.tgz"));
+        assert_eq!(warned_names(PATH, &base, &head), ["a"]);
+    }
+
+    #[test]
+    fn both_scoped_url_forms_do_not_warn() {
+        let scoped = |url: String| new_at("node_modules/@acme/new", &at("1.0.0", &url));
+        assert_eq!(scoped(format!("{PUBLIC}/@acme/new/-/new-1.0.0.tgz")), [""; 0]);
+        assert_eq!(scoped(format!("{PUBLIC}/@acme%2fnew/-/new-1.0.0.tgz")), [""; 0]);
+    }
+
+    #[test]
+    fn a_scoped_url_of_another_scope_warns() {
+        assert_eq!(new_at("node_modules/@acme/new", &at("1.0.0", &format!("{PUBLIC}/@evil/new/-/new-1.0.0.tgz"))), ["@acme/new"]);
+    }
+
+    #[test]
+    fn an_alias_warns() {
+        let head = a_is(&format!(r#""name":"b",{}"#, public("b", "1.0.0")));
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["a"]);
+    }
+
+    #[test]
+    fn a_bundled_entry_with_an_integrity_warns() {
+        assert_eq!(new_at("node_modules/a/node_modules/new", r#""version":"1.0.0","integrity":"sha512-any","inBundle":true"#), ["new"]);
+    }
+
+    #[test]
+    fn a_bundled_entry_with_a_resolved_alone_warns() {
+        assert_eq!(
+            new_at("node_modules/a/node_modules/new", r#""version":"1.0.0","resolved":"https://evil.example/x.tgz","inBundle":true"#),
+            ["new"]
+        );
+    }
+
+    #[test]
+    fn a_bundled_entry_with_a_link_alone_warns() {
+        assert_eq!(new_at("node_modules/a/node_modules/new", r#""version":"1.0.0","link":true,"inBundle":true"#), ["new"]);
+    }
+
+    #[test]
+    fn a_bump_onto_a_bundled_copy_with_no_origin_warns() {
+        let head = lock(&format!(
+            "{},{}",
+            entry("node_modules/x", &public("x", "1.0.0")),
+            entry("node_modules/x/node_modules/a", r#""version":"1.0.1","inBundle":true"#)
+        ));
+        let base = lock(&format!("{},{}", entry("node_modules/x", &public("x", "1.0.0")), entry("node_modules/a", &public("a", "1.0.0"))));
+        assert_eq!(warned_names(PATH, &base, &head), ["a"]);
+    }
+
+    #[test]
+    fn a_bundled_entry_that_is_a_link_warns() {
+        assert_eq!(new_at("node_modules/a/node_modules/new", r#""resolved":"../../evil","link":true,"inBundle":true"#), ["new"]);
+    }
+
+    #[test]
+    fn a_bundled_copy_keeps_its_origin_in_the_comparison() {
+        let fields = format!(r#"{},"inBundle":true"#, at("1.0.0", "https://evil.example/x.tgz"));
+        assert_eq!(new_at("node_modules/z/node_modules/a", &fields), ["a"]);
+    }
+
+    #[test]
+    fn a_bundled_entry_at_the_top_has_no_package_to_ship_it_and_warns() {
+        assert_eq!(new_package(r#""version":"1.0.0","inBundle":true"#), ["new"]);
+    }
+
+    #[test]
+    fn a_bundled_entry_under_a_package_the_lock_does_not_hold_warns() {
+        assert_eq!(new_at("node_modules/ghost/node_modules/new", r#""version":"1.0.0","inBundle":true"#), ["new"]);
+    }
+
+    #[test]
+    fn a_new_bundled_entry_with_no_source_does_not_warn() {
+        assert_eq!(new_at("node_modules/a/node_modules/new", r#""version":"1.0.0","inBundle":true"#), [""; 0]);
+    }
+
+    const REPO: &str = "git+ssh://git@github.com/acme/a.git";
+
+    fn on_git(version: &str, repo: &str, commit: &str) -> String {
+        a_is(&format!(r#""version":"{version}","resolved":"{repo}#{commit}""#))
+    }
+
+    #[test]
+    fn a_git_bump_inside_one_repository_does_not_warn() {
+        assert_eq!(warned_names(PATH, &on_git("1.0.0", REPO, "aaa"), &on_git("1.1.0", REPO, "bbb")), [""; 0]);
+    }
+
+    #[test]
+    fn a_git_bump_to_a_fork_on_the_same_host_warns() {
+        let fork = on_git("1.1.0", "git+ssh://git@github.com/evil/a.git", "bbb");
+        assert_eq!(warned_names(PATH, &on_git("1.0.0", REPO, "aaa"), &fork), ["a"]);
+    }
+
+    #[test]
+    fn git_with_no_commit_warns() {
+        let head = a_is(&format!(r#""version":"1.1.0","resolved":"{REPO}""#));
+        assert_eq!(warned_names(PATH, &on_git("1.0.0", REPO, "aaa"), &head), ["a"]);
+        assert_eq!(warned_names(PATH, &on_git("1.0.0", REPO, "aaa"), &on_git("1.1.0", REPO, "")), ["a"]);
+    }
+
+    #[test]
+    fn a_base_with_no_sources_leaves_only_the_public_registry_ordinary() {
+        let base = lock(r#""node_modules/z":{"version":"1.0.0"}"#);
+        let with = |fields: &str| lock(&format!(r#""node_modules/z":{{"version":"1.0.0"}},{}"#, entry("node_modules/n", fields)));
+        assert_eq!(warned_names(PATH, &base, &with(&at("1.0.0", "https://evil.example/n/-/n-1.0.0.tgz"))), ["n"]);
+        assert_eq!(warned_names(PATH, &base, &with(&public("n", "1.0.0"))), [""; 0]);
+    }
+
+    fn with_version(version: &str) -> Vec<String> {
+        bump_to(version, &format!("{PUBLIC}/a/-/a-{version}.tgz"))
+    }
+
+    #[test]
+    fn a_version_with_a_prefix_warns_though_its_url_fits() {
+        assert_eq!(with_version("v1.0.1"), ["a"]);
+        assert_eq!(with_version("=1.0.1"), ["a"]);
+    }
+
+    #[test]
+    fn a_version_with_a_leading_zero_warns_though_its_url_fits() {
+        assert_eq!(with_version("01.0.1"), ["a"]);
+    }
+
+    #[test]
+    fn a_version_in_fullwidth_digits_warns() {
+        assert_eq!(bump_to("\u{ff11}.0.1", &format!("{PUBLIC}/a/-/a-1.0.1.tgz")), ["a"]);
+    }
+
+    #[test]
+    fn a_pre_release_and_a_build_of_the_right_form_do_not_warn() {
+        assert_eq!(with_version("1.0.1-rc.1"), [""; 0]);
+        assert_eq!(with_version("1.0.1+x"), [""; 0]);
+    }
+
+    #[test]
+    fn build_metadata_with_a_new_integrity_warns_though_its_url_fits() {
+        let head = a_is(r#""version":"1.0.0+x","resolved":"https://registry.npmjs.org/a/-/a-1.0.0+x.tgz","integrity":"sha512-evil""#);
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["a"]);
+    }
+
+    #[test]
+    fn a_new_package_with_no_integrity_warns() {
+        assert_eq!(new_package(&format!(r#""version":"1.0.0","resolved":"{PUBLIC}/new/-/new-1.0.0.tgz""#)), ["new"]);
+    }
+
+    #[test]
+    fn a_new_package_with_an_empty_integrity_warns() {
+        assert_eq!(new_package(&format!(r#""version":"1.0.0","resolved":"{PUBLIC}/new/-/new-1.0.0.tgz","integrity":"""#)), ["new"]);
+    }
+
+    #[test]
+    fn a_new_package_with_no_source_warns() {
+        assert_eq!(new_package(r#""version":"1.0.0""#), ["new"]);
+    }
+
+    #[test]
+    fn a_new_package_with_an_install_script_warns() {
+        assert_eq!(new_package(&format!(r#"{},"hasInstallScript":true"#, public("new", "1.0.0"))), ["new"]);
+    }
 }

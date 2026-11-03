@@ -553,6 +553,19 @@ mod tests {
     }
 
     #[test]
+    fn only_semver_to_the_letter_is_semver() {
+        for good in ["1.0.0", "0.0.0", "1.2.3-rc.1", "1.2.3-0", "1.2.3-a-b", "1.2.3+x.01", "1.2.3-rc+x"] {
+            assert!(is_semver(good), "{good}");
+        }
+        for bad in ["v1.0.0", "=1.0.0", "01.0.0", "1.0", "1.0.0.0", "+1.0.0", "1.0.0-", "1.0.0-01", "1.0.0+", "1.0.0+a+b", "1.0.0 "] {
+            assert!(!is_semver(bad), "{bad}");
+        }
+        for hidden in ["\u{ff11}.0.0", "1.0.0\u{200b}", "1.0.0\u{2060}", "1.0.0-\u{e9}", "99999999999999999999.0.0"] {
+            assert!(!is_semver(hidden), "{hidden}");
+        }
+    }
+
+    #[test]
     fn pre_releases_order_by_semver_identifiers() {
         assert!(version("1.0.0-rc.2").is_older_than(&version("1.0.0-rc.10")));
         assert!(version("1.0.0-1").is_older_than(&version("1.0.0-alpha")));
@@ -617,6 +630,17 @@ mod tests {
         assert_eq!(kinds(&[sourced("1.0.0", "x")], &[sourced("1.0.0", "y")]), warning(vec![Alert::SourceChanged]));
         let bare = Package { origin: Origin { checksum: None, source: None }, ..package("a", "1.0.0", "x") };
         assert_eq!(kinds(&[package("a", "1.0.0", "x")], &[bare]), warning(vec![Alert::ChecksumChanged, Alert::SourceChanged]));
+    }
+
+    #[test]
+    fn copies_trading_checksums_and_sources_warn_though_both_sets_stay_the_same() {
+        let copy = |checksum: &str, source: &str| Package {
+            origin: Origin { checksum: Some(checksum.into()), source: Some(source.into()) },
+            ..package("a", "1.0.0", "x")
+        };
+        let warning =
+            vec![ChangeKind::SameVersion { version: version("1.0.0"), alerts: vec![Alert::ChecksumChanged, Alert::SourceChanged] }];
+        assert_eq!(kinds(&[copy("x", "one"), copy("y", "two")], &[copy("x", "two"), copy("y", "one")]), warning);
     }
 
     #[test]

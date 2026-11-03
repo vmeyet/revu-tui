@@ -1,0 +1,1 @@
+{"name": "widgets", "version": "1.0.0", "lockfileVersion": 3, "requires": true, "packages": {"": {"name": "widgets", "version": "1.0.0", "dependencies": {"a": "^1.0.0"}}, "node_modules/a": {"version": "1.0.1", "resolved": "http://registry.npmjs.org/a/-/a-1.0.1.tgz", "integrity": "sha512-uasQr897gPangZx/EWAi8RoYatm59VBnYIF7aKtxri34UKEBzT2xuxrv2yDCAlbIo9a3YjSX5ceNSOHn0ENb9g=="}}}
