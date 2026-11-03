@@ -31,7 +31,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/backend/mod.rs` | `Backend`: the parts behind the runner, one per concern, and `Homes`, each host's forge and cache |
 | `tui/backend/saves.rs`, `queue.rs`, `reviews.rs` | What the reader keeps (`state.json`, pins, queue view); the queue of every host; opening an MR and loading ahead |
 | `tui/backend/drafts.rs`, `tui/lanes.rs` | Draft writes and publishing; one lane per MR so they run one at a time |
-| `tui/backend/ai.rs`, `files.rs`, `prune.rs` | Claude's answers and Jev's marks; files at a commit and pictures; the daily cache prune |
+| `tui/backend/ai.rs`, `files.rs`, `prune.rs` | Jev's marks; files at a commit and pictures; the daily cache prune |
 | `tui/backend/cache_shapes.rs` | Tests only: one fixture per type written to the cache, so a change that stops reading an older file fails (the cache would drop it, and the reader's pins, viewed files and drafts with it); a new cached type adds its fixture here |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
@@ -43,7 +43,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
-| `ai/` | Claude (`anthropic.rs`, questions with `a`; `context.rs`, what a question sends) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
+| `ai/` | Claude (`anthropic.rs`, `revu ai ask`; `context.rs`, what a question sends) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
 | `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |

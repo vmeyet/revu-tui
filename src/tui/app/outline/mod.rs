@@ -110,7 +110,7 @@ impl App {
             self.close_outline();
             return vec![];
         }
-        self.update_open(|open| Open { pane: None, tree: None, answer: None, pipeline: None, ..open });
+        self.update_open(|open| Open { pane: None, tree: None, pipeline: None, ..open });
         self.focus = Focus::Side;
         self.read_outline()
     }

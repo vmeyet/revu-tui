@@ -22,8 +22,6 @@ pub(crate) struct Open {
     pub(crate) select_from: Option<usize>,
     /// The file tree, when it holds the right pane.
     pub(crate) tree: Option<super::Tree>,
-    /// Claude's answer, when it holds the right pane.
-    pub(crate) answer: Option<super::ask::Answer>,
     /// The CI run, when it holds the right pane.
     pub(crate) pipeline: Option<super::Pipeline>,
     /// The symbols the MR changes, when they hold the right pane.
@@ -50,7 +48,6 @@ impl Open {
             cached: None,
             select_from: None,
             tree: None,
-            answer: None,
             pipeline: None,
             outline: None,
             prose: None,
@@ -85,14 +82,14 @@ impl Open {
         })
     }
 
-    /// The right pane holds something: threads, the tree, an answer, the pipeline or the outline.
+    /// The right pane holds something: threads, the tree, the pipeline or the outline.
     pub(crate) fn side_open(&self) -> bool {
-        self.pane.is_some() || self.tree.is_some() || self.answer.is_some() || self.pipeline.is_some() || self.outline.is_some()
+        self.pane.is_some() || self.tree.is_some() || self.pipeline.is_some() || self.outline.is_some()
     }
 
-    /// The right pane shows threads: no file tree, pipeline, outline or answer took their place.
+    /// The right pane shows threads: no file tree, pipeline or outline took their place.
     pub(crate) fn shows_threads(&self) -> bool {
-        self.pane.is_some() && self.tree.is_none() && self.answer.is_none() && self.pipeline.is_none() && self.outline.is_none()
+        self.pane.is_some() && self.tree.is_none() && self.pipeline.is_none() && self.outline.is_none()
     }
 
     pub(crate) fn row(&self) -> Option<&Row> {

@@ -1,6 +1,5 @@
 //! The review TUI: an event loop over a pure `App`, with the network at its edge.
 mod actions;
-mod answer_view;
 mod app;
 mod backend;
 mod brief_view;

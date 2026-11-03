@@ -1,6 +1,5 @@
 //! The pure state machine: keys in, actions out, incoming answers applied. No clock, no network.
 mod apply;
-mod ask;
 mod brief;
 mod commands;
 mod compact;
@@ -52,7 +51,6 @@ mod writes;
 mod zen;
 
 pub(crate) use apply::Confirm;
-pub(crate) use ask::{Answer, AnswerState};
 pub(crate) use brief::{Brief, ThreadRow};
 pub(crate) use feedback::Toast;
 pub(crate) use inbox::{Spot, progress_bar};

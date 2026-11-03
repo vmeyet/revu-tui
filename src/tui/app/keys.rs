@@ -335,10 +335,6 @@ impl App {
             Act::NextFile => self.review_jump(Toward::Next, |r| matches!(r, Row::File { .. })),
             Act::PrevFile => self.review_jump(Toward::Previous, |r| matches!(r, Row::File { .. })),
             Act::Open => return self.enter_review_row(),
-            Act::Back | Act::ClosePane if self.answer_open() => {
-                self.key_did = Some(Act::ClosePane);
-                self.close_answer();
-            }
             Act::Back | Act::ClosePane if has_pane => {
                 self.key_did = Some(Act::ClosePane);
                 self.close_pane();
@@ -442,9 +438,9 @@ impl App {
         vec![]
     }
 
-    /// `a` opens its family in the queue, for `a g`, and on an open MR; the answer and the outline read `a` themselves.
+    /// `a` opens its family in the queue, for `a g`, and on an open MR; the outline reads `a` itself.
     fn reads_a_prefix(&self) -> bool {
-        let on_open_mr = self.open.is_some() && !self.answer_open() && !self.outline_keys();
+        let on_open_mr = self.open.is_some() && !self.outline_keys();
         self.focus == Focus::Queue || on_open_mr
     }
 
@@ -458,9 +454,6 @@ impl App {
     }
 
     pub(super) fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        if self.answer_open() {
-            return self.handle_answer_key(key);
-        }
         if self.pipeline_open() {
             return self.handle_pipeline_key(key);
         }
@@ -475,11 +468,6 @@ impl App {
 }
 
 impl App {
-    /// Claude's answer holds the right pane.
-    pub(super) fn answer_open(&self) -> bool {
-        self.open.as_ref().is_some_and(|o| o.answer.is_some())
-    }
-
     /// `?`, or the user's key for it, widens the focused pane's keys to every key, then closes the list.
     fn help_key(&self, open: Help, key: KeyEvent) -> Option<Help> {
         if self.is_help_key(key) {

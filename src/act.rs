@@ -164,8 +164,6 @@ pub(crate) enum Pane {
     Tree,
     Outline,
     Pipeline,
-    /// Claude's answer in the right pane.
-    Answer,
     /// The prose view of a Markdown file, after `Page`.
     Prose,
     /// A page that only scrolls: the prose view, the `?` help, the news.
@@ -175,8 +173,7 @@ pub(crate) enum Pane {
 }
 
 /// Every pane with a cursor or a scroll: where the moving keys work.
-const MOVES: &[Pane] =
-    &[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Page, Pane::Cover];
+const MOVES: &[Pane] = &[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Page, Pane::Cover];
 
 /// What an action is called, and who uses the name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -451,7 +448,7 @@ pub(crate) const ROWS: &[Row] = &[
         .panes(&[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Cover])
         .section(Section::Move),
     listed(Act::Back, "back", &["esc"])
-        .panes(&[Pane::Queue, Pane::Diff, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Prose, Pane::Cover, Pane::Page])
+        .panes(&[Pane::Queue, Pane::Diff, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Prose, Pane::Cover, Pane::Page])
         .section(Section::Move),
     listed(Act::FocusLeft, "focus_left", &["h", "left"])
         .help(&[line(Group::Move, "h l", "pane to the left, to the right")])
@@ -480,7 +477,7 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::DeleteDraft, "delete_draft", &["d"]).panes(&[Pane::ThreadRow]).section(Section::Thread),
     listed(Act::ClosePane, "close_pane", &["esc", "x"])
         .help(&[line(Group::Move, "esc x", "close the pane, back to the queue")])
-        .panes(&[Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Answer, Pane::Prose])
+        .panes(&[Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Prose])
         .section(Section::Thread),
     listed(Act::OpenLink, "open_link", &["u"])
         .help(&[line(Group::Thread, "u U", "open, copy the first link")])
