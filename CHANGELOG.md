@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **`↑` on an empty line brings back the last command, as in pgbg and slack.**
+  In the palette, on commands, once the top of the list is highlighted.
+  `↑` `↓` walk the commands you ran until you type, `↓` still picks from the list, and `ctrl-p` `ctrl-n` still recall from any line.
+
 - **A file or hunk that is not an ordinary edit says so: `whitespace`, `formatting` or `rewritten`.**
   In the diff's file and hunk rows and the file tree, whenever the row has room for the word.
   Nothing to do: no label means an ordinary edit, and a label describes the text, not whether the change is safe.
@@ -32,6 +36,11 @@ Each entry says what changed, then where, then how to use it.
 - **Comments read as full Markdown: headings, lists, quotes, tables and links, wrapped to the pane.**
   In the thread pane, under a diff line, the description and the answer pane; code blocks and suggestions keep the diff's colours.
   Nothing to do: write Markdown as on the forge, and a drag copies the text as it is drawn.
+
+### Fixed
+
+- **A changed line no longer runs on into blank rows while wrapping and searching.**
+  In the diff with `w` on and a `/` search active, for lines ending in uncoloured text.
 
 ## 0.11.0 - 2026-10-29
 
@@ -90,18 +99,24 @@ Each entry says what changed, then where, then how to use it.
 - **Failures revu works around now show in the log.**
   A cache write that failed, a host left out of the queue or an unreadable key leaves a warning.
   Read `revu.log` in the cache folder when something looks off.
+
 - **A token from the environment goes only to the host it names.**
   With `GITLAB_TOKEN`, `GITHUB_TOKEN` or `GH_TOKEN` set: it goes to `--host`, else `GITLAB_HOST`, else gitlab.com or github.com, and every other host uses its keychain token.
   `host` in the config no longer gets it; set `GITLAB_HOST` to that host as well, or run `revu login <host>`.
+
 - **`revu login` takes an IPv6 host.**
   A host such as `[fd00::1]:8443` now stores its token in the keychain.
+
 - **A host written with capitals is asked once.**
   When `host` in the config differs from the host in use only by case, the queue no longer fetches it twice.
+
 - **A cache file revu cannot read is kept, not deleted.**
   Pins, queue settings or review state this version cannot read move aside to `<file>.unreadable` in the cache folder.
   Rename it back to restore it with a version that reads it; revu drops it after 30 days.
+
 - **The log stays small in a long session.**
   `revu.log` rolls over to `revu.log.1` whenever it passes 2 MB, not only at startup, so a warning repeated at every poll cannot fill the disk.
+
 - **Steadier internals.**
   revu's code got a cleanup for safety and speed: errors are logged, tokens stay on their host, and caches survive upgrades.
 
@@ -112,12 +127,15 @@ Each entry says what changed, then where, then how to use it.
 - **A binding on an action revu removed only warns.**
   In `[keys.bind]`: revu starts, says which action it skipped, and loads your other keys.
   Delete that line to stop the warning.
+
 - **Mark a file viewed and move on in one key.**
   In the diff and zen, on a thread row, and as `viewed` in the phone's tap bar.
   `m` marks the file viewed and jumps to the first change of the next file not viewed; `zv` still stays put.
+
 - **Jump between threads with `n` and `N`.**
   In the diff and zen, while no search is on.
   `n` and `N` do what `]n` and `[n` do; with a search on, they still step through its matches.
+
 - **Share to the same place again.**
   In the list `Y` opens when you have several places to share to, on each host apart.
   It opens on the place you last shared to, so `Y` then `enter` repeats it; `1` to `9` pick one directly.
@@ -127,36 +145,50 @@ Each entry says what changed, then where, then how to use it.
 - **The reaction picker fits a phone.**
   After `+` on a narrow screen, such as a phone: the key hint goes first, then the choices wrap onto more rows.
   Every choice stays on screen and its digit still picks it.
+
 - **The news page marks a new version `● new for you`.**
   On the page `:news` opens, beside each version that came after the one you last ran.
+
 - **Paging down at the end of a Markdown file no longer stops revu.**
   In the prose view (`v`), after `G`, with `^f` or PgDn.
+
 - **A letter pressed with ctrl no longer does what the letter alone does.**
   Everywhere outside a text box: `^t` no longer closes the file tree, `^r` no longer replies, `^j` no longer moves.
   Only the ctrl keys the help lists act: `^d` `^u` `^f` `^b` `^k` `^v` and `^c`.
+
 - **The file tree, the outline and the pipeline page like the other panes.**
   In the right pane: `^f` and `^b` move a full page there too, and `x` closes the file tree.
+
 - **`[keys.bind]` no longer takes the arrow keys from revu.**
   In `config.toml`: revu stops at start and names the key, as it does for any key already taken.
+
 - **`revu usage` counts what each key did.**
   In `revu usage`: a key that does nothing, like `c` in prose, no longer counts; `enter` in the thread pane counts as what it did.
+
 - **`revu usage` lists every action it counts, in one order.**
   Under NEVER USED and RARELY USED: `b`, `:ready`, `:pin` and the other commands now show when unused.
   Actions follow the order of the keys reference, and commands the order of the palette.
+
 - **Your own keys work on the cover page.**
   On the MR cover page, `i`: a key from `[keys.bind]` does what its action does there, as in every other pane.
+
 - **Your own keys work on the news page too.**
   On the page `:news` opens: a key from `[keys.bind]` closes or scrolls it like its default key.
+
 - **A second key pressed with ctrl no longer finishes a two-key sequence.**
   After `z`, `[`, `]`, `a` or `'`: `z` then `^a` does nothing, as `^a` alone does.
+
 - **A second host that misses one refresh keeps its MRs.**
   In the queue across several hosts, such as a GitLab behind a VPN: its last rows stay, and a toast names it.
   Once it answers again, no notification comes for an MR you already had.
+
 - **Pins and the queue layout are never lost.**
   In the queue, when you press `b` twice quickly, or run revu on a desktop and a phone at once.
   Each revu keeps the other's pins, sort order and folded sections.
+
 - **A slow MR you left no longer spoils the next one.**
   When an MR is slow to open and you open another: its late error no longer shows, marks you offline or blocks the new one.
+
 - **GitHub's secondary rate limit is waited out.**
   On GitHub, when it asks revu to slow down while requests are left.
   A short wait passes on its own; a long one says `rate limited until 14:05`, and refreshing comes back then.
@@ -165,14 +197,19 @@ Each entry says what changed, then where, then how to use it.
 
 - **Grouping the queue by author, `S`.**
   In the queue: `s` still sorts by author, which keeps one author's MRs together.
+
 - **Folding the MR header with `zh`, and every file with `zM` and `zR`.**
   In the diff: `za`, `zo` and `zc` still fold one file; in the prose view `zR` and `zM` still show and fold the unchanged blocks.
+
 - **Jumping thread by thread with `J` and `K`.**
   In the thread pane and the list of every thread: `j` and `k` walk the notes.
+
 - **The ready-made questions to Claude: `a e`, `a r`, `a s`, `a t` and `a c`.**
   In the diff and the thread pane: `a a` or `:ask` asks the same in your own words.
+
 - **The jumps `]N` `[N`, `]f` `[f` and `]r` `[r`.**
   In the diff and the queue: `]n` `[n` still jump between open threads, `T` lists every thread, and `]m` `[m` change MR.
+
 - **Finding a file of the open MR with `^k` then `/`.**
   In the search box: `t` opens the file tree, and `/` in the diff finds a path too.
 
@@ -183,33 +220,43 @@ Each entry says what changed, then where, then how to use it.
 - **Your most used reactions come first.**
   In the reaction picker, on each host apart, with GitLab emoji you found by name among them.
   `+` lists the three you give most, then the usual eight.
+
 - **Copy a link to the device in your hand.**
   Over ssh or mosh, and inside tmux with `set-clipboard on`.
   `y` copies the link of the MR, line, thread or job, and every copy reaches your terminal's clipboard.
+
 - **Copy the first link of a thread.**
   In the thread pane and on a thread row of the diff.
   `U` copies what `u` opens, or the thread's first picture when it has no link.
+
 - **Copy a link from the command line.**
   In the queue and in the diff.
   `:copy` copies the link `:open` would show in the browser.
+
 - **Review from a phone, one page at a time.**
   In a window under 70 columns: the queue, the diff and the right pane each take the whole screen.
   `enter` opens the diff, `h` goes back a page, and `[tui] layout = "compact"` forces it at any width.
+
 - **A diff that fits a phone.**
   In the compact layout: long lines wrap, only the sign shows, and the title tells the cursor's line.
   `w` cuts long lines again, and a long file path keeps its folder and its name.
+
 - **More rows for the page when the keyboard is up.**
   In the compact layout under 20 rows: the status row and the MR header hide.
   A question, the search and the queue filter keep their row, and a toast shows on the bottom row.
+
 - **Tap a label instead of typing a key.**
   In the compact layout, on the bottom row: the main actions of the page, and `more` for every command.
   Tap a label to press its key, and set `[tui] tap_bar = false` to hide the row.
+
 - **A short key list for the page you are on.**
   In the compact layout, on the first `?`: the keys of the tap bar.
   `?` again lists every key.
+
 - **Open the search with a comma.**
   In the queue, the diff and the right pane, wherever `ctrl-k` works.
   `,` opens it on MRs, then `/` finds files and `>` runs commands.
+
 - **Open the Claude Code session of an MR.**
   In the queue, the diff and zen, once `[agent] enabled = true` is in the config.
   `a` then `g`, or `:session`, opens it beside the diff in a tmux, Ghostty, iTerm2 or WezTerm split, or starts one on the MR's branch.
@@ -218,35 +265,47 @@ Each entry says what changed, then where, then how to use it.
 
 - **A screen at rest sends nothing to a slow link.**
   In the compact layout: the queue marks stay lit, and a spinner turns four steps a second.
+
 - **Usage time counts reading, not a screen left open.**
   In the TIME of `revu usage`: a screen stops counting a minute after your last key, click or wheel, or when the terminal loses focus.
   Days counted before keep their actions, and the report leaves out their time and hints.
+
 - **Usage hints fire only where a faster key would have helped.**
   In the diff and the queue, with `[usage] enabled = true`.
   The first three times a hint fires, a toast names the key to try.
+
 - **Usage counts a key by what it did.**
   In `revu usage`: `q`, `esc` or `x` closing a pane counts as `close_pane`, and `enter` on a file or hunk as `fold_toggle`.
+
 - **A config written for a newer revu no longer stops this one.**
   In every command and the TUI: a setting revu does not know is ignored, and a warning names it once at start.
   An old `[ai] enabled` or `provider` now warns and points at `[ai.anthropic]` and `[ai.typesafe]`.
+
 - **Refreshing comes back after a sleep or a dropped VPN.**
   In the queue and an open MR: a request that gets no answer gives up, the status line says offline, and polling tries again.
+
 - **Opening an agent session no longer waits forever.**
   On `a g` and `:session`: a stuck `git fetch`, tmux or terminal is stopped and the toast says which.
+
 - **A draft you deleted or edited is never published as it was.**
   When deleting or editing a draft fails, for example while you are offline.
   The draft comes back as the forge holds it, your new text waits in the box, and `P` waits for `r`.
+
 - **A comment survives an editor that exits with an error.**
   When you write in `$EDITOR` with `E` or `ctrl-o`, and vim quits with `:cq` or after an error.
   The text waits in the comment box, and `enter` saves it.
+
 - **A refused approval no longer reads as a failed publish.**
   On GitLab, when you publish and approve with `P`, `a`, `enter`.
   The comments are published and leave the list, and the warning says why the approval was refused.
+
 - **Notes saved together on a GitHub PR all reach it.**
   On GitHub, when several drafts save at once, as `r` does after you were offline.
   Each draft now waits for the one before it, so none overwrites another.
+
 - **A big MR opens faster.**
   In the diff: folded files are coloured only once unfolded, and an unchanged MR opens without fetching its diff again.
+
 - **An open MR at rest stays quiet.**
   In the thread pane and under lines, where threads are laid out again only when a thread or the age of a note changes.
 
@@ -257,21 +316,27 @@ Each entry says what changed, then where, then how to use it.
 - **See what changed in revu.**
   In the terminal and inside revu.
   `revu news` prints it, `:news` opens it, and `revu update` ends with what is new for you.
+
 - **Read the threads of a line in the diff, under that line.**
   In zen and in a window under 120 columns, one row per thread.
   `enter` on the line unfolds its threads, and `enter` on a thread folds or unfolds that one.
+
 - **Write a comment in the diff, where it will land.**
   In zen and in a window under 120 columns, for a new comment, a reply and an edited draft.
   `c` on a line, `r` on a thread or `e` on your draft opens the box under it.
+
 - **Reply to a thread with the comment key.**
   On a thread, in the thread pane and in the diff.
   `c` replies as `r` does, and still starts a new comment on a line of code.
+
 - **A narrow window gives its whole width to the diff.**
   In a window under 120 columns, with an MR open: the queue hides and one line number shows.
   `h` or `esc` brings the queue back, and `l` or `enter` returns to the diff.
+
 - **Choose the widths where the layout changes.**
   In the config, under `[tui]`.
   `narrow_width` sets where a window counts as narrow, 120 by default, and `wide_width` where three columns fit, 150 by default.
+
 - **Pick and open a row with the mouse.**
   In the queue, the file tree, the outline and the list of every thread.
   Click a row to pick it, and click it again to open it.
@@ -283,9 +348,11 @@ Each entry says what changed, then where, then how to use it.
 - **Read a Markdown file as a page, with its changes marked.**
   In the diff, on a Markdown file.
   `v` opens the page, `v` again goes back, and `zR` shows the parts that did not change.
+
 - **See the old page beside the new one.**
   In the Markdown page that `v` opens.
   `D` puts them side by side, and `D` again goes back to one column.
+
 - **Move a full page at a time.**
   In the queue, the diff, the thread pane, the cover and the key list.
   `ctrl-f` goes down and `ctrl-b` goes up, as `PgDn` and `PgUp` do.
@@ -302,6 +369,7 @@ Each entry says what changed, then where, then how to use it.
 - **Keep an MR on top of the queue.**
   In the queue, under PINNED, until the MR is merged or closed.
   `b` pins or unpins it, and `:pin` and `:unpin` do the same from the diff.
+
 - **Code in comments takes the colours of the diff.**
   In the thread pane, in code blocks and suggestions.
   Name the language at the top of a code block, as on the forge.
@@ -334,99 +402,131 @@ Each entry says what changed, then where, then how to use it.
 - **Install revu with Homebrew.**
   On macOS.
   Run `brew install vmeyet/tap/revu`, and `revu update` upgrades it later.
+
 - **One queue for GitLab and GitHub.**
   In the left pane, with every host you logged in to.
   `revu login --from-glab` and `revu login github.com --from-gh` reuse the tokens you already have.
+
 - **The queue keeps to what needs you.**
   In the queue, where stale, approved and unready MRs move to OTHER.
   `[queue.rules] enabled = false` shows them all again.
+
 - **Filter, sort and group the queue.**
   In the queue.
   `/` filters with words like `@nina` or `~infra`, `s` sorts, `S` groups by author, and `*` shows every project.
+
 - **Save a filter as a view.**
   In the queue, from `[queue.views]` in the config.
   `'` then the first letter of a view applies it.
+
 - **Read a diff with folds and syntax colours.**
   In the diff.
   `]c` and `[c` jump between changes, `tab` goes to the next file, and `za` folds.
+
 - **See the old file beside the new one.**
   In the diff.
   `D` switches between inline and side by side.
+
 - **Wrap long lines, hide whitespace changes and show more lines around a change.**
   In the diff.
   `w` wraps, `W` hides whitespace changes, and `=` shows more lines.
+
 - **Find text anywhere in the MR.**
   In the diff, in folded files too.
   `/` searches, then `n` and `N` go to the next and previous match.
+
 - **Comment on a line, a range or with a suggestion.**
   In the diff, as drafts only you can see.
   `c` comments, `V` selects lines first, and `s` suggests a change.
+
 - **Publish every draft as one review.**
   In the diff and the thread pane.
   `P` lists your drafts, then `a` approves with it and `enter` publishes.
+
 - **Post a comment at once, without a draft.**
   In the comment box.
   `⌘enter` posts it, or `ctrl-s` where the terminal keeps `⌘enter`.
+
 - **Read and answer threads beside the code.**
   In the right pane, from a line with a mark.
   `enter` opens the threads, `r` replies and `R` resolves.
+
 - **Walk the threads of an MR.**
   In the diff and the right pane.
   `]n` and `[n` jump between open threads, `T` lists every thread, and `m` keeps yours.
+
 - **React to a comment.**
   In the thread pane, and in the diff on a line with a thread.
   `+` opens the reactions, then `1` to `8` picks one.
+
 - **Apply a suggestion.**
   In the thread pane, on a comment that holds a suggestion.
   `S` applies it after a `y`.
+
 - **Approve, merge, and mark your MR draft or ready.**
   In the diff, and from the shell.
   `A` approves, `M` merges yours, `H` switches draft and ready, like `revu approve`, `revu merge` and `revu ready`.
+
 - **See an MR at a glance on its cover page.**
   Over the queue or the diff.
   `i` opens the description, the checks, the reviewers and the open threads.
+
 - **See the pipeline and its failed jobs.**
   In the right pane.
   `p` opens it, and `o` opens a job in the browser.
+
 - **Browse the files as a tree and mark them viewed.**
   In the right pane and the diff.
   `t` opens the tree, and `zv` marks a file viewed.
+
 - **Zen shows the diff alone.**
   In the diff, and at start with `revu 42`.
   `zz` enters and leaves it, and `]m` and `[m` change MR without leaving.
+
 - **Go through the MRs that need you like an inbox.**
   In the queue and the diff.
   `]r` opens the next MR that needs you, and `[r` the previous one.
+
 - **One search for MRs, files and commands.**
   Anywhere in revu.
   `⌘K` or `ctrl-k` opens it, `/` first finds files, and `:` runs a command.
+
 - **Open a file in your own editor.**
   In the diff, at the line under the cursor.
   `ctrl-v` opens it, and `:view old` opens it as it was before the change.
+
 - **Ask Claude about the diff.**
   In the diff and the thread pane, once `[ai.anthropic]` is switched on.
   `a` then `e` explains, `a` then `r` lists risks, and `a` then `s` sums up the MR.
+
 - **Share an MR to a place you choose.**
   In the queue and the diff, through a `[share]` command.
   `Y` or `:share` shows the message first, then `y` sends it.
+
 - **Scroll with the wheel and copy by dragging.**
   In every pane, with the mouse.
   Drag over code or over a comment to copy it.
+
 - **Get a notification when an MR needs your review.**
   On macOS, while revu runs.
   `[notify] enabled = false` turns it off.
+
 - **Add your own keys, or use an AZERTY keyboard.**
   In the config, under `[keys]`.
   `[keys.bind]` adds keys, and `layout = "azerty"` makes `(` and `)` work like `[` and `]`.
+
 - **Pick a theme.**
   Anywhere in revu.
   `:set theme=nord` changes it and saves it.
+
 - **See the keys of the pane you are in.**
   Anywhere in revu.
   `?` shows them, and `?` again shows every key.
+
 - **Review from the shell.**
   In the terminal, for scripts too.
   `revu list`, `revu show`, `revu diff`, `revu comment` and `revu publish` work without the screen, and `--json` prints data.
+
 - **See which keys you use.**
   In the terminal, once `[usage] enabled = true` is in the config.
   `revu usage` prints what you use most and what you never use.

@@ -273,6 +273,71 @@ mod tests {
         assert_eq!(shown, [(" 12 let x = ", false), ("12", true), (";", false)]);
     }
 
+    /// An MR adding the line `text` then a line `after`, long lines wrapping, `query` searched for.
+    fn wrapped_search(text: &str, query: &str) -> App {
+        let diff = format!("@@ -1 +1,3 @@\n a\n+{text}\n+after\n");
+        let file = DiffFile { diff, old_path: "a.txt".into(), new_path: "a.txt".into(), ..DiffFile::default() };
+        let mut app = with_review();
+        app.theme = Theme::named("dracula").unwrap();
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(mr(), &[file], vec![], &[])), cached: None });
+        press(&mut app, "w");
+        type_text(&mut app, &format!("/{query}"));
+        app
+    }
+
+    const SCREEN: (u16, u16) = (120, 40);
+
+    fn row_holding(app: &mut App, text: &str) -> u16 {
+        spot(app, text, SCREEN.0, SCREEN.1).1
+    }
+
+    fn reversed_cells(app: &mut App, y: u16) -> usize {
+        let screen = cells(app, SCREEN.0, SCREEN.1);
+        (0..SCREEN.0).filter(|&x| screen[(x, y)].modifier.contains(Modifier::REVERSED)).count()
+    }
+
+    #[test]
+    fn a_line_ending_in_plain_text_during_a_search_wraps_to_its_own_row_count_with_every_row_filled() {
+        let mut app = wrapped_search(&format!("{} db tail", "x".repeat(200)), "db");
+        let (first, last) = (row_holding(&mut app, "xxx"), row_holding(&mut app, "tail"));
+        assert!(last > first, "the line wraps");
+        assert_eq!(row_holding(&mut app, "after"), last + 1, "no blank rows follow the text");
+        let screen = cells(&mut app, SCREEN.0, SCREEN.1);
+        let fill_edge = |y| (0..SCREEN.0).rev().find(|&x| Some(screen[(x, y)].bg) == app.theme.added_fill);
+        assert!((first..=last).all(|y| fill_edge(y) == fill_edge(first)), "every row reaches the edge");
+    }
+
+    #[test]
+    fn a_match_on_a_line_ending_in_plain_text_reads_marked() {
+        let mut app = wrapped_search("let db tail", "db");
+        let screen = cells(&mut app, SCREEN.0, SCREEN.1);
+        assert!(cell_of(&screen, "db tail").modifier.contains(Modifier::REVERSED));
+        let row = row_holding(&mut app, "db tail");
+        assert_eq!(reversed_cells(&mut app, row), 2, "the match alone");
+    }
+
+    #[test]
+    fn a_match_wrapped_across_rows_stays_marked_on_each_of_them() {
+        let mut app = wrapped_search(&format!("xxx{} tail", "y".repeat(150)), &"y".repeat(150));
+        let (first, last) = (row_holding(&mut app, "xxx"), row_holding(&mut app, "tail"));
+        assert!(last > first, "the match wraps");
+        assert_eq!((first..=last).map(|y| reversed_cells(&mut app, y)).sum::<usize>(), 150);
+    }
+
+    #[test]
+    fn a_search_for_spaces_leaves_the_padding_unmarked() {
+        let mut app = wrapped_search("let db", "  ");
+        let row = row_holding(&mut app, "let db");
+        assert_eq!(reversed_cells(&mut app, row), 0);
+    }
+
+    #[test]
+    fn real_trailing_whitespace_keeps_its_dots_during_a_search() {
+        let mut app = wrapped_search("let db  ", "let");
+        let row = row_holding(&mut app, "db··");
+        assert_eq!(row_holding(&mut app, "after"), row + 1);
+    }
+
     /// What the row under the cursor reads: a line's text (the new side of a pair), or a file's path.
     fn text_here(app: &App) -> String {
         let open = app.open.as_ref().unwrap();
