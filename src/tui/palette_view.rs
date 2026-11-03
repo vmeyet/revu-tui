@@ -42,6 +42,6 @@ fn footer(mode: Mode) -> &'static str {
         Mode::Mrs => "  ↑↓ pick · enter opens · > commands · esc",
         Mode::Answers => "  ↑↓ pick · enter shows it · esc",
         Mode::Sessions => "  ↑↓ pick · enter opens it · esc",
-        Mode::Commands => "  ↑↓ pick · tab completes · ^p history · esc",
+        Mode::Commands => "  ↑↓ pick · ↑ history · tab completes · esc",
     }
 }

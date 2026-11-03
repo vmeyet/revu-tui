@@ -5,8 +5,18 @@ use ratatui::text::{Line, Span};
 /// One long line as several screen rows of `width`: continuation rows indented under the text,
 /// every row padded with the line's fill so a changed line stays one coloured block.
 pub(super) fn wrap_row(line: Line<'static>, width: usize, indent: usize) -> Vec<Line<'static>> {
-    let mut spans = line.spans;
-    let fill = trailing_fill(&mut spans);
+    wrap_marked_row(line, width, indent, std::convert::identity)
+}
+
+/// `wrap_row` with `mark` run on the line once its padding is off, so marks neither fall on the padding nor merge it into the text.
+pub(super) fn wrap_marked_row(
+    mut line: Line<'static>,
+    width: usize,
+    indent: usize,
+    mark: impl FnOnce(Line<'static>) -> Line<'static>,
+) -> Vec<Line<'static>> {
+    let fill = trailing_fill(&mut line.spans);
+    let spans = mark(line).spans;
     let mut rows: Vec<Vec<Span<'static>>> = vec![];
     let mut row: Vec<Span<'static>> = vec![];
     let mut used = 0;
