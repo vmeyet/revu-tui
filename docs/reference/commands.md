@@ -148,7 +148,6 @@ Store a provider's key in the keychain; the config still has to switch it on.
 | Flag | Means |
 |---|---|
 | `--token` | Read the key from stdin (`-`) instead of prompting. |
-| `--from-slack-tui` | Reuse the TypeSafe key slack-tui keeps in the keychain. |
 
 ## `revu ai logout`
 
@@ -175,14 +174,6 @@ Ask Claude about a merge request; the answer streams to stdout.
 |---|---|
 | `--file` | Ask about one file instead of the whole MR. |
 | `--lines` | With `--file`: the new-side lines asked about, `13` or `13-20`. |
-
-## `revu tui`
-
-Interactive review client, on the queue or straight on one MR in zen.
-
-| Argument | Means |
-|---|---|
-| `MR` | Open the TUI on this MR, in zen: `42`, `group/project!42` or an MR URL (quote `'!42'` in your shell) |
 
 ## `revu completions`
 

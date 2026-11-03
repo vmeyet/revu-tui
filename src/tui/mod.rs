@@ -13,7 +13,6 @@ mod outline_view;
 mod palette;
 mod palette_view;
 mod pipeline_view;
-#[cfg(feature = "prose")]
 mod prose;
 mod prose_view;
 mod publish_view;
@@ -68,7 +67,6 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         watch_labels: ctx.config.queue.watch_labels.clone(),
         rules: ctx.config.queue.rules.clone(),
         ready_command: ctx.config.queue.ready.command.clone(),
-        inline: ctx.config.review.inline(),
         open: ctx.config.open.clone(),
         agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
         checkout,

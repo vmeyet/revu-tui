@@ -35,7 +35,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/backend/cache_shapes.rs` | Tests only: one fixture per type written to the cache, so a change that stops reading an older file fails (the cache would drop it, and the reader's pins, viewed files and drafts with it); a new cached type adds its fixture here |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
-| `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies in `body.rs`: revu draws fenced code, suggestions and pictures, `prose.rs` draws the Markdown between them with mrk (plain text without the `prose` feature) |
+| `tui/thread_view/` | The thread pane and the compose box in `mod.rs`; notes, drafts and the rows under a diff line in `conversation.rs`; bodies in `body.rs`: revu draws fenced code, suggestions and pictures, `prose.rs` draws the Markdown between them with mrk |
 | `tui/theme.rs` | revu's colours over vtui's palette: the fills of a changed line; code colours come from vtui's `Syntax` |
 | `tui/palette.rs`, `palette_view.rs`, `help.rs` | revu's side of the `ctrl-k` palette (its modes, commands and what it lists) and of the `?` overlay (its groups of keys per pane) |
 | `tui/prose.rs`, `table.rs`, `images.rs` | Markdown drawn by mrk (files block by block, note bodies), the tables of a Markdown file in the diff, pictures in the thread pane |
@@ -81,7 +81,7 @@ Handling a key:
 A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/app/paste.rs`) types it whole into the box `App::receiver` (`tui/app/receiver.rs`) says takes the next key, and drops it where no box is open.
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `docs`, ...) at once.
-The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `Ctx` to `tui::run`.
+The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
 
 ## Boundaries
 
@@ -90,7 +90,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu tui` hand the `
 - `tui/app/` is pure: it reads time from `app.now` and `app.today`, set by the loop, and never does I/O; its tests drive it with keys and `Incoming` values.
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `vtui::screen::Screen::lend`, with the key stream paused.
-- Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands: `revu login` takes a token from `glab`, `gh` or stdin, and `revu ai` can copy slack-tui's key from the keychain.
+- Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands: `revu login` takes a token from `glab`, `gh` or stdin.
 - Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments), the AI clients, and `revu ai`, which checks a new key against the Anthropic API before it stores it.
 
 ## Concurrency

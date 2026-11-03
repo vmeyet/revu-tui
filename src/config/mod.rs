@@ -1,4 +1,3 @@
-use crate::diff::words::InlineRule;
 use crate::forge::Kind;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -121,40 +120,16 @@ pub(crate) struct Host {
 }
 
 /// How a diff opens.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Review {
     /// Glob patterns of files that open folded: lockfiles, snapshots, generated code.
     #[serde(default)]
     pub(crate) fold: Vec<String>,
-    /// A changed pair reads as one row when each side changes at most this many words…
-    #[serde(default = "inline_max_words")]
-    pub(crate) inline_max_words: usize,
-    /// …and both lines keep at least this share of their text, in percent.
-    #[serde(default = "inline_min_same")]
-    pub(crate) inline_min_same: u8,
-}
-
-impl Default for Review {
-    fn default() -> Self {
-        Self { fold: vec![], inline_max_words: inline_max_words(), inline_min_same: inline_min_same() }
-    }
-}
-
-fn inline_max_words() -> usize {
-    InlineRule::default().max_words
-}
-
-fn inline_min_same() -> u8 {
-    InlineRule::default().min_same
 }
 
 impl Review {
     fn is_default(&self) -> bool {
         *self == Self::default()
-    }
-
-    pub(crate) fn inline(&self) -> InlineRule {
-        InlineRule { max_words: self.inline_max_words, min_same: self.inline_min_same }
     }
 }
 
@@ -295,9 +270,8 @@ impl Config {
             return Ok(Loaded::default());
         }
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let (config, mut warnings) = ignored::parse(&text).with_context(|| format!("parsing {}", path.display()))?;
+        let (config, warnings) = ignored::parse(&text).with_context(|| format!("parsing {}", path.display()))?;
         config.check().with_context(|| format!("in {}", path.display()))?;
-        warnings.extend(crate::keymap::ignored(&config.keys));
         Ok(Loaded { config, warnings })
     }
 
@@ -321,7 +295,7 @@ mod tests {
             host: Some("gitlab.com".into()),
             username: Some("nina".into()),
             queue: Queue { watch_labels: vec!["infra".into()], ..Queue::default() },
-            review: Review { fold: vec!["*.lock".into()], ..Review::default() },
+            review: Review { fold: vec!["*.lock".into()] },
             tui: Tui { theme: Some("nord".into()), ..Tui::default() },
             ai: Ai::default(),
             open: Open { default: Some("hx".into()), files: BTreeMap::from([("*.md".into(), "glow -p".into())]) },
@@ -358,15 +332,13 @@ mod tests {
     }
 
     #[test]
-    fn a_binding_on_an_action_revu_removed_is_ignored_with_a_warning() {
+    fn a_binding_on_an_unknown_action_warns_and_revu_still_starts() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         std::fs::write(&path, "[keys.bind]\nnext_review = \"F\"\nnext_thread = \"f\"\n").unwrap();
         let loaded = Config::read(&path).unwrap();
-        assert_eq!(loaded.warnings, ["`next_review` is not an action this revu knows; it is ignored"]);
+        assert_eq!(loaded.warnings, ["`keys.bind.next_review` is not a setting this revu knows; it is ignored"]);
         assert!(crate::keymap::Keymap::new(&loaded.config.keys).is_ok(), "the rest of the bindings load");
-        std::fs::write(&path, "[keys.bind]\nnext_reviw = \"F\"\n").unwrap();
-        assert!(Config::read(&path).is_err(), "a typo still stops revu, naming the real actions");
     }
 
     #[test]
@@ -377,8 +349,6 @@ mod tests {
         let loaded = Config::read(&path).unwrap();
         assert_eq!(loaded.config.tui.theme.as_deref(), Some("nord"));
         assert_eq!(loaded.warnings.len(), 2, "{:?}", loaded.warnings);
-        std::fs::write(&path, "[ai]\nenabled = true\n").unwrap();
-        assert!(Config::read(&path).unwrap().warnings[0].contains("[ai.anthropic] enabled = true"), "the moved switch says where it went");
         std::fs::write(&path, "[ai.anthropic]\nkey = \"sk-ant\"\n").unwrap();
         let err = format!("{:#}", Config::load_from(&path).unwrap_err());
         assert!(err.contains("config.toml") && err.contains("keychain"), "a key in the config is refused: {err}");

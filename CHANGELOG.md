@@ -42,6 +42,27 @@ Each entry says what changed, then where, then how to use it.
 - **A changed line no longer runs on into blank rows while wrapping and searching.**
   In the diff with `w` on and a `/` search active, for lines ending in uncoloured text.
 
+- **A binding on an action revu does not know no longer stops it at start.**
+  In `[keys.bind]`: revu warns, leaves that binding out and loads the rest.
+
+### Removed
+
+- **`revu tui`.**
+  On the command line: `revu` opens the review screen, and `revu 42` opens it on one MR.
+
+- **`revu ai login --from-slack-tui` and the offer to reuse slack-tui's key.**
+  In `revu ai login typesafe`: paste the key, or pipe it with `--token -`.
+
+- **The settings `inline_max_words` and `inline_min_same`.**
+  In `[review]`: a config that holds them gets a warning.
+  A pair of lines still reads as one row at 2 changed words and 60% kept.
+
+- **Old names in the config.**
+  `split` in `[keys.bind]` no longer binds `side_by_side`, and `[ai] enabled`, `provider` and `model` no longer say where they moved.
+
+- **The `prose` cargo feature.**
+  When you build revu: the Markdown view is always in.
+
 ## 0.11.0 - 2026-10-29
 
 ### New

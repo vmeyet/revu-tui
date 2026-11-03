@@ -14,7 +14,7 @@ revu login --from-glab            # GitLab: reuse the token glab holds
 revu login github.com --from-gh   # GitHub: reuse the token gh holds
 ```
 
-You need Rust 1.90 or newer.
+You need Rust 1.92 or newer.
 `revu update` installs the latest version later, and ends with what is new for you.
 When brew installed revu, `revu update` runs `brew upgrade` for you.
 

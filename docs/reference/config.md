@@ -3,7 +3,8 @@
 
 revu reads `~/.config/revu/config.toml`, or `$XDG_CONFIG_HOME/revu/config.toml`.
 Every key is optional.
-A key revu does not know stops it at start, with the file and the key named.
+A key revu does not know is ignored, with a warning that names it.
+A key that looks like a secret stops revu at start.
 Tokens never go here: they live in the macOS keychain.
 
 ## Top level
@@ -66,8 +67,6 @@ Tokens never go here: they live in the macOS keychain.
 | Key | Type | Default | Does |
 |---|---|---|---|
 | `fold` | list of globs | `[]` | Files that open folded. |
-| `inline_max_words` | number | 2 | At most this many changed words per side show on one row. |
-| `inline_min_same` | percent | 60 | Both lines keep at least this share of text to show on one row. |
 
 ## `[tui]`
 
@@ -192,8 +191,6 @@ mine = "@me ~frontend"
 
 [review]
 fold = ["*.lock", "**/generated/**"]
-inline_max_words = 2
-inline_min_same = 60
 
 [tui]
 theme = "catppuccin"

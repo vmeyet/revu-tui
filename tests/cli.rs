@@ -126,9 +126,9 @@ fn a_bare_number_outside_a_checkout_fails_before_the_tui() {
 }
 
 #[test]
-fn tui_rejects_a_reference_before_the_screen_changes() {
+fn a_bad_reference_fails_before_the_screen_changes() {
     revu()
-        .args(["--host", "localhost:1", "tui", "nonsense"])
+        .args(["--host", "localhost:1", "nonsense"])
         .env("GITLAB_TOKEN", "glpat-xxxx")
         .assert()
         .failure()
@@ -190,7 +190,7 @@ fn a_config_written_for_a_newer_revu_warns_once_and_the_command_runs() {
     let config = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(config.path().join("revu")).unwrap();
     std::fs::write(config.path().join("revu/config.toml"), "[tui]\nsparkles = true\n\n[sync.later]\nevery = 5\n").unwrap();
-    let warned = predicate::str::contains("`tui.sparkles` is not a setting this revu knows; it is ignored — written for a newer revu?")
+    let warned = predicate::str::contains("`tui.sparkles` is not a setting this revu knows; it is ignored")
         .and(predicate::str::contains("`sync` is not a setting"))
         .and(predicate::str::contains("config.toml"));
     revu().env("XDG_CONFIG_HOME", config.path()).arg("usage").assert().success().stderr(warned);

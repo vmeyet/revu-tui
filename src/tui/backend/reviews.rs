@@ -3,7 +3,6 @@ use super::saves::Saves;
 use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::cache::{Entry, keys};
 use crate::diff::fold::FoldState;
-use crate::diff::words::InlineRule;
 use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Mr, MrKey, Sha};
 use crate::log::OrWarn as _;
 use crate::review::{Draft, Review};
@@ -18,7 +17,6 @@ pub(in crate::tui) struct Reviews {
     pub(super) homes: Arc<Homes>,
     pub(super) saves: Saves,
     pub(super) fold_globs: Vec<String>,
-    pub(super) inline: InlineRule,
     /// MRs being opened right now, counted by every task: loading ahead waits while there are any.
     pub(super) opening: Arc<AtomicUsize>,
 }
@@ -193,7 +191,6 @@ impl Reviews {
         review
             .with_fold(fold)
             .with_viewed(viewed)
-            .with_inline(self.inline)
             .with_side_by_side(state.side_by_side)
             .with_drafts(drafts.iter().map(Draft::from_held).collect())
     }
@@ -217,7 +214,7 @@ mod tests {
 
     fn reviews(homes: Homes) -> Reviews {
         let homes = Arc::new(homes);
-        Reviews { saves: Saves::new(Arc::clone(&homes)), homes, fold_globs: vec![], inline: InlineRule::default(), opening: Arc::default() }
+        Reviews { saves: Saves::new(Arc::clone(&homes)), homes, fold_globs: vec![], opening: Arc::default() }
     }
 
     fn ahead(updated: &str) -> Ahead {

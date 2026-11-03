@@ -9,7 +9,7 @@ cargo install --git https://github.com/vmeyet/revu-tui
 revu --version
 ```
 
-You need macOS and Rust 1.90 or newer.
+You need macOS and Rust 1.92 or newer.
 
 ## 2. Log in
 

@@ -150,22 +150,6 @@ const SETTINGS: &[Setting] = &[
         meaning: "Files that open folded.",
         example: "[\"*.lock\", \"**/generated/**\"]",
     },
-    Setting {
-        table: "review",
-        key: "inline_max_words",
-        kind: "number",
-        default: "2",
-        meaning: "At most this many changed words per side show on one row.",
-        example: "2",
-    },
-    Setting {
-        table: "review",
-        key: "inline_min_same",
-        kind: "percent",
-        default: "60",
-        meaning: "Both lines keep at least this share of text to show on one row.",
-        example: "60",
-    },
     Setting { table: "tui", key: "theme", kind: "text", default: "`default`", meaning: "The colour palette.", example: "\"catppuccin\"" },
     Setting {
         table: "tui",
@@ -448,7 +432,8 @@ fn config_page() -> String {
         String::new(),
         "revu reads `~/.config/revu/config.toml`, or `$XDG_CONFIG_HOME/revu/config.toml`.".to_owned(),
         "Every key is optional.".to_owned(),
-        "A key revu does not know stops it at start, with the file and the key named.".to_owned(),
+        "A key revu does not know is ignored, with a warning that names it.".to_owned(),
+        "A key that looks like a secret stops revu at start.".to_owned(),
         "Tokens never go here: they live in the macOS keychain.".to_owned(),
     ];
     let mut tables: Vec<&str> = vec![];

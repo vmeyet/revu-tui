@@ -32,7 +32,7 @@ pub(crate) fn rules() -> Rules {
         actions: act::listed_names(),
         groups: Section::ALL.iter().map(|section| Group { title: section.title(), actions: act::listed_in(*section) }).collect(),
         hints: HINTS,
-        renamed: crate::keymap::RENAMED,
+        renamed: &[],
         counting: COUNTING,
     }
 }
@@ -52,7 +52,7 @@ pub(crate) fn read(cache: &Cache) -> Vec<Day> {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
-    use vtui::usage::{Count, Window};
+    use vtui::usage::Window;
 
     fn date(text: &str) -> NaiveDate {
         text.parse().unwrap()
@@ -96,14 +96,6 @@ mod tests {
             rules().actions.len(),
             "every known action lands somewhere: never, rarely, or next_thread and move_down"
         );
-    }
-
-    #[test]
-    fn a_renamed_action_counts_under_its_new_name() {
-        let days = rules().parse("{\"date\":\"2026-09-24\",\"actions\":{\"split\":1,\"side_by_side\":1}}");
-        let report = rules().report(&days, date("2026-09-24"), Window::All);
-        assert!(report.rarely.contains(&Count { action: "side_by_side".to_owned(), count: 2 }), "{:?}", report.rarely);
-        assert!(!report.most.iter().any(|count| count.action == "split"));
     }
 
     #[test]

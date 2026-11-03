@@ -197,39 +197,28 @@ fn is_thin_gap(gap: &str) -> bool {
     matches!(tokens(gap).as_slice(), [token] if !token.starts_with(is_word_char))
 }
 
-/// When a changed pair reads better as one row: few changed words, and most of both lines kept.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct InlineRule {
-    /// Most changed runs allowed on each side.
-    pub(crate) max_words: usize,
-    /// Least share of each line, in percent of its bytes, the two lines must keep.
-    pub(crate) min_same: u8,
+/// Most changed runs a pair may have on each side and still read as one row.
+const INLINE_MAX_WORDS: usize = 2;
+/// Least share of each line, in percent of its bytes, a pair must keep to read as one row.
+const INLINE_MIN_SAME: usize = 60;
+
+/// Whether a changed pair reads better as one row: few changed words, and most of both lines kept.
+/// Read from the changed ranges `mark_file` stored on both lines.
+fn fits_one_row(old: &Line, new: &Line) -> bool {
+    let (olds, news) = (old.words.len(), new.words.len());
+    let same = old.text.len() - old.words.iter().map(ExactSizeIterator::len).sum::<usize>();
+    let kept = |len: usize| len > 0 && same * 100 >= INLINE_MIN_SAME * len;
+    olds + news > 0 && olds <= INLINE_MAX_WORDS && news <= INLINE_MAX_WORDS && kept(old.text.len()) && kept(new.text.len())
 }
 
-impl Default for InlineRule {
-    fn default() -> Self {
-        Self { max_words: 2, min_same: 60 }
-    }
-}
-
-impl InlineRule {
-    /// Read from the changed ranges `mark_file` stored on both lines.
-    pub(crate) fn fits(self, old: &Line, new: &Line) -> bool {
-        let (olds, news) = (old.words.len(), new.words.len());
-        let same = old.text.len() - old.words.iter().map(ExactSizeIterator::len).sum::<usize>();
-        let kept = |len: usize| len > 0 && same * 100 >= usize::from(self.min_same) * len;
-        olds + news > 0 && olds <= self.max_words && news <= self.max_words && kept(old.text.len()) && kept(new.text.len())
-    }
-}
-
-/// The pairs `mark_file` found in `hunk` that `rule` lets read as one row.
-pub(crate) fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<LinePair> {
-    pairs_where(hunk, |old, new| rule.fits(old, new))
+/// The pairs `mark_file` found in `hunk` that fit on one row.
+pub(crate) fn inline_pairs(hunk: &Hunk) -> Vec<LinePair> {
+    pairs_where(hunk, fits_one_row)
 }
 
 /// The pairs `inline_pairs` finds, and those whose lines differ in whitespace only, which read as one row under `W`.
-pub(crate) fn inline_or_whitespace_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<LinePair> {
-    pairs_where(hunk, |old, new| rule.fits(old, new) || same_but_whitespace(&old.text, &new.text))
+pub(crate) fn inline_or_whitespace_pairs(hunk: &Hunk) -> Vec<LinePair> {
+    pairs_where(hunk, |old, new| fits_one_row(old, new) || same_but_whitespace(&old.text, &new.text))
 }
 
 fn pairs_where(hunk: &Hunk, keep: impl Fn(&Line, &Line) -> bool) -> Vec<LinePair> {
@@ -400,7 +389,7 @@ pub(super) mod tests {
             #[test]
             fn an_inline_pair_is_always_a_removed_line_then_its_added_twin(hunk in alike_hunk()) {
                 let hunk = mark(&hunk);
-                for LinePair { removed, added } in inline_pairs(&hunk, InlineRule::default()) {
+                for LinePair { removed, added } in inline_pairs(&hunk) {
                     prop_assert_eq!(hunk.lines[removed].kind, LineKind::Removed);
                     prop_assert_eq!(hunk.lines[added].kind, LineKind::Added);
                     prop_assert!(removed < added);
@@ -580,7 +569,6 @@ pub(super) mod tests {
 
     #[test]
     fn the_inline_rule_takes_small_changes_and_leaves_rewrites_split() {
-        let rule = InlineRule::default();
         let cases = [
             ("let b = 2;", "let b = 20;", true, "one word"),
             ("let total = price * qty;", "let total = cost * count;", true, "two words, most kept"),
@@ -592,17 +580,15 @@ pub(super) mod tests {
         ];
         for (old, new, fits, why) in cases {
             let [old_line, new_line] = marked_pair(old, new);
-            assert_eq!(rule.fits(&old_line, &new_line), fits, "{why}: {old:?} -> {new:?}");
+            assert_eq!(fits_one_row(&old_line, &new_line), fits, "{why}: {old:?} -> {new:?}");
         }
-        let [old, new] = marked_pair("a b c d e f g h", "a x c y e z g h");
-        assert!(InlineRule { max_words: 3, min_same: 50 }.fits(&old, &new), "thresholds come from the rule");
     }
 
     #[test]
     fn only_twins_that_fit_the_rule_are_inline_pairs() {
         let hunk =
             mark(&parse("@@ -1,3 +1,3 @@\n-let b = 2;\n-completely old text\n+let b = 20;\n+something else entirely\n let c = 3;\n")[0]);
-        assert_eq!(inline_pairs(&hunk, InlineRule::default()), vec![pair(0, 2)]);
+        assert_eq!(inline_pairs(&hunk), vec![pair(0, 2)]);
     }
 
     #[test]
@@ -631,6 +617,6 @@ pub(super) mod tests {
         assert!(!same_but_whitespace("let a = 1;", "let a = 1;"), "an unchanged line is no whitespace change");
         assert!(!same_but_whitespace("let a = 1;", "let a = 2;"));
         let hunk = mark(&parse("@@ -1,2 +1,2 @@\n-\tone();\n-two();\n+    one();\n+three();\n")[0]);
-        assert_eq!(inline_or_whitespace_pairs(&hunk, InlineRule::default()), [pair(0, 2)]);
+        assert_eq!(inline_or_whitespace_pairs(&hunk), [pair(0, 2)]);
     }
 }

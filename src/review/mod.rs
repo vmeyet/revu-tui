@@ -16,7 +16,6 @@ pub(crate) use rows::Row;
 pub(crate) use thread::{Anchor, Side, Thread, anchor_of};
 
 use crate::diff::fold::{FileMeta, FoldState};
-use crate::diff::words::InlineRule;
 pub(crate) use crate::forge::FileKind;
 use crate::forge::{DiffFile, Discussion, Mr, ThreadId};
 use std::collections::{BTreeMap, BTreeSet};
@@ -53,8 +52,6 @@ pub(crate) struct Review {
     pub(crate) drafts: Arc<[Draft]>,
     pub(crate) viewed: BTreeSet<String>,
     pub(crate) fold: FoldState,
-    /// Which changed pairs read as one row.
-    pub(crate) inline: InlineRule,
     /// The old file beside the new one, `D` in the TUI; the reader's choice, kept even while the diff is too narrow.
     pub(crate) side_by_side: bool,
     /// The diff area holds two sides of code; below, side by side falls back to inline.
@@ -94,7 +91,6 @@ impl Review {
             drafts: Arc::from([]),
             viewed: BTreeSet::new(),
             fold,
-            inline: InlineRule::default(),
             side_by_side: false,
             wide: true,
             peek: None,
@@ -107,10 +103,6 @@ impl Review {
 
     pub(crate) fn with_mr(self, mr: Mr) -> Self {
         Self { mr: Arc::new(mr), ..self }
-    }
-
-    pub(crate) fn with_inline(self, inline: InlineRule) -> Self {
-        Self { inline, ..self }
     }
 
     pub(crate) fn with_side_by_side(self, side_by_side: bool) -> Self {
