@@ -16,7 +16,9 @@ The first character picks what you search.
 `:` opens the search on commands directly.
 `↑` `↓` pick a command from the list, and `enter` runs it.
 A command that needs more, like `go`, waits for you to finish the line.
-`ctrl-p` and `ctrl-n` bring back the commands you ran before.
+`↑` on an empty line, at the top of the list, brings back the command you ran last.
+`↑` `↓` then walk the ones before it until you type.
+`ctrl-p` and `ctrl-n` do the same from any line.
 `⌫` on an empty line goes back to MRs, then closes.
 
 ## Find in the diff
