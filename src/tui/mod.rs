@@ -27,7 +27,6 @@ mod ui;
 mod whats_new_view;
 
 use crate::ai;
-use crate::ai::anthropic::Claude;
 use crate::ai::typesafe::TypeSafe;
 use crate::blocking;
 use crate::cache::Cache;
@@ -71,10 +70,8 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
         checkout,
         jev: jev(&ctx.config.ai),
-        claude: claude(&ctx.config.ai),
     };
     let triage = setup.jev.is_some();
-    let ask = setup.claude.as_ref().map(|_| ctx.config.ai.anthropic.model().to_owned());
     let backend = Backend::new(homes, setup);
     let settings = Settings {
         theme,
@@ -83,7 +80,6 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         project: ctx.project.clone(),
         ground,
         triage,
-        ask,
         notify: ctx.config.notify.enabled,
         hosts,
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
@@ -375,16 +371,6 @@ fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
     }
     let (key, _) = ai_key(ai::Provider::Typesafe, &keychain)?;
     TypeSafe::connect(&key).inspect_err(|e| tracing::warn!("Jev is off: {e}")).ok()
-}
-
-/// Claude, only when the config switches it on and a key is found.
-fn claude(ai: &crate::config::Ai) -> Option<Claude> {
-    if !ai.anthropic.enabled {
-        return None;
-    }
-    let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
-    let (key, _) = ai_key(ai::Provider::Anthropic, &keychain)?;
-    Claude::new(key, ai.anthropic.model()).inspect_err(|e| tracing::warn!("Claude is off: {e:#}")).ok()
 }
 
 /// A keychain that cannot be read leaves the provider off, with the reason in the log.

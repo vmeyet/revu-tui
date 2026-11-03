@@ -84,6 +84,15 @@ mod tests {
     }
 
     #[test]
+    fn counts_of_an_action_revu_no_longer_has_still_read() {
+        let text = "{\"date\":\"2026-09-24\",\"version\":2,\"actions\":{\"ask_free\":3,\":ask\":1,\"zen\":2}}\n";
+        let days = rules().parse(text);
+        let report = rules().report(&days, date("2026-09-24"), Window::Days(30));
+        assert_eq!(days[0].counts.actions["zen"], 2);
+        assert!(report.rarely.iter().all(|count| !count.action.contains("ask")), "the report lists only what revu still has");
+    }
+
+    #[test]
     fn a_report_sorts_every_known_action() {
         let days = rules().parse(
             "{\"date\":\"2026-09-20\",\"version\":2,\"actions\":{\"next_thread\":40,\"zen\":2,\"move_down\":120}}\n\

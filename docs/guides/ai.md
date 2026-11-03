@@ -37,10 +37,9 @@ model = "claude-opus-5"
 
 ## Ask Claude
 
-Press `a`, then `a`, and type a question about the change under the cursor.
-The answer streams into the right pane; asking again asks Claude again.
+`revu ai ask` asks from the command line, and the answer prints as it comes.
 
-`:ai off` stops both helpers until you type `:ai on`.
+`:ai off` stops Jev until you type `:ai on`.
 
 ## See also
 

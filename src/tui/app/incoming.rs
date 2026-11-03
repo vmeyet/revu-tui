@@ -111,7 +111,6 @@ impl App {
             Incoming::SessionPick { mr, sessions } => self.offer_sessions(*mr, sessions),
             Incoming::SessionReady(handoff) => self.handoff = Some(handoff),
             Incoming::SessionLeft { said, outcome } => self.apply_session_left(&said, outcome),
-            Incoming::Answer { key, id, part } => self.apply_answer(&key, id, part),
             Incoming::Triaged { key, verdict } => self.apply_triaged(key, verdict),
             Incoming::Read { key, head, reading } => self.apply_read(key, head, reading),
             Incoming::Failed { what, message } => self.apply_failure(what, message),

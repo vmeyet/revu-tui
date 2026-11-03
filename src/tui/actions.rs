@@ -1,5 +1,5 @@
 //! The action runner: each action the app asks for runs in its own task and answers through `Incoming`.
-use super::app::{self, Action, Failure, Incoming, Part, Post};
+use super::app::{self, Action, Failure, Incoming, Post};
 use super::backend::{Backend, MrState, read_cache, run_blocking};
 use crate::blocking;
 use crate::cache::Cache;
@@ -204,7 +204,6 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.files.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
-            Action::Ask { key, id, request } => backend.ai.ask(&key, id, &request, &send).await,
             Action::Triage(mr) => {
                 send(backend.ai.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
             }
@@ -262,10 +261,8 @@ async fn post(forge: &Forge, key: &MrKey, to: &Post, body: &str) -> Result<()> {
 }
 
 fn log_failure(incoming: &Incoming) {
-    match incoming {
-        Incoming::Failed { what, message } => tracing::warn!("{what:?} failed: {message}"),
-        Incoming::Answer { part: Part::Failed(message), .. } => tracing::warn!("Claude failed: {message}"),
-        _ => {}
+    if let Incoming::Failed { what, message } = incoming {
+        tracing::warn!("{what:?} failed: {message}");
     }
 }
 

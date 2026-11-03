@@ -97,12 +97,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `zo` `zc` `za` | open, close, toggle the branch |
 | `enter` | the call in the diff, the definition, a section |
 
-## Ask claude
-
-| Keys | Does |
-|---|---|
-| `a` `a` | ask anything about the cursor |
-
 ## Search & app
 
 | Keys | Does |

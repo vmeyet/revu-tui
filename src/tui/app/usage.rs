@@ -413,7 +413,6 @@ mod tests {
         let mut diff = with_usage(with_review());
         assert_eq!(counted_by_keys(&mut diff, "]n"), ["next_thread"]);
         assert_eq!(counted_by_keys(&mut diff, "="), ["more_context"]);
-        assert_eq!(counted_by_keys(&mut diff, "aa"), ["ask_free"]);
         assert_eq!(counted_by(&mut diff, code(KeyCode::Right)), ["focus_right"]);
         assert_eq!(counted_by_keys(&mut diff, "z"), Vec::<String>::new(), "a prefix alone is no action");
         let mut suggest = with_usage(with_review());

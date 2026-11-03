@@ -12,7 +12,6 @@ pub(super) use saves::MrState;
 
 use super::app::Incoming;
 use super::lanes::Lanes;
-use crate::ai::anthropic::Claude;
 use crate::ai::typesafe::TypeSafe;
 use crate::blocking;
 use crate::cache::Cache;
@@ -62,7 +61,6 @@ pub(super) struct Setup {
     pub(super) open: crate::config::Open,
     pub(super) checkout: Option<crate::open::Checkout>,
     pub(super) jev: Option<TypeSafe>,
-    pub(super) claude: Option<Claude>,
     pub(super) agent: Option<crate::agent::Agent>,
 }
 
@@ -93,7 +91,7 @@ impl Backend {
             },
             reviews: Reviews { homes: Arc::clone(&homes), saves: saves.clone(), fold_globs: setup.fold_globs, opening: Arc::default() },
             drafts: Drafts { homes: Arc::clone(&homes), lanes: Lanes::default() },
-            ai: Ai { homes: Arc::clone(&homes), jev: setup.jev, claude: setup.claude },
+            ai: Ai { homes: Arc::clone(&homes), jev: setup.jev },
             files: Files { homes: Arc::clone(&homes), open: setup.open, checkout: setup.checkout },
             agent: setup.agent,
             saves,

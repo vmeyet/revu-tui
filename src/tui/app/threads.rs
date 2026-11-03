@@ -80,7 +80,6 @@ impl Open {
                 Some(line + 1 + last)
             }
             Input::EditDraft { draft } => self.draft_row(review.drafts.iter().position(|d| d.is(*draft))?),
-            Input::Ask { .. } => None,
         }
     }
 
@@ -89,7 +88,7 @@ impl Open {
         match input {
             Input::Reply { thread } => Some(thread.clone()),
             Input::EditDraft { draft } => self.review.drafts.iter().find(|d| d.is(*draft)).and_then(|d| d.reply_to.clone()),
-            Input::Comment { .. } | Input::Ask { .. } => None,
+            Input::Comment { .. } => None,
         }
     }
 
