@@ -1,6 +1,6 @@
 # Open an agent session on an MR
 
-`a g` opens the coding-agent session that belongs to the MR under the cursor.
+`a` opens the coding-agent session that belongs to the MR under the cursor.
 The agent is Claude Code, the real one: your login, your skills, your permissions.
 On someone else's MR you ask it about the diff; on your own you ask it for a change.
 
@@ -18,7 +18,7 @@ You need the `claude` command, logged in, and a checkout of the project that Cla
 ## Use it
 
 1. Put the cursor on an MR in the queue, or open one.
-2. Press `a`, then `g`, or type `:session`.
+2. Press `a`, or type `:session`.
 3. Talk to the session.
 
 It works in the queue, in the diff, in zen and on a phone.
@@ -111,11 +111,11 @@ After the split revu usually draws its narrow layout: the diff alone, then the q
 | To | Press |
 |---|---|
 | Go back to revu | The tmux prefix, then `;` |
-| Go to the session again | `a g` on the same MR, or the tmux prefix, then `;` |
+| Go to the session again | `a` on the same MR, or the tmux prefix, then `;` |
 | Close the session's pane | `ctrl-z` in the session: it keeps running, and revu takes the full width back |
 | Come back from a window | The tmux prefix, then `l` |
 
-`a g` on an MR whose session is already on show goes to its pane or its window, and opens no second one.
+`a` on an MR whose session is already on show goes to its pane or its window, and opens no second one.
 
 To always get one or the other:
 
@@ -133,10 +133,10 @@ Say no, and the session takes the terminal instead, with the reason in the toast
 | To | Press |
 |---|---|
 | Go back to revu | `cmd-[` |
-| Go to the session again | `cmd-]`, or `a g` on the same MR |
+| Go to the session again | `cmd-]`, or `a` on the same MR |
 | Close the session's split | `ctrl-z` in the session: it keeps running, the split closes, and revu takes the full width back |
 
-revu splits the terminal that is in front when you press `a g`, which is revu's own.
+revu splits the terminal that is in front when you press `a`, which is revu's own.
 Ghostty needs `macos-applescript` left on, as it is by default.
 The split starts your own shell, which becomes the session, so it closes when the session ends.
 For the moment your shell takes to start, the split shows it and one short line it types: ` printf …; exec /full/path/claude attach <id>`.
@@ -152,7 +152,7 @@ The first time, macOS asks whether iTerm2 may be controlled: allow it.
 | To | Press |
 |---|---|
 | Go back to revu | `cmd-[` |
-| Go to the session again | `cmd-]`, or `a g` on the same MR |
+| Go to the session again | `cmd-]`, or `a` on the same MR |
 | Close the session's split | `ctrl-z` in the session |
 
 ## In WezTerm
@@ -163,10 +163,10 @@ No permission is asked.
 | To | Press |
 |---|---|
 | Go back to revu | `ctrl-shift-←` |
-| Go to the session again | `ctrl-shift-→`, or `a g` on the same MR |
+| Go to the session again | `ctrl-shift-→`, or `a` on the same MR |
 | Close the session's split | `ctrl-z` in the session |
 
-In these three terminals, `a g` on an MR whose session is already in a split goes to that split.
+In these three terminals, `a` on an MR whose session is already in a split goes to that split.
 revu keeps the split's id with the session, and opens a new one when the terminal no longer has it.
 
 ## In another terminal
@@ -184,7 +184,7 @@ split = "kitty @ launch --location=vsplit --cwd {dir} {command}"
 | `{dir}` | The folder the session works in |
 
 The command runs without a shell.
-revu cannot see the pane it opened: `a g` again runs the command again.
+revu cannot see the pane it opened: `a` again runs the command again.
 When the command fails, the session takes the terminal and the toast says why.
 
 Two recipes, not tested:
@@ -203,7 +203,7 @@ Run revu in tmux or in one of the terminals above to see the diff and the sessio
 ## From a phone
 
 Run revu inside tmux on your computer and reach it from the phone, as in [Review from a phone](phone.md).
-A phone is too narrow for two panes, so `a g` opens the session in the next tmux window.
+A phone is too narrow for two panes, so `a` opens the session in the next tmux window.
 The tmux prefix, then `l`, brings revu back.
 With the tap bar, `more` then `session` does the same.
 
@@ -247,7 +247,7 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 - A pane runs the agent by its full path, with the `PATH` revu was started with, and the terminal's own environment for the rest.
 - An agent that is not on revu's `PATH` opens no pane: the toast names the program.
 - revu finds a session's pane by a mark it sets on it, so only a pane revu opened is found again.
-- In Ghostty, switch to another tab right after `a g` and the split may open there: revu cannot ask Ghostty which terminal it runs in.
+- In Ghostty, switch to another tab right after `a` and the split may open there: revu cannot ask Ghostty which terminal it runs in.
 - revu does not send the line or the thread under the cursor to the session, and shows no session state in the queue.
 - revu remembers one session per MR, in its cache, for as long as it keeps the MR there.
 - revu never removes a worktree it added: `git worktree remove` does.

@@ -128,6 +128,7 @@ impl App {
                 self.start_share(None);
                 vec![]
             }
+            Act::Session if !self.outline_keys() && !self.key_is_held() => self.open_session(),
             Act::FocusLeft => self.focus_left(),
             Act::FocusRight => self.focus_right(),
             _ => {
@@ -152,7 +153,6 @@ impl App {
         let is_read = match c {
             'z' | '[' | ']' if self.focus != Focus::Side || self.tree_open() => true,
             'z' => self.outline_keys(),
-            'a' => self.reads_a_prefix(),
             _ => false,
         };
         is_read.then_some(c)
@@ -373,8 +373,8 @@ impl App {
         actions
     }
 
-    /// The second key of a two-key default: the views, the agent session and the queue's own first, then the
-    /// outline's and the prose's folds, then the diff's.
+    /// The second key of a two-key default: the views and the queue's own first, then the outline's and the
+    /// prose's folds, then the diff's.
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
         if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -386,10 +386,6 @@ impl App {
             return vec![];
         }
         let act = act::act_after(prefix, c);
-        if act == Some(Act::Session) {
-            self.did(Act::Session);
-            return self.open_session();
-        }
         if self.focus == Focus::Queue {
             return act.map(|act| self.queue_prefixed(act)).unwrap_or_default();
         }
@@ -438,13 +434,7 @@ impl App {
         vec![]
     }
 
-    /// `a` opens its family in the queue, for `a g`, and on an open MR; the outline reads `a` itself.
-    fn reads_a_prefix(&self) -> bool {
-        let on_open_mr = self.open.is_some() && !self.outline_keys();
-        self.focus == Focus::Queue || on_open_mr
-    }
-
-    /// The outline reads `a` itself while it has the keys.
+    /// The outline has the keys: it reads `a` and `z` itself.
     fn outline_keys(&self) -> bool {
         self.focus == Focus::Side && self.outline_open()
     }
@@ -542,7 +532,7 @@ mod tests {
         let rows = queue.queue_rows().len();
         assert_eq!(press(&mut queue, "S"), vec![]);
         assert_eq!((queue.queue_rows().len(), queue.queue_view_label()), (rows, None), "no grouping by author");
-        for keys in ["zh", "zM", "zR", "]N", "[N", "]f", "[f", "]r", "[r", "ae", "ar", "as", "at", "ac"] {
+        for keys in ["zh", "zM", "zR", "]N", "[N", "]f", "[f", "]r", "[r"] {
             let mut app = with_review();
             let before = (app.open.as_ref().unwrap().selected, app.open.as_ref().unwrap().review.fold.clone());
             assert_eq!(press(&mut app, keys), vec![], "{keys}");

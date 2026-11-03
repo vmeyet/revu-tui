@@ -104,7 +104,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `^k` `,` | MRs · > commands |
 | `:` | commands: :go !42, :set theme=nord |
 | `o` `y` | open in the browser, copy the link |
-| `ag` | the agent session of the MR: a, then g |
+| `a` | the agent session of the MR |
 | `r` | refresh |
 | `?` | this help |
 | `q` `^c` | quit: twice; q closes a pane first |
@@ -166,7 +166,7 @@ A bound key adds to the default key, it does not replace it.
 | `merge` | `M` |
 | `ready` | `H` |
 | `share` | `Y` |
-| `session` | `ag` |
+| `session` | `a` |
 | `react` | `+` |
 | `open_browser` | `o` |
 | `copy_link` | `y` |

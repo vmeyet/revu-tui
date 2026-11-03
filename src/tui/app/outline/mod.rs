@@ -313,6 +313,16 @@ mod tests {
     }
 
     #[test]
+    fn a_is_the_outlines_own_while_it_has_the_keys_and_the_session_after() {
+        let mut app = with_outline();
+        app.agent = true;
+        assert_eq!(press(&mut app, "a"), vec![]);
+        assert_eq!(rows(&app)[6..], ["_log", "Tests 1"], "private symbols, no session");
+        press(&mut app, "O");
+        assert!(matches!(press(&mut app, "a").as_slice(), [Action::Session { .. }]));
+    }
+
+    #[test]
     fn o_shows_the_call_tree_t_the_flat_list_and_a_private_symbols_too() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);

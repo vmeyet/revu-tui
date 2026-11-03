@@ -12,7 +12,7 @@ pub(crate) enum Mode {
     #[default]
     Mrs,
     Commands,
-    /// The agent sessions that could be an MR's, `a g`.
+    /// The agent sessions that could be an MR's, `a`.
     Sessions,
 }
 
@@ -43,7 +43,7 @@ impl Mode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Target {
     Mr(MrKey),
-    /// An agent session, by its index in the list `a g` found; `None` for a new one.
+    /// An agent session, by its index in the list `a` found; `None` for a new one.
     Session(Option<usize>),
 }
 
@@ -90,7 +90,7 @@ pub(crate) enum Command {
     AiOn,
     /// `:share [target]`: post the MR through a `[share]` command, after a preview.
     Share(Option<String>),
-    /// `:session`: the agent session of the MR, as `a g` does.
+    /// `:session`: the agent session of the MR, as `a` does.
     Session,
     /// `:news`: what changed in revu, version by version.
     News,

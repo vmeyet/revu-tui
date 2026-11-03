@@ -289,7 +289,7 @@ pub(crate) enum Action {
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
     },
-    /// `a g`: find or start the agent session of `mr`, then show it.
+    /// `a`: find or start the agent session of `mr`, then show it.
     Session {
         mr: Box<crate::agent::Mr>,
         choice: crate::agent::Choice,

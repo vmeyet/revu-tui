@@ -14,14 +14,16 @@ pub(crate) struct Repeat {
     code: KeyCode,
     since: Instant,
     last: Instant,
+    /// Not the first press of the run.
+    again: bool,
 }
 
 impl Repeat {
     /// The run after `code` pressed at `now`: the same one when it goes on soon enough, else a new one.
     pub(crate) fn after(run: Option<Self>, code: KeyCode, now: Instant) -> Self {
         match run {
-            Some(run) if run.code == code && now.saturating_duration_since(run.last) < GAP => Self { last: now, ..run },
-            _ => Self { code, since: now, last: now },
+            Some(run) if run.code == code && now.saturating_duration_since(run.last) < GAP => Self { last: now, again: true, ..run },
+            _ => Self { code, since: now, last: now, again: false },
         }
     }
 
@@ -33,6 +35,11 @@ impl Repeat {
 }
 
 impl App {
+    /// The key in flight repeats the one before it, for keys that must act once per press.
+    pub(super) fn key_is_held(&self) -> bool {
+        self.repeat.is_some_and(|run| run.again)
+    }
+
     /// How many rows `j`, `k` and the arrows move now: more while one of them is held.
     pub(super) fn step(&self) -> isize {
         self.repeat.map_or(1, Repeat::step)

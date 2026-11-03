@@ -1,4 +1,4 @@
-//! `a g` and `:session`: the coding-agent session that belongs to an MR, found or started, then shown.
+//! `a` and `:session`: the coding-agent session that belongs to an MR, found or started, then shown.
 //! Claude Code is the built-in agent (`claude.rs`); `[agent] start` names another one (`custom.rs`).
 //! Every program runs through [`Run`], so a test never starts a session, a tmux window or a git command.
 mod claude;
@@ -216,7 +216,7 @@ pub(crate) struct Kept {
     pub(crate) pane: Option<String>,
 }
 
-/// Which session `a g` is after.
+/// Which session `a` is after.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Choice {
     /// The one that belongs to the MR, wherever it is found.
@@ -269,7 +269,7 @@ pub(crate) struct Handoff {
     pub(crate) said: String,
 }
 
-/// What `a g` led to.
+/// What `a` led to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
     /// Several sessions could be the one: the reader picks, or starts a new one.
@@ -304,7 +304,7 @@ pub(crate) struct Machine {
     pub(crate) started_in: Option<(String, PathBuf)>,
 }
 
-/// `[agent]` switched on: everything `a g` needs to find, start and show a session.
+/// `[agent]` switched on: everything `a` needs to find, start and show a session.
 #[derive(Clone)]
 pub(crate) struct Agent {
     harness: Harness,

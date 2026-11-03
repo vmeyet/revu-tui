@@ -60,7 +60,7 @@ pub(crate) struct Settings {
     pub(crate) whats_new: super::WhatsNew,
     /// The keys of the config this revu ignores, toasted at start.
     pub(crate) ignored_settings: Vec<String>,
-    /// `[agent] enabled`: `a g` opens an agent session on an MR.
+    /// `[agent] enabled`: `a` opens an agent session on an MR.
     pub(crate) agent: bool,
 }
 
@@ -221,9 +221,9 @@ pub(crate) struct App {
     pub(crate) thread_rows: crate::tui::thread_view::InlineLayout,
     /// A file ready for the reader's program; the loop takes it and hands over the terminal.
     pub(crate) viewing: Option<crate::open::View>,
-    /// `[agent] enabled`: `a g` opens an agent session on an MR.
+    /// `[agent] enabled`: `a` opens an agent session on an MR.
     pub(crate) agent: bool,
-    /// The sessions `a g` found for an MR, which the search box lists.
+    /// The sessions `a` found for an MR, which the search box lists.
     pub(crate) session_pick: Option<super::SessionPick>,
     /// An agent session ready for the terminal; the loop takes it and hands the terminal over.
     pub(crate) handoff: Option<crate::agent::Handoff>,

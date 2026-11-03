@@ -44,7 +44,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
 | `ai/` | Jev (`typesafe.rs`, `triage.rs`, marks on the queue) and where its key comes from |
-| `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
+| `agent/` | Coding-agent sessions per MR (`a`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
 | `docs.rs`, `sources.rs` | Writes `docs/reference/` from the code (`revu docs`); tests only, the crate's own source files for checks that read them |
@@ -109,6 +109,7 @@ State shared between tasks, and why:
 | `Saves::saved: Arc<Mutex<HashMap<MrKey, u64>>>` | The one lock every `state.json` write takes, the reader's saves and the opened stamp alike; saves finish out of order, and one older than the last is dropped |
 | `Saves::changed: Arc<Mutex<HashMap<String, u64>>>` | The same for pins and the queue view |
 | `Drafts::lanes: Lanes` | Draft writes and publishing of one MR run one at a time: on GitHub each reads the pending review, then writes it |
+| `Backend::session_lanes: Lanes` | Opening one MR's agent session runs one at a time, so a second open finds the session the first one started |
 | `forge::budget::Budget` (atomics) | Every clone of a client shares the rate limit, so the loop shows what the tasks saw |
 | GitLab `Client::me: Arc<OnceCell<String>>` | The reader's username is asked once and shared by every clone of the client |
 | GitHub `Client::downloads: Arc<Downloads>` | Read only: the picture client is shared so the forge client stays cheap to clone |

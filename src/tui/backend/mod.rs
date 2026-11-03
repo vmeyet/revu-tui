@@ -73,8 +73,10 @@ pub(super) struct Backend {
     pub(super) drafts: Drafts,
     pub(super) ai: Ai,
     pub(super) files: Files,
-    /// The agent whose sessions `a g` opens, when `[agent]` is on.
+    /// The agent whose sessions `a` opens, when `[agent]` is on.
     pub(super) agent: Option<crate::agent::Agent>,
+    /// Two opens of one MR would each find no session and start one; shared by every clone so they wait.
+    session_lanes: Lanes,
 }
 
 impl Backend {
@@ -94,6 +96,7 @@ impl Backend {
             ai: Ai { homes: Arc::clone(&homes), jev: setup.jev },
             files: Files { homes: Arc::clone(&homes), open: setup.open, checkout: setup.checkout },
             agent: setup.agent,
+            session_lanes: Lanes::default(),
             saves,
             homes,
         }
@@ -104,6 +107,7 @@ impl Backend {
         use crate::agent::Outcome;
         let agent = self.agent.clone().context("agent sessions are off")?;
         let cache = self.homes.cache_of(&mr.key).clone();
+        let _lane = self.session_lanes.enter(&mr.key).await;
         blocking::run(move || {
             Ok(match agent.open(&mr, &cache, choice)? {
                 Outcome::Pick(sessions) => Incoming::SessionPick { mr: Box::new(mr), sessions },
