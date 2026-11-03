@@ -38,13 +38,15 @@ impl App {
         vec![]
     }
 
-    /// ↑ ↓ pick a command from the list, then walk the options of its argument as tab does;
-    /// → takes the ghost; ^p ^n walk the history, as in a shell.
+    /// ↑ ↓ pick a command from the list, ↑ on an empty line at the top of it recalls the last line, then they walk
+    /// the options of the argument as tab does; → takes the ghost; ^p ^n walk the history from any line, as in a shell.
     fn command_key(&self, palette: &mut Palette, code: KeyCode) {
         let candidates = self.completions_for(&palette.input);
         let listed = palette::verbs_for(&palette.input).len();
         match code {
-            KeyCode::Up | KeyCode::Down if palette.naming_command() => palette.move_by(if code == KeyCode::Up { -1 } else { 1 }, listed),
+            KeyCode::Up | KeyCode::Down if palette.naming_command() || palette.walking_history() => {
+                palette.arrow(Toward::next_if(code == KeyCode::Down), listed);
+            }
             KeyCode::Up | KeyCode::Down => palette.complete(&candidates, Toward::next_if(code == KeyCode::Down)),
             KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, Toward::next_if(code == KeyCode::Tab)),
             KeyCode::Right | KeyCode::End => palette.accept(&candidates),
@@ -304,6 +306,40 @@ mod tests {
         press(&mut app, "x:");
         app.handle_key(ctrl('p'));
         assert_eq!(app.palette.as_ref().unwrap().input, "help", "^p recalls, as in a shell");
+    }
+
+    #[test]
+    fn up_on_an_empty_line_recalls_the_last_command_and_the_arrows_walk_on() {
+        let mut app = with_queue();
+        run_line(&mut app, "copy");
+        run_line(&mut app, "all");
+        press(&mut app, ":");
+        app.handle_key(code(KeyCode::Up));
+        assert_eq!(app.palette.as_ref().unwrap().input, "all");
+        app.handle_key(code(KeyCode::Up));
+        assert_eq!(app.palette.as_ref().unwrap().input, "copy");
+        app.handle_key(code(KeyCode::Down));
+        app.handle_key(code(KeyCode::Down));
+        assert_eq!(app.palette.as_ref().unwrap().input, "");
+    }
+
+    #[test]
+    fn down_on_an_empty_line_picks_from_the_list_with_history_to_recall() {
+        let mut app = with_queue();
+        run_line(&mut app, "all");
+        press(&mut app, ":");
+        app.handle_key(code(KeyCode::Down));
+        let palette = app.palette.as_ref().unwrap();
+        assert_eq!((palette.input.as_str(), palette.selected), ("", 1));
+    }
+
+    #[test]
+    fn up_finding_mrs_never_recalls_a_command() {
+        let mut app = with_queue();
+        run_line(&mut app, "all");
+        app.handle_key(ctrl_k());
+        app.handle_key(code(KeyCode::Up));
+        assert_eq!(app.palette.as_ref().unwrap().input, "");
     }
 
     #[test]

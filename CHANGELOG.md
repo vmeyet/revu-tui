@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **`↑` on an empty line brings back the last command, as in pgbg and slack.**
+  In the palette, on commands, once the top of the list is highlighted.
+  `↑` `↓` walk the commands you ran until you type, `↓` still picks from the list, and `ctrl-p` `ctrl-n` still recall from any line.
+
 - **Bold, italic and struck text in comments read as they do on the forge.**
   In the thread pane, the description, the answer pane and tables.
   Write `**bold**`, `_italic_` or `~~struck~~`; a marker inside a word or a code span stays as written.
