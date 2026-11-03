@@ -1,9 +1,8 @@
 //! How much a change matters, so a reviewer sees where to spend attention: a label for a hunk, the worst of its runs.
 //! A run is one `-` block and the `+` block after it. Labels only inform: nothing hides, sorts or counts by them.
 //! Rows draw no word for `Edited`, the common case, so no label on a row means an ordinary edit.
-use super::align::{MIN_LINE_SIMILARITY, changes, code_tokens, similarity, too_large_to_align};
+use super::align::{Change, MIN_LINE_SIMILARITY, changes, code_tokens, similarity, too_large_to_align};
 use super::{Hunk, Line};
-use std::ops::Range;
 
 /// From the least to the most attention a change asks for: the order makes the worst of many their `max`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,11 +40,11 @@ const LINE_BOUND_MARKS: [&str; 2] = ["//", "#"];
 
 /// `hunk` with its label; `path` says whether whitespace can be harmless there. No changed line, no label.
 pub(crate) fn labelled(hunk: Hunk, path: &str) -> Hunk {
-    let label = changes(&hunk.lines).into_iter().map(|(removed, added)| run_label(&hunk, removed, added, path)).max();
+    let label = changes(&hunk.lines).into_iter().map(|change| run_label(&hunk, change, path)).max();
     Hunk { label, ..hunk }
 }
 
-fn run_label(hunk: &Hunk, removed: Range<usize>, added: Range<usize>, path: &str) -> ChangeLabel {
+fn run_label(hunk: &Hunk, Change { removed, added }: Change, path: &str) -> ChangeLabel {
     let (old, new) = (&hunk.lines[removed.clone()], &hunk.lines[added]);
     if old.is_empty() || new.is_empty() {
         return ChangeLabel::Edited;

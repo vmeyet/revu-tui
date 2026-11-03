@@ -20,8 +20,8 @@ const MAX_ALIGNED_WORK: usize = 1_000_000_000;
 const MAX_POSITIONAL_WORK: usize = 125_000_000;
 
 pub(super) fn aligned_pairs(lines: &[Line]) -> Vec<LinePair> {
-    let both_sides = changes(lines).into_iter().filter(|(removed, added)| !removed.is_empty() && !added.is_empty());
-    both_sides.flat_map(|(removed, added)| align_run(lines, removed, added)).collect()
+    let both_sides = changes(lines).into_iter().filter(|change| !change.removed.is_empty() && !change.added.is_empty());
+    both_sides.flat_map(|Change { removed, added }| align_run(lines, removed, added)).collect()
 }
 
 /// The twins of a `-` run in the `+` run after it.
@@ -127,15 +127,21 @@ pub(super) fn code_tokens(line: &str) -> Vec<&str> {
     tokens(line).into_iter().filter(|token| !token.starts_with(char::is_whitespace)).collect()
 }
 
-/// Index ranges of each `-` run and the `+` run right after it, either one possibly empty.
-pub(super) fn changes(lines: &[Line]) -> Vec<(Range<usize>, Range<usize>)> {
+/// A `-` run and the `+` run right after it, as index ranges into a hunk's lines, either one possibly empty.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Change {
+    pub(super) removed: Range<usize>,
+    pub(super) added: Range<usize>,
+}
+
+pub(super) fn changes(lines: &[Line]) -> Vec<Change> {
     let mut found = Vec::new();
     let mut i = 0;
     while i < lines.len() {
         let removed = run(lines, i, LineKind::Removed);
         let added = run(lines, removed.end, LineKind::Added);
         if !removed.is_empty() || !added.is_empty() {
-            found.push((removed.clone(), added.clone()));
+            found.push(Change { removed: removed.clone(), added: added.clone() });
         }
         i = added.end.max(removed.end).max(i + 1);
     }

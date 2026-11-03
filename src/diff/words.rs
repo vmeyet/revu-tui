@@ -1,7 +1,7 @@
 //! Intra-line highlighting: `align` finds which removed and added lines are twins, and this marks what changed between them.
 //! A line is cut like code, into identifiers, whitespace runs and single punctuation characters, so
 //! `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`, and a changed word never drags its space along.
-use super::align::{aligned_pairs, changes, pairs_by_position};
+use super::align::{Change, aligned_pairs, changes, pairs_by_position};
 use super::{Hunk, Line, LinePair};
 use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
@@ -170,7 +170,7 @@ fn pairs_where(hunk: &Hunk, keep: impl Fn(&Line, &Line) -> bool) -> Vec<LinePair
 pub(crate) fn side_by_side_pairs(hunk: &Hunk) -> Vec<LinePair> {
     let mut marked = hunk.pairs.iter().copied().peekable();
     let mut found = Vec::new();
-    for (removed, added) in changes(&hunk.lines) {
+    for Change { removed, added } in changes(&hunk.lines) {
         let (mut old_at, mut new_at) = (removed.start, added.start);
         while let Some(pair) = marked.next_if(|pair| removed.contains(&pair.removed)) {
             found.extend(pairs_by_position(old_at..pair.removed, new_at..pair.added));
