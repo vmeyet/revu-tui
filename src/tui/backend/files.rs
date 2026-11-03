@@ -4,7 +4,7 @@ use crate::blocking;
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
 use crate::log::OrWarn as _;
-use crate::tui::app::{Incoming, Versions};
+use crate::tui::app::{Incoming, Sides, Versions};
 use crate::tui::images;
 use anyhow::{Context as _, Result};
 use futures_util::{StreamExt, TryStreamExt};
@@ -46,13 +46,7 @@ impl Files {
     }
 
     /// The symbols the files change and the calls between them, a few files read at once.
-    pub(in crate::tui) async fn outline(
-        &self,
-        key: &MrKey,
-        base: &Sha,
-        head: &Sha,
-        files: Vec<crate::outline::Sides>,
-    ) -> Result<crate::outline::Reading> {
+    pub(in crate::tui) async fn outline(&self, key: &MrKey, base: &Sha, head: &Sha, files: Vec<Sides>) -> Result<crate::outline::Reading> {
         let files: Vec<(String, String, String)> = futures_util::stream::iter(files)
             .map(|sides| async move {
                 let path = sides.head.clone().or_else(|| sides.base.clone()).unwrap_or_default();
@@ -66,7 +60,7 @@ impl Files {
     }
 
     /// The Markdown file the prose view shows, at base and at head.
-    pub(in crate::tui) async fn prose(&self, key: &MrKey, base: &Sha, head: &Sha, sides: crate::outline::Sides) -> Result<Versions> {
+    pub(in crate::tui) async fn prose(&self, key: &MrKey, base: &Sha, head: &Sha, sides: Sides) -> Result<Versions> {
         let (base, head) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
         Ok(Versions { base, head })
     }

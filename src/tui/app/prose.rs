@@ -1,10 +1,16 @@
 //! The prose view (`v`): the Markdown file under the cursor drawn rendered in the diff area.
 use super::{Action, App, MrKey, Open};
 use crate::act::{Act, Pane};
-use crate::outline::Sides;
 use crate::review::FileKind;
 use crossterm::event::KeyEvent;
 use std::sync::Arc;
+
+/// A Markdown file's path at base, absent when added, and at head, absent when deleted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Sides {
+    pub(crate) base: Option<String>,
+    pub(crate) head: Option<String>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Prose {

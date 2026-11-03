@@ -108,9 +108,6 @@ pub(crate) enum Act {
     WordBack,
     Leave,
     OutlineTree,
-    OutlineCalls,
-    OutlineStack,
-    OutlinePublic,
 }
 
 /// A task of the `?` help and its keys; a key that only works in one pane says which in its words.
@@ -523,9 +520,6 @@ pub(crate) const ROWS: &[Row] = &[
     unnamed(Act::WordBack, &[]).help(&[line(Group::Comment, "⌥← ⌥→ ⌥⌫", "in the box: word back, on, delete")]),
     unnamed(Act::Leave, &["esc"]).help(&[line(Group::Comment, "esc", "drop the selection, leave the box")]),
     unnamed(Act::OutlineTree, &["t"]).help(&[line(Group::Outline, "t", "call tree, or the flat list")]).panes(&[Pane::Outline]),
-    unnamed(Act::OutlineCalls, &["u"]).help(&[line(Group::Outline, "u", "calls, or called by")]).panes(&[Pane::Outline]),
-    unnamed(Act::OutlineStack, &["s"]).help(&[line(Group::Outline, "s", "the whole stack, unchanged calls too")]).panes(&[Pane::Outline]),
-    unnamed(Act::OutlinePublic, &["a"]).help(&[line(Group::Outline, "a", "public symbols only, or all")]).panes(&[Pane::Outline]),
 ];
 
 impl Group {
@@ -594,7 +588,7 @@ impl Group {
                 Act::Share,
             ],
             Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
-            Self::Outline => &[Act::OutlineTree, Act::OutlineCalls, Act::OutlineStack, Act::OutlinePublic, Act::FoldOpen, Act::Open],
+            Self::Outline => &[Act::OutlineTree, Act::FoldOpen, Act::Open],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
         }
     }
@@ -686,7 +680,7 @@ mod tests {
         for (index, row) in ROWS.iter().enumerate() {
             assert_eq!(row.act as usize, index, "{:?} is out of place", row.act);
         }
-        assert_eq!(ROWS.len(), Act::OutlinePublic as usize + 1, "an act has no row");
+        assert_eq!(ROWS.len(), Act::OutlineTree as usize + 1, "an act has no row");
     }
 
     #[test]

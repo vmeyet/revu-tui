@@ -10,7 +10,7 @@ Each entry says what changed, then where, then how to use it.
 ### New
 
 - **`a` opens the agent session: it was `a g`.**
-  In the queue, the diff and every right pane but the outline, where `a` still switches to public symbols and `:session` opens it.
+  In the queue, the diff and every right pane.
   Press `a` alone: a `g` typed out of habit now counts as its own key.
 
 - **`↑` on an empty line brings back the last command, as in pgbg and slack.**
@@ -50,6 +50,9 @@ Each entry says what changed, then where, then how to use it.
   In `[keys.bind]`: revu warns, leaves that binding out and loads the rest.
 
 ### Removed
+
+- **The outline's `a`, `s` and `u`.**
+  In the outline pane: it now always lists private symbols and the calls each symbol makes.
 
 - **Ask Claude.**
   In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane, `revu ai ask` and `[ai.anthropic]`, which now only warns in the config.

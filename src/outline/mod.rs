@@ -3,7 +3,7 @@
 //! the calls the query finds link them into a tree.
 mod tree;
 
-pub(crate) use tree::{Branch, Direction, Item, Section, Shape, Site};
+pub(crate) use tree::{Branch, Item, Section, Site};
 
 use crate::diff::similarity;
 use crate::forge::Side;
@@ -104,9 +104,9 @@ pub(crate) struct Reading {
 }
 
 impl Reading {
-    /// The call tree over the changes of `section`, cut as `shape` says.
-    pub(crate) fn tree(&self, shape: Shape, section: Section) -> Vec<Branch> {
-        tree::build(&self.changes, &self.unchanged, shape, section)
+    /// The call tree over the changes of `section`.
+    pub(crate) fn tree(&self, section: Section) -> Vec<Branch> {
+        tree::build(&self.changes, &self.unchanged, section)
     }
 }
 
@@ -120,13 +120,6 @@ pub(crate) fn read(files: &[(String, String, String)]) -> Reading {
         unchanged.extend(kept.into_iter().map(|symbol| (path.clone(), symbol)));
     }
     Reading { changes, unchanged }
-}
-
-/// One file to outline: its path at base, absent when added, and at head, absent when deleted.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Sides {
-    pub(crate) base: Option<String>,
-    pub(crate) head: Option<String>,
 }
 
 /// One syntax language with a tags query, named as in [`syntax::LANGUAGES`], which says which files it reads.

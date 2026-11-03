@@ -1,6 +1,6 @@
 //! What the outline pane draws, built once whenever its state changes, so a frame only slices it.
 use crate::diff::words::{Segment, text_segments};
-use crate::outline::{Branch, Change, Item, Reading, Section, Shape, Site, State, is_test};
+use crate::outline::{Branch, Change, Item, Reading, Section, Site, State, is_test};
 use std::collections::BTreeSet;
 
 /// Every row of the pane, and the entries among them the cursor walks.
@@ -51,23 +51,15 @@ impl Entry {
     }
 }
 
-/// How the pane shows the reading.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct View {
-    pub(crate) shape: Shape,
-    pub(crate) flat: bool,
-}
-
 impl Rows {
-    /// The code section, then the tests section, each under its header and gone when empty.
-    pub(super) fn build(reading: &Reading, view: View, folded: &BTreeSet<Vec<usize>>) -> Self {
+    /// The code section, as a flat list or a tree, then the tests section, each under its header and gone when empty.
+    pub(super) fn build(reading: &Reading, flat_list: bool, folded: &BTreeSet<Vec<usize>>) -> Self {
         let in_tests = |c: &usize| is_test(&reading.changes[*c].path);
-        let counted: Vec<usize> =
-            (0..reading.changes.len()).filter(|c| !in_tests(c) && (view.shape.all || reading.changes[*c].public())).collect();
+        let counted: Vec<usize> = (0..reading.changes.len()).filter(|c| !in_tests(c)).collect();
         let tests: Vec<usize> = (0..reading.changes.len()).filter(in_tests).collect();
-        let code = if view.flat { flat(&counted) } else { tree(&reading.tree(view.shape, Section::Code), folded, 0) };
+        let code = if flat_list { flat(&counted) } else { tree(&reading.tree(Section::Code), folded, 0) };
         let code = section(Section::Code, counted.len(), code, folded);
-        let tests = section(Section::Tests, tests.len(), tree(&reading.tree(view.shape, Section::Tests), folded, 1), folded);
+        let tests = section(Section::Tests, tests.len(), tree(&reading.tree(Section::Tests), folded, 1), folded);
         let entries: Vec<Entry> = code.into_iter().chain(tests).collect();
         let mut lines = vec![];
         let mut line_of = vec![];

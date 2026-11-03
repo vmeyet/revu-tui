@@ -1,5 +1,5 @@
 //! The call tree: the changed symbols nothing changed calls as roots, what they call under them in full,
-//! linked through at most two unchanged functions of the changed files, or through all of them in the whole stack.
+//! linked through at most two unchanged functions of the changed files.
 use super::{Change, State, Symbol};
 use crate::forge::Side;
 use std::collections::HashMap;
@@ -7,21 +7,13 @@ use std::collections::HashMap;
 /// Unchanged functions shown in a row between two changed ones; a longer chain folds into one row.
 const BRIDGES: usize = 2;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Direction {
-    /// Under each symbol, the symbols it calls.
-    Calls,
-    /// Under each symbol, the symbols that call it.
-    CalledBy,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Item {
     /// A changed symbol, by its index in the changes, shown in full here.
     Changed(usize),
     /// A changed symbol shown in full elsewhere.
     Seen(usize),
-    /// An unchanged function linking two changed symbols, or any in the whole stack.
+    /// An unchanged function linking two changed symbols.
     Bridge(String),
     /// Unchanged calls folded away, how many.
     Fold(usize),
@@ -44,16 +36,6 @@ pub(crate) struct Site {
     pub(crate) path: String,
     pub(crate) side: Side,
     pub(crate) line: u32,
-}
-
-/// How the tree is cut: which changes may be roots, and whether every unchanged function shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Shape {
-    pub(crate) direction: Direction,
-    /// Private changes may be roots too.
-    pub(crate) all: bool,
-    /// Every unchanged function called, not only those linking two changes.
-    pub(crate) stack: bool,
 }
 
 /// One symbol of the graph: a change, or an unchanged symbol of a changed file, read on `side`.
@@ -87,17 +69,15 @@ pub(crate) enum Section {
 
 /// Code roots first among the changes nothing changed reaches, then any change still unseen, both riskiest first.
 /// Test roots are every changed test symbol, in order; nothing links into a test file.
-pub(super) fn build(changes: &[Change], unchanged: &[(String, Symbol)], shape: Shape, section: Section) -> Vec<Branch> {
-    let direction = if section == Section::Tests { Direction::Calls } else { shape.direction };
-    let graph = Graph::new(changes, unchanged, direction, section);
+pub(super) fn build(changes: &[Change], unchanged: &[(String, Symbol)], section: Section) -> Vec<Branch> {
+    let graph = Graph::new(changes, unchanged, section);
     let in_section = |change: usize| super::is_test(&changes[change].path) == (section == Section::Tests);
-    let mut walk = Walk { graph: &graph, seen: vec![false; graph.nodes.len()], stack: shape.stack };
+    let mut walk = Walk { graph: &graph, seen: vec![false; graph.nodes.len()] };
     if section == Section::Tests {
         return (0..changes.len()).filter(|&change| in_section(change)).filter_map(|change| walk.unseen(change)).collect();
     }
     let reached = graph.reached_from_changed();
-    let candidates: Vec<usize> =
-        (0..changes.len()).filter(|&change| in_section(change) && (shape.all || changes[change].public())).collect();
+    let candidates: Vec<usize> = (0..changes.len()).filter(|&change| in_section(change)).collect();
     let first: Vec<usize> = candidates.iter().copied().filter(|&change| !reached[change]).collect();
     first.into_iter().chain(candidates).filter_map(|change| walk.unseen(change)).collect()
 }
@@ -106,16 +86,6 @@ pub(super) fn build(changes: &[Change], unchanged: &[(String, Symbol)], shape: S
 struct Walk<'g> {
     graph: &'g Graph<'g>,
     seen: Vec<bool>,
-    stack: bool,
-}
-
-impl Direction {
-    pub(crate) fn reversed(self) -> Self {
-        match self {
-            Self::Calls => Self::CalledBy,
-            Self::CalledBy => Self::Calls,
-        }
-    }
 }
 
 impl Branch {
@@ -138,7 +108,7 @@ fn names(change: &Change) -> (Option<&str>, Option<&str>) {
 impl<'a> Graph<'a> {
     /// Changes come first, so a change's node is its index; a call links to every code symbol of its name on its own side.
     /// Test symbols call from the tests section only.
-    fn new(changes: &'a [Change], unchanged: &'a [(String, Symbol)], direction: Direction, section: Section) -> Self {
+    fn new(changes: &'a [Change], unchanged: &'a [(String, Symbol)], section: Section) -> Self {
         let nodes: Vec<Node<'_>> = changes
             .iter()
             .enumerate()
@@ -163,11 +133,7 @@ impl<'a> Graph<'a> {
             for call in &node.symbol.calls {
                 let called = named.get(call.name.as_str()).map_or(&[][..], Vec::as_slice);
                 for &to in called {
-                    let link = Link { to, caller, line: call.line, unsure: called.len() > 1 };
-                    match direction {
-                        Direction::Calls => push_once(&mut links[caller], link),
-                        Direction::CalledBy => push_once(&mut links[to], Link { to: caller, ..link }),
-                    }
+                    push_once(&mut links[caller], Link { to, caller, line: call.line, unsure: called.len() > 1 });
                 }
             }
         }
@@ -235,7 +201,6 @@ impl Walk<'_> {
             let linked = |branch: Branch| Branch { site: Some(graph.site(link)), unsure: link.unsure, ..branch };
             match graph.change(link.to) {
                 Some(_) => found.push(linked(self.changed(link.to, path))),
-                None if self.stack => found.push(linked(self.unchanged(link.to, path))),
                 None if path.contains(&link.to) => {}
                 None if bridges < BRIDGES => {
                     let children = self.children(link.to, bridges + 1, &[path, &[link.to]].concat());
@@ -264,19 +229,6 @@ impl Walk<'_> {
         self.seen[change] = true;
         Branch { children: self.children(change, 0, &[path, &[change]].concat()), ..Branch::new(Item::Changed(change)) }
     }
-
-    /// In the whole stack, an unchanged function: in full the first time, bare after, a cycle when it is above.
-    fn unchanged(&mut self, node: usize, path: &[usize]) -> Branch {
-        let name = self.graph.name(node);
-        if path.contains(&node) {
-            return Branch::new(Item::Cycle(name));
-        }
-        if self.seen[node] {
-            return Branch::new(Item::Bridge(name));
-        }
-        self.seen[node] = true;
-        Branch { children: self.children(node, 0, &[path, &[node]].concat()), ..Branch::new(Item::Bridge(name)) }
-    }
 }
 
 /// The first call between two symbols makes the link; later ones add nothing.
@@ -291,10 +243,8 @@ mod tests {
     use super::super::{Reading, read};
     use super::*;
 
-    const CALLS: Shape = Shape { direction: Direction::Calls, all: false, stack: false };
-
     /// Each branch as one indented line: `name`, `?` when unsure.
-    fn sketch(reading: &Reading, shape: Shape) -> Vec<String> {
+    fn sketch(reading: &Reading) -> Vec<String> {
         fn walk(reading: &Reading, branches: &[Branch], depth: usize, out: &mut Vec<String>) {
             for branch in branches {
                 let name = |change: usize| reading.changes[change].symbol.name.clone();
@@ -310,7 +260,7 @@ mod tests {
             }
         }
         let mut out = vec![];
-        walk(reading, &reading.tree(shape, Section::Code), 0, &mut out);
+        walk(reading, &reading.tree(Section::Code), 0, &mut out);
         out
     }
 
@@ -325,30 +275,14 @@ mod tests {
     fn a_root_is_a_change_nothing_changed_calls_and_what_it_calls_nests_in_full() {
         let head = "def charge():\n    return _fee()\n\ndef checkout():\n    return charge()\n\ndef refund():\n    return charge()\n\ndef _fee():\n    return 1\n";
         let reading = read(&[python("pay.py", &["charge", "checkout", "refund", "_fee"], head)]);
-        assert_eq!(sketch(&reading, CALLS), ["checkout", "  charge", "    _fee", "refund", "  (charge)"]);
-    }
-
-    #[test]
-    fn a_private_change_nothing_calls_is_a_root_only_with_all() {
-        let head = "def pay():\n    return 1\n\ndef _orphan():\n    return 2\n";
-        let reading = read(&[python("pay.py", &["pay", "_orphan"], head)]);
-        assert_eq!(sketch(&reading, CALLS), ["pay"]);
-        assert_eq!(sketch(&reading, Shape { all: true, ..CALLS }), ["pay", "_orphan"]);
-    }
-
-    #[test]
-    fn a_public_change_only_a_hidden_private_one_calls_is_still_a_root() {
-        let head = "def _main():\n    return pay()\n\ndef pay():\n    return 1\n";
-        let reading = read(&[python("pay.py", &["_main", "pay"], head)]);
-        assert_eq!(sketch(&reading, CALLS), ["pay"]);
-        assert_eq!(sketch(&reading, Shape { all: true, ..CALLS }), ["_main", "  pay"]);
+        assert_eq!(sketch(&reading), ["checkout", "  charge", "    _fee", "refund", "  (charge)"]);
     }
 
     #[test]
     fn a_cycle_is_cut_where_it_comes_back() {
         let head = "def pay():\n    return _charge()\n\ndef _charge():\n    return pay()\n";
         let reading = read(&[python("pay.py", &["pay", "_charge"], head)]);
-        assert_eq!(sketch(&reading, CALLS), ["pay", "  _charge", "    ↺ pay"]);
+        assert_eq!(sketch(&reading), ["pay", "  _charge", "    ↺ pay"]);
     }
 
     #[test]
@@ -357,7 +291,7 @@ mod tests {
             python("a.py", &["pay", "_save"], "def pay():\n    return _save()\n\ndef _save():\n    return 1\n"),
             python("b.py", &["_save"], "def _save():\n    return 2\n"),
         ]);
-        assert_eq!(sketch(&reading, CALLS), ["pay", "  _save ?", "  _save ?"]);
+        assert_eq!(sketch(&reading), ["pay", "  _save ?", "  _save ?"]);
     }
 
     #[test]
@@ -367,7 +301,7 @@ mod tests {
             ("a.py".to_owned(), moved.to_owned(), String::new()),
             python("b.py", &["to_date", "is_current"], &format!("{moved}\ndef is_current():\n    return to_date(1)\n")),
         ]);
-        let tree = reading.tree(CALLS, Section::Code);
+        let tree = reading.tree(Section::Code);
         let current = tree.iter().find(|b| matches!(b.item, Item::Changed(c) if reading.changes[c].symbol.name == "is_current")).unwrap();
         let [call] = current.children.as_slice() else { panic!("one call: {:?}", current.children) };
         let Item::Changed(callee) = call.item else { panic!("a change: {call:?}") };
@@ -378,26 +312,14 @@ mod tests {
     fn two_unchanged_functions_bridge_and_a_longer_chain_folds() {
         let head = "def pay():\n    return a()\n\ndef a():\n    return b()\n\ndef b():\n    return c()\n\ndef c():\n    return d()\n\ndef d():\n    return _end()\n\ndef _end():\n    return 1\n";
         let reading = read(&[python("pay.py", &["pay", "_end"], head)]);
-        assert_eq!(sketch(&reading, CALLS), ["pay", "  · a()", "    · b()", "      … 2 calls", "        _end"]);
+        assert_eq!(sketch(&reading), ["pay", "  · a()", "    · b()", "      … 2 calls", "        _end"]);
     }
 
     #[test]
-    fn an_unchanged_function_leading_nowhere_changed_shows_only_in_the_whole_stack() {
+    fn an_unchanged_function_leading_nowhere_changed_does_not_show() {
         let head = "def pay():\n    return log()\n\ndef log():\n    return fmt() + fmt()\n\ndef fmt():\n    return log()\n";
         let reading = read(&[python("pay.py", &["pay"], head)]);
-        assert_eq!(sketch(&reading, CALLS), ["pay"]);
-        assert_eq!(sketch(&reading, Shape { stack: true, ..CALLS }), ["pay", "  · log()", "    · fmt()", "      ↺ log"]);
-    }
-
-    #[test]
-    fn called_by_lists_the_callers_of_each_changed_symbol() {
-        let base = "def charge(card):\n    return 1\n\ndef pay():\n    return charge(1)\n";
-        let head = "def charge(card, amount):\n    return 1\n\ndef pay():\n    return charge(1, 2)\n";
-        let reading = read(&[("pay.py".to_owned(), base.to_owned(), head.to_owned())]);
-        let shape = Shape { direction: Direction::CalledBy, ..CALLS };
-        assert_eq!(sketch(&reading, shape), ["charge", "  pay"]);
-        let site = reading.tree(shape, Section::Code)[0].children[0].site.clone().unwrap();
-        assert_eq!(site, Site { path: "pay.py".into(), side: Side::New, line: 5 });
+        assert_eq!(sketch(&reading), ["pay"]);
     }
 
     #[test]
@@ -410,17 +332,17 @@ mod tests {
                 "def helper():\n    return 0\n\ndef test_pay():\n    assert pay() == helper()\n\ndef test_fee():\n    assert _fee()\n",
             ),
         ]);
-        let tests = |shape| {
+        let tests = || {
             let mut out = vec![];
-            for branch in reading.tree(shape, Section::Tests) {
+            for branch in reading.tree(Section::Tests) {
                 let Item::Changed(change) = branch.item else { panic!("a test root: {branch:?}") };
                 out.push((reading.changes[change].symbol.name.clone(), branch.children.len()));
             }
             out
         };
-        assert_eq!(sketch(&reading, CALLS), ["pay", "  _fee"], "helper() is a test file's");
-        assert_eq!(tests(CALLS), [("helper".to_owned(), 0), ("test_pay".to_owned(), 1), ("test_fee".to_owned(), 1)]);
-        let under_test_pay = &reading.tree(CALLS, Section::Tests)[1].children[0];
+        assert_eq!(sketch(&reading), ["pay", "  _fee"], "helper() is a test file's");
+        assert_eq!(tests(), [("helper".to_owned(), 0), ("test_pay".to_owned(), 1), ("test_fee".to_owned(), 1)]);
+        let under_test_pay = &reading.tree(Section::Tests)[1].children[0];
         assert_eq!(under_test_pay.children.len(), 1, "pay in full, with _fee under it");
     }
 }
