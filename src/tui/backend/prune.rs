@@ -17,7 +17,7 @@ const KEEP_UNTOUCHED: Duration = Duration::from_hours(30 * 24);
 
 impl Homes {
     /// At most once a day, what the cache keeps for merged, closed or long untouched MRs goes:
-    /// their diffs, threads and Claude's answers. Safe to run twice; a failure leaves the cache as it is.
+    /// their diffs and threads. Safe to run twice; a failure leaves the cache as it is.
     pub(in crate::tui) async fn prune_daily(&self) {
         let last = blocking::run(|| Ok(Cache::shared().read_entry::<()>(&keys::pruned()))).await.inspect_err(warn_stopped).ok().flatten();
         if last.is_some_and(|entry| entry.age(Utc::now()) < PRUNE_EVERY) {

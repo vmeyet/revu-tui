@@ -108,10 +108,6 @@ impl Claude {
         Self::with_base(API_URL, key, model)
     }
 
-    pub(crate) fn model(&self) -> &str {
-        &self.model
-    }
-
     /// Pointed at another server: a mock in tests.
     pub(crate) fn with_base(base: &str, key: Secret, model: &str) -> anyhow::Result<Self> {
         let http = crate::http::client().read_timeout(STREAM_IDLE_TIMEOUT).build().context("building the Claude client")?;

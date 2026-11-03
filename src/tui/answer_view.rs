@@ -17,7 +17,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
 
     let compose = matches!(app.input, Some(Input::Ask { .. })).then(|| (app.input_label(), app.buffer.clone()));
     let Some(answer) = app.open.as_ref().and_then(|o| o.answer.as_ref()) else { return };
-    let title = if answer.cached { format!("Claude · {} · cached", answer.label) } else { format!("Claude · {}", answer.label) };
+    let title = format!("Claude · {}", answer.label);
     let block = side_pane(theme, &title, focused, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -52,7 +52,7 @@ fn indent(line: Line<'static>) -> Line<'static> {
     Line::from(std::iter::once(Span::raw(" ")).chain(line.spans).collect::<Vec<_>>())
 }
 
-/// How the answer stands: streaming, cut, declined, failed, or which model answered and what the cache saved.
+/// How the answer stands: streaming, cut, declined, failed, or which model answered and what prompt caching saved.
 fn footer_line(answer: &Answer, theme: Theme, spinner: &str, width: usize) -> Line<'static> {
     let faded = Style::default().fg(theme.faded);
     match &answer.state {

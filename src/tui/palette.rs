@@ -88,8 +88,6 @@ pub(crate) enum Command {
     AiOff,
     /// `:ai on`: the providers the config switched on answer again.
     AiOn,
-    /// `:ask <question>`: a free question to Claude about what is under the cursor.
-    Ask(String),
     /// `:share [target]`: post the MR through a `[share]` command, after a preview.
     Share(Option<String>),
     /// `:session`: the agent session of the MR, as `a g` does.
@@ -119,7 +117,6 @@ impl Command {
             Self::View(_) => Act::ViewCommand,
             Self::Outline => Act::OutlineCommand,
             Self::AiOff | Self::AiOn => Act::AiCommand,
-            Self::Ask(_) => Act::AskCommand,
             Self::Share(_) => Act::ShareCommand,
             Self::Session => Act::SessionCommand,
             Self::News => Act::NewsCommand,
@@ -160,8 +157,6 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "ai" if rest == "off" => Ok(Command::AiOff),
         "ai" if rest == "on" => Ok(Command::AiOn),
         "ai" => Err(":ai off or :ai on; the config says which providers exist".into()),
-        "ask" if rest.is_empty() => Err(":ask needs a question".into()),
-        "ask" => Ok(Command::Ask(rest.to_owned())),
         "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
         "session" => Ok(Command::Session),
         "news" => Ok(Command::News),

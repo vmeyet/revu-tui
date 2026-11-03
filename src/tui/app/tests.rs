@@ -336,7 +336,8 @@ fn snapshot_answer_pane() {
     press(&mut app, "aa");
     let (id, ..) = the_ask(&type_text(&mut app, "what does it do?"));
     let text = "It swaps the client for one keyed by the card, so a retry **reuses** the idempotency key.\n\n- `charge` now takes the key\n- nothing else moves";
-    app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done { outcome: done("claude-opus-5"), cached_text: Some(text.into()) } });
+    app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Text(text.into()) });
+    app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done(done("claude-opus-5")) });
     insta::assert_snapshot!("answer_pane", render(&mut app, 150, 20));
 }
 

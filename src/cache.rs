@@ -385,11 +385,6 @@ pub(crate) mod keys {
         format!("{}/ai/verdict.json", dir(key))
     }
 
-    /// Claude's answer to one request, named by a hash of the request so the same question hits it.
-    pub(crate) fn answer(key: &MrKey, request: &str) -> String {
-        format!("{}/ai/answer.{}.json", dir(key), sha1_smol::Sha1::from(request.as_bytes()).digest())
-    }
-
     /// What Jev read in an MR at one head commit.
     pub(crate) fn reading(key: &MrKey, head: &Sha) -> String {
         format!("{}/ai/reading.{head}.json", dir(key))

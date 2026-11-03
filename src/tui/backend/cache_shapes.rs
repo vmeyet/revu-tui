@@ -1,7 +1,6 @@
 //! Cache files as revu has written them: a type that no longer reads one makes the cache drop it,
 //! and with it the reader's pins, viewed files and drafts.
 use super::MrState;
-use super::ai::SavedAnswer;
 use crate::cache::Entry;
 use crate::forge::{Discussion, Draft as HeldDraft, Mr, MrKey, Queue};
 use serde::Serialize;
@@ -43,9 +42,4 @@ fn a_saved_state_reads_back_unchanged() {
 #[test]
 fn a_cached_queue_reads_back_unchanged() {
     reads_back::<Entry<Queue>>(include_str!("fixtures/queue.json"));
-}
-
-#[test]
-fn a_kept_answer_reads_back_unchanged() {
-    reads_back::<SavedAnswer>(include_str!("fixtures/answer.json"));
 }
