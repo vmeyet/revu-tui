@@ -9,14 +9,13 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use unicode_width::UnicodeWidthStr;
 use vtui::text::truncate;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let focused = app.focus == Focus::Side;
 
-    let compose = matches!(app.input, Some(Input::Ask { .. } | Input::FollowUp)).then(|| (app.input_label(), app.buffer.clone()));
+    let compose = matches!(app.input, Some(Input::Ask { .. })).then(|| (app.input_label(), app.buffer.clone()));
     let Some(answer) = app.open.as_ref().and_then(|o| o.answer.as_ref()) else { return };
     let title = if answer.cached { format!("Claude · {} · cached", answer.label) } else { format!("Claude · {}", answer.label) };
     let block = side_pane(theme, &title, focused, app.zen);
@@ -61,23 +60,19 @@ fn footer_line(answer: &Answer, theme: Theme, spinner: &str, width: usize) -> Li
             Span::styled(format!(" {spinner} "), Style::default().fg(theme.accent)),
             Span::styled("answering · esc closes", faded),
         ]),
-        AnswerState::Failed(message) => {
-            Line::from(Span::styled(format!(" ✗ {message} · R to ask again"), Style::default().fg(theme.danger)))
-        }
+        AnswerState::Failed(message) => Line::from(Span::styled(format!(" ✗ {message}"), Style::default().fg(theme.danger))),
         AnswerState::Done(Outcome { stop: Stop::Refused(why), .. }) => {
             let why = why.as_deref().map(|w| format!(": {w}")).unwrap_or_default();
             Line::from(Span::styled(format!(" declined{why}"), Style::default().fg(theme.danger)))
         }
         AnswerState::Done(Outcome { stop: Stop::Cut, .. }) => {
-            Line::from(Span::styled(" cut at the token limit · enter to ask for the rest", Style::default().fg(theme.warn)))
+            Line::from(Span::styled(" cut at the token limit", Style::default().fg(theme.warn)))
         }
         AnswerState::Done(outcome) if outcome.model.is_empty() => Line::from(Span::styled(" type your question below", faded)),
         AnswerState::Done(outcome) => {
             let facts =
                 format!(" {} · {} cached · {} out", outcome.model, thousands(outcome.usage.cache_read), thousands(outcome.usage.output));
-            let hints = " · c draft · ⏎ follow up · R again";
-            let text = if facts.width() + hints.width() <= width { facts + hints } else { truncate(&facts, width) };
-            Line::from(Span::styled(text, faded))
+            Line::from(Span::styled(truncate(&facts, width), faded))
         }
     }
 }

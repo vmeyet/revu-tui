@@ -47,6 +47,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
+- **Ask Claude's kept answers and the keys on an answer.**
+  In the review: `a h`, and `c`, `enter`, `R` and `y` on an answer.
+
 - **`revu tui`.**
   On the command line: `revu` opens the review screen, and `revu 42` opens it on one MR.
 

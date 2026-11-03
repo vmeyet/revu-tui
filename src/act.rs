@@ -94,8 +94,8 @@ pub(crate) enum Act {
     OutlineCommand,
     SetCommand,
     ViewCommand,
-    AskCommand,
     AiCommand,
+    AskCommand,
     ShareCommand,
     SessionCommand,
     NewsCommand,
@@ -113,11 +113,6 @@ pub(crate) enum Act {
     OutlineCalls,
     OutlineStack,
     OutlinePublic,
-    AskAnswers,
-    AnswerFollowUp,
-    AnswerAgain,
-    AnswerCopy,
-    AnswerDraft,
 }
 
 /// A task of the `?` help and its keys; a key that only works in one pane says which in its words.
@@ -522,8 +517,8 @@ pub(crate) const ROWS: &[Row] = &[
     command!(Act::OutlineCommand, "outline", "the functions and classes the MR changes, in the right pane"),
     command!(Act::SetCommand, "set", "change and save a setting: :set theme=nord"),
     command!(Act::ViewCommand, "view", "the file in your program: :view · :view old · :view src/a.rs:42"),
-    command!(Act::AskCommand, "ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
     command!(Act::AiCommand, "ai", "switch AI off or back on for this session: :ai off, :ai on"),
+    command!(Act::AskCommand, "ask", "ask Claude about the cursor's hunk, file or the MR: :ask is this thread-safe?"),
     command!(Act::ShareCommand, "share", "post the MR through a [share] command: :share · :share review"),
     command!(Act::SessionCommand, "session", "open the agent session of the MR, or start one"),
     command!(Act::NewsCommand, "news", "what changed in revu, the newest version first"),
@@ -547,11 +542,6 @@ pub(crate) const ROWS: &[Row] = &[
     unnamed(Act::OutlineCalls, &["u"]).help(&[line(Group::Outline, "u", "calls, or called by")]).panes(&[Pane::Outline]),
     unnamed(Act::OutlineStack, &["s"]).help(&[line(Group::Outline, "s", "the whole stack, unchanged calls too")]).panes(&[Pane::Outline]),
     unnamed(Act::OutlinePublic, &["a"]).help(&[line(Group::Outline, "a", "public symbols only, or all")]).panes(&[Pane::Outline]),
-    unnamed(Act::AskAnswers, &["ah"]).help(&[line(Group::Ask, "a h", "answers kept for this MR")]),
-    unnamed(Act::AnswerFollowUp, &["enter"]).panes(&[Pane::Answer]),
-    unnamed(Act::AnswerAgain, &["R"]).panes(&[Pane::Answer]),
-    unnamed(Act::AnswerCopy, &["y"]).panes(&[Pane::Answer]),
-    unnamed(Act::AnswerDraft, &["c"]).help(&[line(Group::Ask, "c ⏎ R y", "answer: draft, follow up, again, copy")]).panes(&[Pane::Answer]),
 ];
 
 impl Group {
@@ -622,7 +612,7 @@ impl Group {
             ],
             Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
             Self::Outline => &[Act::OutlineTree, Act::OutlineCalls, Act::OutlineStack, Act::OutlinePublic, Act::FoldOpen, Act::Open],
-            Self::Ask => &[Act::AskFree, Act::AskAnswers, Act::AnswerDraft],
+            Self::Ask => &[Act::AskFree],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
         }
     }
@@ -714,7 +704,7 @@ mod tests {
         for (index, row) in ROWS.iter().enumerate() {
             assert_eq!(row.act as usize, index, "{:?} is out of place", row.act);
         }
-        assert_eq!(ROWS.len(), Act::AnswerDraft as usize + 1, "an act has no row");
+        assert_eq!(ROWS.len(), Act::OutlinePublic as usize + 1, "an act has no row");
     }
 
     #[test]

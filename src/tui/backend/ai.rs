@@ -5,8 +5,8 @@ use crate::ai::triage::{self, Verdict};
 use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
-use crate::tui::app::{self, AnswerSource, Incoming, Part};
-use chrono::{DateTime, Utc};
+use crate::tui::app::{Incoming, Part};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -19,61 +19,18 @@ pub(in crate::tui) struct Ai {
     pub(super) claude: Option<Claude>,
 }
 
-/// An answer kept in the cache: asking the same thing about the same diff paints it at once, and
-/// `a h` lists it. Answers kept before the label was saved have none and are not listed.
+/// An answer kept in the cache: asking the same thing about the same diff paints it at once.
 #[derive(Serialize, Deserialize)]
 pub(super) struct SavedAnswer {
     text: String,
     model: String,
     usage: Usage,
-    #[serde(default)]
-    label: Option<String>,
-    #[serde(default)]
-    asked_at: Option<DateTime<Utc>>,
-    #[serde(default)]
-    head: Option<Sha>,
-    #[serde(default)]
-    request: Option<Ask>,
-}
-
-impl SavedAnswer {
-    fn past(self) -> Option<app::PastAnswer> {
-        let outcome = Outcome { stop: Stop::Done, usage: self.usage, model: self.model };
-        Some(app::PastAnswer {
-            label: self.label?,
-            asked_at: self.asked_at?,
-            head: self.head?,
-            request: self.request?,
-            text: self.text,
-            outcome,
-        })
-    }
 }
 
 impl Ai {
-    /// The answers kept for `key` that say what they were, newest first.
-    pub(in crate::tui) fn past_answers(&self, key: &MrKey) -> Vec<app::PastAnswer> {
-        let cache = self.homes.cache_of(key);
-        let (dir, prefix) = keys::answers(key);
-        let mut answers: Vec<app::PastAnswer> =
-            cache.keys_in(&dir, prefix).iter().filter_map(|entry| cache.read::<SavedAnswer>(entry)?.past()).collect();
-        answers.sort_by_key(|a| std::cmp::Reverse(a.asked_at));
-        answers
-    }
-
-    /// Claude's answer, piece by piece as it streams, or at once from the cache when `source` allows.
+    /// Claude's answer, piece by piece as it streams, or at once from the cache.
     /// Only a finished answer is kept, so a cut or refused one is asked again next time.
-    #[expect(clippy::too_many_arguments, reason = "the label and head only go into what is kept")]
-    pub(in crate::tui) async fn ask(
-        &self,
-        key: &MrKey,
-        id: u64,
-        request: &Ask,
-        source: AnswerSource,
-        label: &str,
-        head: &Sha,
-        send: &impl Fn(Incoming),
-    ) {
+    pub(in crate::tui) async fn ask(&self, key: &MrKey, id: u64, request: &Ask, send: &impl Fn(Incoming)) {
         let part = |part: Part| Incoming::Answer { key: key.clone(), id, part };
         let Some(claude) = &self.claude else {
             send(part(Part::Failed("Claude is off".into())));
@@ -82,7 +39,7 @@ impl Ai {
         let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
         let (wanted, reading) = (key.clone(), cache_key.clone());
         let saved = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read::<SavedAnswer>(&reading)).await;
-        if let Some(saved) = saved.filter(|_| source == AnswerSource::CacheFirst) {
+        if let Some(saved) = saved {
             let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
             send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
             return;
@@ -103,15 +60,7 @@ impl Ai {
         match streamed {
             Ok(outcome) => {
                 if outcome.stop == Stop::Done {
-                    let saved = SavedAnswer {
-                        text,
-                        model: outcome.model.clone(),
-                        usage: outcome.usage,
-                        label: Some(label.to_owned()),
-                        asked_at: Some(Utc::now()),
-                        head: Some(head.clone()),
-                        request: Some(request.clone()),
-                    };
+                    let saved = SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage };
                     let wanted = key.clone();
                     write_cache("caching Claude's answer", &self.homes, move |homes| homes.cache_of(&wanted).write(&cache_key, &saved))
                         .await;
@@ -177,28 +126,6 @@ mod tests {
         Ai { homes: homes_in(dir).into(), jev: None, claude: None }
     }
 
-    #[test]
-    fn kept_answers_list_newest_first_and_skip_those_saved_without_a_label() {
-        let dir = tempfile::tempdir().unwrap();
-        let ai = ai_in(dir.path());
-        let mr = key();
-        let saved = |label: Option<&str>, hours: i64| SavedAnswer {
-            text: "text".into(),
-            model: "claude-opus-5".into(),
-            usage: Usage::default(),
-            label: label.map(str::to_owned),
-            asked_at: Some(Utc::now() - chrono::Duration::hours(hours)),
-            head: Some("b2".into()),
-            request: Some(Ask { system: vec![], turns: vec![] }),
-        };
-        let cache = ai.homes.cache_of(&mr);
-        cache.write(&keys::answer(&mr, "old"), &saved(Some("explain · a.rs"), 5)).unwrap();
-        cache.write(&keys::answer(&mr, "new"), &saved(Some("summary"), 1)).unwrap();
-        cache.write(&keys::answer(&mr, "before"), &serde_json::json!({"text": "t", "model": "m", "usage": Usage::default()})).unwrap();
-        let labels: Vec<String> = ai.past_answers(&mr).into_iter().map(|a| a.label).collect();
-        assert_eq!(labels, ["summary", "explain · a.rs"]);
-    }
-
     #[tokio::test]
     async fn jev_is_asked_once_per_mr_state_and_answers_from_the_cache_after() {
         let dir = tempfile::tempdir().unwrap();
@@ -217,7 +144,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_answer_streams_once_then_comes_from_the_cache_until_asked_fresh() {
+    async fn an_answer_streams_once_then_comes_from_the_cache() {
         use wiremock::matchers::method;
         let server = wiremock::MockServer::start().await;
         let stream = [
@@ -230,7 +157,7 @@ mod tests {
         .collect::<String>();
         wiremock::Mock::given(method("POST"))
             .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(stream))
-            .expect(2)
+            .expect(1)
             .mount(&server)
             .await;
         let dir = tempfile::tempdir().unwrap();
@@ -239,9 +166,8 @@ mod tests {
         let request = Ask { system: vec![], turns: vec![anthropic::Turn { role: anthropic::Role::User, text: "ok?".into() }] };
         let heard = std::sync::Mutex::new(vec![]);
         let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
-        ai.ask(&key(), 1, &request, AnswerSource::CacheFirst, "explain", &"b2".into(), &listen).await;
-        ai.ask(&key(), 2, &request, AnswerSource::CacheFirst, "explain", &"b2".into(), &listen).await;
-        ai.ask(&key(), 3, &request, AnswerSource::Fresh, "explain", &"b2".into(), &listen).await;
+        ai.ask(&key(), 1, &request, &listen).await;
+        ai.ask(&key(), 2, &request, &listen).await;
         let heard = heard.into_inner().unwrap();
         let cached: Vec<_> = heard
             .iter()
@@ -250,6 +176,6 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(cached, vec![(1, None), (2, Some("Looks fine.".into())), (3, None)], "the second answer never reaches the API");
+        assert_eq!(cached, vec![(1, None), (2, Some("Looks fine.".into()))], "the second answer never reaches the API");
     }
 }

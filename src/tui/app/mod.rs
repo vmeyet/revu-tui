@@ -52,7 +52,7 @@ mod writes;
 mod zen;
 
 pub(crate) use apply::Confirm;
-pub(crate) use ask::{Answer, AnswerSource, AnswerState, Part, PastAnswer};
+pub(crate) use ask::{Answer, AnswerState, Part};
 pub(crate) use brief::{Brief, ThreadRow};
 pub(crate) use feedback::Toast;
 pub(crate) use inbox::{Spot, progress_bar};
@@ -287,13 +287,7 @@ pub(crate) enum Action {
         key: MrKey,
         id: u64,
         request: Box<crate::ai::anthropic::Ask>,
-        source: AnswerSource,
-        /// What the answer is kept under, so `a h` lists it: its title and the commit asked about.
-        label: String,
-        head: Sha,
     },
-    /// `a h`: the answers kept for the MR.
-    LoadAnswers(MrKey),
     /// Ask Jev how urgent and how big a queue MR is.
     Triage(Box<QueueMr>),
     /// Ask Jev whether the open MR waits on me and how risky each file is, at commit `head`.
@@ -345,10 +339,7 @@ pub(crate) enum Input {
     /// A question to Claude about `scope`.
     Ask {
         scope: Box<crate::ai::context::Scope>,
-        target: Box<ask::Target>,
     },
-    /// The next question on the conversation of the open answer.
-    FollowUp,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -545,11 +536,6 @@ pub(crate) enum Incoming {
         key: MrKey,
         sides: crate::outline::Sides,
         versions: Versions,
-    },
-    /// The answers kept for the MR, newest first.
-    PastAnswers {
-        key: MrKey,
-        answers: Vec<PastAnswer>,
     },
     /// The open MR's review apps, newest deployment of each environment.
     Deployments {

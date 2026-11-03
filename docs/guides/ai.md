@@ -37,25 +37,8 @@ model = "claude-opus-5"
 
 ## Ask Claude
 
-Press `a`, then a letter.
-
-| Keys | Asks about | You get |
-|---|---|---|
-| `a a` | The change under the cursor | Your own question |
-| `a h` | Nothing new | The answers you got before on this MR |
-
+Press `a`, then `a`, and type a question about the change under the cursor.
 The answer streams into the right pane.
-
-| Key on an answer | Does |
-|---|---|
-| `c` | Turn it into a draft on those lines |
-| `enter` | Ask a follow-up |
-| `R` | Ask again, past the cache |
-| `y` | Copy it |
-
-`a h` lists the answers Claude gave before on this MR, newest first.
-One asked before the last push says `older push`.
-`enter` shows it again, for free, and you can ask a follow-up from there.
 
 `:ai off` stops both helpers until you type `:ai on`.
 

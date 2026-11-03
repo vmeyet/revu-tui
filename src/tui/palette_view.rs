@@ -1,4 +1,4 @@
-//! The palette popup: the prompt with its mode, then MRs, answers or sessions to pick, or the commands that
+//! The palette popup: the prompt with its mode, then MRs or sessions to pick, or the commands that
 //! match what is typed.
 use super::app::App;
 use super::palette::{Mode, Palette, Target, verbs_for};
@@ -15,7 +15,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) 
     let popup = Popup { title: &title, prompt, footer: footer(palette.mode) };
     view::draw(f, theme, area, popup, |room| match palette.mode {
         Mode::Commands => view::verb_lines(theme, palette, &verbs_for(&palette.input), room),
-        Mode::Mrs | Mode::Answers | Mode::Sessions => list_lines(app, palette, room),
+        Mode::Mrs | Mode::Sessions => list_lines(app, palette, room),
     });
 }
 
@@ -27,7 +27,6 @@ fn list_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
         .map(|candidate| {
             let (icon, colour) = match candidate.target {
                 Target::Mr(_) => ("◆", theme.accent),
-                Target::Answer(_) => ("✦", theme.accent),
                 Target::Session(Some(_)) => ("●", theme.accent),
                 Target::Session(None) => ("+", theme.muted),
             };
@@ -40,7 +39,6 @@ fn list_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
 fn footer(mode: Mode) -> &'static str {
     match mode {
         Mode::Mrs => "  ↑↓ pick · enter opens · > commands · esc",
-        Mode::Answers => "  ↑↓ pick · enter shows it · esc",
         Mode::Sessions => "  ↑↓ pick · enter opens it · esc",
         Mode::Commands => "  ↑↓ pick · ↑ history · tab completes · esc",
     }
