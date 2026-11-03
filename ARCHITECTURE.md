@@ -20,7 +20,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
-| `diff/` | Unified diff parsing, word highlighting inside lines, fold state; `arbitrary.rs` builds diffs for property tests |
+| `diff/` | Unified diff parsing, word highlighting inside lines, change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
 | `outline/` | The changed functions and classes of an MR and the calls between them (`O`) |
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |
@@ -154,6 +154,7 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | forge | The host's code platform: GitLab or GitHub |
 | file | One changed file in the MR diff |
 | hunk | One `@@` block inside a file |
+| change label | How much a hunk or file's change matters: `whitespace`, `formatting`, `edited` or `rewritten`, the worst run deciding; rows draw no word for `edited`, so no label means an ordinary edit; display only; `diff::label::ChangeLabel` |
 | symbol | A function, method or class the outline lists |
 | prose | A Markdown file drawn rendered, block by block |
 | line | One diff row with an old and/or new number |

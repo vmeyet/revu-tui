@@ -1,6 +1,7 @@
 //! One changed file as the review reads it: its parsed hunks, its counts, and its syntax colours.
 use super::{Anchor, Side};
 use crate::diff::fold::FileMeta;
+use crate::diff::label::{self, ChangeLabel};
 use crate::diff::words;
 use crate::diff::{self, Hunk, LineKind};
 use crate::forge::{DiffFile, FileKind};
@@ -20,6 +21,8 @@ pub(crate) struct File {
     pub(crate) hunks: Vec<Hunk>,
     pub(crate) additions: usize,
     pub(crate) deletions: usize,
+    /// The worst label of its hunks; none for a binary or too large file, or one without hunks.
+    pub(crate) label: Option<ChangeLabel>,
     colours: Colours,
 }
 
@@ -57,12 +60,12 @@ impl std::fmt::Debug for Colours {
 
 impl File {
     pub(crate) fn from_diff(diff: &DiffFile) -> Self {
-        let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(words::mark).collect();
+        let kind = diff.change;
+        let path = if kind == FileKind::Deleted { &diff.old_path } else { &diff.new_path };
+        let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(words::mark).map(|hunk| label::labelled(hunk, path)).collect();
         let lines = hunks.iter().map(|h| h.lines.len()).sum::<usize>();
         let count = |kind: LineKind| hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind == kind).count();
-        let kind = diff.change;
         let too_large = diff.too_large || lines > TOO_LARGE_LINES;
-        let path = if kind == FileKind::Deleted { &diff.old_path } else { &diff.new_path };
         let language = syntax::language_for(path, &syntax::LANGUAGES).filter(|_| !too_large);
         let colours = Colours { language, hunks: hunks.iter().map(|_| OnceLock::new()).collect() };
         Self {
@@ -74,6 +77,7 @@ impl File {
             colours,
             additions: count(LineKind::Added),
             deletions: count(LineKind::Removed),
+            label: hunks.iter().filter_map(|hunk| hunk.label).max().filter(|_| !too_large),
             hunks,
         }
     }
@@ -199,6 +203,46 @@ mod tests {
     fn counts_additions_and_deletions() {
         let file = File::from_diff(&charge());
         assert_eq!((file.additions, file.deletions, file.hunks.len()), (4, 2, 2));
+    }
+
+    const REINDENT: &str = "@@ -1 +1 @@\n-  a;\n+    a;\n";
+    const EDIT: &str = "@@ -9 +9 @@\n-let a = 1;\n+let a = 2;\n";
+
+    fn at_path(path: &str, diff: String) -> DiffFile {
+        DiffFile { diff, old_path: path.into(), new_path: path.into(), ..DiffFile::default() }
+    }
+
+    #[test]
+    fn a_file_reads_as_its_worst_hunk() {
+        let file = File::from_diff(&at_path("a.rs", format!("{REINDENT}{EDIT}")));
+        assert_eq!(
+            file.hunks.iter().map(|hunk| hunk.label).collect::<Vec<_>>(),
+            [Some(ChangeLabel::Whitespace), Some(ChangeLabel::Edited)]
+        );
+        assert_eq!(file.label, Some(ChangeLabel::Edited));
+    }
+
+    #[test]
+    fn a_deleted_file_is_labelled_by_its_old_path() {
+        let deleted =
+            DiffFile { change: FileKind::Deleted, old_path: "a.rs".into(), new_path: "/dev/null".into(), ..at_path("", REINDENT.into()) };
+        assert_eq!(File::from_diff(&deleted).label, Some(ChangeLabel::Whitespace));
+    }
+
+    #[test]
+    fn a_binary_file_has_no_label() {
+        assert_eq!(File::from_diff(&at_path("logo.png", String::new())).label, None);
+    }
+
+    #[test]
+    fn a_too_large_file_has_no_label() {
+        let large = DiffFile { too_large: true, ..at_path("a.rs", REINDENT.into()) };
+        assert_eq!(File::from_diff(&large).label, None);
+    }
+
+    #[test]
+    fn a_file_with_only_context_lines_has_no_label() {
+        assert_eq!(File::from_diff(&at_path("a.rs", "@@ -1 +1 @@\n a\n".into())).label, None);
     }
 
     #[test]

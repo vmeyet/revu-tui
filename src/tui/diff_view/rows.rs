@@ -3,6 +3,7 @@ use super::anchors::{Anchors, anchor_spans, range_spans};
 use super::line::{line_spans, pair_spans, peeked, quiet_spans};
 use super::wrap::is_blank;
 use super::{ANCHOR_W, Gutter, Overflow, UNCUT};
+use crate::diff::label::ChangeLabel;
 use crate::diff::words::same_but_whitespace;
 use crate::diff::{Line as DiffLine, LineKind};
 use crate::review::{File, FileKind, Place, Review, Row};
@@ -153,7 +154,9 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, gutter: Gutter, widt
     let anchors_w: usize = anchors.iter().map(|(text, _)| text.width()).sum();
     let state = file_state(file, review, open);
     let tail_w = counts.width() + anchors_w + state.as_ref().map_or(0, |s| s.width() + 2);
-    let name_room = width.saturating_sub(mark.width() + tail_w + 2);
+    let free = width.saturating_sub(mark.width() + tail_w + 2);
+    let label = label_span(file.label, free.saturating_sub(file.new_path.width()), theme);
+    let name_room = free - label.as_ref().map_or(0, Span::width);
     let name = gutter.path(&format!("{dir}{base}"), name_room);
     let (dir, base) = match name.rsplit_once('/') {
         Some((d, b)) => (format!("{d}/"), b.to_owned()),
@@ -173,7 +176,21 @@ fn file_spans<'a>(review: &Review, file: &File, open: bool, gutter: Gutter, widt
     if let Some(state) = state {
         spans.push(Span::styled(format!("  {state}"), Style::default().fg(theme.faded)));
     }
+    spans.extend(label);
     spans
+}
+
+/// A row's label and the two cells before it, if `spare` cells are free: it never takes room from a path or a count.
+/// `Edited` draws nothing: it is the common case, so a row without a word reads as an ordinary edit.
+pub(crate) fn label_span(label: Option<ChangeLabel>, spare: usize, theme: Theme) -> Option<Span<'static>> {
+    let label = label?;
+    let style = match label {
+        ChangeLabel::Whitespace | ChangeLabel::Formatting => Style::default().fg(theme.faded),
+        ChangeLabel::Edited => return None,
+        ChangeLabel::Rewritten => Style::default().fg(theme.warn),
+    };
+    let span = Span::styled(format!("  {}", label.word()), style);
+    (span.width() <= spare).then_some(span)
 }
 
 fn file_state(file: &File, review: &Review, open: bool) -> Option<String> {
@@ -204,12 +221,17 @@ fn hunk_spans<'a>(file: &File, index: usize, open: bool, width: usize, theme: Th
         None => (hunk.header.clone(), String::new()),
     };
     let count = if open { String::new() } else { format!("  ({} lines)", hunk.lines.len()) };
-    let room = width.saturating_sub(INDENT.len() + mark.len() + range.width() + count.width() + 1);
+    let room = width.saturating_sub(INDENT.width() + mark.width() + range.width() + count.width() + 1);
+    let spare = room.saturating_sub(context.width());
+    let label = label_span(hunk.label, spare, theme);
+    let pad = label.as_ref().map_or(0, |label| spare - label.width());
     vec![
         Span::styled(format!("{INDENT}{mark}"), Style::default().fg(theme.faded)),
         Span::styled(format!("{range} "), Style::default().fg(theme.muted)),
         Span::raw(truncate(&context, room)),
         Span::styled(count, Style::default().fg(theme.faded)),
+        Span::raw(" ".repeat(pad)),
+        label.unwrap_or_default(),
     ]
 }
 
@@ -335,6 +357,69 @@ mod tests {
         let under = |indent: usize, n: usize, pad: usize| format!("{}{}{}", " ".repeat(indent), x(n), " ".repeat(pad));
         assert_eq!(wrapped(Gutter::Both), [format!("           2 +{}", x(16)), under(14, 16, 0), under(14, 8, 8)]);
         assert_eq!(wrapped(Gutter::One), [format!("      2 +{}", x(21)), under(9, 19, 2)]);
+    }
+
+    fn labelled_file(path: &str, diff: &str) -> File {
+        File::from_diff(&crate::forge::DiffFile { diff: diff.into(), old_path: path.into(), new_path: path.into(), ..Default::default() })
+    }
+
+    const REINDENT: &str = "@@ -1 +1 @@ fn charge()\n-  a;\n+    a;\n";
+
+    #[test]
+    fn a_hunk_row_ends_on_its_label_at_the_edge_of_the_pane() {
+        let drawn = spans_text(&hunk_spans(&labelled_file("a.rs", REINDENT), 0, true, 60, Theme::default()));
+        assert_eq!(drawn.width(), 60);
+        assert!(drawn.starts_with("   ▾ @@ -1 +1 @@ fn charge()") && drawn.ends_with("  whitespace"), "{drawn}");
+    }
+
+    #[test]
+    fn a_hunk_row_drops_its_label_before_it_cuts_the_context() {
+        let drawn = spans_text(&hunk_spans(&labelled_file("a.rs", REINDENT), 0, true, 35, Theme::default()));
+        assert_eq!(drawn, "   ▾ @@ -1 +1 @@ fn charge()");
+    }
+
+    fn drawn_file_row(file: &File, width: usize) -> String {
+        let review = Review::new((*crate::review::tests::review().mr).clone(), &[], vec![], &[]);
+        spans_text(&file_spans(&review, file, true, Gutter::Both, width, Theme::default()))
+    }
+
+    #[test]
+    fn a_file_row_ends_on_its_label() {
+        let drawn = drawn_file_row(&labelled_file("src/a.rs", REINDENT), 60);
+        assert!(drawn.ends_with("+1 −1  whitespace") && drawn.starts_with("▾ src/a.rs "), "{drawn}");
+    }
+
+    #[test]
+    fn a_narrow_file_row_drops_its_label_and_keeps_the_path_and_the_counts_whole() {
+        assert_eq!(drawn_file_row(&labelled_file("src/a.rs", REINDENT), 20), "▾ src/a.rs     +1 −1");
+    }
+
+    #[test]
+    fn a_file_with_nothing_to_label_shows_none() {
+        let drawn = drawn_file_row(&labelled_file("logo.png", ""), 60);
+        assert!(drawn.ends_with("+0 −0  binary"), "{drawn}");
+    }
+
+    const EDIT: &str = "@@ -1 +1 @@ fn charge()\n-let a = 1;\n+let a = 2;\n";
+
+    #[test]
+    fn an_edited_hunk_row_draws_no_label() {
+        let drawn = spans_text(&hunk_spans(&labelled_file("a.rs", EDIT), 0, true, 60, Theme::default()));
+        assert_eq!(drawn, "   ▾ @@ -1 +1 @@ fn charge()");
+    }
+
+    #[test]
+    fn an_edited_file_row_draws_no_label() {
+        let drawn = drawn_file_row(&labelled_file("src/a.rs", EDIT), 60);
+        assert!(drawn.ends_with("+1 −1") && drawn.starts_with("▾ src/a.rs "), "{drawn}");
+    }
+
+    #[test]
+    fn snapshot_labels_read_dim_or_warned() {
+        let theme = Theme::named("tokyonight").unwrap();
+        let labels = [ChangeLabel::Whitespace, ChangeLabel::Formatting, ChangeLabel::Rewritten];
+        let drawn: Vec<Span<'_>> = labels.into_iter().filter_map(|label| label_span(Some(label), 20, theme)).collect();
+        insta::assert_snapshot!("change_labels", painted(&drawn));
     }
 
     #[test]

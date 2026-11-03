@@ -13,6 +13,10 @@ Each entry says what changed, then where, then how to use it.
   In the palette, on commands, once the top of the list is highlighted.
   `↑` `↓` walk the commands you ran until you type, `↓` still picks from the list, and `ctrl-p` `ctrl-n` still recall from any line.
 
+- **A file or hunk that is not an ordinary edit says so: `whitespace`, `formatting` or `rewritten`.**
+  In the diff's file and hunk rows and the file tree, whenever the row has room for the word.
+  Nothing to do: no label means an ordinary edit, or a change revu cannot prove harmless, and a label only informs.
+
 - **A changed line is compared with the line most like it, not the one at the same place.**
   In the diff, inline and side by side, for blocks up to 50 lines a side.
   Nothing to do: a line added or removed in a block keeps the marks on the others, and a rewrite stays plain.

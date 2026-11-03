@@ -7,7 +7,7 @@ use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
 
 /// Least similarity, over a line's code tokens, for two lines to count as twins.
-const MIN_LINE_SIMILARITY: f32 = 0.6;
+pub(super) const MIN_LINE_SIMILARITY: f32 = 0.6;
 /// Longest run, on either side, that is aligned: aligning costs one word diff per pair of lines.
 const MAX_ALIGNED_RUN: usize = 50;
 /// Most work an alignment may take, as the bytes of the `-` run times the bytes of the `+` run, what the
@@ -47,7 +47,7 @@ fn pairs_by_position(removed: Range<usize>, added: Range<usize>) -> impl Iterato
     removed.zip(added).map(|(removed, added)| LinePair { removed, added })
 }
 
-fn too_large_to_align(removed: &[Line], added: &[Line]) -> bool {
+pub(super) fn too_large_to_align(removed: &[Line], added: &[Line]) -> bool {
     let bytes = |run: &[Line]| run.iter().map(|line| line.text.len()).sum::<usize>();
     removed.len() > MAX_ALIGNED_RUN || added.len() > MAX_ALIGNED_RUN || bytes(removed) * bytes(added) > MAX_ALIGNED_WORK
 }
@@ -99,12 +99,12 @@ pub(crate) fn similarity(old: &[&str], new: &[&str]) -> f32 {
 }
 
 /// The tokens that make a line's code what it is: indentation and spacing say nothing about which line it is.
-fn code_tokens(line: &str) -> Vec<&str> {
+pub(super) fn code_tokens(line: &str) -> Vec<&str> {
     tokens(line).into_iter().filter(|token| !token.starts_with(char::is_whitespace)).collect()
 }
 
 /// Index ranges of each `-` run and the `+` run right after it, either one possibly empty.
-fn changes(lines: &[Line]) -> Vec<(Range<usize>, Range<usize>)> {
+pub(super) fn changes(lines: &[Line]) -> Vec<(Range<usize>, Range<usize>)> {
     let mut found = Vec::new();
     let mut i = 0;
     while i < lines.len() {

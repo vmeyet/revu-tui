@@ -1,5 +1,6 @@
 //! The file tree pane: folders and files with the same counts and marks as the diff's file rows.
 use super::app::{App, Focus, List, ListRow};
+use super::diff_view::label_span;
 use super::ui::{settle_scroll, side_pane};
 use crate::ai::triage::Risk;
 use crate::review::tree::TreeRow;
@@ -58,7 +59,7 @@ fn row_line<'a>(app: &App, review: &Review, row: &TreeRow, selected: bool, width
     }
 }
 
-/// A file: its name, tinted by the risk Jev saw in it, then `+adds −dels`, `◆n` unresolved threads and `✓` once viewed, right aligned.
+/// A file: its name, tinted by the risk Jev saw in it, then `+adds −dels`, `◆n` unresolved threads, `✓` once viewed and its label if it fits, right aligned.
 fn file_line<'a>(app: &App, review: &Review, file: &File, name: &str, depth: usize, bar: Span<'a>, width: usize) -> Line<'a> {
     let theme = app.theme;
     let risk = app.risk(&file.new_path);
@@ -67,7 +68,9 @@ fn file_line<'a>(app: &App, review: &Review, file: &File, name: &str, depth: usi
     let marks = format!("{}{}", if threads > 0 { format!(" ◆{threads}") } else { String::new() }, if viewed { " ✓" } else { "" });
     let counts = format!("+{} −{}", file.additions, file.deletions);
     let indent = "  ".repeat(depth) + "  ";
-    let room = width.saturating_sub(1 + indent.width() + counts.width() + marks.width() + 1);
+    let free = width.saturating_sub(1 + indent.width() + counts.width() + marks.width() + 1);
+    let label = label_span(file.label, free.saturating_sub(name.width()), theme);
+    let room = free - label.as_ref().map_or(0, Span::width);
     let name = truncate(name, room);
     let pad = room.saturating_sub(name.width()) + 1;
     let text = match (viewed, risk) {
@@ -86,5 +89,6 @@ fn file_line<'a>(app: &App, review: &Review, file: &File, name: &str, depth: usi
         Span::raw(" "),
         Span::styled(format!("−{}", file.deletions), Style::default().fg(theme.danger)),
         Span::styled(marks, Style::default().fg(if viewed { theme.success } else { theme.warn })),
+        label.unwrap_or_default(),
     ])
 }

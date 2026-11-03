@@ -57,6 +57,21 @@ You can approve in the same step.
 | `P` sends | every draft note | the pending review |
 | Approve with it | yes | yes |
 
+### Change label
+
+The word at the end of a file row or a hunk row, saying how much the change matters; an ordinary edit shows none.
+
+| Label | Means |
+|---|---|
+| `whitespace` | Only whitespace differs |
+| `formatting` | The same code, laid out on other lines |
+| no label | An ordinary edit: small changes, new code, removed code, or anything revu cannot be sure about |
+| `rewritten` | Removed and added code with little in common |
+
+A hunk reads as its worst block of changed lines, and a file as its worst hunk.
+`whitespace` and `formatting` only show for languages where whitespace has no meaning, and never when a string may have changed.
+A label only informs: it hides, sorts and skips nothing, and a narrow pane drops it first.
+
 ## How the queue is built
 
 ```mermaid
