@@ -12,6 +12,7 @@ struct Lock {
     package: Vec<Entry>,
     #[serde(default)]
     metadata: toml::Table,
+    root: Option<toml::Table>,
 }
 
 #[derive(Deserialize)]
@@ -30,18 +31,21 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     ensure!(!lock.metadata.keys().any(|key| key.starts_with("checksum ")), "this Cargo.lock format keeps its checksums apart");
     // A replaced package loads other code than its row says, and only the raw diff shows the whole of it.
     ensure!(lock.package.iter().all(|entry| entry.replace.is_none()), "this Cargo.lock replaces a package");
+    // The oldest format keeps one package here, which can carry a source and a replace of its own.
+    ensure!(lock.root.is_none(), "this Cargo.lock has a root section");
     Ok(lock.package.into_iter().map(package_of).collect())
 }
 
 fn package_of(entry: Entry) -> Package {
     let site = site_of(entry.source.as_deref(), entry.checksum.as_deref());
+    let place = format!("{} {} {}", entry.name, entry.version, entry.source.as_deref().unwrap_or_default());
     Package {
         name: PackageName(entry.name),
         version: Version(entry.version),
         origin: Origin { checksum: entry.checksum, source: entry.source },
         site,
         install_script: false,
-        at_top: false,
+        place,
     }
 }
 
@@ -199,6 +203,12 @@ mod tests {
         let other = git("1.0.0", "https://github.com/acme/other", "aaa").replace("\"s\"", "\"other\"");
         let (base, head) = (entry("s", "1.0.0", REGISTRY, "aaaa"), git("1.0.1", "https://github.com/acme/other", "aaa"));
         assert_eq!(warned_names("Cargo.lock", &lock(&[&other, &base]), &lock(&[&other, &head])), ["s"]);
+    }
+
+    #[test]
+    fn a_lock_with_a_root_section_is_refused() {
+        let root = "[root]\nname = \"a\"\nversion = \"1.0.0\"\nsource = \"git+https://evil.example/a#1\"\n";
+        assert!(parse(&format!("{root}{}", entry("serde", "1.0.0", REGISTRY, "aaaa"))).is_err());
     }
 
     #[test]

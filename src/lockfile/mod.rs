@@ -196,8 +196,9 @@ struct Package {
     site: Site,
     /// Runs code when it installs.
     install_script: bool,
-    /// The copy a project's own `require` finds, at the top of the tree.
-    at_top: bool,
+    /// What tells this copy from every other, across both sides: the install path where a format has one, so a copy that
+    /// keeps its place but changes is a change whatever the rest of the tree holds.
+    place: String,
 }
 
 /// How far an update goes, the biggest first.
@@ -340,6 +341,22 @@ impl ChangeKind {
         !self.alerts().is_empty()
     }
 
+    /// Two changes the same row can say: the same version, or the same move.
+    fn is_same_row(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::SameVersion { version, .. }, Self::SameVersion { version: other, .. }) => version == other,
+            (Self::Updated { from, to, .. }, Self::Updated { from: other_from, to: other_to, .. }) => from == other_from && to == other_to,
+            _ => false,
+        }
+    }
+
+    fn add_alerts(&mut self, more: &[Alert]) {
+        if let Self::SameVersion { alerts, .. } | Self::Updated { alerts, .. } | Self::Added { alerts, .. } = self {
+            let new: Vec<Alert> = more.iter().filter(|alert| !alerts.contains(alert)).cloned().collect();
+            alerts.extend(new);
+        }
+    }
+
     fn rank(&self) -> u8 {
         match self {
             Self::SameVersion { .. } => 0,
@@ -409,7 +426,7 @@ impl Copies<'_> {
 #[derive(Default)]
 struct Installed<'a> {
     versions: BTreeMap<&'a Version, Copies<'a>>,
-    at_top: Option<&'a Version>,
+    places: BTreeMap<&'a str, &'a Package>,
 }
 
 /// Copies of a version collapse into one: moving a copy in the tree changes nothing a reader cares about.
@@ -418,9 +435,7 @@ fn by_name(packages: &[Package]) -> BTreeMap<&PackageName, Installed<'_>> {
     for package in packages {
         let installed = names.entry(&package.name).or_default();
         installed.versions.entry(&package.version).or_default().0.push(package);
-        if package.at_top {
-            installed.at_top = Some(&package.version);
-        }
+        installed.places.insert(&package.place, package);
     }
     names
 }
@@ -443,14 +458,25 @@ fn compare(base: &[Package], head: &[Package], public_registry: &str) -> Vec<Cha
 
 fn package_changes(base: &Installed<'_>, head: &Installed<'_>, known: &Known<'_>) -> Vec<ChangeKind> {
     let same_versions = base.versions.iter().filter_map(|(&version, copies)| same_version(version, copies, head.versions.get(version)?));
-    let mut changes: Vec<ChangeKind> = same_versions.chain(moved_versions(base, head, known)).collect();
-    changes.extend(top_copy_swap(base, head, &changes, known));
-    changes
+    let changes = same_versions.chain(moved_versions(base, head, known)).chain(place_changes(base, head, known));
+    in_one_row_each(changes)
 }
 
 fn same_version(version: &Version, old: &Copies<'_>, new: &Copies<'_>) -> Option<ChangeKind> {
     let alerts = Alert::of_same_release(old, new);
     (!alerts.is_empty()).then(|| ChangeKind::SameVersion { version: version.clone(), alerts })
+}
+
+/// Each row once, with every alert any comparison found for it.
+fn in_one_row_each(changes: impl Iterator<Item = ChangeKind>) -> Vec<ChangeKind> {
+    let mut rows: Vec<ChangeKind> = vec![];
+    for change in changes {
+        match rows.iter_mut().find(|row| row.is_same_row(&change)) {
+            Some(row) => row.add_alerts(change.alerts()),
+            None => rows.push(change),
+        }
+    }
+    rows
 }
 
 fn updated(from: &Version, to: &Version, old: &Copies<'_>, new: &Copies<'_>, known: &Known<'_>) -> ChangeKind {
@@ -462,12 +488,17 @@ fn updated(from: &Version, to: &Version, old: &Copies<'_>, new: &Copies<'_>, kno
     }
 }
 
-/// The copy a project loads changed version though both versions stay somewhere in the tree.
-fn top_copy_swap(base: &Installed<'_>, head: &Installed<'_>, changes: &[ChangeKind], known: &Known<'_>) -> Option<ChangeKind> {
-    let (from, to) = base.at_top.zip(head.at_top).filter(|(from, to)| from != to)?;
-    let shown = changes.iter().any(|change| matches!(change, ChangeKind::Updated { from: f, to: t, .. } if f == from && t == to));
-    let none = Copies::default();
-    (!shown).then(|| updated(from, to, base.versions.get(from).unwrap_or(&none), head.versions.get(to).unwrap_or(&none), known))
+/// A copy that changes in place, which the sets of versions and origins hide when copies trade them.
+fn place_changes(base: &Installed<'_>, head: &Installed<'_>, known: &Known<'_>) -> Vec<ChangeKind> {
+    let changed_at = |(place, new): (&&str, &&Package)| {
+        let old = base.places.get(place)?;
+        let (old_copy, new_copy) = (Copies(vec![*old]), Copies(vec![*new]));
+        if old.version != new.version {
+            return Some(updated(&old.version, &new.version, &old_copy, &new_copy, known));
+        }
+        same_version(&new.version, &old_copy, &new_copy)
+    };
+    head.places.iter().filter_map(changed_at).collect()
 }
 
 fn only_in<'a>(versions: &Installed<'a>, other: &Installed<'a>) -> Vec<&'a Version> {
@@ -476,33 +507,43 @@ fn only_in<'a>(versions: &Installed<'a>, other: &Installed<'a>) -> Vec<&'a Versi
     only
 }
 
+/// The moves `fits` allows, each new version taken once, and the versions left on either side.
+struct Paired<'a> {
+    moves: Vec<(&'a Version, &'a Version)>,
+    gone: Vec<&'a Version>,
+    new: Vec<&'a Version>,
+}
+
+fn paired<'a>(gone: Vec<&'a Version>, new: Vec<&'a Version>, fits: fn(&Version, &Version) -> bool) -> Paired<'a> {
+    let (mut moves, mut left, mut new) = (vec![], vec![], new);
+    for from in gone {
+        match new.iter().position(|to| fits(from, to)) {
+            Some(at) => moves.push((from, new.remove(at))),
+            None => left.push(from),
+        }
+    }
+    Paired { moves, gone: left, new }
+}
+
 /// A gone version pairs with a new one it is compatible with; what is left pairs only when the counts match,
 /// since an extra version is a package added or removed, not an update.
 fn moved_versions(base: &Installed<'_>, head: &Installed<'_>, known: &Known<'_>) -> Vec<ChangeKind> {
     let none = Copies::default();
-    let update = |from: &Version, to: &Version| {
+    let update = |(from, to): (&Version, &Version)| {
         updated(from, to, base.versions.get(from).unwrap_or(&none), head.versions.get(to).unwrap_or(&none), known)
     };
-    let mut new = only_in(head, base);
-    let mut changes = vec![];
-    let mut left = vec![];
-    for from in only_in(base, head) {
-        match new.iter().position(|to| Bump::between(from, to) != Bump::Breaking) {
-            Some(at) => changes.push(update(from, new.remove(at))),
-            None => left.push(from),
-        }
-    }
-    if left.len() == new.len() {
-        changes.extend(left.into_iter().zip(new).map(|(from, to)| update(from, to)));
-        return changes;
+    let same = paired(only_in(base, head), only_in(head, base), |from, to| from.release() == to.release());
+    let compatible = paired(same.gone, same.new, |from, to| Bump::between(from, to) != Bump::Breaking);
+    let moves = same.moves.into_iter().chain(compatible.moves);
+    if compatible.gone.len() == compatible.new.len() {
+        return moves.chain(compatible.gone.into_iter().zip(compatible.new)).map(update).collect();
     }
     let added = |version: &Version| ChangeKind::Added {
         version: version.clone(),
         alerts: Alert::of_added(version, head.versions.get(version).unwrap_or(&none), known),
     };
-    changes.extend(new.into_iter().map(added));
-    changes.extend(left.into_iter().map(|v| ChangeKind::Removed { version: v.clone() }));
-    changes
+    let removed = |version: &Version| ChangeKind::Removed { version: version.clone() };
+    moves.map(update).chain(compatible.new.into_iter().map(added)).chain(compatible.gone.into_iter().map(removed)).collect()
 }
 
 /// The names of the rows that warn, for a format's tests.
@@ -525,7 +566,7 @@ mod tests {
             origin: Origin { checksum: Some(checksum.into()), source: Some(REGISTRY.into()) },
             site: Site::Registry { base: REGISTRY.into() },
             install_script: false,
-            at_top: false,
+            place: format!("{name} {version}"),
         }
     }
 

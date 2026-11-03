@@ -1,5 +1,5 @@
 //! `package-lock.json`, the `packages` map of lockfile versions 2 and 3.
-use super::{Origin, Package, PackageName, Site, Version};
+use super::{Origin, Package, PackageName, Site, Version, is_semver};
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -64,12 +64,11 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     Ok(packages)
 }
 
-/// Older npm installs from `dependencies`, which the summary does not read: a row `packages` does not explain is refused.
-/// A version that is not semver (git, a folder, an alias) has no row to compare with.
+/// Older npm installs from `dependencies`, which the summary does not read: only a row `packages` says the same of reads.
 fn ensure_agrees(dependencies: &BTreeMap<String, Legacy>, listed: &Listed<'_>) -> Result<()> {
     for (name, entry) in dependencies {
         let row = (name.as_str(), entry.version.as_str(), entry.integrity.as_deref(), entry.resolved.as_deref());
-        let explained = entry.bundled || Version(entry.version.clone()).numbers().is_none() || listed.contains(&row);
+        let explained = is_semver(&entry.version) && listed.contains(&row) && !(entry.bundled && entry.resolved.is_some());
         ensure!(explained, "the dependencies section of package-lock.json disagrees with its packages on {name}");
         ensure_agrees(&entry.dependencies, listed)?;
     }
@@ -102,7 +101,7 @@ fn package_at(path: &str, written: &serde_json::Value, packages: &BTreeMap<Strin
         version,
         site,
         install_script: entry.install_script,
-        at_top: installed.is_some_and(|(folder, _)| folder.is_empty()),
+        place: path.to_owned(),
         origin: Origin { checksum: entry.integrity, source: entry.resolved },
     }))
 }
@@ -158,7 +157,7 @@ fn tarball_paths(name: &str, version: &Version) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{ChangeKind, compare, summarize, warned_names};
+    use super::super::{Alert, ChangeKind, compare, summarize, warned_names};
     use super::*;
 
     fn named<'a>(packages: &'a [Package], name: &str) -> Vec<&'a Package> {
@@ -303,8 +302,8 @@ mod tests {
         let two = r#""version":"2.0.0","resolved":"https://registry.npmjs.org/a/-/a-2.tgz","integrity":"sha512-two""#;
         let tree = |top: &str, nested: &str| lock(&format!(r#""node_modules/a":{{{top}}},"node_modules/b/node_modules/a":{{{nested}}}"#));
         let summary = summarize(PATH, Some(&tree(two, one)), Some(&tree(one, two))).unwrap();
-        assert_eq!(summary.changes.len(), 1, "{summary:?}");
-        assert!(matches!(&summary.changes[0].kind, ChangeKind::Updated { from, to, .. } if from.0 == "2.0.0" && to.0 == "1.0.0"));
+        let downgrade = |kind: &ChangeKind| matches!(kind, ChangeKind::Updated { from, to, .. } if from.0 == "2.0.0" && to.0 == "1.0.0");
+        assert!(summary.changes.iter().any(|c| downgrade(&c.kind)), "{summary:?}");
     }
 
     fn lock_v2(dependency: &str) -> String {
@@ -320,18 +319,6 @@ mod tests {
     fn a_nested_v2_dependency_that_disagrees_with_packages_is_refused() {
         let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"9.0.0"}}}}"#);
         assert!(parse(&lock_v2(&nested)).is_err());
-    }
-
-    #[test]
-    fn a_bundled_v2_dependency_needs_no_row_in_packages() {
-        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"9.0.0","bundled":true}}}}"#);
-        assert_eq!(parse(&lock_v2(&nested)).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn a_v2_dependency_on_git_needs_no_row_in_packages() {
-        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"git+ssh://git@example.com/b.git#abc"}}}}"#);
-        assert_eq!(parse(&lock_v2(&nested)).unwrap().len(), 1);
     }
 
     #[test]
@@ -482,6 +469,11 @@ mod tests {
     #[test]
     fn an_entry_with_a_source_outside_node_modules_warns() {
         assert_eq!(case!("x09_outside_node_modules"), ["vendor/x"]);
+    }
+
+    #[test]
+    fn copies_swapping_their_origins_warn_at_each_path() {
+        assert_eq!(case!("x10b_origin_swap"), ["a"]);
     }
 
     #[test]
@@ -731,6 +723,16 @@ mod tests {
     }
 
     #[test]
+    fn a_build_pairs_with_its_release_before_any_other_version() {
+        let nested = |under: &str, fields: &str| entry(&format!("node_modules/{under}/node_modules/a"), fields);
+        let base = lock(&format!("{},{}", nested("b", &public("a", "1.0.0")), nested("c", &public("a", "1.0.1"))));
+        let build = at("1.0.1+x", "https://registry.npmjs.org/a/-/a-1.0.1+x.tgz").replace("sha512-any", "sha512-evil");
+        let head = lock(&format!("{},{}", nested("d", &build), nested("e", &public("a", "1.0.2"))));
+        let changes = summarize(PATH, Some(&base), Some(&head)).unwrap().changes;
+        assert!(changes.iter().any(|c| c.kind.alerts().contains(&Alert::ChecksumChanged)), "{changes:?}");
+    }
+
+    #[test]
     fn a_new_package_with_no_integrity_warns() {
         assert_eq!(new_package(&format!(r#""version":"1.0.0","resolved":"{PUBLIC}/new/-/new-1.0.0.tgz""#)), ["new"]);
     }
@@ -748,5 +750,74 @@ mod tests {
     #[test]
     fn a_new_package_with_an_install_script_warns() {
         assert_eq!(new_package(&format!(r#"{},"hasInstallScript":true"#, public("new", "1.0.0"))), ["new"]);
+    }
+
+    #[test]
+    fn nested_copies_swapping_versions_show_a_row() {
+        let tree = |one: &str, two: &str| {
+            let nested = |under: &str, version: &str| entry(&format!("node_modules/{under}/node_modules/a"), &public("a", version));
+            lock(&format!("{},{}", nested("b", one), nested("c", two)))
+        };
+        let changes = summarize(PATH, Some(&tree("1.0.0", "2.0.0")), Some(&tree("2.0.0", "1.0.0"))).unwrap().changes;
+        assert_eq!(changes.len(), 2, "{changes:?}");
+    }
+
+    #[test]
+    fn copies_trading_two_known_registries_warn_though_each_version_keeps_the_same_set() {
+        let private = |version: &str| at(version, &format!("https://npm.acme.example/a/-/a-{version}.tgz"));
+        let tree = |top: String, nested: String| {
+            lock(&format!("{},{}", entry("node_modules/a", &top), entry("node_modules/b/node_modules/a", &nested)))
+        };
+        let (base, head) = (tree(public("a", "1.0.0"), private("1.0.0")), tree(private("2.0.0"), public("a", "2.0.0")));
+        assert_eq!(warned_names(PATH, &base, &head), ["a"]);
+    }
+
+    #[test]
+    fn a_v2_row_with_a_url_as_its_version_is_refused() {
+        assert!(parse(&lock_v2(r#""version":"https://evil.example/x.tgz","integrity":"sha512-evil""#)).is_err());
+    }
+
+    #[test]
+    fn a_v2_row_with_git_as_its_version_is_refused() {
+        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"git+ssh://git@example.com/b.git#abc"}}}}"#);
+        assert!(parse(&lock_v2(&nested)).is_err());
+    }
+
+    #[test]
+    fn a_bundled_v2_row_with_a_resolved_is_refused() {
+        assert!(
+            parse(&lock_v2(r#""version":"1.0.0","resolved":"https://evil.example/x.tgz","integrity":"sha512-evil","bundled":true"#))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_bundled_v2_row_with_a_resolved_is_refused_though_packages_says_the_same() {
+        let same = r#""version":"1.0.0","resolved":"https://evil.example/x.tgz","integrity":"sha512-evil""#;
+        let text = format!(
+            r#"{{"lockfileVersion":2,"packages":{{"node_modules/a":{{{same},"inBundle":true}}}},"dependencies":{{"a":{{{same},"bundled":true}}}}}}"#
+        );
+        assert!(parse(&text).is_err());
+    }
+
+    #[test]
+    fn a_bundled_v2_row_packages_does_not_list_is_refused() {
+        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"9.0.0","bundled":true}}}}"#);
+        assert!(parse(&lock_v2(&nested)).is_err());
+    }
+
+    #[test]
+    fn a_bundled_v2_row_packages_lists_reads() {
+        let text = format!(
+            r#"{{"lockfileVersion":2,"packages":{{"node_modules/a":{{{GOOD}}},"node_modules/a/node_modules/b":{{"version":"9.0.0","inBundle":true}}}},"dependencies":{{"a":{{{GOOD},"dependencies":{{"b":{{"version":"9.0.0","bundled":true}}}}}}}}}}"#
+        );
+        assert_eq!(parse(&text).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_v2_row_with_a_version_that_is_not_semver_is_refused_though_packages_says_the_same() {
+        let same = r#""version":"v1.0.0","resolved":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-aaaa""#;
+        let text = format!(r#"{{"lockfileVersion":2,"packages":{{"node_modules/a":{{{same}}}}},"dependencies":{{"a":{{{same}}}}}}}"#);
+        assert!(parse(&text).is_err());
     }
 }
