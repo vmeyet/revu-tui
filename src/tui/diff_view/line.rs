@@ -106,23 +106,25 @@ fn text_spans<'a>(
     edges.retain(|&edge| edge <= trimmed.len() && trimmed.is_char_boundary(edge));
     edges.sort_unstable();
     edges.dedup();
-    let mut parts: Vec<(&str, Style)> = vec![];
-    for piece in edges.windows(2) {
+    let pieces = edges.windows(2).map(|piece| {
         let (from, to) = (piece[0], piece[1]);
-        let in_word = line.words.iter().any(|w| w.start <= from && from < w.end);
-        let style = if in_word { word.unwrap_or(base) } else { base };
-        parts.push((&trimmed[from..to], with_syntax(style, code, from, theme)));
-    }
+        let style = if in_ranges(&line.words, from) { word.unwrap_or(base) } else { base };
+        (&trimmed[from..to], with_syntax(style, code, from, theme))
+    });
     let dots = "·".repeat(trailing);
-    if changed && trailing > 0 {
-        parts.push((&dots, base.fg(theme.warn)));
-    }
-    fit(parts, room)
+    let marked_end = (changed && trailing > 0).then_some((dots.as_str(), base.fg(theme.warn)));
+    fit(pieces.chain(marked_end), room)
 }
 
-/// `style` with the syntax colour of the token covering byte `at`, if any.
+/// Whether byte `at` falls inside one of `sorted`, ranges in order that never overlap.
+fn in_ranges(sorted: &[Range<usize>], at: usize) -> bool {
+    sorted.get(sorted.partition_point(|range| range.end <= at)).is_some_and(|range| range.start <= at)
+}
+
+/// `style` with the syntax colour of the token covering byte `at`, if any; `code` is in order, as `syntax` writes it.
 fn with_syntax(style: Style, code: &[(Range<usize>, Token)], at: usize, theme: Theme) -> Style {
-    code.iter().find(|(range, _)| range.start <= at && at < range.end).map_or(style, |(_, token)| style.fg(theme.syntax.colour(*token)))
+    let covering = code.get(code.partition_point(|(range, _)| range.end <= at)).filter(|(range, _)| range.start <= at);
+    covering.map_or(style, |(_, token)| style.fg(theme.syntax.colour(*token)))
 }
 
 /// A removed line and its added twin on one row: the kept text in its syntax colours, each old
@@ -209,7 +211,7 @@ pub(super) fn with_quiet_sign(mut spans: Vec<Span<'_>>, theme: Theme) -> Vec<Spa
 }
 
 /// Styled pieces laid end to end, tabs made visible, cut to `room` columns.
-fn fit<'a>(parts: Vec<(&str, Style)>, room: usize) -> Vec<Span<'a>> {
+fn fit<'a, 't>(parts: impl IntoIterator<Item = (&'t str, Style)>, room: usize) -> Vec<Span<'a>> {
     let mut spans = vec![];
     let mut used = 0;
     for (text, style) in parts {
@@ -312,6 +314,13 @@ mod tests {
         assert!(drawn(Gutter::One).starts_with("   5 ~const total = "), "{}", drawn(Gutter::One));
         assert_eq!(drawn(Gutter::One).width(), 30);
         assert_eq!(drawn(Gutter::Both).width(), 30, "both cut at the pane's edge");
+    }
+
+    #[test]
+    fn a_byte_is_in_a_range_from_its_start_up_to_its_end() {
+        let ranges = [2..4, 6..7];
+        let inside: Vec<usize> = (0..8).filter(|&at| in_ranges(&ranges, at)).collect();
+        assert_eq!(inside, [2, 3, 6]);
     }
 
     #[test]
