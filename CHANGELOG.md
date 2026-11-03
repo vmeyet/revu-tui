@@ -14,7 +14,7 @@ Each entry says what changed, then where, then how to use it.
   Nothing to do: no label means an ordinary edit, or a change revu cannot prove harmless, and a label only informs.
 
 - **A changed line is compared with the line most like it, not the one at the same place.**
-  In the diff, inline and side by side; a block past 50 lines a side compares lines at the same place.
+  In the diff; a block past 50 lines compares lines at the same place, and a file over 2000 lines stays plain.
   Nothing to do: a line added or removed keeps the marks on the others, and a one-line change marks once both lines share a word.
 
 - **A changed line marks the code that changed, not what is stuck to it.**

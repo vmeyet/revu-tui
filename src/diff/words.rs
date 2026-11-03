@@ -1,20 +1,57 @@
 //! Intra-line highlighting: `align` finds which removed and added lines are twins, and this marks what changed between them.
 //! A line is cut like code, into identifiers, whitespace runs and single punctuation characters, so
 //! `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`, and a changed word never drags its space along.
-use super::align::{Change, aligned_pairs, changes, pairs_by_position};
+use super::align::{Change, Comparison, MAX_FILE_WORK, changes, compare_run, pairs_by_position};
 use super::{Hunk, Line, LinePair};
 use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
 
-pub(crate) fn mark(hunk: &Hunk) -> Hunk {
-    let pairs = aligned_pairs(&hunk.lines);
-    let mut lines = hunk.lines.clone();
-    for &LinePair { removed, added } in &pairs {
-        let (old_words, new_words) = changed_ranges(&hunk.lines[removed].text, &hunk.lines[added].text);
-        lines[removed].words = old_words;
-        lines[added].words = new_words;
+/// `hunks`, one file's, with their twins and what changed between them, as far as the file's budget of work goes.
+pub(crate) fn mark_file(hunks: &[Hunk]) -> Vec<Hunk> {
+    marked_within(hunks, MAX_FILE_WORK)
+}
+
+/// `hunks` with their whitespace-only twins alone and no word diff: a file too large to be worth any.
+pub(crate) fn mark_whitespace_only(hunks: &[Hunk]) -> Vec<Hunk> {
+    marked_within(hunks, 0)
+}
+
+fn marked_within(hunks: &[Hunk], work: usize) -> Vec<Hunk> {
+    let mut work_left = work;
+    let mut marked = Vec::with_capacity(hunks.len());
+    for hunk in hunks {
+        let (hunk, spent) = mark_hunk(hunk, work_left);
+        work_left -= spent;
+        marked.push(hunk);
     }
-    Hunk { lines, pairs, ..hunk.clone() }
+    marked
+}
+
+fn mark_hunk(hunk: &Hunk, work: usize) -> (Hunk, usize) {
+    let (mut pairs, mut diffed, mut unaligned, mut spent) = (vec![], vec![], vec![], 0);
+    let both_sides = changes(&hunk.lines).into_iter().filter(|change| !change.removed.is_empty() && !change.added.is_empty());
+    for change in both_sides {
+        let run = compare_run(&hunk.lines, &change, work - spent);
+        spent += run.work;
+        if run.comparison != Comparison::Aligned {
+            unaligned.push(change.removed.start);
+        }
+        if run.comparison != Comparison::WhitespaceOnly {
+            diffed.extend_from_slice(&run.pairs);
+        }
+        pairs.extend(run.pairs);
+    }
+    (Hunk { lines: with_changed_words(&hunk.lines, &diffed), pairs, unaligned, ..hunk.clone() }, spent)
+}
+
+fn with_changed_words(lines: &[Line], pairs: &[LinePair]) -> Vec<Line> {
+    let mut marked = lines.to_vec();
+    for &LinePair { removed, added } in pairs {
+        let (old_words, new_words) = changed_ranges(&lines[removed].text, &lines[added].text);
+        marked[removed].words = old_words;
+        marked[added].words = new_words;
+    }
+    marked
 }
 
 /// One run of a changed pair read as a single row: text both lines keep, text only the old one
@@ -26,7 +63,7 @@ pub(crate) enum Segment {
     New(String),
 }
 
-/// The runs of a changed pair, read back from the changed ranges `mark` stored on both lines.
+/// The runs of a changed pair, read back from the changed ranges `mark_file` stored on both lines.
 pub(crate) fn segments(old: &Line, new: &Line) -> Vec<Segment> {
     let mut found = Vec::new();
     let (mut old_at, mut new_at) = (0, 0);
@@ -142,7 +179,7 @@ impl Default for InlineRule {
 }
 
 impl InlineRule {
-    /// Read from the changed ranges `mark` stored on both lines.
+    /// Read from the changed ranges `mark_file` stored on both lines.
     pub(crate) fn fits(self, old: &Line, new: &Line) -> bool {
         let (olds, news) = (old.words.len(), new.words.len());
         let same = old.text.len() - old.words.iter().map(ExactSizeIterator::len).sum::<usize>();
@@ -151,7 +188,7 @@ impl InlineRule {
     }
 }
 
-/// The pairs `mark` found in `hunk` that `rule` lets read as one row.
+/// The pairs `mark_file` found in `hunk` that `rule` lets read as one row.
 pub(crate) fn inline_pairs(hunk: &Hunk, rule: InlineRule) -> Vec<LinePair> {
     pairs_where(hunk, |old, new| rule.fits(old, new))
 }
@@ -165,7 +202,7 @@ fn pairs_where(hunk: &Hunk, keep: impl Fn(&Line, &Line) -> bool) -> Vec<LinePair
     hunk.pairs.iter().copied().filter(|pair| keep(&hunk.lines[pair.removed], &hunk.lines[pair.added])).collect()
 }
 
-/// The rows of a side by side diff holding both sides: the pairs `mark` found, and between them the lines
+/// The rows of a side by side diff holding both sides: the pairs `mark_file` found, and between them the lines
 /// without a twin set beside each other by position, the longer side's extra lines left alone.
 pub(crate) fn side_by_side_pairs(hunk: &Hunk) -> Vec<LinePair> {
     let mut marked = hunk.pairs.iter().copied().peekable();
@@ -217,11 +254,16 @@ fn push_merged(ranges: &mut Vec<Range<usize>>, range: Range<usize>) {
 }
 
 #[cfg(test)]
+pub(crate) fn mark(hunk: &Hunk) -> Hunk {
+    marked_within(std::slice::from_ref(hunk), MAX_FILE_WORK).remove(0)
+}
+
+#[cfg(test)]
 pub(super) mod tests {
     use super::*;
     use crate::diff::parse;
 
-    /// Two lines read as twins whatever their similarity, each holding the ranges `mark` stores on a pair.
+    /// Two lines read as twins whatever their similarity, each holding the ranges `mark_file` stores on a pair.
     fn marked_pair(old: &str, new: &str) -> [Line; 2] {
         let hunk = &parse(&format!("@@ -1 +1 @@\n-{old}\n+{new}\n"))[0];
         let (old_words, new_words) = changed_ranges(old, new);

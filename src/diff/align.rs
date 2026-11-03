@@ -1,7 +1,7 @@
 //! Which removed lines are twins of which added lines: each run of removed lines is aligned with the run of added lines
 //! after it, so a line pairs with its most alike twin wherever it sits; pairs never cross, and a line with no twin stays plain.
 //! A one-line change has only one candidate, so one word in common is enough to pair it.
-//! A run too large to align compares its lines by position instead, and stays plain past its own budget.
+//! A file has one budget of work: a run the budget cannot align compares its lines by position, and past that stays plain.
 use super::words::{same_but_whitespace, tokens};
 use super::{Line, LineKind, LinePair};
 use similar::TextDiff;
@@ -12,46 +12,67 @@ use std::ops::Range;
 pub(super) const MIN_LINE_SIMILARITY: f32 = 0.6;
 /// Longest run, on either side, that is aligned: aligning costs one word diff per pair of lines.
 pub(super) const MAX_ALIGNED_RUN: usize = 50;
-/// Most work an alignment may take, as the bytes of the `-` run times the bytes of the `+` run, what the
-/// word diffs of all its pairs of lines add up to: this much is 50 lines of 630 bytes a side, about 200ms.
-const MAX_ALIGNED_WORK: usize = 1_000_000_000;
-/// Most work comparing a run's lines by position may take, as the bytes of each `-` line times those of its `+` line,
-/// added up, since a long line costs its square: this much is 5,000 lines of 158 bytes a side, about 250ms on minified code.
-const MAX_POSITIONAL_WORK: usize = 125_000_000;
+/// Most work one file's word diffs may take, a unit being one byte of a line compared with one byte of another:
+/// a diff of two unlike lines costs about the product of their lengths. Measured in release, this much takes up to
+/// 600ms on minified code, the densest text a file really holds, and 30ms on ordinary code.
+/// It is one line of 6.7KB a side, or 50 lines of 190 bytes a side aligned.
+pub(super) const MAX_FILE_WORK: usize = 90_000_000;
 
-pub(super) fn aligned_pairs(lines: &[Line]) -> Vec<LinePair> {
-    let both_sides = changes(lines).into_iter().filter(|change| !change.removed.is_empty() && !change.added.is_empty());
-    both_sides.flat_map(|Change { removed, added }| align_run(lines, removed, added)).collect()
+/// How the lines of a run were compared: the richest way the work left in the file allows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Comparison {
+    /// Every `-` line against every `+` line, so a line without a twin truly has none.
+    Aligned,
+    /// Each line against the one at the same place only.
+    ByPosition,
+    /// Nothing diffed: only lines that differ in whitespace pair, so a reindented block still reads quiet under `W`.
+    WhitespaceOnly,
 }
 
-/// The twins of a `-` run in the `+` run after it.
-fn align_run(lines: &[Line], removed: Range<usize>, added: Range<usize>) -> Vec<LinePair> {
+pub(super) struct ComparedRun {
+    pub(super) pairs: Vec<LinePair>,
+    pub(super) comparison: Comparison,
+    /// What this cost out of the file's work, the word diffs of its pairs included.
+    pub(super) work: usize,
+}
+
+/// The twins of a `-` run in the `+` run after it, spending at most `work_left`.
+pub(super) fn compare_run(lines: &[Line], Change { removed, added }: &Change, work_left: usize) -> ComparedRun {
     let (old, new) = (&lines[removed.clone()], &lines[added.clone()]);
-    if too_large_to_align(old, new) {
-        return twins_by_position(lines, removed, added);
+    let word_diffs = position_work(old, new);
+    let aligned_work = run_bytes(old) * run_bytes(new) + word_diffs;
+    if old.len() <= MAX_ALIGNED_RUN && new.len() <= MAX_ALIGNED_RUN && aligned_work <= work_left {
+        return ComparedRun { pairs: align_run(lines, removed, added), comparison: Comparison::Aligned, work: aligned_work };
     }
+    if 2 * word_diffs <= work_left {
+        let pairs = twins_by_position(lines, removed, added, alike_enough);
+        return ComparedRun { pairs, comparison: Comparison::ByPosition, work: 2 * word_diffs };
+    }
+    let pairs = twins_by_position(lines, removed, added, same_but_whitespace);
+    ComparedRun { pairs, comparison: Comparison::WhitespaceOnly, work: 0 }
+}
+
+fn align_run(lines: &[Line], removed: &Range<usize>, added: &Range<usize>) -> Vec<LinePair> {
+    let (old, new) = (&lines[removed.clone()], &lines[added.clone()]);
     if let ([old_line], [new_line]) = (old, new)
         && share_a_word(&old_line.text, &new_line.text)
     {
-        return pairs_by_position(removed, added).collect();
+        return pairs_by_position(removed.clone(), added.clone()).collect();
     }
     let in_hunk = |pair: LinePair| LinePair { removed: removed.start + pair.removed, added: added.start + pair.added };
     best_alignment(&twin_scores(old, new)).into_iter().map(in_hunk).collect()
 }
 
-/// The twins among lines at the same place in their runs. Past its budget a run keeps only its whitespace-only
-/// changes, so a reindented block still reads quiet under `W`.
-fn twins_by_position(lines: &[Line], removed: Range<usize>, added: Range<usize>) -> Vec<LinePair> {
-    let keeps: fn(&str, &str) -> bool = if positional_work(&lines[removed.clone()], &lines[added.clone()]) > MAX_POSITIONAL_WORK {
-        same_but_whitespace
-    } else {
-        alike_enough
-    };
-    pairs_by_position(removed, added).filter(|pair| keeps(&lines[pair.removed].text, &lines[pair.added].text)).collect()
+fn twins_by_position(lines: &[Line], removed: &Range<usize>, added: &Range<usize>, keep: fn(&str, &str) -> bool) -> Vec<LinePair> {
+    pairs_by_position(removed.clone(), added.clone()).filter(|pair| keep(&lines[pair.removed].text, &lines[pair.added].text)).collect()
 }
 
-fn positional_work(removed: &[Line], added: &[Line]) -> usize {
+fn position_work(removed: &[Line], added: &[Line]) -> usize {
     removed.iter().zip(added).map(|(old, new)| old.text.len() * new.text.len()).sum()
+}
+
+fn run_bytes(run: &[Line]) -> usize {
+    run.iter().map(|line| line.text.len()).sum()
 }
 
 fn alike_enough(old: &str, new: &str) -> bool {
@@ -66,11 +87,6 @@ fn share_a_word(old: &str, new: &str) -> bool {
 
 pub(super) fn pairs_by_position(removed: Range<usize>, added: Range<usize>) -> impl Iterator<Item = LinePair> {
     removed.zip(added).map(|(removed, added)| LinePair { removed, added })
-}
-
-pub(super) fn too_large_to_align(removed: &[Line], added: &[Line]) -> bool {
-    let bytes = |run: &[Line]| run.iter().map(|line| line.text.len()).sum::<usize>();
-    removed.len() > MAX_ALIGNED_RUN || added.len() > MAX_ALIGNED_RUN || bytes(removed) * bytes(added) > MAX_ALIGNED_WORK
 }
 
 /// How alike each removed line is to each added line, `0` below the bar for twins.
@@ -156,8 +172,8 @@ fn run(lines: &[Line], from: usize, kind: LineKind) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use super::super::parse;
-    use super::super::words::mark;
     use super::super::words::tests::{change_of, pair, words_of};
+    use super::super::words::{mark, mark_file};
     use super::*;
 
     #[test]
@@ -232,40 +248,64 @@ mod tests {
     /// A run too long to align of alike lines, each long enough for the run to take about `work` when compared by position.
     fn lines_taking(work: usize, end: &str) -> Vec<String> {
         let count = MAX_ALIGNED_RUN + 1;
-        let line = format!("{}{end}", "word ".repeat((work / count).isqrt() / 5));
+        let line = format!("{}{end}", "word ".repeat((work / count / 2).isqrt() / 5));
         (0..count).map(|n| format!("{n:05} {line}")).collect()
     }
 
     #[test]
-    fn a_run_past_the_cap_leaves_lines_below_the_bar_plain() {
-        let old = numbered_lines(MAX_ALIGNED_RUN + 1, ";");
-        let mut new = numbered_lines(MAX_ALIGNED_RUN + 1, "?;");
-        new[0] = "return Err(Refused::At(0).into_report());".to_owned();
-        let hunk = change_of(&old, &new);
-        assert_eq!(hunk.pairs.first(), Some(&pair(1, MAX_ALIGNED_RUN + 2)));
-        assert_eq!(hunk.pairs.len(), MAX_ALIGNED_RUN);
-        assert_eq!(words_of(&hunk.lines[0]), [] as [&str; 0]);
-    }
-
-    #[test]
-    fn a_run_under_the_position_budget_pairs_its_alike_lines() {
-        let (old, new) = (lines_taking(MAX_POSITIONAL_WORK / 2, "a"), lines_taking(MAX_POSITIONAL_WORK / 2, "b"));
+    fn a_run_within_the_file_budget_pairs_its_alike_lines_by_position() {
+        let (old, new) = (lines_taking(MAX_FILE_WORK / 2, "a"), lines_taking(MAX_FILE_WORK / 2, "b"));
         assert_eq!(change_of(&old, &new).pairs.len(), old.len());
     }
 
     #[test]
-    fn a_run_past_the_position_budget_stays_unmarked() {
-        let (old, new) = (lines_taking(MAX_POSITIONAL_WORK * 2, "a"), lines_taking(MAX_POSITIONAL_WORK * 2, "b"));
+    fn a_run_past_the_file_budget_stays_unmarked() {
+        let (old, new) = (lines_taking(MAX_FILE_WORK * 2, "a"), lines_taking(MAX_FILE_WORK * 2, "b"));
         let hunk = change_of(&old, &new);
         assert_eq!(hunk.pairs, []);
         assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
     }
 
     #[test]
-    fn a_reindented_run_past_the_position_budget_still_pairs_its_whitespace_changes() {
-        let old = lines_taking(MAX_POSITIONAL_WORK * 2, "a");
+    fn a_reindented_run_past_the_file_budget_pairs_its_lines_with_no_word_diff() {
+        let old = lines_taking(MAX_FILE_WORK * 2, "a");
         let new: Vec<String> = old.iter().map(|line| format!("    {line}")).collect();
-        assert_eq!(change_of(&old, &new).pairs.len(), old.len());
+        let hunk = change_of(&old, &new);
+        assert_eq!(hunk.pairs.len(), old.len());
+        assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
+    }
+
+    #[test]
+    fn a_short_run_the_budget_cannot_align_compares_its_lines_by_position() {
+        let long_word = "word ".repeat(60);
+        let old: Vec<String> = (0..MAX_ALIGNED_RUN).map(|n| format!("{n} {long_word}a ").repeat(2)).collect();
+        let new: Vec<String> = (0..MAX_ALIGNED_RUN).map(|n| format!("{n} {long_word}b ").repeat(2)).collect();
+        let hunk = change_of(&old, &new);
+        assert_eq!(hunk.pairs.len(), MAX_ALIGNED_RUN);
+        assert_eq!(hunk.unaligned, [0]);
+    }
+
+    /// A one-line hunk costing about `work`.
+    fn hunk_taking(work: usize, at: usize) -> String {
+        let line = format!("{at} {}", "word ".repeat((work / 2).isqrt() / 5));
+        format!("@@ -{at} +{at} @@\n-{line}a\n+{line}b\n")
+    }
+
+    #[test]
+    fn hunks_of_one_file_share_its_budget() {
+        let two_hunks = parse(&format!("{}{}", hunk_taking(MAX_FILE_WORK * 2 / 3, 1), hunk_taking(MAX_FILE_WORK * 2 / 3, 2)));
+        let marked = mark_file(&two_hunks);
+        assert_eq!(marked[0].pairs.len(), 1);
+        assert_eq!(marked[1].pairs, [], "the second hunk finds the budget spent");
+        assert_eq!(mark_file(&two_hunks[1..])[0].pairs.len(), 1, "alone it fits");
+    }
+
+    #[test]
+    fn a_whitespace_only_change_on_a_very_long_line_pairs_with_no_word_diff() {
+        let (old, new) = ("a,".repeat(800_000), "a, ".repeat(800_000));
+        let hunk = change_of(&[old], &[new]);
+        assert_eq!(hunk.pairs, [pair(0, 1)]);
+        assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
     }
 
     #[test]
@@ -299,7 +339,7 @@ mod tests {
 
     #[test]
     fn a_run_of_lines_too_heavy_to_diff_stays_unmarked() {
-        let heavy = |end: &str| format!("{} {end}", "word ".repeat(MAX_ALIGNED_WORK.isqrt() / 5 + 1));
+        let heavy = |end: &str| format!("{} {end}", "word ".repeat(MAX_FILE_WORK.isqrt() / 5 + 1));
         let hunk = change_of(&[heavy("a")], &[heavy("b")]);
         assert_eq!(hunk.pairs, []);
         assert!(hunk.lines.iter().all(|l| l.words.is_empty()));

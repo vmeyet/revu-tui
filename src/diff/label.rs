@@ -1,7 +1,7 @@
 //! How much a change matters, so a reviewer sees where to spend attention: a label for a hunk, the worst of its runs.
 //! A run is one `-` block and the `+` block after it. Labels only inform: nothing hides, sorts or counts by them.
 //! Rows draw no word for `Edited`, the common case, so no label on a row means an ordinary edit.
-use super::align::{Change, MIN_LINE_SIMILARITY, changes, code_tokens, similarity, too_large_to_align};
+use super::align::{Change, MIN_LINE_SIMILARITY, changes, code_tokens, similarity};
 use super::{Hunk, Line};
 
 /// From the least to the most attention a change asks for: the order makes the worst of many their `max`.
@@ -53,7 +53,8 @@ fn run_label(hunk: &Hunk, Change { removed, added }: Change, path: &str) -> Chan
         return if whitespace_is_free(path) { layout_label(old, new) } else { ChangeLabel::Edited };
     }
     let paired = hunk.pairs.iter().filter(|pair| removed.contains(&pair.removed)).count();
-    let rewritten = !too_large_to_align(old, new) && mostly_unpaired(old.len(), new.len(), paired) && !alike_as_a_whole(old, new);
+    let aligned = !hunk.unaligned.contains(&removed.start);
+    let rewritten = aligned && mostly_unpaired(old.len(), new.len(), paired) && !alike_as_a_whole(old, new);
     if rewritten { ChangeLabel::Rewritten } else { ChangeLabel::Edited }
 }
 
@@ -104,6 +105,7 @@ fn mostly_unpaired(old: usize, new: usize, paired: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::align::MAX_FILE_WORK;
     use super::super::{parse, words};
     use super::*;
 
@@ -236,6 +238,17 @@ mod tests {
     fn a_run_too_heavy_to_align_never_reads_as_rewritten() {
         let heavy = |word: &str, i: usize| format!("{i} {}", word.repeat(800));
         assert_eq!(label_of(&run_of(10, |i| heavy("old_call(); ", i), |i| heavy("new, ", i))), Some(ChangeLabel::Edited));
+    }
+
+    #[test]
+    fn a_run_the_file_budget_refused_never_reads_as_rewritten() {
+        let spends_it_all = "word ".repeat((MAX_FILE_WORK / 2).isqrt() / 5);
+        let first = format!("@@ -1 +1 @@\n-{spends_it_all}a\n+{spends_it_all}b\n");
+        let second =
+            run_of(MIN_REWRITTEN_LINES, |i| format!("let total{i} = sum(items);").repeat(20), |i| format!("return Err({i});").repeat(30));
+        let hunks = words::mark_file(&parse(&format!("{first}{second}")));
+        assert_eq!(hunks[1].unaligned, [0]);
+        assert_eq!(labelled(hunks[1].clone(), "a.rs").label, Some(ChangeLabel::Edited));
     }
 
     #[test]
