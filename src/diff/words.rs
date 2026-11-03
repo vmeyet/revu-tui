@@ -5,6 +5,11 @@ use super::align::{Change, Comparison, MAX_FILE_WORK, changes, compare_run, pair
 use super::{Hunk, Line, LinePair};
 use similar::{ChangeTag, TextDiff};
 use std::ops::Range;
+use unicode_width::UnicodeWidthChar;
+
+/// Glues two emoji into one drawn character.
+const JOINER: char = '\u{200D}';
+const SKIN_TONES: std::ops::RangeInclusive<char> = '\u{1F3FB}'..='\u{1F3FF}';
 
 /// `hunks`, one file's, with their twins and what changed between them, as far as the file's budget of work goes.
 pub(crate) fn mark_file(hunks: &[Hunk]) -> Vec<Hunk> {
@@ -132,11 +137,11 @@ pub(super) fn tokens(line: &str) -> Vec<&str> {
     let mut rest = line;
     while let Some(first) = rest.chars().next() {
         let len = match first {
-            c if is_word_char(c) => prefix_len(rest, is_word_char),
+            c if is_word_char(c) => prefix_len(rest, |c| is_word_char(c) || is_mark(c)),
             c if c.is_whitespace() => prefix_len(rest, char::is_whitespace),
             c => c.len_utf8(),
         };
-        let (token, after) = rest.split_at(len);
+        let (token, after) = rest.split_at(len + attached_len(&rest[len..]));
         found.push(token);
         rest = after;
     }
@@ -145,6 +150,23 @@ pub(super) fn tokens(line: &str) -> Vec<&str> {
 
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+/// Draws in the cell of the character before it: a combining mark, a variation selector, a joiner, a skin tone.
+fn is_mark(c: char) -> bool {
+    c.width() == Some(0) || SKIN_TONES.contains(&c)
+}
+
+/// How many bytes at the start of `after` belong to the character before it: its marks, and whatever a joiner glues on.
+pub(crate) fn attached_len(after: &str) -> usize {
+    let mut joined = false;
+    for (at, c) in after.char_indices() {
+        if !joined && !is_mark(c) {
+            return at;
+        }
+        joined = c == JOINER;
+    }
+    after.len()
 }
 
 fn prefix_len(text: &str, keep: fn(char) -> bool) -> usize {
@@ -493,6 +515,37 @@ pub(super) mod tests {
     #[test]
     fn a_line_cuts_into_identifiers_whitespace_runs_and_single_punctuation() {
         assert_eq!(tokens("é_1  🦀::x"), ["é_1", "  ", "🦀", ":", ":", "x"]);
+    }
+
+    #[test]
+    fn a_combining_mark_stays_in_the_word_before_it() {
+        assert_eq!(tokens("cafe\u{301} au"), ["cafe\u{301}", " ", "au"]);
+    }
+
+    #[test]
+    fn a_combining_mark_inside_a_word_does_not_cut_it() {
+        assert_eq!(tokens("re\u{301}sume\u{301};"), ["re\u{301}sume\u{301}", ";"]);
+    }
+
+    #[test]
+    fn a_variation_selector_stays_with_the_character_before_it() {
+        assert_eq!(tokens("\u{2764}\u{FE0F}!"), ["\u{2764}\u{FE0F}", "!"]);
+    }
+
+    #[test]
+    fn a_joiner_keeps_an_emoji_sequence_in_one_token() {
+        assert_eq!(tokens("\u{1F469}\u{200D}\u{1F4BB};"), ["\u{1F469}\u{200D}\u{1F4BB}", ";"]);
+    }
+
+    #[test]
+    fn a_skin_tone_stays_with_the_emoji_before_it() {
+        assert_eq!(tokens("\u{1F44D}\u{1F3FD};"), ["\u{1F44D}\u{1F3FD}", ";"]);
+    }
+
+    #[test]
+    fn a_changed_emoji_sequence_marks_all_of_it() {
+        let (old, new) = ("a \u{1F469}\u{200D}\u{1F4BB}", "a \u{1F469}\u{200D}\u{1F527}");
+        assert_eq!(text_segments(old, new), [same("a "), self::old("\u{1F469}\u{200D}\u{1F4BB}"), self::new("\u{1F469}\u{200D}\u{1F527}")]);
     }
 
     #[test]

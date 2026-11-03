@@ -275,6 +275,29 @@ fn snapshot_palette_in_each_mode() {
     insta::assert_snapshot!("palette_mrs", render(&mut app, 100, 24));
 }
 
+const REINDENT: &str = "@@ -1 +1 @@\n-  charge(card);\n+    charge(card);\n";
+
+/// The row of `name`, reindented, in the file tree pane at the right of the screen.
+fn tree_row(name: &str) -> String {
+    let mut app = with_review_of(name, REINDENT);
+    press(&mut app, "t");
+    let screen = render(&mut app, 120, 20);
+    let mut tree_pane = screen.lines().filter_map(|line| line.rsplit('│').nth(1));
+    tree_pane.find(|row| row.contains("+1 −1")).unwrap_or_default().to_owned()
+}
+
+#[test]
+fn a_tree_row_with_room_shows_the_file_label() {
+    assert!(tree_row("a.rs").contains("whitespace"), "{}", tree_row("a.rs"));
+}
+
+#[test]
+fn a_tree_row_without_room_keeps_the_whole_name_and_drops_the_label() {
+    let row = tree_row("checkout_totals_by_region.rs");
+    assert!(row.contains("checkout_totals_by_region.rs"), "{row}");
+    assert!(!row.contains("whitespace"), "{row}");
+}
+
 #[test]
 fn snapshot_file_tree() {
     let mut app = with_review();

@@ -395,6 +395,14 @@ mod tests {
     }
 
     #[test]
+    fn a_label_with_no_room_beside_a_long_path_leaves_the_path_whole() {
+        let path = "src/pay/checkout_totals.rs";
+        let drawn = drawn_file_row(&labelled_file(path, REINDENT), 40);
+        assert!(drawn.contains(path), "{drawn}");
+        assert!(!drawn.contains("whitespace"), "{drawn}");
+    }
+
+    #[test]
     fn a_file_with_nothing_to_label_shows_none() {
         let drawn = drawn_file_row(&labelled_file("logo.png", ""), 60);
         assert!(drawn.ends_with("+0 −0  binary"), "{drawn}");

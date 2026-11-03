@@ -154,7 +154,7 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | forge | The host's code platform: GitLab or GitHub |
 | file | One changed file in the MR diff |
 | hunk | One `@@` block inside a file |
-| change label | How much a hunk or file's change matters: `whitespace`, `formatting`, `edited` or `rewritten`, the worst run deciding; rows draw no word for `edited`, so no label means an ordinary edit; display only; `diff::label::ChangeLabel` |
+| change label | How much a hunk or file's change matters: `whitespace`, `formatting`, `edited` or `rewritten`, the worst run deciding; rows draw no word for `edited`, so no label means an ordinary edit; describes the text change only, not its effect, and is display only; `diff::label::ChangeLabel` |
 | symbol | A function, method or class the outline lists |
 | prose | A Markdown file drawn rendered, block by block |
 | line | One diff row with an old and/or new number |
