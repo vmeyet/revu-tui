@@ -11,7 +11,7 @@ Each entry says what changed, then where, then how to use it.
 
 - **A file or hunk that is not an ordinary edit says so: `whitespace`, `formatting` or `rewritten`.**
   In the diff's file and hunk rows and the file tree, whenever the row has room for the word.
-  Nothing to do: no label means an ordinary edit, or a change revu cannot prove harmless, and a label only informs.
+  Nothing to do: no label means an ordinary edit, and a label describes the text, not whether the change is safe.
 
 - **A changed line is compared with the line most like it, not the one at the same place.**
   In the diff; a block past 50 lines compares lines at the same place, and a file over 2000 lines stays plain.

@@ -65,11 +65,12 @@ The word at the end of a file row or a hunk row, saying how much the change matt
 |---|---|
 | `whitespace` | Only whitespace differs |
 | `formatting` | The same code, laid out on other lines |
-| no label | An ordinary edit: small changes, new code, removed code, or anything revu cannot be sure about |
+| no label | An ordinary edit: small changes, new code, removed code, or a layout change that a string could give meaning to |
 | `rewritten` | Removed and added code with little in common |
 
 A hunk reads as its worst block of changed lines, and a file as its worst hunk.
-`whitespace` and `formatting` only show for languages where whitespace has no meaning, and never when a string may have changed.
+`whitespace` and `formatting` only show for languages where whitespace between tokens has no meaning, and not when a line shows a string changing.
+They describe the text, not its effect: a hunk cannot see a multi-line string it starts in, so no label promises safety.
 A label only informs: it hides, sorts and skips nothing, and a narrow pane drops it first.
 
 ## How the queue is built

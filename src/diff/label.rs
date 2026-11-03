@@ -1,5 +1,6 @@
 //! How much a change matters, so a reviewer sees where to spend attention: a label for a hunk, the worst of its runs.
 //! A run is one `-` block and the `+` block after it. Labels only inform: nothing hides, sorts or counts by them.
+//! A label describes the change to the text, not its effect: a hunk cannot tell it starts inside a multi-line string.
 //! Rows draw no word for `Edited`, the common case, so no label on a row means an ordinary edit.
 use super::align::{Change, MIN_LINE_SIMILARITY, changes, code_tokens, similarity};
 use super::{Hunk, Line};
@@ -11,7 +12,7 @@ pub(crate) enum ChangeLabel {
     Whitespace,
     /// The same code tokens laid out on other lines.
     Formatting,
-    /// Small changes in similar lines, new code, removed code, or anything not proven harmless.
+    /// Small changes in similar lines, new code, removed code, or a layout change a quote or a line ending could give meaning to.
     Edited,
     /// Removed and added code with little in common.
     Rewritten,
@@ -28,10 +29,9 @@ impl ChangeLabel {
     }
 }
 
-/// Extensions of languages where whitespace between tokens has no meaning; any other file never reads as harmless.
-const WHITESPACE_FREE_EXTENSIONS: &[&str] = &[
-    "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "java", "c", "h", "cc", "cpp", "hpp", "css", "scss", "json", "tf", "tfvars", "hcl",
-];
+/// Extensions of languages where whitespace between tokens has no meaning outside a string; any other file never reads as a layout change.
+const WHITESPACE_FREE_EXTENSIONS: &[&str] =
+    &["rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "java", "c", "h", "cc", "cpp", "hpp", "json"];
 /// Fewest lines each side of a run needs to read as `Rewritten`: below this a run is a small edit, whatever its twins.
 const MIN_REWRITTEN_LINES: usize = 3;
 const QUOTES: [char; 3] = ['"', '\'', '`'];
@@ -70,7 +70,7 @@ fn whitespace_is_free(path: &str) -> bool {
     path.rsplit_once('.').is_some_and(|(_, extension)| WHITESPACE_FREE_EXTENSIONS.iter().any(|known| known.eq_ignore_ascii_case(extension)))
 }
 
-/// The harmless label two runs of the same code earn, `Edited` when a quote or a line ending could carry meaning.
+/// The layout label two runs of the same code earn, `Edited` when a quote or a line ending could carry meaning.
 fn layout_label(old: &[Line], new: &[Line]) -> ChangeLabel {
     let same_lines = old.len() == new.len() && old.iter().zip(new).all(|(old, new)| code_tokens(&old.text) == code_tokens(&new.text));
     if same_lines {
@@ -272,12 +272,28 @@ mod tests {
     }
 
     #[test]
-    fn whitespace_counts_as_harmless_only_in_listed_extensions() {
+    fn whitespace_reads_as_a_layout_change_only_in_listed_extensions() {
         for path in ["a.py", "ci.yaml", "ci.yml", "Makefile", "README.md", "a.unknown", "no_extension", "a.rs/Makefile"] {
             assert_eq!(label_at(path, REINDENT), Some(ChangeLabel::Edited), "{path}");
         }
-        for path in ["src/a.rs", "a.tsx", "main.tf", "A.RS"] {
+        for path in ["src/a.rs", "a.tsx", "A.RS"] {
             assert_eq!(label_at(path, REINDENT), Some(ChangeLabel::Whitespace), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_css_selector_that_lost_its_space_reads_as_edited() {
+        let diff = "@@ -1 +1 @@\n-.card .total {\n+.card.total {\n";
+        for path in ["a.css", "a.scss"] {
+            assert_eq!(label_at(path, diff), Some(ChangeLabel::Edited), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_terraform_heredoc_with_new_indentation_reads_as_edited() {
+        let diff = "@@ -1 +1 @@\n-  echo ready\n+    echo ready\n";
+        for path in ["main.tf", "a.tfvars", "a.hcl"] {
+            assert_eq!(label_at(path, diff), Some(ChangeLabel::Edited), "{path}");
         }
     }
 
