@@ -43,7 +43,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
-| `ai/` | Claude's client (`anthropic.rs`, unused) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
+| `ai/` | Jev (`typesafe.rs`, `triage.rs`, marks on the queue) and where its key comes from |
 | `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
@@ -91,7 +91,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `vtui::screen::Screen::lend`, with the key stream paused.
 - Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands: `revu login` takes a token from `glab`, `gh` or stdin.
-- Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments), the AI clients, and `revu ai`, which checks a new key against the Anthropic API before it stores it.
+- Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments) and Jev's client.
 
 ## Concurrency
 

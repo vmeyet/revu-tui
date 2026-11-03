@@ -1,7 +1,7 @@
-//! The two AI providers: which one is on, and where its key comes from.
+//! The AI providers: which one is on, and where its key comes from.
 //! Keys live in the keychain (service `revu`, one account per provider) or an environment
 //! variable; they never touch the config, the cache or a log line.
-#[expect(dead_code, reason = "nothing asks Claude any more; a later change in the stack deletes it")]
+#[expect(dead_code, reason = "nothing asks Claude any more; the next change in the stack deletes it")]
 pub(crate) mod anthropic;
 pub(crate) mod triage;
 pub(crate) mod typesafe;
@@ -18,18 +18,15 @@ use std::fmt;
 pub(crate) enum Provider {
     /// TypeSafe's Jev: typed judgments that rank the queue and the files.
     Typesafe,
-    /// Anthropic's Claude: questions about the MR.
-    Anthropic,
 }
 
 impl Provider {
-    pub(crate) const ALL: [Provider; 2] = [Provider::Typesafe, Provider::Anthropic];
+    pub(crate) const ALL: [Provider; 1] = [Provider::Typesafe];
 
     /// The keychain account under service `revu`.
     pub(crate) fn account(self) -> &'static str {
         match self {
             Provider::Typesafe => "typesafe",
-            Provider::Anthropic => "anthropic",
         }
     }
 
@@ -37,14 +34,12 @@ impl Provider {
     pub(crate) fn variable(self) -> &'static str {
         match self {
             Provider::Typesafe => "TYPESAFE_API_KEY",
-            Provider::Anthropic => "ANTHROPIC_API_KEY",
         }
     }
 
     pub(crate) fn enabled(self, ai: &Ai) -> bool {
         match self {
             Provider::Typesafe => ai.typesafe.enabled,
-            Provider::Anthropic => ai.anthropic.enabled,
         }
     }
 
@@ -52,7 +47,6 @@ impl Provider {
     pub(crate) fn key_page(self) -> &'static str {
         match self {
             Provider::Typesafe => "https://typesafe.ai",
-            Provider::Anthropic => "https://console.anthropic.com/settings/keys",
         }
     }
 }
@@ -96,19 +90,17 @@ pub(crate) enum KeySource {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct KeyEnv {
     pub(crate) typesafe: Option<String>,
-    pub(crate) anthropic: Option<String>,
 }
 
 impl KeyEnv {
     pub(crate) fn from_process() -> Self {
         let read = |p: Provider| std::env::var(p.variable()).ok().filter(|v| !v.trim().is_empty());
-        Self { typesafe: read(Provider::Typesafe), anthropic: read(Provider::Anthropic) }
+        Self { typesafe: read(Provider::Typesafe) }
     }
 
     fn get(&self, provider: Provider) -> Option<&String> {
         match provider {
             Provider::Typesafe => self.typesafe.as_ref(),
-            Provider::Anthropic => self.anthropic.as_ref(),
         }
     }
 }
@@ -127,8 +119,6 @@ pub(crate) struct Status {
     pub(crate) provider: Provider,
     pub(crate) enabled: bool,
     pub(crate) key: Option<KeySource>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) model: Option<String>,
 }
 
 pub(crate) fn status(ai: &Ai, env: &KeyEnv, store: &dyn SecretStore) -> Vec<Status> {
@@ -138,7 +128,6 @@ pub(crate) fn status(ai: &Ai, env: &KeyEnv, store: &dyn SecretStore) -> Vec<Stat
             provider,
             enabled: provider.enabled(ai),
             key: key(provider, env, store).ok().flatten().map(|(_, source)| source),
-            model: (provider == Provider::Anthropic).then(|| ai.anthropic.model().to_owned()),
         })
         .collect()
 }
@@ -151,32 +140,32 @@ mod tests {
     #[test]
     fn the_variable_wins_over_the_keychain() {
         let store = MemoryStore::default();
-        store.set("anthropic", "sk-ant-keychain").unwrap();
-        let env = KeyEnv { anthropic: Some("sk-ant-env".into()), ..KeyEnv::default() };
-        let (key, source) = key(Provider::Anthropic, &env, &store).unwrap().unwrap();
-        assert_eq!((key.expose(), source), ("sk-ant-env", KeySource::Env));
-        let (key, source) = super::key(Provider::Anthropic, &KeyEnv::default(), &store).unwrap().unwrap();
-        assert_eq!((key.expose(), source), ("sk-ant-keychain", KeySource::Keychain));
-        assert!(super::key(Provider::Typesafe, &KeyEnv::default(), &store).unwrap().is_none());
+        store.set("typesafe", "ts-keychain").unwrap();
+        let env = KeyEnv { typesafe: Some("ts-env".into()) };
+        let (key, source) = key(Provider::Typesafe, &env, &store).unwrap().unwrap();
+        assert_eq!((key.expose(), source), ("ts-env", KeySource::Env));
+        let (key, source) = super::key(Provider::Typesafe, &KeyEnv::default(), &store).unwrap().unwrap();
+        assert_eq!((key.expose(), source), ("ts-keychain", KeySource::Keychain));
+        assert!(super::key(Provider::Typesafe, &KeyEnv::default(), &MemoryStore::default()).unwrap().is_none());
     }
 
     #[test]
     fn status_reports_the_switch_and_the_key_source_apart() {
         let store = MemoryStore::default();
         store.set("typesafe", "ts-key").unwrap();
+        let [off] = status(&Ai::default(), &KeyEnv::default(), &store).try_into().unwrap();
+        assert_eq!((off.enabled, off.key), (false, Some(KeySource::Keychain)));
         let mut ai = Ai::default();
-        ai.anthropic.enabled = true;
-        let [typesafe, anthropic] = status(&ai, &KeyEnv::default(), &store).try_into().unwrap();
-        assert_eq!((typesafe.enabled, typesafe.key), (false, Some(KeySource::Keychain)));
-        assert_eq!((anthropic.enabled, anthropic.key), (true, None));
-        assert_eq!(anthropic.model.as_deref(), Some("claude-opus-5"));
+        ai.typesafe.enabled = true;
+        let [on] = status(&ai, &KeyEnv::default(), &MemoryStore::default()).try_into().unwrap();
+        assert_eq!((on.enabled, on.key), (true, None));
     }
 
     #[test]
     fn a_secret_never_prints() {
-        let secret = Secret::new("sk-ant-api03-secret");
+        let secret = Secret::new("ts-secret");
         assert_eq!(format!("{secret:?}"), "<redacted>");
-        let status = Status { provider: Provider::Anthropic, enabled: true, key: Some(KeySource::Env), model: None };
-        assert!(!serde_json::to_string(&status).unwrap().contains("sk-ant"));
+        let status = Status { provider: Provider::Typesafe, enabled: true, key: Some(KeySource::Env) };
+        assert!(!serde_json::to_string(&status).unwrap().contains("ts-secret"));
     }
 }

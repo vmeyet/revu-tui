@@ -126,13 +126,6 @@ Tokens never go here: they live in the macOS keychain.
 |---|---|---|---|
 | `enabled` | true or false | false | Jev marks urgent MRs and risky files. |
 
-## `[ai.anthropic]`
-
-| Key | Type | Default | Does |
-|---|---|---|---|
-| `enabled` | true or false | false | `a` asks Claude about the diff. |
-| `model` | text | `claude-opus-5` | The Claude model to ask. |
-
 ## `[agent]`
 
 | Key | Type | Default | Does |
@@ -225,10 +218,6 @@ next_thread = "F"
 
 [ai.typesafe]
 enabled = true
-
-[ai.anthropic]
-enabled = true
-model = "claude-opus-5"
 
 [agent]
 enabled = true

@@ -1,31 +1,26 @@
 # AI
 
-Two optional helpers: Jev marks what matters in the queue, and Claude answers questions about the diff.
+Jev is an optional helper that marks what matters in the queue.
 
-Both are off until you switch them on.
-Switching one on sends MR content to its provider.
+It is off until you switch it on.
+Switching it on sends MR content to its provider.
 
-## Switch them on
+## Switch it on
 
 1. Store the key in the keychain.
 2. Switch the provider on in the config.
 
 ```sh
 revu ai login typesafe     # Jev
-revu ai login anthropic    # Claude; revu checks the key before it saves it
-revu ai status             # which provider is on, and where its key comes from
+revu ai status             # whether it is on, and where its key comes from
 ```
 
 ```toml
 [ai.typesafe]
 enabled = true
-
-[ai.anthropic]
-enabled = true
-model = "claude-opus-5"
 ```
 
-`TYPESAFE_API_KEY` and `ANTHROPIC_API_KEY` override the keychain.
+`TYPESAFE_API_KEY` overrides the keychain.
 
 ## What Jev does
 
@@ -39,6 +34,6 @@ model = "claude-opus-5"
 
 ## See also
 
-- [Open an agent session on an MR](agent.md), for Claude Code itself on the MR's branch.
+- [Open an agent session on an MR](agent.md), to ask Claude Code about the MR on its branch.
 - [Config reference: `[ai]`](../reference/config.md).
 - [Troubleshooting](../troubleshooting.md).

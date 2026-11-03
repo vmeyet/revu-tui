@@ -48,8 +48,8 @@ Each entry says what changed, then where, then how to use it.
 ### Removed
 
 - **Ask Claude.**
-  In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane and `revu ai ask`.
-  An agent session asks about the MR instead.
+  In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane, `revu ai ask` and `[ai.anthropic]`, which now only warns in the config.
+  An agent session asks about the MR instead; a key you stored stays in the keychain until `security delete-generic-password -s revu -a anthropic`.
 
 - **`revu tui`.**
   On the command line: `revu` opens the review screen, and `revu 42` opens it on one MR.
