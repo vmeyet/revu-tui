@@ -1,5 +1,6 @@
 //! A drag selects text in one pane, the way a terminal would, but only the text: never a gutter,
 //! a sign or the pane beside it. What it copies is the raw text under the drawing.
+use crate::diff::words::attached_len;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Position;
 use ratatui::style::Modifier;
@@ -35,9 +36,17 @@ impl TextRow {
 /// The bytes under each cell of `text` drawn as the diff draws it, a tab `tab` cells wide.
 pub(super) fn cells_of(text: &str, tab: usize) -> Vec<Range<usize>> {
     let mut cells: Vec<Range<usize>> = vec![];
-    for (at, c) in text.char_indices() {
-        let bytes = at..at + c.len_utf8();
-        match if c == '\t' { tab } else { c.width().unwrap_or(0) } {
+    let mut at = 0;
+    while let Some(first) = text[at..].chars().next() {
+        let after_first = at + first.len_utf8();
+        let bytes = at..after_first + attached_len(&text[after_first..]);
+        let width = match first {
+            '\t' => tab,
+            _ if bytes.end == after_first => first.width().unwrap_or(0),
+            _ => text[bytes.clone()].width(),
+        };
+        at = bytes.end;
+        match width {
             0 => match cells.last_mut() {
                 Some(last) => last.end = bytes.end,
                 None => cells.push(bytes),
@@ -178,6 +187,18 @@ impl Drag {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_variation_selector_and_its_character_take_the_cells_they_are_drawn_on() {
+        let text = "\u{2764}\u{FE0F}x";
+        assert_eq!(cells_of(text, 4).len(), UnicodeWidthStr::width(text));
+    }
+
+    #[test]
+    fn an_emoji_sequence_takes_the_cells_it_is_drawn_on() {
+        let text = "\u{1F469}\u{200D}\u{1F4BB}x";
+        assert_eq!(cells_of(text, 4).len(), UnicodeWidthStr::width(text));
+    }
 
     /// Rows of plain text in a column at x 10, one line per row unless `line` says they wrap.
     fn row(y: u16, line: usize, text: &str) -> TextRow {

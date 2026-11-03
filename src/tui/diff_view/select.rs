@@ -97,6 +97,14 @@ mod tests {
     use crate::tui::diff_view::test_support::{long_added_line, side_by_side_of, total_pair};
 
     #[test]
+    fn a_pair_that_gained_a_combining_mark_has_one_cell_per_column() {
+        let hunk = crate::diff::words::mark(&crate::diff::parse("@@ -1 +1 @@\n-cafe au lait chaud\n+cafe\u{301} au lait chaud\n")[0]);
+        let new = &hunk.lines[1];
+        let kept: Vec<_> = pair_cells(&hunk.lines[0], new).into_iter().filter(|cell| !cell.is_empty()).collect();
+        assert_eq!(kept.len(), UnicodeWidthStr::width(new.text.as_str()), "{kept:?}");
+    }
+
+    #[test]
     fn a_drag_starts_where_the_text_does_whatever_the_gutter() {
         let review = long_added_line();
         let row = Row::Line { file: 0, hunk: 0, index: 1 };
