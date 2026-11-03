@@ -31,8 +31,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         f.render_widget(Paragraph::new(Line::styled(path.to_owned(), Style::default().fg(theme.muted))), area);
         return draw_empty(f, theme, body, &[spinner, "", "reading the file at both commits"]);
     };
-    let raw_lines = open.review.files.iter().find(|f| f.new_path == path || f.old_path == path).map_or(0, |f| f.additions + f.deletions);
-    let counts = counts(summary, raw_lines, theme);
+    let counts = counts(summary, theme);
     let path_room = (area.width as usize).saturating_sub(counts.width() + 2);
     let path_span = Span::styled(format!("{}  ", truncate_middle(path, path_room)), Style::default().add_modifier(Modifier::BOLD));
     f.render_widget(Paragraph::new(Line::from([vec![path_span], counts.spans].concat())), area);
@@ -59,12 +58,17 @@ fn in_column(text: &str, width: usize) -> String {
     format!("{cut}{}", " ".repeat(fill))
 }
 
-fn counts<'a>(summary: &Summary, raw_lines: usize, theme: Theme) -> Line<'a> {
+fn unshown_label(lines: usize) -> &'static str {
+    if lines == 1 { "raw line not in rows" } else { "raw lines not in rows" }
+}
+
+fn counts<'a>(summary: &Summary, theme: Theme) -> Line<'a> {
+    let unshown = summary.unshown_lines;
     if summary.changes.is_empty() {
-        let said = if raw_lines == 0 {
+        let said = if unshown == 0 {
             "no package rows · v reads the raw diff".to_owned()
         } else {
-            format!("no package rows · {raw_lines} raw lines changed · v reads them")
+            format!("no package rows · {unshown} {} · v reads them", unshown_label(unshown))
         };
         return Line::styled(said, Style::default().fg(theme.muted));
     }
@@ -75,6 +79,7 @@ fn counts<'a>(summary: &Summary, raw_lines: usize, theme: Theme) -> Line<'a> {
             (count(|k| matches!(k, ChangeKind::Updated { .. }) && !k.warns()), "updated", theme.muted),
             (count(|k| matches!(k, ChangeKind::Added { .. }) && !k.warns()), "added", theme.success),
             (count(|k| matches!(k, ChangeKind::Removed { .. })), "removed", theme.danger),
+            (unshown, unshown_label(unshown), theme.accent),
         ],
         theme,
     )

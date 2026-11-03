@@ -411,16 +411,29 @@ mod tests {
     }
 
     #[test]
-    fn no_row_over_a_changed_file_says_how_many_raw_lines_changed() {
+    fn no_row_over_a_changed_file_says_how_many_raw_lines_no_row_shows() {
         let mut app = on_lockfile();
         press(&mut app, "v");
         let same = lock(&[package("a", "1.0.0", "x")]);
-        answer_with(&mut app, &same, &same);
+        answer_with(&mut app, &same, &format!("# a note\n{same}"));
         let screen = render(&mut app, 100, 20);
-        assert!(
-            screen.contains("no package rows · 2 raw lines changed · v reads them") && !screen.contains("no package changed"),
-            "{screen}"
-        );
+        assert!(screen.contains("no package rows · 1 raw line not in rows · v reads them"), "{screen}");
+    }
+
+    #[test]
+    fn rows_over_a_file_still_say_how_many_raw_lines_they_do_not_show() {
+        let mut app = on_lockfile();
+        press(&mut app, "v");
+        let (base, head) = (lock(&[package("a", "1.0.0", "x")]), lock(&[package("a", "1.0.1", "x")]));
+        answer_with(&mut app, &base, &format!("# one\n# two\n{head}"));
+        let screen = render(&mut app, 100, 20);
+        assert!(screen.contains("1 updated") && screen.contains("2 raw lines not in rows"), "{screen}");
+    }
+
+    #[test]
+    fn nothing_unshown_says_nothing_of_raw_lines() {
+        let screen = drawn_with(&[package("a", "1.0.0", "x")], &[package("a", "1.0.1", "x")]);
+        assert!(!screen.contains("raw line"), "{screen}");
     }
 
     #[test]

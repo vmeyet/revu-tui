@@ -1,4 +1,5 @@
 //! `Cargo.lock`, the `[[package]]` tables of its format up to version 4.
+use super::raw_lines::EntryLines;
 use super::{Origin, Package, PackageName, Site, Version};
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
@@ -22,6 +23,8 @@ struct Entry {
     source: Option<String>,
     checksum: Option<String>,
     replace: Option<String>,
+    #[serde(default)]
+    dependencies: Vec<String>,
 }
 
 pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
@@ -39,6 +42,7 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
 fn package_of(entry: Entry) -> Package {
     let site = site_of(entry.source.as_deref(), entry.checksum.as_deref());
     let place = format!("{} {} {}", entry.name, entry.version, entry.source.as_deref().unwrap_or_default());
+    let lines = lines_of(&entry);
     Package {
         name: PackageName(entry.name),
         version: Version(entry.version),
@@ -46,7 +50,25 @@ fn package_of(entry: Entry) -> Package {
         site,
         install_script: false,
         place,
+        lines,
     }
+}
+
+/// The lines Cargo writes for `entry`.
+fn lines_of(entry: &Entry) -> EntryLines {
+    let field = |name: &str, value: &str| format!("{name} = \"{value}\"");
+    let drawn = [
+        Some(field("name", &entry.name)),
+        Some(field("version", &entry.version)),
+        entry.source.as_deref().map(|source| field("source", source)),
+        entry.checksum.as_deref().map(|checksum| field("checksum", checksum)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let opening = (!entry.dependencies.is_empty()).then(|| "dependencies = [".to_owned());
+    let rest = opening.into_iter().chain(entry.dependencies.iter().map(|dependency| format!("\"{dependency}\""))).collect();
+    EntryLines { key: "[[package]]".to_owned(), drawn, rest }
 }
 
 fn site_of(source: Option<&str>, checksum: Option<&str>) -> Site {

@@ -4,6 +4,7 @@
 //! diff shows. This is a reading aid: a clean summary does not prove that a lockfile is safe.
 mod cargo;
 mod npm;
+mod raw_lines;
 
 use anyhow::{Context as _, Result};
 use std::cmp::Ordering;
@@ -199,6 +200,8 @@ struct Package {
     /// What tells this copy from every other, across both sides: the install path where a format has one, so a copy that
     /// keeps its place but changes is a change whatever the rest of the tree holds.
     place: String,
+    /// What the raw diff holds of this entry.
+    lines: raw_lines::EntryLines,
 }
 
 /// How far an update goes, the biggest first.
@@ -378,13 +381,22 @@ pub(crate) struct Change {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Summary {
     pub(crate) changes: Vec<Change>,
+    /// The raw diff lines that changed and that no row accounts for.
+    pub(crate) unshown_lines: usize,
 }
 
 /// The summary between the two sides of the lockfile at `path`; a side is `None` where the file does not exist.
 pub(crate) fn summarize(path: &str, base: Option<&str>, head: Option<&str>) -> Result<Summary> {
     let format = format_of(path).with_context(|| format!("{path} is not a lockfile"))?;
     let read = |text: Option<&str>| text.map_or_else(|| Ok(vec![]), format.parse);
-    Ok(Summary { changes: compare(&read(base)?, &read(head)?, format.public_registry) })
+    let (old, new) = (read(base)?, read(head)?);
+    let changes = compare(&old, &new, format.public_registry);
+    let (old, new) = (
+        raw_lines::Side { text: base.unwrap_or_default(), packages: &old },
+        raw_lines::Side { text: head.unwrap_or_default(), packages: &new },
+    );
+    let unshown_lines = raw_lines::unshown_lines(&old, &new, &changes);
+    Ok(Summary { changes, unshown_lines })
 }
 
 /// The copies of one version of a package; a bundled copy has no origin of its own, so it adds none.
@@ -567,6 +579,7 @@ mod tests {
             site: Site::Registry { base: REGISTRY.into() },
             install_script: false,
             place: format!("{name} {version}"),
+            lines: raw_lines::EntryLines::default(),
         }
     }
 

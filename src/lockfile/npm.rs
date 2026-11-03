@@ -1,4 +1,5 @@
 //! `package-lock.json`, the `packages` map of lockfile versions 2 and 3.
+use super::raw_lines::{EntryLines, significant};
 use super::{Origin, Package, PackageName, Site, Version, is_semver};
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
@@ -56,12 +57,21 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     let packages = lock.packages.context("package-lock.json has no packages")?;
     let packages: Vec<Package> =
         packages.iter().filter_map(|(path, entry)| package_at(path, entry, &packages).transpose()).collect::<Result<_>>()?;
+    if lock.dependencies.is_empty() {
+        return Ok(packages);
+    }
     let listed: Listed<'_> = packages
         .iter()
         .map(|p| (p.name.0.as_str(), p.version.0.as_str(), p.origin.checksum.as_deref(), p.origin.source.as_deref()))
         .collect();
     ensure_agrees(&lock.dependencies, &listed)?;
-    Ok(packages)
+    Ok(packages.into_iter().map(drawn_twice).collect())
+}
+
+/// The older section writes each drawn field again; `ensure_agrees` proved it says the same, so a row accounts for both.
+fn drawn_twice(package: Package) -> Package {
+    let drawn = package.lines.drawn.iter().chain(&package.lines.drawn).cloned().collect();
+    Package { lines: EntryLines { drawn, ..package.lines }, ..package }
 }
 
 /// Older npm installs from `dependencies`, which the summary does not read: only a row `packages` says the same of reads.
@@ -102,8 +112,20 @@ fn package_at(path: &str, written: &serde_json::Value, packages: &BTreeMap<Strin
         site,
         install_script: entry.install_script,
         place: path.to_owned(),
+        lines: lines_of(path, written),
         origin: Origin { checksum: entry.integrity, source: entry.resolved },
     }))
+}
+
+/// The lines npm writes for this entry, which a row splits by whether it draws them.
+fn lines_of(path: &str, written: &serde_json::Value) -> EntryLines {
+    let pretty = format!("{written:#}");
+    let (drawn, rest) = pretty
+        .lines()
+        .filter_map(significant)
+        .map(str::to_owned)
+        .partition(|line| ["\"version\":", "\"resolved\":", "\"integrity\":"].iter().any(|field| line.starts_with(field)));
+    EntryLines { key: format!("{}: {{", serde_json::Value::from(path)), drawn, rest }
 }
 
 fn unproven(entry: &Entry) -> Site {
