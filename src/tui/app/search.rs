@@ -352,12 +352,7 @@ mod tests {
 
     /// An app on a review of `diff`, `query` searched and the search line closed.
     fn searched(diff: &str, query: &str) -> App {
-        let file = DiffFile { diff: diff.into(), new_path: "a.rs".into(), old_path: "a.rs".into(), ..Default::default() };
-        let review = Review::new(mr(), &[file], vec![], &[]);
-        let mut app = with_queue();
-        app.queue_move(0);
-        app.handle_key(code(KeyCode::Enter));
-        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
+        let mut app = with_review_of("a.rs", diff);
         press(&mut app, &format!("/{query}"));
         app.handle_key(code(KeyCode::Enter));
         app

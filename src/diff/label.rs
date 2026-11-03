@@ -215,9 +215,27 @@ mod tests {
 
     #[test]
     fn code_re_wrapped_with_one_token_added_stays_edited() {
-        let diff = "@@ -1,3 +1,7 @@\n-charge(card, total, currency);\n-refund(card, total);\n-log(card);\n\
-                    +charge(\n+    card, total, currency,\n+);\n+refund(\n+    card, total,\n+);\n+log(card,);\n";
+        let diff = "@@ -1,3 +1,4 @@\n-charge(card, total, currency, region);\n-refund(card, total, currency, region);\n-log(card, total, currency, region);\n\
+                    +charge(card,\n+total, currency, region); refund(card,\n+total, currency, region); log(card, total,\n+currency, region, extra);\n";
+        assert_eq!(words::mark(&parse(diff)[0]).pairs.len(), 1, "under half its lines have a twin, yet the whole run does");
         assert_eq!(label_of(diff), Some(ChangeLabel::Edited));
+    }
+
+    #[test]
+    fn a_run_with_exactly_half_its_lines_paired_stays_edited() {
+        let lines = 4;
+        let old = |i: usize| if i < 2 { format!("let total{i} = sum(items, 1);") } else { format!("let total{i} = sum(items, {i});") };
+        let new = |i: usize| {
+            if i < 2 { format!("let total{i} = sum(items, 2);") } else { format!("return Err(Refused::At({i}).into_report());") }
+        };
+        let diff = run_of(lines, old, new);
+        assert_eq!(words::mark(&parse(&diff)[0]).pairs.len(), lines / 2);
+        assert_eq!(label_of(&diff), Some(ChangeLabel::Edited));
+    }
+
+    #[test]
+    fn a_preprocessor_line_re_wrapped_reads_as_edited() {
+        assert_eq!(label_at("a.c", "@@ -1 +1,2 @@\n-#define LIMIT 10\n+#define LIMIT\n+10\n"), Some(ChangeLabel::Edited));
     }
 
     #[test]

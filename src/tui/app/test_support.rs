@@ -253,6 +253,16 @@ pub(super) fn sum_review() -> Review {
     Review::new(mr(), &[file], vec![fixture::discussion(&on_new_line_three.to_string())], &[])
 }
 
+/// An app on a review of one file, `path`, changed by `diff`.
+pub(super) fn with_review_of(path: &str, diff: &str) -> App {
+    let file = DiffFile { diff: diff.into(), new_path: path.into(), old_path: path.into(), ..Default::default() };
+    let mut app = with_queue();
+    app.queue_move(0);
+    app.handle_key(code(KeyCode::Enter));
+    app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(mr(), &[file], vec![], &[])), cached: None });
+    app
+}
+
 pub(super) fn with_sum_review() -> App {
     let mut app = with_queue();
     app.queue_move(0);
