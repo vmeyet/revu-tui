@@ -3,6 +3,7 @@ mod cargo;
 mod npm;
 
 use anyhow::{Context as _, Result};
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -50,15 +51,35 @@ impl Version {
         parts.try_into().ok()
     }
 
-    /// Whether both are semver and this one comes before `other`.
+    /// Whether both are semver and this one comes before `other`; a pre-release comes before its release.
     pub(crate) fn is_older_than(&self, other: &Self) -> bool {
-        self.numbers().zip(other.numbers()).is_some_and(|(mine, theirs)| mine < theirs)
+        let (Some(mine), Some(theirs)) = (self.numbers(), other.numbers()) else { return false };
+        mine.cmp(&theirs).then_with(|| pre_release_order(self.pre_release(), other.pre_release())) == Ordering::Less
+    }
+
+    fn pre_release(&self) -> Option<&str> {
+        self.0.split('+').next()?.split_once('-').map(|(_, identifiers)| identifiers)
     }
 
     /// The version without its build metadata or anything a reader cannot see: two with the same one read as the same.
     fn release(&self) -> String {
         self.0.split('+').next().unwrap_or_default().chars().filter(char::is_ascii_graphic).collect()
     }
+}
+
+/// Semver's order: none is the release and comes last; numbers come before words, and more identifiers after fewer.
+fn pre_release_order(mine: Option<&str>, theirs: Option<&str>) -> Ordering {
+    match (mine, theirs) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(mine), Some(theirs)) => mine.split('.').map(identifier_order).cmp(theirs.split('.').map(identifier_order)),
+    }
+}
+
+fn identifier_order(identifier: &str) -> (bool, u64, &str) {
+    let number = identifier.parse::<u64>();
+    (number.is_err(), number.unwrap_or(0), identifier)
 }
 
 /// What kind of place a source is.
@@ -433,6 +454,24 @@ mod tests {
 
     fn kinds(base: &[Package], head: &[Package]) -> Vec<ChangeKind> {
         compare(base, head).changes.into_iter().map(|c| c.kind).collect()
+    }
+
+    #[test]
+    fn a_pre_release_is_older_than_its_release() {
+        assert!(version("2.0.0-rc.1").is_older_than(&version("2.0.0")));
+        assert!(!version("2.0.0").is_older_than(&version("2.0.0-rc.1")));
+    }
+
+    #[test]
+    fn pre_releases_order_by_semver_identifiers() {
+        assert!(version("1.0.0-rc.2").is_older_than(&version("1.0.0-rc.10")));
+        assert!(version("1.0.0-1").is_older_than(&version("1.0.0-alpha")));
+        assert!(version("1.0.0-alpha").is_older_than(&version("1.0.0-alpha.1")));
+    }
+
+    #[test]
+    fn build_metadata_does_not_order_versions() {
+        assert!(!version("1.0.0").is_older_than(&version("1.0.0+x")) && !version("1.0.0+x").is_older_than(&version("1.0.0")));
     }
 
     #[test]
