@@ -35,10 +35,6 @@ model = "claude-opus-5"
 | Queue sort | `s` gains an urgency order |
 | File tree | Risky files are tinted |
 
-## Ask Claude
-
-`revu ai ask` asks from the command line, and the answer prints as it comes.
-
 `:ai off` stops Jev until you type `:ai on`.
 
 ## See also

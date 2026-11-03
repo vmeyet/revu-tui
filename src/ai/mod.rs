@@ -1,8 +1,8 @@
 //! The two AI providers: which one is on, and where its key comes from.
 //! Keys live in the keychain (service `revu`, one account per provider) or an environment
 //! variable; they never touch the config, the cache or a log line.
+#[expect(dead_code, reason = "nothing asks Claude any more; a later change in the stack deletes it")]
 pub(crate) mod anthropic;
-pub(crate) mod context;
 pub(crate) mod triage;
 pub(crate) mod typesafe;
 

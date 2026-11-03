@@ -43,7 +43,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `cache.rs`, `blocking.rs` | JSON files under the cache folder; `cache::keys` spells the path of every entry; `blocking::run`, blocking work on tokio's blocking pool |
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
-| `ai/` | Claude (`anthropic.rs`, `revu ai ask`; `context.rs`, what a question sends) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
+| `ai/` | Claude's client (`anthropic.rs`, unused) and Jev (`typesafe.rs`, `triage.rs`, marks on the queue) |
 | `agent/` | Coding-agent sessions per MR (`a g`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |

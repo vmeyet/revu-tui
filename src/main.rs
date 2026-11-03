@@ -29,7 +29,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Usage(args)) => return commands::usage::run(&args, cli.json),
         Some(Command::News(args)) => return commands::news::run(&args, cli.json),
         Some(Command::Docs(args)) => return commands::docs::run(&args),
-        Some(Command::Ai(args)) if !args.needs_forge() => return commands::ai::run(args, cli.json).await,
+        Some(Command::Ai(args)) => return commands::ai::run(args, cli.json).await,
         Some(Command::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "revu", &mut std::io::stdout());
             return Ok(());
@@ -48,10 +48,10 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Ready(args)) => commands::ready::run(&ctx, args).await,
         Some(Command::Publish(args)) => commands::publish::run(&ctx, args).await,
         Some(Command::Share(args)) => commands::share::run(&ctx, args).await,
-        Some(Command::Ai(args)) => commands::ai::ask(&ctx, args).await,
         None => commands::tui::run(ctx, cli.mr).await,
         Some(
-            Command::Login(_)
+            Command::Ai(_)
+            | Command::Login(_)
             | Command::Logout { .. }
             | Command::Completions { .. }
             | Command::Update(_)
