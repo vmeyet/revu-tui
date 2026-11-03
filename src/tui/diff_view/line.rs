@@ -108,7 +108,7 @@ fn text_spans<'a>(
     edges.dedup();
     let pieces = edges.windows(2).map(|piece| {
         let (from, to) = (piece[0], piece[1]);
-        let style = if in_ranges(&line.words, from) { word.unwrap_or(base) } else { base };
+        let style = if covering(&line.words, |range| range, from).is_some() { word.unwrap_or(base) } else { base };
         (&trimmed[from..to], with_syntax(style, code, from, theme))
     });
     let dots = "·".repeat(trailing);
@@ -116,15 +116,14 @@ fn text_spans<'a>(
     fit(pieces.chain(marked_end), room)
 }
 
-/// Whether byte `at` falls inside one of `sorted`, ranges in order that never overlap.
-fn in_ranges(sorted: &[Range<usize>], at: usize) -> bool {
-    sorted.get(sorted.partition_point(|range| range.end <= at)).is_some_and(|range| range.start <= at)
+/// The item of `sorted` whose range holds byte `at`, its ranges in order and never overlapping.
+fn covering<T>(sorted: &[T], range_of: impl Fn(&T) -> &Range<usize>, at: usize) -> Option<&T> {
+    sorted.get(sorted.partition_point(|item| range_of(item).end <= at)).filter(|item| range_of(item).start <= at)
 }
 
 /// `style` with the syntax colour of the token covering byte `at`, if any; `code` is in order, as `syntax` writes it.
 fn with_syntax(style: Style, code: &[(Range<usize>, Token)], at: usize, theme: Theme) -> Style {
-    let covering = code.get(code.partition_point(|(range, _)| range.end <= at)).filter(|(range, _)| range.start <= at);
-    covering.map_or(style, |(_, token)| style.fg(theme.syntax.colour(*token)))
+    covering(code, |(range, _)| range, at).map_or(style, |(_, token)| style.fg(theme.syntax.colour(*token)))
 }
 
 /// A removed line and its added twin on one row: the kept text in its syntax colours, each old
@@ -319,7 +318,7 @@ mod tests {
     #[test]
     fn a_byte_is_in_a_range_from_its_start_up_to_its_end() {
         let ranges = [2..4, 6..7];
-        let inside: Vec<usize> = (0..8).filter(|&at| in_ranges(&ranges, at)).collect();
+        let inside: Vec<usize> = (0..8).filter(|&at| covering(&ranges, |range| range, at).is_some()).collect();
         assert_eq!(inside, [2, 3, 6]);
     }
 

@@ -53,7 +53,7 @@ fn run_label(hunk: &Hunk, Change { removed, added }: Change, path: &str) -> Chan
         return if whitespace_is_free(path) { layout_label(old, new) } else { ChangeLabel::Edited };
     }
     let paired = hunk.pairs.iter().filter(|pair| removed.contains(&pair.removed)).count();
-    let aligned = !hunk.unaligned.contains(&removed.start);
+    let aligned = hunk.unaligned.binary_search(&removed.start).is_err();
     let rewritten = aligned && mostly_unpaired(old.len(), new.len(), paired) && !alike_as_a_whole(old, new);
     if rewritten { ChangeLabel::Rewritten } else { ChangeLabel::Edited }
 }

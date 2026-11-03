@@ -41,7 +41,19 @@ fn mark_hunk(hunk: &Hunk, work: usize) -> (Hunk, usize) {
         }
         pairs.extend(run.pairs);
     }
-    (Hunk { lines: with_changed_words(&hunk.lines, &diffed), pairs, unaligned, ..hunk.clone() }, spent)
+    let lines = with_changed_words(&hunk.lines, &diffed);
+    (
+        Hunk {
+            header: hunk.header.clone(),
+            old_start: hunk.old_start,
+            new_start: hunk.new_start,
+            lines,
+            pairs,
+            unaligned,
+            label: hunk.label,
+        },
+        spent,
+    )
 }
 
 fn with_changed_words(lines: &[Line], pairs: &[LinePair]) -> Vec<Line> {
@@ -255,7 +267,7 @@ fn push_merged(ranges: &mut Vec<Range<usize>>, range: Range<usize>) {
 
 #[cfg(test)]
 pub(crate) fn mark(hunk: &Hunk) -> Hunk {
-    marked_within(std::slice::from_ref(hunk), MAX_FILE_WORK).remove(0)
+    mark_file(std::slice::from_ref(hunk)).remove(0)
 }
 
 #[cfg(test)]

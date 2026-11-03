@@ -14,7 +14,7 @@ pub(super) const MIN_LINE_SIMILARITY: f32 = 0.6;
 pub(super) const MAX_ALIGNED_RUN: usize = 50;
 /// Most work one file's word diffs may take, a unit being one byte of a line compared with one byte of another:
 /// a diff of two unlike lines costs about the product of their lengths. Measured in release, this much takes up to
-/// 600ms on minified code, the densest text a file really holds, and 30ms on ordinary code.
+/// about 550ms on minified code, the densest text a file really holds, and 15ms on ordinary code.
 /// It is one line of 6.7KB a side, or 50 lines of 190 bytes a side aligned.
 pub(super) const MAX_FILE_WORK: usize = 90_000_000;
 
@@ -44,9 +44,10 @@ pub(super) fn compare_run(lines: &[Line], Change { removed, added }: &Change, wo
     if old.len() <= MAX_ALIGNED_RUN && new.len() <= MAX_ALIGNED_RUN && aligned_work <= work_left {
         return ComparedRun { pairs: align_run(lines, removed, added), comparison: Comparison::Aligned, work: aligned_work };
     }
-    if 2 * word_diffs <= work_left {
+    let compare_then_diff = 2 * word_diffs;
+    if compare_then_diff <= work_left {
         let pairs = twins_by_position(lines, removed, added, alike_enough);
-        return ComparedRun { pairs, comparison: Comparison::ByPosition, work: 2 * word_diffs };
+        return ComparedRun { pairs, comparison: Comparison::ByPosition, work: compare_then_diff };
     }
     let pairs = twins_by_position(lines, removed, added, same_but_whitespace);
     ComparedRun { pairs, comparison: Comparison::WhitespaceOnly, work: 0 }
@@ -144,7 +145,6 @@ pub(super) fn code_tokens(line: &str) -> Vec<&str> {
 }
 
 /// A `-` run and the `+` run right after it, as index ranges into a hunk's lines, either one possibly empty.
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Change {
     pub(super) removed: Range<usize>,
     pub(super) added: Range<usize>,
