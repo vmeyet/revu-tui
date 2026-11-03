@@ -1,7 +1,7 @@
 //! `package-lock.json`, the `packages` map of lockfile versions 2 and 3.
 use super::raw_lines::{EntryLines, significant};
 use super::{Origin, Package, PackageName, Site, Version, is_semver};
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -55,6 +55,9 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     let lock: Lock = serde_json::from_str(text).context("package-lock.json does not parse")?;
     ensure!(matches!(lock.version, 2 | 3), "package-lock.json version {} is not supported", lock.version);
     let packages = lock.packages.context("package-lock.json has no packages")?;
+    if let Some(path) = packages.keys().find(|path| !is_plain_path(path)) {
+        bail!("package-lock.json has an entry at {path:?}, which is no plain install path");
+    }
     let packages: Vec<Package> =
         packages.iter().filter_map(|(path, entry)| package_at(path, entry, &packages).transpose()).collect::<Result<_>>()?;
     if lock.dependencies.is_empty() {
@@ -85,6 +88,21 @@ fn ensure_agrees(dependencies: &BTreeMap<String, Legacy>, listed: &Listed<'_>) -
     Ok(())
 }
 
+/// A path npm itself writes: relative, with no step it would have to resolve, and `..` only to climb above the project at the start.
+fn is_plain_path(path: &str) -> bool {
+    let plain = |step: &str| {
+        let other_spelling = step != "node_modules" && step.eq_ignore_ascii_case("node_modules");
+        !(step.is_empty() || step == "." || step == ".." || step.contains('\\') || other_spelling)
+    };
+    path.is_empty() || path.trim_start_matches("../").split('/').all(plain)
+}
+
+/// The fields that start with `_`, written out: npm reads some of them as a source, and nothing proves what the rest do.
+fn underscore_fields(written: &serde_json::Value) -> Vec<String> {
+    let fields = written.as_object().into_iter().flatten();
+    fields.filter(|(key, _)| key.starts_with('_')).map(|(key, value)| format!("{key}={value}")).collect()
+}
+
 /// The folder and the package name of a path that installs under `node_modules`.
 fn installed_at(path: &str) -> Option<(&str, &str)> {
     path.rsplit_once("node_modules/").filter(|(folder, _)| folder.is_empty() || folder.ends_with('/'))
@@ -94,7 +112,8 @@ fn installed_at(path: &str) -> Option<(&str, &str)> {
 fn package_at(path: &str, written: &serde_json::Value, packages: &BTreeMap<String, serde_json::Value>) -> Result<Option<Package>> {
     let entry = Entry::deserialize(written).with_context(|| format!("{path} does not parse"))?;
     let installed = installed_at(path);
-    if installed.is_none() && !entry.has_origin() {
+    let underscored = underscore_fields(written).join(" ");
+    if installed.is_none() && !entry.has_origin() && underscored.is_empty() {
         return Ok(None);
     }
     let version = if entry.link { Some("link".to_owned()) } else { entry.version.clone() };
@@ -106,6 +125,9 @@ fn package_at(path: &str, written: &serde_json::Value, packages: &BTreeMap<Strin
         }
         None => (path, unproven(&entry)),
     };
+    let site = if underscored.is_empty() { site } else { Site::Unproven { shown: underscored.clone() } };
+    let source =
+        if underscored.is_empty() { entry.resolved } else { Some(format!("{underscored} {}", entry.resolved.unwrap_or_default())) };
     Ok(Some(Package {
         name: PackageName(name.to_owned()),
         version,
@@ -113,7 +135,8 @@ fn package_at(path: &str, written: &serde_json::Value, packages: &BTreeMap<Strin
         install_script: entry.install_script,
         place: path.to_owned(),
         lines: lines_of(path, written),
-        origin: Origin { checksum: entry.integrity, source: entry.resolved },
+        checksum_has_form: entry.integrity.as_deref().is_some_and(is_integrity),
+        origin: Origin { checksum: entry.integrity, source },
     }))
 }
 
@@ -126,6 +149,22 @@ fn lines_of(path: &str, written: &serde_json::Value) -> EntryLines {
         .map(str::to_owned)
         .partition(|line| ["\"version\":", "\"resolved\":", "\"integrity\":"].iter().any(|field| line.starts_with(field)));
     EntryLines { key: format!("{}: {{", serde_json::Value::from(path)), drawn, rest }
+}
+
+/// A sha512 or, for packages old enough to have nothing else, a sha1; npm may write both.
+fn is_integrity(text: &str) -> bool {
+    let is_hash = |hash: &str| match hash.split_once('-') {
+        Some(("sha512", value)) => is_base64(value, 86, "=="),
+        Some(("sha1", value)) => is_base64(value, 27, "="),
+        _ => false,
+    };
+    text.split(' ').all(is_hash)
+}
+
+fn is_base64(value: &str, length: usize, padding: &str) -> bool {
+    value
+        .strip_suffix(padding)
+        .is_some_and(|body| body.len() == length && body.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/'))
 }
 
 fn unproven(entry: &Entry) -> Site {
@@ -211,11 +250,13 @@ mod tests {
     }
 
     const PATH: &str = "package-lock.json";
+    /// A well-formed sha512 value, of no real file.
+    const HASH: &str = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
     const GOOD: &str = r#""version":"1.0.0","resolved":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-aaaa""#;
     const NESTED_LINK: &str = r#""node_modules/a":{"resolved":"../../evil","link":true},"node_modules/b/node_modules/a":{GOOD}"#;
 
     fn lock(entries: &str) -> String {
-        format!(r#"{{"lockfileVersion":3,"packages":{{"":{{"name":"widgets"}},{}}}}}"#, entries.replace("GOOD", GOOD))
+        format!(r#"{{"lockfileVersion":3,"packages":{{"":{{"name":"widgets"}},{}}}}}"#, entries.replace("GOOD", GOOD).replace("HASH", HASH))
     }
 
     fn good_a() -> String {
@@ -233,9 +274,8 @@ mod tests {
 
     #[test]
     fn a_bump_on_the_same_registry_does_not_warn() {
-        let head = lock(
-            r#""node_modules/a":{"version":"1.0.1","resolved":"https://registry.npmjs.org/a/-/a-1.0.1.tgz","integrity":"sha512-bbbb"}"#,
-        );
+        let head =
+            lock(r#""node_modules/a":{"version":"1.0.1","resolved":"https://registry.npmjs.org/a/-/a-1.0.1.tgz","integrity":"HASH"}"#);
         assert_eq!(warned_names(PATH, &good_a(), &head), [""; 0]);
     }
 
@@ -261,7 +301,7 @@ mod tests {
     #[test]
     fn a_new_package_on_a_known_registry_does_not_warn() {
         let head = lock(
-            r#""node_modules/a":{GOOD},"node_modules/b":{"version":"1.0.0","resolved":"https://registry.npmjs.org/b/-/b-1.0.0.tgz","integrity":"sha512-b"}"#,
+            r#""node_modules/a":{GOOD},"node_modules/b":{"version":"1.0.0","resolved":"https://registry.npmjs.org/b/-/b-1.0.0.tgz","integrity":"HASH"}"#,
         );
         assert_eq!(warned_names(PATH, &good_a(), &head), [""; 0]);
     }
@@ -373,7 +413,7 @@ mod tests {
     #[test]
     fn a_bundled_copy_of_a_known_version_does_not_warn() {
         let head = lock(
-            r#""node_modules/a":{GOOD},"node_modules/x":{"version":"1.0.0","resolved":"https://registry.npmjs.org/x/-/x-1.0.0.tgz","integrity":"sha512-x"},"node_modules/x/node_modules/a":{"version":"1.0.0","inBundle":true}"#,
+            r#""node_modules/a":{GOOD},"node_modules/x":{"version":"1.0.0","resolved":"https://registry.npmjs.org/x/-/x-1.0.0.tgz","integrity":"HASH"},"node_modules/x/node_modules/a":{"version":"1.0.0","inBundle":true}"#,
         );
         assert_eq!(warned_names(PATH, &good_a(), &head), [""; 0]);
     }
@@ -398,7 +438,7 @@ mod tests {
     }
 
     fn at(version: &str, resolved: &str) -> String {
-        format!(r#""version":"{version}","resolved":"{resolved}","integrity":"sha512-any""#)
+        format!(r#""version":"{version}","resolved":"{resolved}","integrity":"{HASH}""#)
     }
 
     fn public(name: &str, version: &str) -> String {
@@ -748,7 +788,7 @@ mod tests {
     fn a_build_pairs_with_its_release_before_any_other_version() {
         let nested = |under: &str, fields: &str| entry(&format!("node_modules/{under}/node_modules/a"), fields);
         let base = lock(&format!("{},{}", nested("b", &public("a", "1.0.0")), nested("c", &public("a", "1.0.1"))));
-        let build = at("1.0.1+x", "https://registry.npmjs.org/a/-/a-1.0.1+x.tgz").replace("sha512-any", "sha512-evil");
+        let build = at("1.0.1+x", "https://registry.npmjs.org/a/-/a-1.0.1+x.tgz").replace(HASH, "sha512-evil");
         let head = lock(&format!("{},{}", nested("d", &build), nested("e", &public("a", "1.0.2"))));
         let changes = summarize(PATH, Some(&base), Some(&head)).unwrap().changes;
         assert!(changes.iter().any(|c| c.kind.alerts().contains(&Alert::ChecksumChanged)), "{changes:?}");
@@ -841,5 +881,128 @@ mod tests {
         let same = r#""version":"v1.0.0","resolved":"https://registry.npmjs.org/a/-/a-1.0.0.tgz","integrity":"sha512-aaaa""#;
         let text = format!(r#"{{"lockfileVersion":2,"packages":{{"node_modules/a":{{{same}}}}},"dependencies":{{"a":{{{same}}}}}}}"#);
         assert!(parse(&text).is_err());
+    }
+
+    #[test]
+    fn a_bundled_copy_of_a_known_version_with_underscore_fields_warns() {
+        assert_eq!(case!("n_sameversion"), ["a"]);
+    }
+
+    #[test]
+    fn a_bundled_copy_with_underscore_fields_warns_beside_a_routine_update() {
+        assert_eq!(case!("n_sameversion_decoy"), ["a"]);
+    }
+
+    #[test]
+    fn a_bundled_copy_of_a_new_version_with_underscore_fields_warns() {
+        assert_eq!(case!("n_newversion"), ["a"]);
+    }
+
+    #[test]
+    fn a_bundled_copy_with_a_proto_field_warns() {
+        assert_eq!(case!("n_proto"), ["a"]);
+    }
+
+    #[test]
+    fn an_underscore_field_appearing_on_an_ordinary_entry_warns() {
+        let head = a_is(&format!(r#"{GOOD},"_resolved":"https://evil.example/x.tgz""#));
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["a"]);
+    }
+
+    #[test]
+    fn an_underscore_field_changing_on_an_entry_warns() {
+        let with = |url: &str| a_is(&format!(r#"{GOOD},"_resolved":"{url}""#));
+        assert_eq!(warned_names(PATH, &with("https://one.example/x.tgz"), &with("https://two.example/x.tgz")), ["a"]);
+    }
+
+    #[test]
+    fn an_underscore_field_on_a_new_package_warns() {
+        assert_eq!(new_package(&format!(r#"{},"_anything":1"#, public("new", "1.0.0"))), ["new"]);
+    }
+
+    #[test]
+    fn an_underscore_field_outside_node_modules_warns() {
+        assert_eq!(new_at("vendor/x", r#""version":"1.0.0","_resolved":"https://evil.example/x.tgz""#), ["vendor/x"]);
+    }
+
+    #[test]
+    fn a_dependency_whose_name_starts_with_an_underscore_does_not_warn() {
+        assert_eq!(new_package(&format!(r#"{},"dependencies":{{"_lodash":"1.0.0"}}"#, public("new", "1.0.0"))), [""; 0]);
+    }
+
+    #[test]
+    fn an_integrity_that_is_no_hash_warns() {
+        let (bad_letters, half_good) = (HASH.replace('A', "!"), format!("{HASH} not-a-hash"));
+        let odd =
+            ["not-a-hash", "md5-abcd", "sha512-", "sha1-", " ", "sha512-AAAA==", "sha512-AAAA== sha1-AAAA=", &bad_letters, &half_good];
+        for integrity in odd {
+            let url = format!("{PUBLIC}/new/-/new-1.0.0.tgz");
+            assert_eq!(
+                new_package(&format!(r#""version":"1.0.0","resolved":"{url}","integrity":"{integrity}""#)),
+                ["new"],
+                "{integrity:?}"
+            );
+        }
+    }
+
+    const SHA1: &str = "sha1-AAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+    #[test]
+    fn a_well_formed_sha1_does_not_warn_as_old_packages_only_have_that() {
+        let url = format!("{PUBLIC}/new/-/new-1.0.0.tgz");
+        assert_eq!(new_package(&format!(r#""version":"1.0.0","resolved":"{url}","integrity":"{SHA1}""#)), [""; 0]);
+    }
+
+    #[test]
+    fn two_well_formed_hashes_do_not_warn() {
+        let url = format!("{PUBLIC}/new/-/new-1.0.0.tgz");
+        assert_eq!(new_package(&format!(r#""version":"1.0.0","resolved":"{url}","integrity":"{SHA1} {HASH}""#)), [""; 0]);
+    }
+
+    /// Top at `top` and nested at `nested`, each of 1.0.0 with `odd` as its integrity and 2.0.0 well formed.
+    fn traded_versions(top: &str, nested: &str, odd_base: &str, odd_head: &str) -> [String; 2] {
+        let copy = |version: &str, odd: &str| {
+            let url = format!("{PUBLIC}/a/-/a-{version}.tgz");
+            let integrity = if version == "1.0.0" { odd } else { HASH };
+            format!(r#""version":"{version}","resolved":"{url}","integrity":"{integrity}""#)
+        };
+        let tree = |one: &str, two: &str, odd: &str| {
+            lock(&format!("{},{}", entry("node_modules/a", &copy(one, odd)), entry("node_modules/b/node_modules/a", &copy(two, odd))))
+        };
+        [tree(top, nested, odd_base), tree(nested, top, odd_head)]
+    }
+
+    #[test]
+    fn an_odd_integrity_the_base_holds_for_that_version_does_not_warn() {
+        let [base, head] = traded_versions("2.0.0", "1.0.0", "md5-abcd", "md5-abcd");
+        assert_eq!(warned_names(PATH, &base, &head), [""; 0]);
+    }
+
+    #[test]
+    fn an_odd_integrity_the_base_does_not_hold_for_that_version_warns() {
+        let [base, head] = traded_versions("2.0.0", "1.0.0", "md5-abcd", "md5-dcba");
+        assert!(warned_names(PATH, &base, &head).contains(&"a".to_owned()));
+    }
+
+    #[test]
+    fn a_key_that_is_no_plain_install_path_is_refused() {
+        assert!(parse(include_str!("fixtures/npm_cases/n_top_hijack.head.json")).is_err());
+        for key in [
+            "./node_modules/a",
+            "node_modules//a",
+            "node_modules/a/",
+            "node_modules/./a",
+            "x/../node_modules/a",
+            "NODE_MODULES/a",
+            r"node_modules\\a",
+            ".",
+        ] {
+            assert!(parse(&lock(&entry(key, GOOD))).is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn a_path_above_the_project_reads_as_npm_writes_it() {
+        assert_eq!(parse(&lock(r#""../lib":{"version":"1.0.0"},"../lib/node_modules/a":{GOOD}"#)).unwrap().len(), 1);
     }
 }

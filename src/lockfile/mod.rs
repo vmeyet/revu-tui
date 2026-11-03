@@ -159,7 +159,7 @@ impl Site {
 
     /// Ordinary means the project's own, or a base the format makes public or the old side already used.
     fn is_ordinary(&self, known: &Known<'_>) -> bool {
-        matches!(self, Self::Project | Self::Bundled) || self.known_key().is_some_and(|key| known.contains(key))
+        matches!(self, Self::Project | Self::Bundled) || self.known_key().is_some_and(|key| known.sites.contains(key))
     }
 
     fn describe(&self) -> String {
@@ -174,11 +174,25 @@ impl Site {
     }
 }
 
-/// The registries and git repositories a new entry may come from and still read as ordinary.
-type Known<'a> = BTreeSet<&'a str>;
+/// What the old side and the format vouch for.
+struct Known<'a> {
+    /// The registries and git repositories a new entry may come from and still read as ordinary.
+    sites: BTreeSet<&'a str>,
+    /// The checksums the old side holds for a version: one it already had is no new claim, whatever its form.
+    checksums: BTreeSet<(&'a PackageName, &'a Version, &'a str)>,
+}
 
-fn known_sites<'a>(base: &'a [Package], public_registry: &'a str) -> Known<'a> {
-    base.iter().filter_map(|package| package.site.known_key()).chain([public_registry]).collect()
+impl<'a> Known<'a> {
+    fn of(base: &'a [Package], public_registry: &'a str) -> Self {
+        let sites = base.iter().filter_map(|package| package.site.known_key()).chain([public_registry]).collect();
+        let checksums =
+            base.iter().filter_map(|package| Some((&package.name, &package.version, package.origin.checksum.as_deref()?))).collect();
+        Self { sites, checksums }
+    }
+
+    fn holds_checksum_of(&self, copy: &Package) -> bool {
+        copy.origin.checksum.as_deref().is_some_and(|checksum| self.checksums.contains(&(&copy.name, &copy.version, checksum)))
+    }
 }
 
 /// What a lockfile pins a version to; the same version with another origin is other code.
@@ -194,6 +208,8 @@ struct Package {
     name: PackageName,
     version: Version,
     origin: Origin,
+    /// Whether its checksum has a form its format can verify; a format that does not read the form says yes.
+    checksum_has_form: bool,
     site: Site,
     /// Runs code when it installs.
     install_script: bool,
@@ -243,6 +259,8 @@ pub(crate) enum Alert {
     },
     /// A registry copy that pins no checksum.
     ChecksumMissing,
+    /// A registry copy whose checksum is of no form its format can verify.
+    ChecksumMalformed,
     /// The source is not proven ordinary.
     UnknownSource {
         from: String,
@@ -274,10 +292,12 @@ impl Alert {
         (versioned && !is_semver(&version.0)).then_some(Self::NotSemver)
     }
 
-    fn of_checksum(head: &Copies<'_>) -> Option<Self> {
-        let unpinned =
-            |copy: &&Package| matches!(copy.site, Site::Registry { .. }) && copy.origin.checksum.as_deref().is_none_or(str::is_empty);
-        head.0.iter().any(unpinned).then_some(Self::ChecksumMissing)
+    fn of_checksum(head: &Copies<'_>, known: &Known<'_>) -> Option<Self> {
+        let registry = || head.0.iter().filter(|copy| matches!(copy.site, Site::Registry { .. }));
+        if registry().any(|copy| copy.origin.checksum.as_deref().is_none_or(str::is_empty)) {
+            return Some(Self::ChecksumMissing);
+        }
+        registry().any(|copy| !copy.checksum_has_form && !known.holds_checksum_of(copy)).then_some(Self::ChecksumMalformed)
     }
 
     fn of_source(head: &Copies<'_>, known: &Known<'_>) -> Option<Self> {
@@ -294,7 +314,7 @@ impl Alert {
 
     /// The alerts of a move from `from` to `to`.
     fn of_update(from: &Version, to: &Version, base: &Copies<'_>, head: &Copies<'_>, known: &Known<'_>) -> Vec<Self> {
-        let proof = [Self::of_version(to, head), Self::of_checksum(head)].into_iter().flatten();
+        let proof = [Self::of_version(to, head), Self::of_checksum(head, known)].into_iter().flatten();
         if from.release() == to.release() {
             return Self::of_same_release(base, head).into_iter().chain(Self::of_source(head, known)).chain(proof).collect();
         }
@@ -305,7 +325,10 @@ impl Alert {
     /// A new copy has nothing to compare with: all it can be is proven.
     fn of_added(version: &Version, head: &Copies<'_>, known: &Known<'_>) -> Vec<Self> {
         let script = head.install_script().then_some(Self::InstallScript);
-        [Self::of_source(head, known), Self::of_version(version, head), Self::of_checksum(head), script].into_iter().flatten().collect()
+        [Self::of_source(head, known), Self::of_version(version, head), Self::of_checksum(head, known), script]
+            .into_iter()
+            .flatten()
+            .collect()
     }
 }
 
@@ -453,7 +476,7 @@ fn by_name(packages: &[Package]) -> BTreeMap<&PackageName, Installed<'_>> {
 }
 
 fn compare(base: &[Package], head: &[Package], public_registry: &str) -> Vec<Change> {
-    let known = known_sites(base, public_registry);
+    let known = Known::of(base, public_registry);
     let (base, head) = (by_name(base), by_name(head));
     let none = Installed::default();
     let names: BTreeSet<_> = base.keys().chain(head.keys()).copied().collect();
@@ -576,6 +599,7 @@ mod tests {
             name: PackageName(name.into()),
             version: Version(version.into()),
             origin: Origin { checksum: Some(checksum.into()), source: Some(REGISTRY.into()) },
+            checksum_has_form: true,
             site: Site::Registry { base: REGISTRY.into() },
             install_script: false,
             place: format!("{name} {version}"),

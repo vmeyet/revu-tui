@@ -47,6 +47,7 @@ fn package_of(entry: Entry) -> Package {
         name: PackageName(entry.name),
         version: Version(entry.version),
         origin: Origin { checksum: entry.checksum, source: entry.source },
+        checksum_has_form: true,
         site,
         install_script: false,
         place,

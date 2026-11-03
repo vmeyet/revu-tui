@@ -109,6 +109,7 @@ fn alert_text(alert: &Alert) -> String {
         Alert::InstallScript => "install script added".to_owned(),
         Alert::SourceMoved { to } => format!("source moved to {to}"),
         Alert::ChecksumMissing => "no checksum".to_owned(),
+        Alert::ChecksumMalformed => "checksum is not a hash".to_owned(),
         Alert::UnknownSource { from } => format!("from {from}"),
         Alert::NotSemver => "version is not semver".to_owned(),
     }
