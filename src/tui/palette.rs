@@ -4,7 +4,7 @@
 //! suggestion and history.
 use crate::act::{self, Act, Verb};
 use crate::forge::MrKey;
-use vtui::fuzzy;
+use vtui::palette::typed::{Setting, TypedLine, Typing, unknown_verb};
 
 /// What the palette searches, from the first character typed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -140,8 +140,8 @@ pub(super) fn verbs_for(input: &str) -> Vec<Verb> {
 }
 
 pub(crate) fn parse(line: &str) -> Result<Command, String> {
-    let line = line.trim().trim_start_matches(':').trim();
-    let (verb, rest) = line.split_once(char::is_whitespace).map_or((line, ""), |(v, r)| (v, r.trim()));
+    let typed = TypedLine::read(line);
+    let TypedLine { verb, rest, .. } = typed;
     match verb {
         "" => Err("type a command, tab completes".into()),
         "go" | "g" if rest.is_empty() => Err(":go needs an MR, like !42".into()),
@@ -157,8 +157,8 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "pin" => Ok(Command::Pin),
         "unpin" => Ok(Command::Unpin),
         "set" => {
-            let Some((key, value)) = rest.split_once('=') else { return Err(":set needs key=value, e.g. theme=nord".into()) };
-            Ok(Command::Set { key: key.trim().to_owned(), value: value.trim().to_owned() })
+            let Some(Setting { key, value }) = typed.setting() else { return Err(":set needs key=value, e.g. theme=nord".into()) };
+            Ok(Command::Set { key: key.to_owned(), value: value.to_owned() })
         }
         "view" | "v" => Ok(Command::View(rest.to_owned())),
         "outline" => Ok(Command::Outline),
@@ -172,14 +172,7 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "news" => Ok(Command::News),
         "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
-        unknown => {
-            let close = fuzzy::suggestions(unknown, act::verbs().map(|verb| verb.word), 3);
-            if close.is_empty() {
-                Err(format!("unknown command :{unknown}"))
-            } else {
-                Err(format!("unknown command :{unknown}, did you mean :{}?", close.join(", :")))
-            }
-        }
+        unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
     }
 }
 
@@ -196,15 +189,9 @@ pub(super) enum Slot {
 }
 
 pub(crate) fn slot(line: &str) -> Slot {
-    let line = line.trim_start_matches(':');
-    let mut tokens = line.split_whitespace();
-    let verb = tokens.next().unwrap_or("");
-    let done = tokens.count();
-    if !line.contains(char::is_whitespace) {
-        return Slot::Verb;
-    }
-    let arg = if line.ends_with(char::is_whitespace) { done } else { done.saturating_sub(1) };
-    match (verb, arg) {
+    let TypedLine { verb, typing, .. } = TypedLine::read(line);
+    let Typing::Argument(argument) = typing else { return Slot::Verb };
+    match (verb, argument) {
         ("go" | "g", 0) => Slot::Mr,
         ("set", 0) if line.contains("theme=") => Slot::Theme,
         ("set", 0) => Slot::Setting,
