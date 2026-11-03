@@ -1,10 +1,12 @@
 //! Unified diffs as GitLab sends them: hunks only, no `---`/`+++` header.
+mod align;
 #[cfg(test)]
 pub(crate) mod arbitrary;
 pub(crate) mod fold;
 pub(crate) mod label;
 pub(crate) mod words;
 
+pub(crate) use align::similarity;
 use label::ChangeLabel;
 use std::ops::Range;
 
@@ -21,7 +23,7 @@ pub(crate) struct Line {
     pub(crate) old: Option<u32>,
     pub(crate) new: Option<u32>,
     pub(crate) text: String,
-    /// Changed byte ranges inside `text`, filled by `words::mark`; empty for context lines.
+    /// Changed byte ranges inside `text`, filled by `words::mark_file`; empty for context lines.
     pub(crate) words: Vec<Range<usize>>,
     pub(crate) no_newline: bool,
 }
@@ -39,8 +41,10 @@ pub(crate) struct Hunk {
     pub(crate) old_start: u32,
     pub(crate) new_start: u32,
     pub(crate) lines: Vec<Line>,
-    /// The twins among `lines` in reading order, never crossing, filled by `words::mark`.
+    /// The twins among `lines` in reading order, never crossing, filled by `words::mark_file`.
     pub(crate) pairs: Vec<LinePair>,
+    /// Where the `-` runs start that were not aligned all against all: a line without a twin there proves nothing.
+    pub(crate) unaligned: Vec<usize>,
     /// How much the change matters, filled by `label::labelled`; none without a changed line.
     pub(crate) label: Option<ChangeLabel>,
 }
@@ -74,7 +78,15 @@ fn parse_header(line: &str) -> Option<Hunk> {
     let rest = line.strip_prefix("@@ -")?;
     let (old, rest) = rest.split_once(" +")?;
     let (new, _) = rest.split_once(" @@")?;
-    Some(Hunk { header: line.to_owned(), old_start: start_of(old)?, new_start: start_of(new)?, lines: vec![], pairs: vec![], label: None })
+    Some(Hunk {
+        header: line.to_owned(),
+        old_start: start_of(old)?,
+        new_start: start_of(new)?,
+        lines: vec![],
+        pairs: vec![],
+        unaligned: vec![],
+        label: None,
+    })
 }
 
 fn start_of(range: &str) -> Option<u32> {

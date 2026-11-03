@@ -20,7 +20,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
-| `diff/` | Unified diff parsing, word highlighting inside lines, change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
+| `diff/` | Unified diff parsing, which lines are twins (`align.rs`), word highlighting inside them (`words.rs`), change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
 | `outline/` | The changed functions and classes of an MR and the calls between them (`O`) |
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |

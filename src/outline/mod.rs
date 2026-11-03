@@ -5,7 +5,7 @@ mod tree;
 
 pub(crate) use tree::{Branch, Direction, Item, Section, Shape, Site};
 
-use crate::diff::words::similarity;
+use crate::diff::similarity;
 use crate::forge::Side;
 use crate::syntax;
 use std::collections::BTreeMap;

@@ -8,7 +8,7 @@ use crate::forge::{DiffFile, FileKind};
 use crate::syntax::{self, Spans};
 use std::sync::OnceLock;
 
-/// Above this many lines a file starts folded, whatever the forge says.
+/// Above this many lines a file starts folded, whatever the forge says, and marks no changed words.
 const TOO_LARGE_LINES: usize = 2000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,10 +62,11 @@ impl File {
     pub(crate) fn from_diff(diff: &DiffFile) -> Self {
         let kind = diff.change;
         let path = if kind == FileKind::Deleted { &diff.old_path } else { &diff.new_path };
-        let hunks: Vec<Hunk> = diff::parse(&diff.diff).iter().map(words::mark).map(|hunk| label::labelled(hunk, path)).collect();
-        let lines = hunks.iter().map(|h| h.lines.len()).sum::<usize>();
+        let parsed = diff::parse(&diff.diff);
+        let too_large = diff.too_large || parsed.iter().map(|h| h.lines.len()).sum::<usize>() > TOO_LARGE_LINES;
+        let marked = if too_large { words::mark_whitespace_only(&parsed) } else { words::mark_file(&parsed) };
+        let hunks: Vec<Hunk> = marked.into_iter().map(|hunk| label::labelled(hunk, path)).collect();
         let count = |kind: LineKind| hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind == kind).count();
-        let too_large = diff.too_large || lines > TOO_LARGE_LINES;
         let language = syntax::language_for(path, &syntax::LANGUAGES).filter(|_| !too_large);
         let colours = Colours { language, hunks: hunks.iter().map(|_| OnceLock::new()).collect() };
         Self {
@@ -238,6 +239,26 @@ mod tests {
     fn a_too_large_file_has_no_label() {
         let large = DiffFile { too_large: true, ..at_path("a.rs", REINDENT.into()) };
         assert_eq!(File::from_diff(&large).label, None);
+    }
+
+    fn long_diff(old_line: &str, new_line: &str) -> String {
+        let lines = TOO_LARGE_LINES / 2 + 1;
+        format!("@@ -1,{lines} +1,{lines} @@\n{}{}", format!("-{old_line}\n").repeat(lines), format!("+{new_line}\n").repeat(lines))
+    }
+
+    #[test]
+    fn a_too_large_file_marks_no_changed_words() {
+        let file = File::from_diff(&at_path("a.rs", long_diff("let a = 1;", "let a = 2;")));
+        assert!(file.too_large);
+        assert_eq!(file.hunks[0].pairs, []);
+        assert!(file.hunks[0].lines.iter().all(|line| line.words.is_empty()));
+    }
+
+    #[test]
+    fn a_too_large_file_keeps_its_whitespace_only_pairs_for_w() {
+        let file = File::from_diff(&at_path("a.rs", long_diff("  let a = 1;", "    let a = 1;")));
+        assert_eq!(file.hunks[0].pairs.len(), TOO_LARGE_LINES / 2 + 1);
+        assert!(file.hunks[0].lines.iter().all(|line| line.words.is_empty()));
     }
 
     #[test]
