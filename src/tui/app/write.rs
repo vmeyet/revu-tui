@@ -427,7 +427,7 @@ impl App {
             Failure::Checks => self.checks_failed(message),
             Failure::Outline => self.settle_outline(super::Symbols::Failed(message)),
             Failure::Prose => self.settle_prose(super::Texts::Failed(message)),
-            Failure::Packages => self.packages_failed(&message),
+            Failure::Packages { key, head, sides } => self.packages_failed(&key, &head, &sides, &message),
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),
             Failure::SetReadiness => self.warn(format!("not changed: {message}")),

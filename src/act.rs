@@ -535,7 +535,7 @@ pub(crate) const ROWS: &[Row] = &[
         .section(Section::Queue),
     listed(Act::ViewedNext, "viewed", &["m"])
         .help(&[line(Group::View, "m", "file viewed, on to the next one")])
-        .panes(&[Pane::Diff])
+        .panes(&[Pane::Diff, Pane::Prose])
         .section(Section::View),
     unnamed(Act::Search, &["/"]).help(&[line(Group::View, "/ n N", "find text in the MR, next, previous")]).panes(&[Pane::Diff]),
     unnamed(Act::Mine, &["m"]).help(&[line(Group::Thread, "m", "every thread: only mine, or all")]).panes(&[Pane::Threads]),

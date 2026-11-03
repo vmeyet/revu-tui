@@ -243,10 +243,11 @@ impl Review {
         self.drafts.iter().filter(move |d| d.reply_to.is_none() && d.anchor.as_ref().is_some_and(in_file))
     }
 
-    /// The threads and new drafts on the lines of the file at `path`.
+    /// The threads, outdated ones too, and new drafts of the file at `path`.
     pub(crate) fn threads_on_file(&self, path: &str) -> usize {
         let Some(file) = self.files.iter().find(|f| f.new_path == path || f.old_path == path) else { return 0 };
-        self.threads_in_file(file).count() + self.new_drafts_in_file(file).count()
+        let in_file = |a: &Anchor| a.path == file.new_path || a.path == file.old_path;
+        self.threads.iter().filter(|t| t.anchor.as_ref().is_some_and(in_file)).count() + self.new_drafts_in_file(file).count()
     }
 
     /// Threads anchored in the diff that `place` does not show: the footer's "n more in this file".

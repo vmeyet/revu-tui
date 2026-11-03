@@ -194,7 +194,10 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::LoadPackages { key, base, head, sides } => {
                 let outcome = backend.files.packages(&key, &base, &head, sides.clone()).await;
                 let outcome = outcome.inspect_err(|e| tracing::warn!("the packages of {}: {e:#}", sides.path()));
-                send(outcome.map_or_else(|e| failed(Failure::Packages, &e), |summary| Incoming::Packages { key, head, sides, summary }));
+                send(match outcome {
+                    Ok(summary) => Incoming::Packages { key, head, sides, summary },
+                    Err(e) => failed(Failure::Packages { key, head, sides }, &e),
+                });
             }
             Action::LoadDeployments { key, branch, head } => {
                 if let Ok(deployments) = backend.homes.forge_of(&key).deployments(&key, &branch, &head).await {

@@ -148,7 +148,7 @@ fn env(name: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::forge::gitlab::fixture::key;
-    use crate::tui::backend::test_support::homes_on;
+    use crate::tui::backend::test_support::{homes_on, homes_on_github, homes_on_nothing};
     use std::collections::BTreeMap;
 
     #[tokio::test]
@@ -167,6 +167,37 @@ mod tests {
         let files = Files { homes: homes_on(&server, dir.path()).into(), open: crate::config::Open::default(), checkout: None };
         let sides = crate::outline::Sides { base: None, head: Some("Cargo.lock".to_owned()) };
         assert_eq!(files.packages(&key(), &"aaaa".into(), &"bbbb".into(), sides).await.unwrap().changes.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn on_github_the_base_side_is_read_at_the_merge_base() {
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/compare/aaaa...bbbb"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"merge_base_commit": {"sha": "cccc"}})))
+            .mount(&server)
+            .await;
+        let side = |sha: &str, text: &str| {
+            Mock::given(method("GET"))
+                .and(path("/repos/acme/widgets/contents/Cargo.lock"))
+                .and(query_param("ref", sha))
+                .respond_with(ResponseTemplate::new(200).set_body_string(text))
+                .expect(1)
+        };
+        side("cccc", include_str!("../../lockfile/fixtures/cargo_base.lock")).mount(&server).await;
+        side("bbbb", include_str!("../../lockfile/fixtures/cargo_head.lock")).mount(&server).await;
+        let dir = tempfile::tempdir().unwrap();
+        let files = Files { homes: homes_on_github(&server, dir.path()).into(), open: crate::config::Open::default(), checkout: None };
+        let sides = crate::outline::Sides { base: Some("Cargo.lock".to_owned()), head: Some("Cargo.lock".to_owned()) };
+        assert_eq!(files.packages(&key(), &"aaaa".into(), &"bbbb".into(), sides).await.unwrap().changes.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn on_gitlab_the_merge_base_is_the_base_sha() {
+        let start = homes_on_nothing().forge.merge_base(&key(), &"aaaa".into(), &"bbbb".into()).await.unwrap();
+        assert_eq!(start.as_str(), "aaaa");
     }
 
     #[tokio::test]

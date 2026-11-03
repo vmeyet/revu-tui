@@ -8,12 +8,17 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use vtui::text::{truncate, truncate_middle};
 
 /// The title row and the empty row under it.
 const TITLE_ROWS: u16 = 2;
 /// The empty row above the way to the raw diff, and that row.
 const FOOT_ROWS: u16 = 2;
+/// The widest a name or versions column gets: a lockfile's author picks these texts, and they must not push the reason away.
+const COLUMN_MAX: usize = 40;
+/// The glyph and the gaps of a row.
+const ROW_FIXED: usize = 6;
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
@@ -26,23 +31,42 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         f.render_widget(Paragraph::new(Line::styled(path.to_owned(), Style::default().fg(theme.muted))), area);
         return draw_empty(f, theme, body, &[spinner, "", "reading the file at both commits"]);
     };
-    let title =
-        [vec![Span::styled(format!("{path}  "), Style::default().add_modifier(Modifier::BOLD))], counts(summary, theme).spans].concat();
-    f.render_widget(Paragraph::new(Line::from(title)), area);
+    let raw_lines = open.review.files.iter().find(|f| f.new_path == path || f.old_path == path).map_or(0, |f| f.additions + f.deletions);
+    let counts = counts(summary, raw_lines, theme);
+    let path_room = (area.width as usize).saturating_sub(counts.width() + 2);
+    let path_span = Span::styled(format!("{}  ", truncate_middle(path, path_room)), Style::default().add_modifier(Modifier::BOLD));
+    f.render_widget(Paragraph::new(Line::from([vec![path_span], counts.spans].concat())), area);
     let foot = Rect { y: body.bottom() + 1, height: 1, ..area }.intersection(area);
     let threads = open.review.threads_on_file(path);
     f.render_widget(Paragraph::new(Line::styled(way_to_raw_diff(threads), Style::default().fg(theme.faded))), foot);
     packages.scroll = packages.scroll.min(summary.changes.len().saturating_sub(body.height as usize));
-    let name_w = summary.changes.iter().map(|c| c.name.to_string().width()).max().unwrap_or(0);
-    let versions_w = summary.changes.iter().map(|c| versions(&c.kind).width()).max().unwrap_or(0);
+    let name_w = summary.changes.iter().map(|c| capped_width(&c.name.to_string())).max().unwrap_or(0);
+    let versions_w = summary.changes.iter().map(|c| capped_width(&versions(&c.kind))).max().unwrap_or(0);
     let shown = summary.changes.iter().skip(packages.scroll).take(body.height as usize);
-    let rows: Vec<Line<'_>> = shown.map(|change| row(change, name_w, versions_w, theme)).collect();
+    let rows: Vec<Line<'_>> = shown.map(|change| row(change, name_w, versions_w, area.width as usize, theme)).collect();
     f.render_widget(Paragraph::new(rows), body);
 }
 
-fn counts<'a>(summary: &Summary, theme: Theme) -> Line<'a> {
+/// The columns `text` takes, counted no further than [`COLUMN_MAX`].
+fn capped_width(text: &str) -> usize {
+    text.chars().take(COLUMN_MAX + 1).map(|c| c.width().unwrap_or(0)).sum::<usize>().min(COLUMN_MAX)
+}
+
+/// `text` cut to `width` columns and filled up to them.
+fn in_column(text: &str, width: usize) -> String {
+    let cut = truncate(text, width);
+    let fill = width.saturating_sub(cut.width());
+    format!("{cut}{}", " ".repeat(fill))
+}
+
+fn counts<'a>(summary: &Summary, raw_lines: usize, theme: Theme) -> Line<'a> {
     if summary.changes.is_empty() {
-        return Line::styled("no package changed", Style::default().fg(theme.muted));
+        let said = if raw_lines == 0 {
+            "no package rows · v reads the raw diff".to_owned()
+        } else {
+            format!("no package rows · {raw_lines} raw lines changed · v reads them")
+        };
+        return Line::styled(said, Style::default().fg(theme.muted));
     }
     let count = |of: fn(&ChangeKind) -> bool| summary.changes.iter().filter(|c| of(&c.kind)).count();
     ui::counts(
@@ -104,7 +128,8 @@ fn note(kind: &ChangeKind) -> String {
     std::iter::once(lead.to_owned()).filter(|lead| !lead.is_empty()).chain(alerts).collect::<Vec<_>>().join(", ")
 }
 
-fn row<'a>(change: &Change, name_w: usize, versions_w: usize, theme: Theme) -> Line<'a> {
+/// The reason stays whole as far as it can; the name and the versions share what it leaves.
+fn row<'a>(change: &Change, name_w: usize, versions_w: usize, width: usize, theme: Theme) -> Line<'a> {
     let (glyph, colour) = match &change.kind {
         kind if kind.warns() => ("⚠", theme.warn),
         ChangeKind::Updated { from, to, bump, .. } => (
@@ -119,12 +144,26 @@ fn row<'a>(change: &Change, name_w: usize, versions_w: usize, theme: Theme) -> L
         ChangeKind::Removed { .. } => ("-", theme.danger),
     };
     let style = Style::default().fg(colour);
-    let name = format!("{:<name_w$}", change.name.to_string());
-    let versions = format!("{:<versions_w$}", versions(&change.kind));
+    let note = note(&change.kind);
+    let room = width.saturating_sub(ROW_FIXED);
+    let note_w = note.width().min(room * 2 / 3);
+    let left = room - note_w;
+    let versions_w = versions_w.min(left / 2);
+    let name_w = name_w.min(left - versions_w);
     Line::from(vec![
         Span::styled(format!("{glyph} "), style),
-        Span::styled(format!("{name}  "), style.add_modifier(Modifier::BOLD)),
-        Span::raw(format!("{versions}  ")),
-        Span::styled(note(&change.kind), style),
+        Span::styled(format!("{}  ", in_column(&change.name.to_string(), name_w)), style.add_modifier(Modifier::BOLD)),
+        Span::raw(format!("{}  ", in_column(&versions(&change.kind), versions_w))),
+        Span::styled(truncate(&note, note_w), style),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_column_width_stops_at_the_cap() {
+        assert_eq!(capped_width(&"a".repeat(100)), COLUMN_MAX);
+    }
 }

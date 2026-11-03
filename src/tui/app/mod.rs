@@ -410,8 +410,12 @@ pub(crate) enum Failure {
     Outline,
     /// The Markdown file could not be read; the prose view says why.
     Prose,
-    /// The lockfile could not be summed up; the raw diff shows instead.
-    Packages,
+    /// The lockfile of `sides` at `head` could not be summed up; the raw diff shows instead.
+    Packages {
+        key: MrKey,
+        head: Sha,
+        sides: crate::outline::Sides,
+    },
     /// The suggestion was not committed.
     Apply,
     /// The forge did not merge the MR.

@@ -26,6 +26,12 @@ pub(super) fn homes_on(server: &wiremock::MockServer, dir: &Path) -> Homes {
     Homes { forge, cache: Cache::in_dir(dir), others: vec![] }
 }
 
+/// One GitHub host answered by `server`, with its cache in `dir`.
+pub(super) fn homes_on_github(server: &wiremock::MockServer, dir: &Path) -> Homes {
+    let client = crate::forge::github::Client::with_base(&credentials(), &server.uri()).unwrap();
+    Homes { forge: Forge::GitHub(client), cache: Cache::in_dir(dir), others: vec![] }
+}
+
 pub(super) fn queue() -> Queue {
     crate::forge::gitlab::fixture::queue(include_str!("../../forge/gitlab/fixtures/queue.json"))
 }

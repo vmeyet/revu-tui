@@ -31,8 +31,9 @@ pub(crate) struct Progress {
 }
 
 impl Progress {
+    /// A folded lockfile stays in the count: its diff may hold what a reader must check, so the review is not done without it.
     pub(crate) fn new(files: usize, viewed: &BTreeSet<String>, auto_folded: &BTreeSet<String>) -> Self {
-        let folded = auto_folded.difference(viewed).count();
+        let folded = auto_folded.difference(viewed).filter(|path| !crate::lockfile::is_lockfile(path)).count();
         Self { viewed: viewed.len(), files: files.saturating_sub(folded), folded }
     }
 
@@ -437,21 +438,29 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_folded_lockfile_keeps_the_review_from_reading_done() {
+        let read = review().with_viewed(BTreeSet::from(["src/pay/charge.rs".to_owned()])).progress();
+        assert_eq!(read, Progress { viewed: 1, files: 2, folded: 0 });
+        assert!(!read.done());
+    }
+
+    #[test]
     fn progress_leaves_auto_folded_files_apart_until_viewed() {
-        let review = review();
-        let (charge, lock) = (BTreeSet::from(["src/pay/charge.rs".to_owned()]), BTreeSet::from(["Cargo.lock".to_owned()]));
-        assert_eq!(review.progress(), Progress { viewed: 0, files: 1, folded: 1 }, "the lock file waits apart");
+        let vendored = "vendor/big.js".to_owned();
+        let review = Review { auto_folded: Arc::new(BTreeSet::from([vendored.clone()])), ..review() };
+        let (charge, lock) = (BTreeSet::from(["src/pay/charge.rs".to_owned()]), BTreeSet::from([vendored]));
+        assert_eq!(review.progress(), Progress { viewed: 0, files: 1, folded: 1 }, "the folded file waits apart");
         let read = review.clone().with_viewed(charge).progress();
         assert_eq!(read, Progress { viewed: 1, files: 1, folded: 1 });
         assert!(read.done(), "every file to read is viewed");
         assert_eq!(
             review.clone().with_viewed(lock).progress(),
             Progress { viewed: 1, files: 2, folded: 0 },
-            "a viewed lock file joins the count"
+            "a viewed folded file joins the count"
         );
         let by_hand = review.clone().with_fold(review.fold.toggle_file("src/pay/charge.rs"));
         assert_eq!(by_hand.progress().files, 1, "a file folded by hand still counts");
-        let unfolded = review.clone().with_fold(review.fold.toggle_file("Cargo.lock"));
-        assert_eq!(unfolded.progress().folded, 1, "unfolding the lock file does not make it count");
+        let unfolded = review.clone().with_fold(review.fold.toggle_file("vendor/big.js"));
+        assert_eq!(unfolded.progress().folded, 1, "unfolding the folded file does not make it count");
     }
 }

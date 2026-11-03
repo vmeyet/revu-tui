@@ -129,7 +129,7 @@ pub(crate) struct Sides {
 }
 
 impl Sides {
-    pub(crate) fn of(file: &crate::review::File) -> Self {
+    pub(crate) fn from_file(file: &crate::review::File) -> Self {
         Self {
             base: (file.kind != crate::review::FileKind::Added).then(|| file.old_path.clone()),
             head: (file.kind != crate::review::FileKind::Deleted).then(|| file.new_path.clone()),

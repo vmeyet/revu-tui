@@ -52,7 +52,7 @@ impl App {
     pub(super) fn open_prose(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(file) = open.row().and_then(crate::review::Row::file).map(|i| &open.review.files[i]) else { return vec![] };
-        let prose = Prose { sides: Sides::of(file), texts: Texts::Waiting, scroll: 0, unfolded: false };
+        let prose = Prose { sides: Sides::from_file(file), texts: Texts::Waiting, scroll: 0, unfolded: false };
         if crate::lockfile::is_lockfile(prose.path()) {
             return self.open_packages();
         }

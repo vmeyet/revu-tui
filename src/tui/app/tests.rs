@@ -573,7 +573,7 @@ fn progress_shows_in_the_header_and_on_the_queue_row() {
     press(&mut app, "zv");
     assert_eq!(app.progress_of(&mr_key()).map(|p| p.viewed), Some(1), "the open MR counts what I just marked");
     let screen = render(&mut app, 160, 24);
-    assert!(screen.contains("viewed 1/1 · 1 folded ━"), "the lock file waits apart: {screen}");
+    assert!(screen.contains("viewed 1/2 ━"), "the lockfile still counts: {screen}");
     assert!(screen.contains("41 · 1/3"), "{screen}");
     insta::assert_snapshot!("review_progress", screen);
 }

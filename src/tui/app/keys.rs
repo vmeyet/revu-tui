@@ -19,6 +19,7 @@ impl App {
         self.drag = None;
         let pending = self.quitting;
         let actions = self.route_key(key);
+        self.close_packages_off_their_file();
         if self.quitting == pending {
             self.quitting = None;
         }
