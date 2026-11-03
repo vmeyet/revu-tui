@@ -511,6 +511,15 @@ mod tests {
     }
 
     #[test]
+    fn an_update_that_warns_reads_before_a_breaking_one() {
+        let base = [package("a", "1.0.0", "x"), package("z", "1.0.0", "x")];
+        let z = package("z", "1.0.1", "x");
+        let moved = Package { origin: Origin { source: Some("git+https://evil.example/z".into()), ..z.origin }, ..z };
+        let names: Vec<String> = compare(&base, &[package("a", "2.0.0", "x"), moved]).changes.iter().map(|c| c.name.to_string()).collect();
+        assert_eq!(names, ["z", "a"]);
+    }
+
+    #[test]
     fn the_same_version_with_another_checksum_or_source_warns() {
         let warning = |alerts| vec![ChangeKind::SameVersion { version: version("1.0.0"), alerts }];
         assert_eq!(kinds(&[package("a", "1.0.0", "x")], &[package("a", "1.0.0", "y")]), warning(vec![Alert::ChecksumChanged]));

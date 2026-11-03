@@ -64,6 +64,13 @@ mod tests {
     }
 
     #[test]
+    fn a_bump_that_loses_its_checksum_warns() {
+        let base = lock(&[&entry("serde", "1.0.0", REGISTRY, "aaaa")]);
+        let bare = format!("[[package]]\nname = \"serde\"\nversion = \"1.0.1\"\nsource = \"{REGISTRY}\"\n");
+        assert_eq!(warned_names("Cargo.lock", &base, &lock(&[&bare])), ["serde"]);
+    }
+
+    #[test]
     fn a_bump_inside_one_registry_does_not_warn() {
         let (base, head) = (entry("serde", "1.0.0", REGISTRY, "aaaa"), entry("serde", "1.0.1", REGISTRY, "bbbb"));
         assert_eq!(warned_names("Cargo.lock", &lock(&[&base]), &lock(&[&head])), [""; 0]);

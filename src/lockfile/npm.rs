@@ -160,6 +160,12 @@ mod tests {
     }
 
     #[test]
+    fn a_new_tarball_on_a_known_host_off_the_registry_path_warns() {
+        let head = lock(r#""node_modules/a":{GOOD},"node_modules/b":{"version":"1.0.0","resolved":"https://registry.npmjs.org/b.tgz"}"#);
+        assert_eq!(warned_names(PATH, &good_a(), &head), ["b"]);
+    }
+
+    #[test]
     fn a_new_package_on_a_known_registry_does_not_warn() {
         let head =
             lock(r#""node_modules/a":{GOOD},"node_modules/b":{"version":"1.0.0","resolved":"https://registry.npmjs.org/b/-/b-1.0.0.tgz"}"#);
@@ -241,6 +247,23 @@ mod tests {
     fn a_nested_v2_dependency_that_disagrees_with_packages_is_refused() {
         let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"9.0.0"}}}}"#);
         assert!(parse(&lock_v2(&nested)).is_err());
+    }
+
+    #[test]
+    fn a_bundled_v2_dependency_needs_no_row_in_packages() {
+        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"9.0.0","bundled":true}}}}"#);
+        assert_eq!(parse(&lock_v2(&nested)).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_v2_dependency_on_git_needs_no_row_in_packages() {
+        let nested = format!(r#"{GOOD},"dependencies":{{"b":{{"version":"git+ssh://git@example.com/b.git#abc"}}}}"#);
+        assert_eq!(parse(&lock_v2(&nested)).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn version_1_is_refused_even_with_a_packages_map() {
+        assert!(parse(r#"{"lockfileVersion":1,"packages":{}}"#).is_err());
     }
 
     #[test]
