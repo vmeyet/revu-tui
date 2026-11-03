@@ -32,7 +32,7 @@ use std::collections::VecDeque;
 use unicode_width::UnicodeWidthStr;
 use vtui::pane;
 use vtui::text::{truncate, truncate_middle};
-use wrap::wrap_row;
+use wrap::wrap_marked_row;
 
 const GUTTER_W: usize = 4;
 /// The glyph and count column before the line numbers.
@@ -189,7 +189,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
             _ => line,
         };
         if wrap && text_row {
-            wrap_row(found(row_line(&open.review, &anchors, row, marked, gutter, overflow, theme)), width, gutter.wrap_indent())
+            wrap_marked_row(row_line(&open.review, &anchors, row, marked, gutter, overflow, theme), width, gutter.wrap_indent(), found)
         } else {
             vec![found(row_line(&open.review, &anchors, row, marked, gutter, Overflow::Cut(width), theme))]
         }
