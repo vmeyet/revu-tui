@@ -9,9 +9,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
-- **A lockfile reads as its packages: updates, additions, removals, and a warning when a package's code or source changes in a way to check.**
-  In the diff, on `Cargo.lock` and `package-lock.json`, which now open folded and still count until viewed.
-  `enter` or `v` on the file shows the packages; `v` again shows the raw diff, where comments work as usual; `m` marks it viewed.
+- **A lockfile reads as its packages: updates, additions, removals, and a warning on every entry not proven ordinary.**
+  In the diff, on `Cargo.lock` and `package-lock.json`, which open folded and count until viewed; a file it cannot read whole shows its raw diff.
+  `enter` or `v` shows the packages, `v` again the raw diff, `m` marks it viewed; a clean summary does not prove a lockfile is safe.
 
 - **Bold, italic and struck text in comments read as they do on the forge.**
   In the thread pane, the description, the answer pane and tables.

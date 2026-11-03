@@ -51,7 +51,7 @@ Under 70 columns revu shows one page at a time, see [Review from a phone](guides
 | `]c` `[c` | Next, previous change |
 | `tab` | Next file |
 | `za` | Fold or unfold the file or change under the cursor |
-| `enter` on a lockfile | Its packages: what changed, with a warning when a package's code or source changes in a way to check; `v` shows the raw diff, `m` marks it viewed |
+| `enter` on a lockfile | Its packages: what changed, with a warning on every entry not proven ordinary; a reading aid, since a clean summary does not prove a lockfile is safe; `v` shows the raw diff, `m` marks it viewed |
 | `i` | The MR cover: description, checks, reviews, open threads, files |
 
 ## 5. Leave a comment

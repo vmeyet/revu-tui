@@ -1,7 +1,9 @@
 //! `Cargo.lock`, the `[[package]]` tables of its format up to version 4.
-use super::{Origin, Package};
+use super::{Origin, Package, PackageName, Site, Version};
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
+
+pub(super) const PUBLIC_REGISTRY: &str = "registry+https://github.com/rust-lang/crates.io-index";
 
 #[derive(Deserialize)]
 struct Lock {
@@ -28,8 +30,29 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     ensure!(!lock.metadata.keys().any(|key| key.starts_with("checksum ")), "this Cargo.lock format keeps its checksums apart");
     // A replaced package loads other code than its row says, and only the raw diff shows the whole of it.
     ensure!(lock.package.iter().all(|entry| entry.replace.is_none()), "this Cargo.lock replaces a package");
-    let package = |entry: Entry| Package::new(entry.name, entry.version, Origin { checksum: entry.checksum, source: entry.source });
-    Ok(lock.package.into_iter().map(package).collect())
+    Ok(lock.package.into_iter().map(package_of).collect())
+}
+
+fn package_of(entry: Entry) -> Package {
+    let site = site_of(entry.source.as_deref(), entry.checksum.as_deref());
+    Package {
+        name: PackageName(entry.name),
+        version: Version(entry.version),
+        origin: Origin { checksum: entry.checksum, source: entry.source },
+        site,
+        install_script: false,
+        at_top: false,
+    }
+}
+
+fn site_of(source: Option<&str>, checksum: Option<&str>) -> Site {
+    let Some(source) = source else {
+        return if checksum.is_none() { Site::Project } else { Site::Unproven { shown: "a checksum with no source".to_owned() } };
+    };
+    if source.starts_with("registry+") || source.starts_with("sparse+") {
+        return Site::Registry { base: source.to_owned() };
+    }
+    Site::git(source).unwrap_or_else(|| Site::Unproven { shown: source.to_owned() })
 }
 
 #[cfg(test)]
@@ -46,7 +69,7 @@ mod tests {
         assert_eq!(packages.iter().filter(|p| p.name.0 == "rand_core").count(), 2, "two versions of one name");
     }
 
-    const REGISTRY: &str = "registry+https://github.com/rust-lang/crates.io-index";
+    const REGISTRY: &str = PUBLIC_REGISTRY;
 
     fn lock(entries: &[&str]) -> String {
         format!("version = 4\n{}", entries.concat())

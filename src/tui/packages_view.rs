@@ -103,8 +103,9 @@ fn alert_text(alert: &Alert) -> String {
         Alert::SourceChanged => "source changed".to_owned(),
         Alert::InstallScript => "install script added".to_owned(),
         Alert::SourceMoved { to } => format!("source moved to {to}"),
-        Alert::ChecksumLost => "checksum gone".to_owned(),
-        Alert::OffRegistry { from } => format!("from {from}"),
+        Alert::ChecksumMissing => "no checksum".to_owned(),
+        Alert::UnknownSource { from } => format!("from {from}"),
+        Alert::NotSemver => "version is not semver".to_owned(),
     }
 }
 

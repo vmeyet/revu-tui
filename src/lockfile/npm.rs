@@ -1,20 +1,23 @@
 //! `package-lock.json`, the `packages` map of lockfile versions 2 and 3.
-use super::{LINK, Origin, Package, Version};
+use super::{Origin, Package, PackageName, Site, Version};
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
+
+pub(super) const PUBLIC_REGISTRY: &str = "https://registry.npmjs.org";
 
 #[derive(Deserialize)]
 struct Lock {
     #[serde(rename = "lockfileVersion")]
     version: u32,
-    packages: Option<BTreeMap<String, Entry>>,
+    packages: Option<BTreeMap<String, serde_json::Value>>,
     #[serde(default)]
     dependencies: BTreeMap<String, Legacy>,
 }
 
 #[derive(Deserialize)]
 struct Entry {
+    name: Option<String>,
     version: Option<String>,
     resolved: Option<String>,
     integrity: Option<String>,
@@ -24,6 +27,12 @@ struct Entry {
     bundled: bool,
     #[serde(default, rename = "hasInstallScript")]
     install_script: bool,
+}
+
+impl Entry {
+    fn has_origin(&self) -> bool {
+        self.resolved.is_some() || self.integrity.is_some() || self.link
+    }
 }
 
 /// A row of the older `dependencies` section version 2 keeps beside `packages`, for older npm.
@@ -45,7 +54,8 @@ pub(super) fn parse(text: &str) -> Result<Vec<Package>> {
     let lock: Lock = serde_json::from_str(text).context("package-lock.json does not parse")?;
     ensure!(matches!(lock.version, 2 | 3), "package-lock.json version {} is not supported", lock.version);
     let packages = lock.packages.context("package-lock.json has no packages")?;
-    let packages: Vec<Package> = packages.into_iter().filter_map(|(path, entry)| package_at(&path, entry)).collect::<Result<_>>()?;
+    let packages: Vec<Package> =
+        packages.iter().filter_map(|(path, entry)| package_at(path, entry, &packages).transpose()).collect::<Result<_>>()?;
     let listed: Listed<'_> = packages
         .iter()
         .map(|p| (p.name.0.as_str(), p.version.0.as_str(), p.origin.checksum.as_deref(), p.origin.source.as_deref()))
@@ -66,22 +76,84 @@ fn ensure_agrees(dependencies: &BTreeMap<String, Legacy>, listed: &Listed<'_>) -
     Ok(())
 }
 
-/// The package installed at `path`; the project and its workspace folders install nothing, a link installs its target.
-fn package_at(path: &str, entry: Entry) -> Option<Result<Package>> {
-    let (folder, name) = path.rsplit_once("node_modules/")?;
-    let origin = if entry.link {
-        Origin { checksum: None, source: Some(format!("{LINK}{}", entry.resolved.unwrap_or_default())) }
-    } else {
-        Origin { checksum: entry.integrity, source: entry.resolved }
+/// The folder and the package name of a path that installs under `node_modules`.
+fn installed_at(path: &str) -> Option<(&str, &str)> {
+    path.rsplit_once("node_modules/").filter(|(folder, _)| folder.is_empty() || folder.ends_with('/'))
+}
+
+/// The package at `path`. The project and its workspace folders install nothing, but one with a source of its own is no such thing.
+fn package_at(path: &str, written: &serde_json::Value, packages: &BTreeMap<String, serde_json::Value>) -> Result<Option<Package>> {
+    let entry = Entry::deserialize(written).with_context(|| format!("{path} does not parse"))?;
+    let installed = installed_at(path);
+    if installed.is_none() && !entry.has_origin() {
+        return Ok(None);
+    }
+    let version = if entry.link { Some("link".to_owned()) } else { entry.version.clone() };
+    let version = Version(version.with_context(|| format!("{path} has no version"))?);
+    let (name, site) = match installed {
+        Some((folder, name)) => {
+            let inside_a_package = !folder.is_empty() && packages.contains_key(folder.trim_end_matches('/'));
+            (name, site_of(inside_a_package, name, &version, &entry))
+        }
+        None => (path, unproven(&entry)),
     };
-    let version = if entry.link { Some("link".to_owned()) } else { entry.version };
-    let Some(version) = version else { return Some(Err(anyhow::anyhow!("{path} has no version"))) };
-    Some(Ok(Package {
+    Ok(Some(Package {
+        name: PackageName(name.to_owned()),
+        version,
+        site,
         install_script: entry.install_script,
-        at_top: folder.is_empty(),
-        bundled: entry.bundled,
-        ..Package::new(name.to_owned(), version, origin)
+        at_top: installed.is_some_and(|(folder, _)| folder.is_empty()),
+        origin: Origin { checksum: entry.integrity, source: entry.resolved },
     }))
+}
+
+fn unproven(entry: &Entry) -> Site {
+    Site::Unproven { shown: entry.resolved.clone().unwrap_or_else(|| "no source".to_owned()) }
+}
+
+/// A bundled copy comes with the package around it, so it needs one and can have nothing of its own; an alias is another package
+/// than its path says.
+fn site_of(inside_a_package: bool, name: &str, version: &Version, entry: &Entry) -> Site {
+    if entry.name.as_deref().is_some_and(|given| given != name) {
+        return unproven(entry);
+    }
+    if entry.bundled {
+        let shipped = inside_a_package && !entry.has_origin();
+        return if shipped { Site::Bundled } else { unproven(entry) };
+    }
+    let Some(resolved) = &entry.resolved else { return unproven(entry) };
+    if entry.link {
+        return Site::Link { target: resolved.clone() };
+    }
+    Site::git(resolved).or_else(|| registry_site(resolved, name, version)).unwrap_or_else(|| unproven(entry))
+}
+
+/// The registry behind a tarball URL, when the URL is https, says what it means with nothing a parser would rewrite,
+/// and ends in the one path a registry gives this name and version.
+fn registry_site(resolved: &str, name: &str, version: &Version) -> Option<Site> {
+    let url = url::Url::parse(resolved).ok()?;
+    let plain = url.scheme() == "https"
+        && url.as_str() == resolved
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none();
+    if !plain {
+        return None;
+    }
+    let base = tarball_paths(name, version).iter().find_map(|path| resolved.strip_suffix(path.as_str()))?;
+    Some(Site::Registry { base: base.to_owned() })
+}
+
+/// `<name>/-/<basename>-<version>.tgz`; a scope may be written with its slash encoded.
+fn tarball_paths(name: &str, version: &Version) -> Vec<String> {
+    match name.split_once('/') {
+        None => vec![format!("/{name}/-/{name}-{version}.tgz")],
+        Some((scope, base)) if scope.starts_with('@') && !base.contains('/') => {
+            vec![format!("/{scope}/{base}/-/{base}-{version}.tgz"), format!("/{scope}%2f{base}/-/{base}-{version}.tgz")]
+        }
+        Some(_) => vec![],
+    }
 }
 
 #[cfg(test)]
@@ -105,7 +177,7 @@ mod tests {
     fn copies_moving_in_the_tree_show_no_change_and_a_changed_integrity_warns() {
         let base = parse(include_str!("fixtures/package_base.json")).unwrap();
         let head = parse(include_str!("fixtures/package_head.json")).unwrap();
-        let changes = compare(&base, &head).changes;
+        let changes = compare(&base, &head, PUBLIC_REGISTRY);
         assert_eq!(changes.len(), 1, "{changes:?}");
         assert_eq!(changes[0].name.0, "@acme/left-pad");
         assert!(matches!(changes[0].kind, ChangeKind::SameVersion { .. }));
@@ -167,8 +239,9 @@ mod tests {
 
     #[test]
     fn a_new_package_on_a_known_registry_does_not_warn() {
-        let head =
-            lock(r#""node_modules/a":{GOOD},"node_modules/b":{"version":"1.0.0","resolved":"https://registry.npmjs.org/b/-/b-1.0.0.tgz"}"#);
+        let head = lock(
+            r#""node_modules/a":{GOOD},"node_modules/b":{"version":"1.0.0","resolved":"https://registry.npmjs.org/b/-/b-1.0.0.tgz","integrity":"sha512-b"}"#,
+        );
         assert_eq!(warned_names(PATH, &good_a(), &head), [""; 0]);
     }
 

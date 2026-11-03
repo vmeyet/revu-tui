@@ -1,4 +1,7 @@
 //! What a lockfile change means package by package: pure, the two texts in and a [`Summary`] out.
+//!
+//! A row is plain only when its entry is proven ordinary; anything else warns, or the parser refuses the file and the raw
+//! diff shows. This is a reading aid: a clean summary does not prove that a lockfile is safe.
 mod cargo;
 mod npm;
 
@@ -8,12 +11,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 /// One entry per format: adding a lockfile is a parser and a row here.
-const FORMATS: [Format; 2] =
-    [Format { file_name: "Cargo.lock", parse: cargo::parse }, Format { file_name: "package-lock.json", parse: npm::parse }];
+const FORMATS: [Format; 2] = [
+    Format { file_name: "Cargo.lock", parse: cargo::parse, public_registry: cargo::PUBLIC_REGISTRY },
+    Format { file_name: "package-lock.json", parse: npm::parse, public_registry: npm::PUBLIC_REGISTRY },
+];
 
 struct Format {
     file_name: &'static str,
     parse: fn(&str) -> Result<Vec<Package>>,
+    /// The one registry ordinary before the old side has shown any other.
+    public_registry: &'static str,
 }
 
 fn format_of(path: &str) -> Option<&'static Format> {
@@ -46,9 +53,7 @@ impl fmt::Display for Version {
 impl Version {
     /// Major, minor and patch; `None` when the version is not semver.
     fn numbers(&self) -> Option<[u64; 3]> {
-        let release = self.0.split(['-', '+']).next()?;
-        let parts: Vec<u64> = release.split('.').map(str::parse).collect::<Result<_, _>>().ok()?;
-        parts.try_into().ok()
+        release_numbers(self.0.split(['-', '+']).next()?)
     }
 
     /// Whether both are semver and this one comes before `other`; a pre-release comes before its release.
@@ -61,10 +66,39 @@ impl Version {
         self.0.split('+').next()?.split_once('-').map(|(_, identifiers)| identifiers)
     }
 
-    /// The version without its build metadata or anything a reader cannot see: two with the same one read as the same.
-    fn release(&self) -> String {
-        self.0.split('+').next().unwrap_or_default().chars().filter(char::is_ascii_graphic).collect()
+    /// The version without its build metadata: two with the same one read as the same release.
+    fn release(&self) -> &str {
+        self.0.split('+').next().unwrap_or_default()
     }
+}
+
+/// Major, minor and patch of a text that is nothing else.
+fn release_numbers(release: &str) -> Option<[u64; 3]> {
+    let number = |part: &str| is_number(part).then(|| part.parse().ok()).flatten();
+    let parts: Vec<u64> = release.split('.').map(number).collect::<Option<_>>()?;
+    parts.try_into().ok()
+}
+
+fn is_numeric(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn is_number(text: &str) -> bool {
+    is_numeric(text) && (text.len() == 1 || !text.starts_with('0'))
+}
+
+fn is_identifier(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+/// Whether `text` is semver to the letter: no prefix, no leading zero, nothing but ASCII.
+fn is_semver(text: &str) -> bool {
+    let (rest, build) = text.split_once('+').map_or((text, None), |(rest, build)| (rest, Some(build)));
+    let (release, pre) = rest.split_once('-').map_or((rest, None), |(release, pre)| (release, Some(pre)));
+    let pre_part = |part: &str| is_identifier(part) && (!is_numeric(part) || is_number(part));
+    release_numbers(release).is_some()
+        && pre.is_none_or(|pre| pre.split('.').all(pre_part))
+        && build.is_none_or(|build| build.split('.').all(is_identifier))
 }
 
 /// Semver's order: none is the release and comes last; numbers come before words, and more identifiers after fewer.
@@ -82,51 +116,69 @@ fn identifier_order(identifier: &str) -> (bool, u64, &str) {
     (number.is_err(), number.unwrap_or(0), identifier)
 }
 
-/// What kind of place a source is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum SourceKind {
-    Registry,
-    Git,
-    Link,
-    Other,
-}
-
-/// Where a source points: its kind and host. A move inside a site is routine, a move between sites is not.
+/// Where a copy's code comes from, as far as its format can prove it.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Site {
-    kind: SourceKind,
-    host: String,
+enum Site {
+    /// The project's own code: no source and no checksum.
+    Project,
+    /// Shipped inside another package, so it has no origin of its own.
+    Bundled,
+    /// An entry of the form its registry must write; the base is all that stands before the package's own part.
+    Registry {
+        base: String,
+    },
+    /// A git source up to its commit.
+    Git {
+        repo: String,
+    },
+    Link {
+        target: String,
+    },
+    /// Nothing proves what this is, so it never reads as ordinary.
+    Unproven {
+        shown: String,
+    },
 }
 
 impl Site {
-    /// Cargo writes `registry+`, `sparse+` and `git+`; npm a tarball URL, whose path holds `/-/` on a registry.
-    fn of(source: &str) -> Self {
-        let (kind, place) = if let Some(target) = source.strip_prefix(LINK) {
-            (SourceKind::Link, target)
-        } else if let Some(url) = source.strip_prefix("registry+").or_else(|| source.strip_prefix("sparse+")) {
-            (SourceKind::Registry, url)
-        } else if let Some(url) = source.strip_prefix("git+") {
-            (SourceKind::Git, url)
-        } else if source.starts_with("http") && source.contains("/-/") {
-            (SourceKind::Registry, source)
-        } else {
-            (SourceKind::Other, source)
-        };
-        let host = url::Url::parse(place).ok().and_then(|url| url.host_str().map(str::to_owned));
-        Self { kind, host: host.unwrap_or_else(|| place.to_owned()) }
+    /// `git+<url>#<commit>`, the form both formats write for git.
+    fn git(source: &str) -> Option<Self> {
+        let (repo, commit) = source.split_once('#')?;
+        (repo.starts_with("git+") && !commit.is_empty()).then(|| Self::Git { repo: repo.to_owned() })
+    }
+
+    /// What a registry or a repository is known by.
+    fn known_key(&self) -> Option<&str> {
+        match self {
+            Self::Registry { base } => Some(base),
+            Self::Git { repo } => Some(repo),
+            Self::Project | Self::Bundled | Self::Link { .. } | Self::Unproven { .. } => None,
+        }
+    }
+
+    /// Ordinary means the project's own, or a base the format makes public or the old side already used.
+    fn is_ordinary(&self, known: &Known<'_>) -> bool {
+        matches!(self, Self::Project | Self::Bundled) || self.known_key().is_some_and(|key| known.contains(key))
     }
 
     fn describe(&self) -> String {
-        match self.kind {
-            SourceKind::Git => format!("git on {}", self.host),
-            SourceKind::Link => format!("a link to {}", self.host),
-            SourceKind::Registry | SourceKind::Other => self.host.clone(),
+        match self {
+            Self::Project => "the project".to_owned(),
+            Self::Bundled => "a bundle".to_owned(),
+            Self::Registry { base } => base.clone(),
+            Self::Git { repo } => repo.clone(),
+            Self::Link { target } => format!("a link to {target}"),
+            Self::Unproven { shown } => shown.clone(),
         }
     }
 }
 
-/// How a parser spells a source that is a link to a folder.
-const LINK: &str = "link:";
+/// The registries and git repositories a new entry may come from and still read as ordinary.
+type Known<'a> = BTreeSet<&'a str>;
+
+fn known_sites<'a>(base: &'a [Package], public_registry: &'a str) -> Known<'a> {
+    base.iter().filter_map(|package| package.site.known_key()).chain([public_registry]).collect()
+}
 
 /// What a lockfile pins a version to; the same version with another origin is other code.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -141,18 +193,11 @@ struct Package {
     name: PackageName,
     version: Version,
     origin: Origin,
+    site: Site,
     /// Runs code when it installs.
     install_script: bool,
     /// The copy a project's own `require` finds, at the top of the tree.
     at_top: bool,
-    /// Shipped inside another package, so it has no origin of its own.
-    bundled: bool,
-}
-
-impl Package {
-    fn new(name: String, version: String, origin: Origin) -> Self {
-        Self { name: PackageName(name), version: Version(version), origin, install_script: false, at_top: false, bundled: false }
-    }
 }
 
 /// How far an update goes, the biggest first.
@@ -188,53 +233,75 @@ pub(crate) enum Alert {
     ChecksumChanged,
     SourceChanged,
     InstallScript,
-    /// The new version comes from another kind of place or host than the old one.
+    /// The new version comes from a site the old one did not.
     SourceMoved {
         to: String,
     },
-    ChecksumLost,
-    /// A new package from somewhere that is no registry the lockfile already used.
-    OffRegistry {
+    /// A registry copy that pins no checksum.
+    ChecksumMissing,
+    /// The source is not proven ordinary.
+    UnknownSource {
         from: String,
     },
+    /// The version is not strict semver, so nothing can be read from it.
+    NotSemver,
 }
 
 impl Alert {
     /// The alerts between the copies of one release, whatever its version text says.
     fn of_same_release(base: &Copies<'_>, head: &Copies<'_>) -> Vec<Self> {
+        let script = Self::of_install_script(base, head);
+        if base.origins() == head.origins() {
+            return script.into_iter().collect();
+        }
         let (checksums, sources) = (base.checksums() != head.checksums(), base.sources() != head.sources());
-        let moved = base.origins != head.origins;
-        let mut alerts = vec![];
-        if checksums || (moved && !sources) {
-            alerts.push(Self::ChecksumChanged);
-        }
-        if sources || (moved && !checksums) {
-            alerts.push(Self::SourceChanged);
-        }
-        alerts.extend(Self::of_install_script(base, head));
-        alerts
+        let checksum = (checksums || !sources).then_some(Self::ChecksumChanged);
+        let source = (sources || !checksums).then_some(Self::SourceChanged);
+        [checksum, source, script].into_iter().flatten().collect()
     }
 
     fn of_install_script(base: &Copies<'_>, head: &Copies<'_>) -> Option<Self> {
-        (head.install_script && !base.install_script).then_some(Self::InstallScript)
+        (head.install_script() && !base.install_script()).then_some(Self::InstallScript)
+    }
+
+    /// A link has no version of its own to read.
+    fn of_version(version: &Version, head: &Copies<'_>) -> Option<Self> {
+        let versioned = head.0.iter().any(|copy| !matches!(copy.site, Site::Link { .. }));
+        (versioned && !is_semver(&version.0)).then_some(Self::NotSemver)
+    }
+
+    fn of_checksum(head: &Copies<'_>) -> Option<Self> {
+        let unpinned =
+            |copy: &&Package| matches!(copy.site, Site::Registry { .. }) && copy.origin.checksum.as_deref().is_none_or(str::is_empty);
+        head.0.iter().any(unpinned).then_some(Self::ChecksumMissing)
+    }
+
+    fn of_source(head: &Copies<'_>, known: &Known<'_>) -> Option<Self> {
+        let unknown: Vec<String> = head.sites().iter().filter(|site| !site.is_ordinary(known)).map(|site| site.describe()).collect();
+        (!unknown.is_empty()).then(|| Self::UnknownSource { from: unknown.join(", ") })
+    }
+
+    /// Copies with no site of their own, all bundled, come from nowhere a new version can have moved from.
+    fn of_move(base: &Copies<'_>, head: &Copies<'_>) -> Option<Self> {
+        let (old, new) = (base.sites(), head.sites());
+        let moved = !old.is_empty() && (new.is_empty() || !new.is_subset(&old));
+        moved.then(|| Self::SourceMoved { to: head.describe_sites() })
     }
 
     /// The alerts of a move from `from` to `to`.
-    fn of_update(from: &Version, to: &Version, base: &Copies<'_>, head: &Copies<'_>) -> Vec<Self> {
+    fn of_update(from: &Version, to: &Version, base: &Copies<'_>, head: &Copies<'_>, known: &Known<'_>) -> Vec<Self> {
+        let proof = [Self::of_version(to, head), Self::of_checksum(head)].into_iter().flatten();
         if from.release() == to.release() {
-            return Self::of_same_release(base, head);
+            return Self::of_same_release(base, head).into_iter().chain(Self::of_source(head, known)).chain(proof).collect();
         }
-        let moved = (base.sites() != head.sites()).then(|| Self::SourceMoved { to: head.describe_sites() });
-        let lost =
-            (base.checksums().iter().any(Option::is_some) && !head.checksums().iter().all(Option::is_some)).then_some(Self::ChecksumLost);
-        moved.into_iter().chain(lost).chain(Self::of_install_script(base, head)).collect()
+        let source = Self::of_move(base, head).or_else(|| Self::of_source(head, known));
+        source.into_iter().chain(proof).chain(Self::of_install_script(base, head)).collect()
     }
 
-    /// A new copy warns off a registry, or on a host the old side never used; a source of no kind is the project's own.
-    fn of_added(head: &Copies<'_>, known_hosts: &BTreeSet<String>) -> Vec<Self> {
-        let unknown = |site: &Site| !known_hosts.is_empty() && !known_hosts.contains(&site.host);
-        let odd = head.sites().iter().any(|site| site.kind != SourceKind::Registry || unknown(site));
-        odd.then(|| Self::OffRegistry { from: head.describe_sites() }).into_iter().collect()
+    /// A new copy has nothing to compare with: all it can be is proven.
+    fn of_added(version: &Version, head: &Copies<'_>, known: &Known<'_>) -> Vec<Self> {
+        let script = head.install_script().then_some(Self::InstallScript);
+        [Self::of_source(head, known), Self::of_version(version, head), Self::of_checksum(head), script].into_iter().flatten().collect()
     }
 }
 
@@ -300,32 +367,41 @@ pub(crate) struct Summary {
 pub(crate) fn summarize(path: &str, base: Option<&str>, head: Option<&str>) -> Result<Summary> {
     let format = format_of(path).with_context(|| format!("{path} is not a lockfile"))?;
     let read = |text: Option<&str>| text.map_or_else(|| Ok(vec![]), format.parse);
-    Ok(compare(&read(base)?, &read(head)?))
+    Ok(Summary { changes: compare(&read(base)?, &read(head)?, format.public_registry) })
 }
 
 /// The copies of one version of a package; a bundled copy has no origin of its own, so it adds none.
 #[derive(Default)]
-struct Copies<'a> {
-    origins: BTreeSet<&'a Origin>,
-    install_script: bool,
-}
+struct Copies<'a>(Vec<&'a Package>);
 
 impl Copies<'_> {
+    fn with_origin(&self) -> impl Iterator<Item = &Package> {
+        self.0.iter().copied().filter(|copy| copy.site != Site::Bundled)
+    }
+
+    fn origins(&self) -> BTreeSet<&Origin> {
+        self.with_origin().map(|copy| &copy.origin).collect()
+    }
+
     fn checksums(&self) -> BTreeSet<Option<&str>> {
-        self.origins.iter().map(|o| o.checksum.as_deref()).collect()
+        self.with_origin().map(|copy| copy.origin.checksum.as_deref()).collect()
     }
 
     fn sources(&self) -> BTreeSet<Option<&str>> {
-        self.origins.iter().map(|o| o.source.as_deref()).collect()
+        self.with_origin().map(|copy| copy.origin.source.as_deref()).collect()
     }
 
-    fn sites(&self) -> BTreeSet<Site> {
-        self.origins.iter().filter_map(|o| o.source.as_deref()).map(Site::of).collect()
+    fn sites(&self) -> BTreeSet<&Site> {
+        self.with_origin().map(|copy| &copy.site).collect()
+    }
+
+    fn install_script(&self) -> bool {
+        self.0.iter().any(|copy| copy.install_script)
     }
 
     fn describe_sites(&self) -> String {
-        let sites: Vec<String> = self.sites().iter().map(Site::describe).collect();
-        if sites.is_empty() { "no source".to_owned() } else { sites.join(", ") }
+        let sites: Vec<String> = self.sites().iter().map(|site| site.describe()).collect();
+        if sites.is_empty() { Site::Bundled.describe() } else { sites.join(", ") }
     }
 }
 
@@ -341,11 +417,7 @@ fn by_name(packages: &[Package]) -> BTreeMap<&PackageName, Installed<'_>> {
     let mut names: BTreeMap<&PackageName, Installed<'_>> = BTreeMap::new();
     for package in packages {
         let installed = names.entry(&package.name).or_default();
-        let copies = installed.versions.entry(&package.version).or_default();
-        copies.install_script |= package.install_script;
-        if !package.bundled {
-            copies.origins.insert(&package.origin);
-        }
+        installed.versions.entry(&package.version).or_default().0.push(package);
         if package.at_top {
             installed.at_top = Some(&package.version);
         }
@@ -353,43 +425,49 @@ fn by_name(packages: &[Package]) -> BTreeMap<&PackageName, Installed<'_>> {
     names
 }
 
-fn compare(base: &[Package], head: &[Package]) -> Summary {
-    let known_hosts: BTreeSet<String> = base.iter().filter_map(|p| p.origin.source.as_deref()).map(|s| Site::of(s).host).collect();
+fn compare(base: &[Package], head: &[Package], public_registry: &str) -> Vec<Change> {
+    let known = known_sites(base, public_registry);
     let (base, head) = (by_name(base), by_name(head));
     let none = Installed::default();
     let names: BTreeSet<_> = base.keys().chain(head.keys()).copied().collect();
     let mut changes: Vec<Change> = names
         .into_iter()
         .flat_map(|name| {
-            let kinds = package_changes(base.get(name).unwrap_or(&none), head.get(name).unwrap_or(&none), &known_hosts);
+            let kinds = package_changes(base.get(name).unwrap_or(&none), head.get(name).unwrap_or(&none), &known);
             kinds.into_iter().map(|kind| Change { name: name.clone(), kind })
         })
         .collect();
     changes.sort_by_key(|c| c.kind.rank());
-    Summary { changes }
-}
-
-fn package_changes(base: &Installed<'_>, head: &Installed<'_>, known_hosts: &BTreeSet<String>) -> Vec<ChangeKind> {
-    let same_versions = base.versions.iter().filter_map(|(&version, copies)| {
-        let alerts = Alert::of_same_release(copies, head.versions.get(version)?);
-        (!alerts.is_empty()).then(|| ChangeKind::SameVersion { version: version.clone(), alerts })
-    });
-    let mut changes: Vec<ChangeKind> = same_versions.chain(moved_versions(base, head, known_hosts)).collect();
-    changes.extend(top_copy_swap(base, head, &changes));
     changes
 }
 
-fn updated(from: &Version, to: &Version, base: &Installed<'_>, head: &Installed<'_>) -> ChangeKind {
-    let none = Copies::default();
-    let (old, new) = (base.versions.get(from).unwrap_or(&none), head.versions.get(to).unwrap_or(&none));
-    ChangeKind::Updated { from: from.clone(), to: to.clone(), bump: Bump::between(from, to), alerts: Alert::of_update(from, to, old, new) }
+fn package_changes(base: &Installed<'_>, head: &Installed<'_>, known: &Known<'_>) -> Vec<ChangeKind> {
+    let same_versions = base.versions.iter().filter_map(|(&version, copies)| same_version(version, copies, head.versions.get(version)?));
+    let mut changes: Vec<ChangeKind> = same_versions.chain(moved_versions(base, head, known)).collect();
+    changes.extend(top_copy_swap(base, head, &changes, known));
+    changes
+}
+
+fn same_version(version: &Version, old: &Copies<'_>, new: &Copies<'_>) -> Option<ChangeKind> {
+    let alerts = Alert::of_same_release(old, new);
+    (!alerts.is_empty()).then(|| ChangeKind::SameVersion { version: version.clone(), alerts })
+}
+
+fn updated(from: &Version, to: &Version, old: &Copies<'_>, new: &Copies<'_>, known: &Known<'_>) -> ChangeKind {
+    ChangeKind::Updated {
+        from: from.clone(),
+        to: to.clone(),
+        bump: Bump::between(from, to),
+        alerts: Alert::of_update(from, to, old, new, known),
+    }
 }
 
 /// The copy a project loads changed version though both versions stay somewhere in the tree.
-fn top_copy_swap(base: &Installed<'_>, head: &Installed<'_>, changes: &[ChangeKind]) -> Option<ChangeKind> {
+fn top_copy_swap(base: &Installed<'_>, head: &Installed<'_>, changes: &[ChangeKind], known: &Known<'_>) -> Option<ChangeKind> {
     let (from, to) = base.at_top.zip(head.at_top).filter(|(from, to)| from != to)?;
     let shown = changes.iter().any(|change| matches!(change, ChangeKind::Updated { from: f, to: t, .. } if f == from && t == to));
-    (!shown).then(|| updated(from, to, base, head))
+    let none = Copies::default();
+    (!shown).then(|| updated(from, to, base.versions.get(from).unwrap_or(&none), head.versions.get(to).unwrap_or(&none), known))
 }
 
 fn only_in<'a>(versions: &Installed<'a>, other: &Installed<'a>) -> Vec<&'a Version> {
@@ -400,23 +478,27 @@ fn only_in<'a>(versions: &Installed<'a>, other: &Installed<'a>) -> Vec<&'a Versi
 
 /// A gone version pairs with a new one it is compatible with; what is left pairs only when the counts match,
 /// since an extra version is a package added or removed, not an update.
-fn moved_versions(base: &Installed<'_>, head: &Installed<'_>, known_hosts: &BTreeSet<String>) -> Vec<ChangeKind> {
+fn moved_versions(base: &Installed<'_>, head: &Installed<'_>, known: &Known<'_>) -> Vec<ChangeKind> {
+    let none = Copies::default();
+    let update = |from: &Version, to: &Version| {
+        updated(from, to, base.versions.get(from).unwrap_or(&none), head.versions.get(to).unwrap_or(&none), known)
+    };
     let mut new = only_in(head, base);
     let mut changes = vec![];
     let mut left = vec![];
     for from in only_in(base, head) {
         match new.iter().position(|to| Bump::between(from, to) != Bump::Breaking) {
-            Some(at) => changes.push(updated(from, new.remove(at), base, head)),
+            Some(at) => changes.push(update(from, new.remove(at))),
             None => left.push(from),
         }
     }
     if left.len() == new.len() {
-        changes.extend(left.into_iter().zip(new).map(|(from, to)| updated(from, to, base, head)));
+        changes.extend(left.into_iter().zip(new).map(|(from, to)| update(from, to)));
         return changes;
     }
-    let added = |version: &Version| {
-        let alerts = head.versions.get(version).map_or_else(Vec::new, |copies| Alert::of_added(copies, known_hosts));
-        ChangeKind::Added { version: version.clone(), alerts }
+    let added = |version: &Version| ChangeKind::Added {
+        version: version.clone(),
+        alerts: Alert::of_added(version, head.versions.get(version).unwrap_or(&none), known),
     };
     changes.extend(new.into_iter().map(added));
     changes.extend(left.into_iter().map(|v| ChangeKind::Removed { version: v.clone() }));
@@ -434,9 +516,17 @@ fn warned_names(path: &str, base: &str, head: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
+    const REGISTRY: &str = "registry+https://index.example";
+
     fn package(name: &str, version: &str, checksum: &str) -> Package {
-        let origin = Origin { checksum: Some(checksum.into()), source: Some("registry+https://index.example".into()) };
-        Package::new(name.into(), version.into(), origin)
+        Package {
+            name: PackageName(name.into()),
+            version: Version(version.into()),
+            origin: Origin { checksum: Some(checksum.into()), source: Some(REGISTRY.into()) },
+            site: Site::Registry { base: REGISTRY.into() },
+            install_script: false,
+            at_top: false,
+        }
     }
 
     fn sourced(version: &str, source: &str) -> Package {
@@ -453,7 +543,7 @@ mod tests {
     }
 
     fn kinds(base: &[Package], head: &[Package]) -> Vec<ChangeKind> {
-        compare(base, head).changes.into_iter().map(|c| c.kind).collect()
+        compare(base, head, REGISTRY).into_iter().map(|c| c.kind).collect()
     }
 
     #[test]
@@ -506,16 +596,17 @@ mod tests {
             ("new", "1.0.0", "a"),
             ("odd", "y", "a"),
         ];
-        let names: Vec<String> = compare(&base.map(row), &head.map(row)).changes.iter().map(|c| c.name.to_string()).collect();
-        assert_eq!(names, ["zeta", "major-a", "major-b", "minor", "odd", "new", "gone"]);
+        let names: Vec<String> = compare(&base.map(row), &head.map(row), REGISTRY).iter().map(|c| c.name.to_string()).collect();
+        assert_eq!(names, ["odd", "zeta", "major-a", "major-b", "minor", "new", "gone"]);
     }
 
     #[test]
     fn an_update_that_warns_reads_before_a_breaking_one() {
         let base = [package("a", "1.0.0", "x"), package("z", "1.0.0", "x")];
         let z = package("z", "1.0.1", "x");
-        let moved = Package { origin: Origin { source: Some("git+https://evil.example/z".into()), ..z.origin }, ..z };
-        let names: Vec<String> = compare(&base, &[package("a", "2.0.0", "x"), moved]).changes.iter().map(|c| c.name.to_string()).collect();
+        let moved = Package { site: Site::Git { repo: "git+https://evil.example/z".into() }, ..z };
+        let head = [package("a", "2.0.0", "x"), moved];
+        let names: Vec<String> = compare(&base, &head, REGISTRY).iter().map(|c| c.name.to_string()).collect();
         assert_eq!(names, ["z", "a"]);
     }
 
