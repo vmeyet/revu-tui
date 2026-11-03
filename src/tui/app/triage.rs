@@ -1,4 +1,4 @@
-//! Jev's marks in the app: which MRs to ask about, what came back, and how a row wears it.
+//! Jev's marks in the app: `:ai`, which MRs to ask about, what came back, and how a row wears it.
 use super::{Action, App, MrKey};
 use crate::ai::triage::{self, Reading, Verdict};
 use crate::forge::QueueMr;
@@ -73,7 +73,7 @@ impl App {
         self.readings.insert(key, (head, reading));
     }
 
-    /// Jev could not answer: say so once (`message` is its notice) and keep the plain views for the rest of the session.
+    /// Jev could not answer: say so once (`message` is its notice) and keep the plain views until `:ai on`.
     pub(super) fn triage_failed(&mut self, message: &str) {
         if self.triage {
             self.triage = false;

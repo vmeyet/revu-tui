@@ -363,19 +363,14 @@ fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
     if !ai.typesafe.enabled {
         return None;
     }
-    let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
     if let Some(reason) = ai::typesafe::disabled_reason() {
         tracing::info!("Jev is off: {reason}");
         return None;
     }
-    let (key, _) = ai_key(ai::Provider::Typesafe, &keychain)?;
+    let keychain = crate::auth::SecurityCli::new(crate::auth::SERVICE);
+    let found = ai::key(ai::Provider::Typesafe, &ai::KeyEnv::from_process(), &keychain);
+    let (key, _) = found.inspect_err(|e| tracing::warn!("reading the Jev key failed: {e:#}")).ok().flatten()?;
     TypeSafe::connect(&key).inspect_err(|e| tracing::warn!("Jev is off: {e}")).ok()
-}
-
-/// A keychain that cannot be read leaves the provider off, with the reason in the log.
-fn ai_key(provider: ai::Provider, keychain: &crate::auth::SecurityCli) -> Option<(ai::Secret, ai::KeySource)> {
-    let found = ai::key(provider, &ai::KeyEnv::from_process(), keychain);
-    found.inspect_err(|e| tracing::warn!("reading the {provider} key failed: {e:#}")).ok().flatten()
 }
 
 /// The agent of `[agent]`, when it is switched on, with what this machine says: the home folder, Claude

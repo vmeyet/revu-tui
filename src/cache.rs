@@ -546,7 +546,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
         cache.write("mr/acme+widgets/42/mr.json", &1).unwrap();
-        cache.write("mr/acme+widgets/42/ai/answer.1.json", &2).unwrap();
+        cache.write("mr/acme+widgets/42/ai/verdict.json", &2).unwrap();
         cache.write("mr/acme+widgets/41/mr.json", &3).unwrap();
         let mut kept = cache.kept_mrs();
         kept.sort_by_key(|k| k.number);

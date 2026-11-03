@@ -1,8 +1,6 @@
 //! The AI providers: which one is on, and where its key comes from.
 //! Keys live in the keychain (service `revu`, one account per provider) or an environment
 //! variable; they never touch the config, the cache or a log line.
-#[expect(dead_code, reason = "nothing asks Claude any more; the next change in the stack deletes it")]
-pub(crate) mod anthropic;
 pub(crate) mod triage;
 pub(crate) mod typesafe;
 
@@ -58,7 +56,6 @@ impl fmt::Display for Provider {
 }
 
 /// A key, printable only as `<redacted>`.
-#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Secret(String);
 
 impl Secret {
@@ -94,8 +91,7 @@ pub(crate) struct KeyEnv {
 
 impl KeyEnv {
     pub(crate) fn from_process() -> Self {
-        let read = |p: Provider| std::env::var(p.variable()).ok().filter(|v| !v.trim().is_empty());
-        Self { typesafe: read(Provider::Typesafe) }
+        Self { typesafe: std::env::var(Provider::Typesafe.variable()).ok().filter(|v| !v.trim().is_empty()) }
     }
 
     fn get(&self, provider: Provider) -> Option<&String> {
