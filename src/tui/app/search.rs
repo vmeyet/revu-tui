@@ -16,11 +16,13 @@ pub(crate) struct Search {
     from: usize,
 }
 
-/// Where a match sits: a file's path, or one line of one of its hunks. Ordered as the diff reads.
+/// Where a match sits: a file's path, or one line of one of its hunks. Ordered as the diff reads:
+/// a line's place in its hunk's rows, since a pair can read lines out of their index order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Hit {
     file: usize,
     hunk: Option<usize>,
+    read_at: Option<usize>,
     line: Option<usize>,
 }
 
@@ -101,7 +103,7 @@ impl App {
     fn retype(&mut self, search: &Search, query: String) {
         self.search = Some(Search { query, ..search.clone() });
         let Some(open) = &self.open else { return };
-        let start = open.rows.get(search.from).and_then(hit_of);
+        let start = open.rows.get(search.from).and_then(|row| hit_of(&open.review, row));
         let hits = self.matches();
         let first = hits.iter().find(|hit| Some(**hit) >= start).or(hits.first()).copied();
         match first {
@@ -146,11 +148,12 @@ fn hits(review: &Review, query: &str) -> Vec<Hit> {
     let mut found = vec![];
     for (f, file) in review.files.iter().enumerate() {
         if finds(&file.new_path, query) {
-            found.push(Hit { file: f, hunk: None, line: None });
+            found.push(Hit { file: f, hunk: None, read_at: None, line: None });
         }
         for (h, hunk) in file.hunks.iter().enumerate() {
-            let lines = hunk.lines.iter().enumerate().filter(|(_, line)| review.shows_line(line) && finds(&line.text, query));
-            found.extend(lines.map(|(l, _)| Hit { file: f, hunk: Some(h), line: Some(l) }));
+            let reading = review.lines_in_reading_order(f, h, hunk);
+            let matching = reading.into_iter().enumerate().filter(|&(_, l)| finds(&hunk.lines[l].text, query));
+            found.extend(matching.map(|(read_at, l)| Hit { file: f, hunk: Some(h), read_at: Some(read_at), line: Some(l) }));
         }
     }
     found
@@ -160,22 +163,29 @@ fn hits(review: &Review, query: &str) -> Vec<Hit> {
 fn hits_at(open: &Open) -> Vec<Hit> {
     match open.row() {
         Some(&Row::Pair { file, hunk, removed, added }) => {
-            let line = |index| Hit { file, hunk: Some(hunk), line: Some(index) };
-            vec![line(removed.min(added)), line(removed.max(added))]
+            vec![line_hit(&open.review, file, hunk, removed), line_hit(&open.review, file, hunk, added)]
         }
-        row => row.and_then(hit_of).into_iter().collect(),
+        row => row.and_then(|row| hit_of(&open.review, row)).into_iter().collect(),
     }
 }
 
-fn hit_of(row: &Row) -> Option<Hit> {
+fn hit_of(review: &Review, row: &Row) -> Option<Hit> {
     match row {
-        &Row::File { index, .. } => Some(Hit { file: index, hunk: None, line: None }),
-        &Row::Hunk { file, index, .. } => Some(Hit { file, hunk: Some(index), line: None }),
-        &Row::Line { file, hunk, index } => Some(Hit { file, hunk: Some(hunk), line: Some(index) }),
-        &Row::Pair { file, hunk, removed, .. } => Some(Hit { file, hunk: Some(hunk), line: Some(removed) }),
-        &Row::Context { file, hunk, .. } | &Row::Thread { file, hunk, .. } => Some(Hit { file, hunk: Some(hunk), line: None }),
+        &Row::File { index, .. } => Some(Hit { file: index, hunk: None, read_at: None, line: None }),
+        &Row::Hunk { file, index, .. } => Some(Hit { file, hunk: Some(index), read_at: None, line: None }),
+        &Row::Line { file, hunk, index } => Some(line_hit(review, file, hunk, index)),
+        &Row::Pair { file, hunk, removed, .. } => Some(line_hit(review, file, hunk, removed)),
+        &Row::Context { file, hunk, .. } | &Row::Thread { file, hunk, .. } => {
+            Some(Hit { file, hunk: Some(hunk), read_at: None, line: None })
+        }
         Row::Header | Row::Gap => None,
     }
+}
+
+fn line_hit(review: &Review, file: usize, hunk: usize, line: usize) -> Hit {
+    let reading = review.files.get(file).and_then(|f| f.hunks.get(hunk)).map(|h| review.lines_in_reading_order(file, hunk, h));
+    let read_at = reading.and_then(|lines| lines.iter().position(|&l| l == line));
+    Hit { file, hunk: Some(hunk), read_at, line: Some(line) }
 }
 
 fn shows(row: &Row, hit: Hit) -> bool {
@@ -241,7 +251,7 @@ mod tests {
     #[test]
     fn a_hit_in_a_file_the_review_lacks_leaves_the_open_mr_as_it_was() {
         let open = Open::new(fixture::key(), crate::review::tests::review());
-        assert_eq!(open.clone().revealing(Hit { file: 99, hunk: None, line: None }), open);
+        assert_eq!(open.clone().revealing(Hit { file: 99, hunk: None, read_at: None, line: None }), open);
     }
 
     #[test]
@@ -338,6 +348,67 @@ mod tests {
         assert!(text_here(&app).contains("fn idempotency_key"), "{}", text_here(&app));
         press(&mut app, "N");
         assert_eq!(app.search_count().as_deref(), Some("1/2"));
+    }
+
+    /// An app on a review of `diff`, `query` searched and the search line closed.
+    fn searched(diff: &str, query: &str) -> App {
+        let file = DiffFile { diff: diff.into(), new_path: "a.rs".into(), old_path: "a.rs".into(), ..Default::default() };
+        let review = Review::new(mr(), &[file], vec![], &[]);
+        let mut app = with_queue();
+        app.queue_move(0);
+        app.handle_key(code(KeyCode::Enter));
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
+        press(&mut app, &format!("/{query}"));
+        app.handle_key(code(KeyCode::Enter));
+        app
+    }
+
+    /// What the cursor reads at the start, then after each press of `key`.
+    fn walked(app: &mut App, key: &str, presses: usize) -> Vec<String> {
+        let mut seen = vec![text_here(app)];
+        for _ in 0..presses {
+            press(app, key);
+            seen.push(text_here(app));
+        }
+        seen
+    }
+
+    const TWIN_ROW: &str = "let target = compute(one, two); / let target = compute(one, three);";
+    const REMOVED_BETWEEN: &str =
+        "@@ -1,2 +1 @@\n-let target = compute(one, two);\n-target_gone(now);\n+let target = compute(one, three);\n";
+    const ADDED_BEFORE: &str =
+        "@@ -1 +1,2 @@\n-let target = compute(one, two);\n+target_fresh(here);\n+let target = compute(one, three);\n";
+
+    #[test]
+    fn n_reaches_a_removed_line_that_reads_after_its_neighbours_pair() {
+        let seen = walked(&mut searched(REMOVED_BETWEEN, "target"), "n", 2);
+        assert_eq!(seen, [TWIN_ROW, "target_gone(now);", TWIN_ROW]);
+    }
+
+    #[test]
+    fn capital_n_reaches_a_removed_line_that_reads_after_its_neighbours_pair() {
+        let seen = walked(&mut searched(REMOVED_BETWEEN, "target"), "N", 2);
+        assert_eq!(seen, [TWIN_ROW, "target_gone(now);", TWIN_ROW]);
+    }
+
+    #[test]
+    fn n_walks_from_an_added_line_that_reads_before_its_neighbours_pair() {
+        let seen = walked(&mut searched(ADDED_BEFORE, "target"), "n", 2);
+        assert_eq!(seen, ["target_fresh(here);", TWIN_ROW, "target_fresh(here);"]);
+    }
+
+    #[test]
+    fn capital_n_walks_from_an_added_line_that_reads_before_its_neighbours_pair() {
+        let seen = walked(&mut searched(ADDED_BEFORE, "target"), "N", 2);
+        assert_eq!(seen, ["target_fresh(here);", TWIN_ROW, "target_fresh(here);"]);
+    }
+
+    #[test]
+    fn the_count_follows_reading_order_past_a_pair() {
+        let mut app = searched(REMOVED_BETWEEN, "target");
+        assert_eq!(app.search_count().as_deref(), Some("1/3"));
+        press(&mut app, "n");
+        assert_eq!(app.search_count().as_deref(), Some("3/3"));
     }
 
     #[test]
