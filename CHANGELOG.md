@@ -18,8 +18,8 @@ Each entry says what changed, then where, then how to use it.
   Nothing to do: no label means an ordinary edit, or a change revu cannot prove harmless, and a label only informs.
 
 - **A changed line is compared with the line most like it, not the one at the same place.**
-  In the diff, inline and side by side, for blocks up to 50 lines a side.
-  Nothing to do: a line added or removed in a block keeps the marks on the others, and a rewrite stays plain.
+  In the diff, inline and side by side; a block past 50 lines a side compares lines at the same place.
+  Nothing to do: a line added or removed keeps the marks on the others, and a one-line change marks once both lines share a word.
 
 - **A changed line marks the code that changed, not what is stuck to it.**
   In the diff and the outline's signatures, where more small edits now read as one row.

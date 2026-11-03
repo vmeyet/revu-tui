@@ -1,18 +1,24 @@
 //! Intra-line highlighting: each run of removed lines is aligned with the run of added lines after it, so a line
 //! pairs with its most alike twin wherever it sits; pairs never cross, and a line with no twin stays plain.
+//! A one-line change has only one candidate, so one word in common is enough to pair it.
+//! A run too large to align compares its lines by position instead, and stays plain past its own budget.
 //! A line is cut like code, into identifiers, whitespace runs and single punctuation characters, so
 //! `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`, and a changed word never drags its space along.
 use super::{Hunk, Line, LineKind, LinePair};
 use similar::{ChangeTag, TextDiff};
+use std::collections::HashSet;
 use std::ops::Range;
 
 /// Least similarity, over a line's code tokens, for two lines to count as twins.
 pub(super) const MIN_LINE_SIMILARITY: f32 = 0.6;
 /// Longest run, on either side, that is aligned: aligning costs one word diff per pair of lines.
-const MAX_ALIGNED_RUN: usize = 50;
+pub(super) const MAX_ALIGNED_RUN: usize = 50;
 /// Most work an alignment may take, as the bytes of the `-` run times the bytes of the `+` run, what the
 /// word diffs of all its pairs of lines add up to: this much is 50 lines of 630 bytes a side, about 200ms.
 const MAX_ALIGNED_WORK: usize = 1_000_000_000;
+/// Most work comparing a run's lines by position may take, as the bytes of each `-` line times those of its `+` line,
+/// added up, since a long line costs its square: this much is 5,000 lines of 158 bytes a side, about 250ms on minified code.
+const MAX_POSITIONAL_WORK: usize = 125_000_000;
 
 pub(crate) fn mark(hunk: &Hunk) -> Hunk {
     let pairs = aligned_pairs(&hunk.lines);
@@ -30,17 +36,44 @@ fn aligned_pairs(lines: &[Line]) -> Vec<LinePair> {
     both_sides.flat_map(|(removed, added)| align_run(lines, removed, added)).collect()
 }
 
-/// The twins of a `-` run in the `+` run after it. A run too large to align still keeps its whitespace-only
-/// changes by position, so a reindented block reads quiet under `W`.
+/// The twins of a `-` run in the `+` run after it.
 fn align_run(lines: &[Line], removed: Range<usize>, added: Range<usize>) -> Vec<LinePair> {
     let (old, new) = (&lines[removed.clone()], &lines[added.clone()]);
     if too_large_to_align(old, new) {
-        return pairs_by_position(removed, added)
-            .filter(|pair| same_but_whitespace(&lines[pair.removed].text, &lines[pair.added].text))
-            .collect();
+        return twins_by_position(lines, removed, added);
+    }
+    if let ([old_line], [new_line]) = (old, new)
+        && share_a_word(&old_line.text, &new_line.text)
+    {
+        return pairs_by_position(removed, added).collect();
     }
     let in_hunk = |pair: LinePair| LinePair { removed: removed.start + pair.removed, added: added.start + pair.added };
     best_alignment(&twin_scores(old, new)).into_iter().map(in_hunk).collect()
+}
+
+/// The twins among lines at the same place in their runs. Past its budget a run keeps only its whitespace-only
+/// changes, so a reindented block still reads quiet under `W`.
+fn twins_by_position(lines: &[Line], removed: Range<usize>, added: Range<usize>) -> Vec<LinePair> {
+    let keeps: fn(&str, &str) -> bool = if positional_work(&lines[removed.clone()], &lines[added.clone()]) > MAX_POSITIONAL_WORK {
+        same_but_whitespace
+    } else {
+        alike_enough
+    };
+    pairs_by_position(removed, added).filter(|pair| keeps(&lines[pair.removed].text, &lines[pair.added].text)).collect()
+}
+
+fn positional_work(removed: &[Line], added: &[Line]) -> usize {
+    removed.iter().zip(added).map(|(old, new)| old.text.len() * new.text.len()).sum()
+}
+
+fn alike_enough(old: &str, new: &str) -> bool {
+    twin_score(old, new, &code_tokens(old), &code_tokens(new)) > 0.0
+}
+
+/// A word holds a letter: a shared number or bracket says nothing about two lines being the same line.
+fn share_a_word(old: &str, new: &str) -> bool {
+    let new_tokens: HashSet<&str> = code_tokens(new).into_iter().collect();
+    code_tokens(old).into_iter().any(|token| token.contains(char::is_alphabetic) && new_tokens.contains(token))
 }
 
 fn pairs_by_position(removed: Range<usize>, added: Range<usize>) -> impl Iterator<Item = LinePair> {
@@ -56,11 +89,14 @@ pub(super) fn too_large_to_align(removed: &[Line], added: &[Line]) -> bool {
 fn twin_scores(removed: &[Line], added: &[Line]) -> Vec<Vec<f32>> {
     let old_tokens: Vec<Vec<&str>> = removed.iter().map(|line| code_tokens(&line.text)).collect();
     let new_tokens: Vec<Vec<&str>> = added.iter().map(|line| code_tokens(&line.text)).collect();
-    let score = |r: usize, a: usize| {
-        let alike = if same_but_whitespace(&removed[r].text, &added[a].text) { 1.0 } else { similarity(&old_tokens[r], &new_tokens[a]) };
-        if alike >= MIN_LINE_SIMILARITY { alike } else { 0.0 }
-    };
+    let score = |r: usize, a: usize| twin_score(&removed[r].text, &added[a].text, &old_tokens[r], &new_tokens[a]);
     (0..removed.len()).map(|r| (0..added.len()).map(|a| score(r, a)).collect()).collect()
+}
+
+/// How alike two lines are, `0` below the bar for twins; a change of whitespace alone makes them alike in full.
+fn twin_score(old: &str, new: &str, old_tokens: &[&str], new_tokens: &[&str]) -> f32 {
+    let alike = if same_but_whitespace(old, new) { 1.0 } else { similarity(old_tokens, new_tokens) };
+    if alike >= MIN_LINE_SIMILARITY { alike } else { 0.0 }
 }
 
 /// The pairs of `scores` rows and columns with the highest total that never cross, all above `0`; ties go to the earliest pair.
@@ -567,11 +603,79 @@ mod tests {
     }
 
     #[test]
-    fn a_run_past_the_cap_on_one_side_stays_unmarked() {
+    fn a_run_past_the_cap_on_one_side_pairs_alike_lines_by_position() {
         let (old, new) = (numbered_lines(2, ";"), numbered_lines(MAX_ALIGNED_RUN + 1, "?;"));
+        let hunk = change_of(&old, &new);
+        assert_eq!(hunk.pairs, [pair(0, 2), pair(1, 3)]);
+        assert_eq!(words_of(&hunk.lines[3]), ["?"]);
+    }
+
+    #[test]
+    fn a_run_past_the_cap_leaves_lines_below_the_bar_plain() {
+        let old = numbered_lines(MAX_ALIGNED_RUN + 1, ";");
+        let mut new = numbered_lines(MAX_ALIGNED_RUN + 1, "?;");
+        new[0] = "return Err(Refused::At(0).into_report());".to_owned();
+        let hunk = change_of(&old, &new);
+        assert_eq!(hunk.pairs.first(), Some(&pair(1, MAX_ALIGNED_RUN + 2)));
+        assert_eq!(hunk.pairs.len(), MAX_ALIGNED_RUN);
+        assert_eq!(words_of(&hunk.lines[0]), [] as [&str; 0]);
+    }
+
+    /// A run too long to align of alike lines, each long enough for the run to take about `work` when compared by position.
+    fn lines_taking(work: usize, end: &str) -> Vec<String> {
+        let count = MAX_ALIGNED_RUN + 1;
+        let line = format!("{}{end}", "word ".repeat((work / count).isqrt() / 5));
+        (0..count).map(|n| format!("{n:05} {line}")).collect()
+    }
+
+    #[test]
+    fn a_run_under_the_position_budget_pairs_its_alike_lines() {
+        let (old, new) = (lines_taking(MAX_POSITIONAL_WORK / 2, "a"), lines_taking(MAX_POSITIONAL_WORK / 2, "b"));
+        assert_eq!(change_of(&old, &new).pairs.len(), old.len());
+    }
+
+    #[test]
+    fn a_run_past_the_position_budget_stays_unmarked() {
+        let (old, new) = (lines_taking(MAX_POSITIONAL_WORK * 2, "a"), lines_taking(MAX_POSITIONAL_WORK * 2, "b"));
         let hunk = change_of(&old, &new);
         assert_eq!(hunk.pairs, []);
         assert!(hunk.lines.iter().all(|l| l.words.is_empty()));
+    }
+
+    #[test]
+    fn a_reindented_run_past_the_position_budget_still_pairs_its_whitespace_changes() {
+        let old = lines_taking(MAX_POSITIONAL_WORK * 2, "a");
+        let new: Vec<String> = old.iter().map(|line| format!("    {line}")).collect();
+        assert_eq!(change_of(&old, &new).pairs.len(), old.len());
+    }
+
+    #[test]
+    fn a_one_line_change_below_the_bar_pairs_when_its_lines_share_a_word() {
+        let (old, new) = ("charge(card, total);", "let receipt = charge(card).with_total(total).await?;");
+        assert!(!alike_enough(old, new));
+        let hunk = change_of(&[old], &[new]);
+        assert_eq!(hunk.pairs, [pair(0, 1)]);
+        assert_eq!(words_of(&hunk.lines[1]), ["let receipt = ", ").with_total(", ".await?"]);
+    }
+
+    #[test]
+    fn a_one_line_change_sharing_only_punctuation_stays_plain() {
+        let (old, new) = (".counts(DIFF),", ".section(Section::View),");
+        assert!(!alike_enough(old, new));
+        assert_eq!(change_of(&[old], &[new]).pairs, []);
+    }
+
+    #[test]
+    fn a_one_line_change_sharing_only_a_number_stays_plain() {
+        let (old, new) = ("let a = 1;", "return 1;");
+        assert!(!alike_enough(old, new));
+        assert_eq!(change_of(&[old], &[new]).pairs, []);
+    }
+
+    #[test]
+    fn a_word_in_common_pairs_nothing_when_a_side_has_more_than_one_line() {
+        let (old, new) = ("charge(card, total);", "let receipt = charge(card).with_total(total).await?;");
+        assert_eq!(change_of(&[old], &[new, "log(receipt);"]).pairs, []);
     }
 
     #[test]

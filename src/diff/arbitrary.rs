@@ -1,5 +1,6 @@
 //! Generated unified diffs for property tests: what the forges send, built from parts we know,
 //! so a test can compare what `parse` finds with what went in.
+use super::words::MAX_ALIGNED_RUN;
 use super::{Hunk, LineKind};
 use proptest::prelude::*;
 
@@ -92,24 +93,20 @@ fn kind() -> impl Strategy<Value = LineKind> {
     prop_oneof![3 => Just(LineKind::Context), 2 => Just(LineKind::Added), 2 => Just(LineKind::Removed)]
 }
 
-/// One hunk of changed lines close enough to each other for pairs to form in many shapes.
+const REMOVED_LINES: &[&str] = &["-let a = 1;", "-let b = call(a, 2);", "-gone_for_good(now);", "-}", "-   "];
+const ADDED_LINES: &[&str] =
+    &["+let a = 2;", "+let b = call(a, 3);", "+    let b = call(a, 2);", "+brand_new(call);", "+};", "+", "+nothing else alike here"];
+
+/// One hunk of changed lines close enough to each other for pairs to form in many shapes, some with a `-` run
+/// too long to align.
 pub(crate) fn alike_diff() -> impl Strategy<Value = String> {
-    let line = prop_oneof![
-        Just(" keep();"),
-        Just("-let a = 1;"),
-        Just("+let a = 2;"),
-        Just("-let b = call(a, 2);"),
-        Just("+let b = call(a, 3);"),
-        Just("+    let b = call(a, 2);"),
-        Just("-gone_for_good(now);"),
-        Just("+brand_new(call);"),
-        Just("-}"),
-        Just("+};"),
-        Just("+"),
-        Just("-   "),
-        Just("+nothing else alike here"),
-    ];
-    prop::collection::vec(line, 1..20).prop_map(|lines| format!("@@ -1 +1 @@\n{}\n", lines.join("\n")))
+    use prop::collection::vec;
+    let removed = || prop::sample::select(REMOVED_LINES);
+    let added = || prop::sample::select(ADDED_LINES);
+    let line = || prop_oneof![1 => Just(" keep();"), 5 => removed(), 7 => added()];
+    let over_cap = (vec(line(), 0..5), vec(removed(), MAX_ALIGNED_RUN + 1..MAX_ALIGNED_RUN + 10), vec(added(), 1..60), vec(line(), 0..5))
+        .prop_map(|(before, removed, added, after)| [before, removed, added, after].concat());
+    prop_oneof![3 => vec(line(), 1..20), 1 => over_cap].prop_map(|lines| format!("@@ -1 +1 @@\n{}\n", lines.join("\n")))
 }
 
 /// Up to four hunks, each starting past where the previous one ended on both sides.
