@@ -21,6 +21,11 @@ Each entry says what changed, then where, then how to use it.
   In the thread pane, under a diff line, the description and the answer pane; code blocks and suggestions keep the diff's colours.
   Nothing to do: write Markdown as on the forge, and a drag copies the text as it is drawn.
 
+### Fixed
+
+- **A changed line no longer runs on into blank rows while wrapping and searching.**
+  In the diff with `w` on and a `/` search active, for lines ending in uncoloured text.
+
 ## 0.11.0 - 2026-10-29
 
 ### New
