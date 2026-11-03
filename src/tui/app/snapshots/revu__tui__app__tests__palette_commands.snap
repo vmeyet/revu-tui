@@ -8,7 +8,7 @@ expression: "render(&mut app, 100, 24)"
 │  ◆ 1 on the MR  en│ > pu▌blish                                               │                   │
 │                   │                                                          │                   │
 │ ▎▾ src/pay/charge.│ ▸ publish  publish every draft, in the publish modal     │2  ✓1 · 1 outdated │
-│     ▾ @@ -12,4 +12│   ↑↓ pick · tab completes · ^p history · esc             │                   │
+│     ▾ @@ -12,4 +12│   ↑↓ pick · ↑ history · tab completes · esc              │                   │
 │      12  pub async│                                                          │                   │
 │  ✓   13 -    let c│                                                          │                   │
 │        │ ✓ resolve│                                                          │                   │
