@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn every_countable_action_is_known_once_in_the_order_of_the_table() {
         let known = rules().actions;
-        for name in ["pin", ":ready", ":pin", ":unpin", ":outline", ":session", ":news"] {
+        for name in ["pin", ":ready", ":pin", ":unpin", ":session", ":news"] {
             assert!(known.contains(&name), "`{name}` is counted, so it shows when unused");
         }
         assert_eq!(known.iter().filter(|name| **name == "viewed").count(), 1, "`m` and `zv` share a name");

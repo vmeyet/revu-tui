@@ -90,7 +90,6 @@ pub(crate) enum Act {
     AllCommand,
     PinCommand,
     UnpinCommand,
-    OutlineCommand,
     SetCommand,
     ViewCommand,
     AiCommand,
@@ -318,7 +317,7 @@ pub(crate) const ROWS: &[Row] = &[
         .panes(&[Pane::Diff, Pane::Pipeline, Pane::Cover])
         .section(Section::View),
     bound(Act::Outline, "outline", &["O"])
-        .help(&[line(Group::View, "O", "outline: the symbols the MR changes")])
+        .help(&[line(Group::View, "O", "outline: the functions the MR changes")])
         .panes(&[Pane::Diff, Pane::Outline])
         .section(Section::View),
     bound(Act::Prose, "prose", &["v"])
@@ -488,7 +487,6 @@ pub(crate) const ROWS: &[Row] = &[
     command!(Act::AllCommand, "all", "the queue: this repo only, or every project"),
     command!(Act::PinCommand, "pin", "pin the MR on top of the queue"),
     command!(Act::UnpinCommand, "unpin", "take the MR's pin off"),
-    command!(Act::OutlineCommand, "outline", "the functions and classes the MR changes, in the right pane"),
     command!(Act::SetCommand, "set", "change and save a setting: :set theme=nord"),
     command!(Act::ViewCommand, "view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     command!(Act::AiCommand, "ai", "switch AI off or back on for this session: :ai off, :ai on"),
