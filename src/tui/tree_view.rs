@@ -34,7 +34,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         .take(shown.len())
         .map(|(index, y)| ListRow { area: Rect { y, height: 1, ..inner }, list: List::Tree, index })
         .collect();
-    app.list_rows.extend(list_rows);
+    app.drawn.list_rows.extend(list_rows);
 }
 
 fn row_line<'a>(app: &App, review: &Review, row: &TreeRow, selected: bool, width: usize) -> Line<'a> {

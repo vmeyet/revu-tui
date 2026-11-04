@@ -175,7 +175,7 @@ mod tests {
         assert!(screen.contains("⧉ review/feat-checkout +1"), "the review app comes first in the header:\n{screen}");
         assert!(screen.contains("REVIEW APPS") && screen.contains("https://sb.acme.test/feat-checkout"), "{screen}");
         assert!(screen.contains("⧉ storybook/feat-checkout · older push"), "{screen}");
-        assert!(app.links.iter().any(|l| l.text == "⧉ review/feat-checkout" && l.url == "https://feat-checkout.review.acme.test"));
+        assert!(app.drawn.links.iter().any(|l| l.text == "⧉ review/feat-checkout" && l.url == "https://feat-checkout.review.acme.test"));
         press(&mut app, "p");
         press(&mut app, "i");
         let cover = render(&mut app, 200, 50);
@@ -198,7 +198,8 @@ mod tests {
         for (keys, height) in [("", 30), ("pi", 50)] {
             press(&mut app, keys);
             render(&mut app, 200, height);
-            let link = app.links.iter().find(|l| l.text == url).unwrap_or_else(|| panic!("after {keys:?}: {:?}", app.links)).clone();
+            let link =
+                app.drawn.links.iter().find(|l| l.text == url).unwrap_or_else(|| panic!("after {keys:?}: {:?}", app.drawn.links)).clone();
             assert_eq!(click(&mut app, (link.x + 2, link.y)), vec![Action::OpenUrl(url.into())], "after {keys:?}");
         }
     }

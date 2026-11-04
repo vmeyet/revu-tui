@@ -117,7 +117,7 @@ impl App {
         if !self.shows_taps() {
             return None;
         }
-        let keys = self.taps.iter().find(|spot| spot.area.contains(at))?.keys;
+        let keys = self.drawn.taps.iter().find(|spot| spot.area.contains(at))?.keys;
         let keys = crate::keymap::parse(keys).unwrap_or_default();
         Some(keys.into_iter().flat_map(|key| self.handle_key(key.event())).collect())
     }
@@ -265,7 +265,7 @@ mod tests {
         let mut filter = with_queue();
         press(&mut filter, "/pay");
         assert!(last(&mut filter).contains("gitlab.com") && !filter.shows_taps(), "the filter keeps the rows it had");
-        assert!(filter.taps.is_empty(), "and no label answers under it");
+        assert!(filter.drawn.taps.is_empty(), "and no label answers under it");
         let mut search = with_review();
         press(&mut search, "/client");
         assert!(last(&mut search).contains("/client"));
@@ -289,7 +289,7 @@ mod tests {
     fn a_label_drawn_before_the_filter_opened_answers_nothing() {
         let mut app = with_queue();
         phone(&mut app);
-        let open = app.taps[0].area;
+        let open = app.drawn.taps[0].area;
         press(&mut app, "/");
         assert_eq!(click(&mut app, (open.x + 1, open.y)), vec![]);
         assert!(app.filtering && app.opening.is_none());
@@ -299,11 +299,11 @@ mod tests {
     fn the_bar_shows_in_the_compact_layout_only_and_the_setting_hides_it() {
         let mut app = with_review();
         let wide = render(&mut app, 70, 30);
-        assert!(wide.lines().last().unwrap().contains("gitlab.com") && app.taps.is_empty(), "never from 70 columns:\n{wide}");
+        assert!(wide.lines().last().unwrap().contains("gitlab.com") && app.drawn.taps.is_empty(), "never from 70 columns:\n{wide}");
         let mut hidden = with_review();
         hidden.tap_bar = false;
         let screen = phone(&mut hidden);
-        assert!(screen.lines().last().unwrap().contains("gitlab.com") && hidden.taps.is_empty(), "{screen}");
+        assert!(screen.lines().last().unwrap().contains("gitlab.com") && hidden.drawn.taps.is_empty(), "{screen}");
     }
 
     #[test]

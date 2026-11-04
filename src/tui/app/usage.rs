@@ -7,6 +7,15 @@ use crate::usage::Counts;
 use crossterm::event::KeyEvent;
 use std::time::Duration;
 
+/// What `[usage]` keeps while revu runs.
+#[derive(Debug)]
+pub(crate) struct Usage {
+    /// What this session counted since the last flush; `None` when `[usage]` is off.
+    pub(super) tally: Option<crate::usage::Tally>,
+    /// Up to when screen time is counted, and what stops it.
+    pub(super) clock: vtui::usage::Clock,
+}
+
 impl App {
     /// Names what the key in flight did, unless its handler already named something closer.
     pub(super) fn did(&mut self, act: Act) {
@@ -33,7 +42,7 @@ impl App {
     }
 
     pub(super) fn count(&mut self, name: &'static str) {
-        if let Some(tally) = &mut self.usage {
+        if let Some(tally) = &mut self.usage.tally {
             tally.act(name);
         }
     }
@@ -46,32 +55,32 @@ impl App {
 
     /// Adds the time read since the clock last counted to the screen on show; called by `tick`.
     pub(super) fn count_time(&mut self) {
-        let read = self.usage_clock.count(self.now);
+        let read = self.usage.clock.count(self.now);
         self.spend(read);
     }
 
     /// A key, click or wheel: the time before it goes to the screen it was on, and reading goes on from now.
     pub(super) fn count_input(&mut self) {
-        let read = self.usage_clock.input(self.now);
+        let read = self.usage.clock.input(self.now);
         self.spend(read);
     }
 
     /// The terminal came to the front or went to the background: the clock runs only while it is in front.
     pub(crate) fn terminal_focus(&mut self, focused: bool) {
-        let read = if focused { self.usage_clock.to_front(self.now) } else { self.usage_clock.to_back(self.now) };
+        let read = if focused { self.usage.clock.to_front(self.now) } else { self.usage.clock.to_back(self.now) };
         self.spend(read);
     }
 
     fn spend(&mut self, read: Duration) {
         let screen = self.screen();
-        if let Some(tally) = &mut self.usage {
+        if let Some(tally) = &mut self.usage.tally {
             tally.spend(screen, read);
         }
     }
 
     /// What the counts gathered since the last call add up to, for the runtime to write.
     pub(crate) fn take_usage(&mut self) -> Option<Counts> {
-        self.usage.as_mut()?.take()
+        self.usage.tally.as_mut()?.take()
     }
 
     fn screen(&self) -> &'static str {
@@ -194,7 +203,7 @@ mod tests {
     #[test]
     fn q_and_esc_that_close_the_pane_count_as_closing_it() {
         let mut app = with_review();
-        app.usage = Some(crate::usage::Tally::default());
+        app.usage.tally = Some(crate::usage::Tally::default());
         walk_to_any_thread(&mut app, Toward::Next);
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Side);
@@ -222,7 +231,7 @@ mod tests {
     }
 
     fn with_usage(mut app: App) -> App {
-        app.usage = Some(crate::usage::Tally::default());
+        app.usage.tally = Some(crate::usage::Tally::default());
         app
     }
 

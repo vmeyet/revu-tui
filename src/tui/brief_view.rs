@@ -63,7 +63,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((brief.scroll as u16, 0));
     f.render_widget(Clear, popup);
     f.render_widget(paragraph.block(block).style(Style::default().bg(theme.surface)), popup);
-    app.links.extend(links);
+    app.drawn.links.extend(links);
 }
 
 /// Each review app's address where it shows in `inner`, so a click opens it.

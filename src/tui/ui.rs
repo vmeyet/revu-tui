@@ -1,4 +1,4 @@
-use super::app::{App, Focus, Prompt};
+use super::app::{App, Drawn, Focus, Prompt};
 use super::theme::Theme;
 use super::{brief_view, diff_view, publish_view, thread_view};
 use crate::config::Widths;
@@ -45,10 +45,7 @@ pub(crate) struct Link {
 }
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
-    app.links.clear();
-    app.text_rows.clear();
-    app.list_rows.clear();
-    app.taps.clear();
+    app.drawn = Drawn::default();
     let screen = f.area();
     app.compact = screen.width < app.widths.compact;
     app.narrow = app.compact || screen.width < app.widths.narrow;
@@ -102,7 +99,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
     }
     let modal = app.modal();
     if modal {
-        app.links.clear();
+        app.drawn.links.clear();
     }
     if app.focus != Focus::Queue || modal {
         fade(f, queue, app.theme, app.theme.faded);
@@ -117,7 +114,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
         draw_pictures(f, app, &pictures);
     }
     if let Some(drag) = app.drag {
-        drag.paint(&app.text_rows, f.buffer_mut());
+        drag.paint(&app.drawn.text_rows, f.buffer_mut());
     }
     if app.zen {
         draw_zen_banner(f, app, main);

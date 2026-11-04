@@ -39,7 +39,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let shown: Vec<Line<'_>> =
         rows.iter().skip(scroll).take(height).map(|row| row_line(row, checks, pipeline.selected, width, theme, tick)).collect();
     f.render_widget(Paragraph::new(shown), inner);
-    app.links.extend(links);
+    app.drawn.links.extend(links);
 }
 
 /// Each review app's address where it shows in `inner`, `scroll` rows down, so a click opens it.

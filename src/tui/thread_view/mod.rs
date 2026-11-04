@@ -176,7 +176,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
             Some(ListRow { area: Rect { y: *y, height: 1, ..inner }, list: List::Threads, index })
         })
         .collect();
-    app.list_rows.extend(list_rows);
+    app.drawn.list_rows.extend(list_rows);
     let width = inner.width.saturating_sub(1);
     let mut placements = vec![];
     for (row, piece, mark) in marks {
@@ -188,10 +188,10 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
             }
             Mark::Picture { .. } => {}
             Mark::Link { column, text, url } => {
-                app.links.push(super::ui::Link { x: x + column, y, text: text.clone(), url: url.clone() });
+                app.drawn.links.push(super::ui::Link { x: x + column, y, text: text.clone(), url: url.clone() });
             }
             Mark::Written { raw, cells } => {
-                app.text_rows.push(TextRow { at: Position::new(x, y), width, line: *piece, text: raw.clone(), cells: cells.clone() });
+                app.drawn.text_rows.push(TextRow { at: Position::new(x, y), width, line: *piece, text: raw.clone(), cells: cells.clone() });
             }
         }
     }
