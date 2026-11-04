@@ -26,7 +26,7 @@ Each entry says what changed, then where, then how to use it.
   Nothing to do: a line added or removed keeps the marks on the others, and a one-line change marks once both lines share a word.
 
 - **A changed line marks the code that changed, not what is stuck to it.**
-  In the diff and the outline's signatures, where more small edits now read as one row.
+  In the diff, where more small edits now read as one row.
   Nothing to do: `Client::new();` to `Client::with_key(key);` marks `new`, `with_key` and `key`.
 
 - **Bold, italic and struck text in comments read as they do on the forge.**
@@ -51,7 +51,7 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
-- **The outline's call tree, its tests section and every key of its pane but `r` and `esc`.**
+- **The outline's call tree, its signatures, its renames and every key of its pane but `r` and `esc`.**
   In the outline pane: it now only lists the changed symbols by file.
 
 - **Ask Claude.**

@@ -3,15 +3,15 @@ source: src/tui/app/outline/mod.rs
 expression: "render(&mut app, 150, 20)"
 ---
 ╭ Queue · all ───────────────────╮╭ acme/widgets!42 · feat: charge cards at che… ────────╮╭ Outline ─────────────────────────────────────────────────╮
-│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checko… · 2h · +9 −5 · 1 files · ✓ succ ││  1 breaking · 2 added                                    │
-│ ▎ feat charge cards at ch…     ││   1 of 2 approvals                                   ││                                                          │
-│ ▎ omar · !42 · +412 −38     2h ││                                                      ││  shop/cart.py                                            │
-│                                ││                                                      ││   ~ pay                                                  │
-│   ── MINE · 1 ──────────────── ││ ▎▾ shop/cart.py                                +9 −5 ││     def pay(card, amount)                                │
-│   fix flaky cache test       D ││     ▾ @@ -1,11 +1,15 @@                              ││   + refund                                               │
-│   nina · !41 · +3 −1        4h ││       1    1  class Cart:                            ││   · Cart.total                                           │
-│                                ││       2    2      def total(self):                   ││   - _log                                                 │
-│   ── WATCHING · 1 ──────────── ││       3      -        return 1                       ││   + _fee                                                 │
+│   ── TO REVIEW · 1 ─────────── ││  omar · feat/checko… · 2h · +9 −5 · 1 files · ✓ succ ││  shop/cart.py                                            │
+│ ▎ feat charge cards at ch…     ││   1 of 2 approvals                                   ││   + _fee                                                 │
+│ ▎ omar · !42 · +412 −38     2h ││                                                      ││   · pay                                                  │
+│                                ││                                                      ││   + refund                                               │
+│   ── MINE · 1 ──────────────── ││ ▎▾ shop/cart.py                                +9 −5 ││   · Cart.total                                           │
+│   fix flaky cache test       D ││     ▾ @@ -1,11 +1,15 @@                              ││   - _log                                                 │
+│   nina · !41 · +3 −1        4h ││       1    1  class Cart:                            ││                                                          │
+│                                ││       2    2      def total(self):                   ││                                                          │
+│   ── WATCHING · 1 ──────────── ││       3      -        return 1                       ││                                                          │
 │   infra: new runner          ⠋ ││            3 +        return pay(self, 2)            ││                                                          │
 │   omar · !35                2d ││       4    4                                         ││                                                          │
 │                                ││       5    5                                         ││                                                          │

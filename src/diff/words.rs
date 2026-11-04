@@ -108,7 +108,7 @@ pub(crate) fn segments(old: &Line, new: &Line) -> Vec<Segment> {
     found
 }
 
-pub(crate) fn text_segments(old: &str, new: &str) -> Vec<Segment> {
+fn text_segments(old: &str, new: &str) -> Vec<Segment> {
     merge_close_changes(token_runs(old, new))
 }
 
