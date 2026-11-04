@@ -28,7 +28,6 @@ pub(crate) enum Act {
     Tree,
     EveryThread,
     Pipeline,
-    Outline,
     Prose,
     Wrap,
     Whitespace,
@@ -156,7 +155,6 @@ pub(crate) enum Pane {
     /// The right pane's conversations.
     Threads,
     Tree,
-    Outline,
     Pipeline,
     /// The prose view of a Markdown file, after `Page`.
     Prose,
@@ -316,10 +314,6 @@ pub(crate) const ROWS: &[Row] = &[
         .help(&[line(Group::View, "p", "pipeline")])
         .panes(&[Pane::Diff, Pane::Pipeline, Pane::Cover])
         .section(Section::View),
-    bound(Act::Outline, "outline", &["O"])
-        .help(&[line(Group::View, "O", "outline: the functions the MR changes")])
-        .panes(&[Pane::Diff, Pane::Outline])
-        .section(Section::View),
     bound(Act::Prose, "prose", &["v"])
         .help(&[line(Group::View, "v", "prose: the Markdown file rendered, its blocks marked")])
         .panes(&[Pane::Diff, Pane::Prose])
@@ -439,7 +433,7 @@ pub(crate) const ROWS: &[Row] = &[
         .panes(&[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Cover])
         .section(Section::Move),
     listed(Act::Back, "back", &["esc"])
-        .panes(&[Pane::Queue, Pane::Diff, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Prose, Pane::Cover, Pane::Page])
+        .panes(&[Pane::Queue, Pane::Diff, Pane::Tree, Pane::Pipeline, Pane::Prose, Pane::Cover, Pane::Page])
         .section(Section::Move),
     listed(Act::FocusLeft, "focus_left", &["h", "left"])
         .help(&[line(Group::Move, "h l", "pane to the left, to the right")])
@@ -448,7 +442,7 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::FocusRight, "focus_right", &["l", "right"]).panes(&[Pane::Anywhere]).section(Section::Move),
     listed(Act::Refresh, "refresh", &["r"])
         .help(&[line(Group::App, "r", "refresh")])
-        .panes(&[Pane::Queue, Pane::Diff, Pane::Outline, Pane::Pipeline, Pane::Prose])
+        .panes(&[Pane::Queue, Pane::Diff, Pane::Pipeline, Pane::Prose])
         .section(Section::Queue),
     listed(Act::Reply, "reply", &["r", "c"])
         .help(&[
@@ -468,7 +462,7 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::DeleteDraft, "delete_draft", &["d"]).panes(&[Pane::ThreadRow]).section(Section::Thread),
     listed(Act::ClosePane, "close_pane", &["esc", "x"])
         .help(&[line(Group::Move, "esc x", "close the pane, back to the queue")])
-        .panes(&[Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Prose])
+        .panes(&[Pane::Diff, Pane::Threads, Pane::Tree, Pane::Pipeline, Pane::Prose])
         .section(Section::Thread),
     listed(Act::OpenLink, "open_link", &["u"])
         .help(&[line(Group::Thread, "u U", "open, copy the first link")])
@@ -548,7 +542,6 @@ impl Group {
                 Act::Tree,
                 Act::EveryThread,
                 Act::Pipeline,
-                Act::Outline,
                 Act::Prose,
                 Act::Zen,
                 Act::Wrap,

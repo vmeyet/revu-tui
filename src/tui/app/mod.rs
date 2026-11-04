@@ -13,7 +13,6 @@ mod merge;
 mod mouse;
 mod notify;
 mod order;
-mod outline;
 mod pane;
 mod paste;
 mod pin;
@@ -57,7 +56,6 @@ pub(crate) use inbox::{Spot, progress_bar};
 pub(crate) use kept::{Kept, ReviewInputs};
 pub(crate) use mouse::{Areas, List, ListRow};
 pub(crate) use order::{QueueView, ViewChange, with_member};
-pub(crate) use outline::{Outline, Symbols};
 pub(crate) use pane::{ConversationList, Pane};
 pub(crate) use pin::PinChange;
 pub(crate) use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
@@ -258,13 +256,6 @@ pub(crate) enum Action {
         key: MrKey,
         head: Sha,
     },
-    /// `O`: the symbols changed in `files`, read at commits `base` and `head`.
-    LoadOutline {
-        key: MrKey,
-        base: Sha,
-        head: Sha,
-        files: Vec<Sides>,
-    },
     /// `v`: the Markdown file of `sides`, read at commits `base` and `head`.
     LoadProse {
         key: MrKey,
@@ -376,8 +367,6 @@ pub(crate) enum Failure {
     Approve,
     /// The CI run could not be read; the pipeline pane says why.
     Checks,
-    /// The files could not be read; the outline pane says why.
-    Outline,
     /// The Markdown file could not be read; the prose view says why.
     Prose,
     /// The suggestion was not committed.
@@ -513,11 +502,6 @@ pub(crate) enum Incoming {
     Checks {
         key: MrKey,
         checks: Option<crate::forge::checks::Checks>,
-    },
-    /// The symbols the open MR changes and the calls between them.
-    Outline {
-        key: MrKey,
-        reading: crate::outline::Reading,
     },
     /// Both sides of the Markdown file the prose view shows.
     Prose {

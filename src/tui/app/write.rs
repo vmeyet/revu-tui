@@ -425,7 +425,6 @@ impl App {
             Failure::Post { key, to } => self.post_failed(&key, &to, &message),
             Failure::Approve => self.warn(message),
             Failure::Checks => self.checks_failed(message),
-            Failure::Outline => self.settle_outline(super::Symbols::Failed(message)),
             Failure::Prose => self.settle_prose(super::Texts::Failed(message)),
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),

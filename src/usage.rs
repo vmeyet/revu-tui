@@ -90,6 +90,7 @@ mod tests {
         let report = rules().report(&days, date("2026-09-24"), Window::Days(30));
         assert_eq!(days[0].counts.actions["zen"], 2);
         assert!(report.rarely.iter().all(|count| !count.action.contains("ask")), "the report lists only what revu still has");
+        assert!(report.never.iter().flat_map(|unused| &unused.actions).all(|name| !name.contains("ask")));
     }
 
     #[test]

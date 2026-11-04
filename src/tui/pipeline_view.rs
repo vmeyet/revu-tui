@@ -1,7 +1,7 @@
 //! The pipeline pane: the run's state and counts, then each stage and its jobs, failures first.
 use super::app::{App, Focus, Open, Run};
 use super::theme::Theme;
-use super::ui::{DEPLOYED, Link, counts, draw_empty, settle_scroll, side_pane};
+use super::ui::{DEPLOYED, Link, draw_empty, settle_scroll, side_pane};
 use crate::forge::checks::{Checks, Job, JobState};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -183,6 +183,18 @@ fn duration(seconds: u64) -> String {
         s if s < 3600 => format!("{}m{:02}s", s / 60, s % 60),
         s => format!("{}h{:02}m", s / 3600, (s % 3600) / 60),
     }
+}
+
+/// `2 passed · 1 failed`: each count in its colour, zeros left out.
+fn counts<'a>(parts: &[(usize, &str, Color)], theme: Theme) -> Line<'a> {
+    let mut spans = vec![Span::raw(" ")];
+    for (count, label, colour) in parts.iter().filter(|(count, _, _)| *count > 0) {
+        if spans.len() > 1 {
+            spans.push(Span::styled(" · ", Style::default().fg(theme.faded)));
+        }
+        spans.push(Span::styled(format!("{count} {label}"), Style::default().fg(*colour)));
+    }
+    Line::from(spans)
 }
 
 #[cfg(test)]

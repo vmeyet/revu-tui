@@ -1,4 +1,4 @@
-//! What the forge serves beside the diff: files at a commit, for the viewer, the outline and prose, and pictures in notes.
+//! What the forge serves beside the diff: files at a commit, for the viewer and prose, and pictures in notes.
 use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::blocking;
 use crate::cache::keys;
@@ -7,11 +7,7 @@ use crate::log::OrWarn as _;
 use crate::tui::app::{Incoming, Sides, Versions};
 use crate::tui::images;
 use anyhow::{Context as _, Result};
-use futures_util::{StreamExt, TryStreamExt};
 use std::sync::Arc;
-
-/// Files the outline reads from the forge at once, so a large MR does not burst into its rate limit.
-const OUTLINE_READS: usize = 8;
 
 #[derive(Clone)]
 pub(in crate::tui) struct Files {
@@ -45,30 +41,17 @@ impl Files {
         Ok(Incoming::ViewReady { key, view: crate::open::View { argv, shown, note, _copy: dir } })
     }
 
-    /// The symbols the files change and the calls between them, a few files read at once.
-    pub(in crate::tui) async fn outline(&self, key: &MrKey, base: &Sha, head: &Sha, files: Vec<Sides>) -> Result<crate::outline::Reading> {
-        let files: Vec<(String, String, String)> = futures_util::stream::iter(files)
-            .map(|sides| async move {
-                let path = sides.head.clone().or_else(|| sides.base.clone()).unwrap_or_default();
-                let (old, new) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
-                Ok::<_, anyhow::Error>((path, old, new))
-            })
-            .buffered(OUTLINE_READS)
-            .try_collect()
-            .await?;
-        blocking::run(move || Ok(crate::outline::read(&files))).await
-    }
-
     /// The Markdown file the prose view shows, at base and at head.
-    pub(in crate::tui) async fn prose(&self, key: &MrKey, base: &Sha, head: &Sha, sides: Sides) -> Result<Versions> {
-        let (base, head) = futures_util::try_join!(self.side_text(key, sides.base, base), self.side_text(key, sides.head, head))?;
+    pub(in crate::tui) async fn prose(&self, key: &MrKey, base: &Sha, head: &Sha, sides: &Sides) -> Result<Versions> {
+        let (base, head) =
+            futures_util::try_join!(self.side_text(key, sides.base.as_deref(), base), self.side_text(key, sides.head.as_deref(), head))?;
         Ok(Versions { base, head })
     }
 
     /// The file at `sha`, empty when it does not exist on that side.
-    async fn side_text(&self, key: &MrKey, path: Option<String>, sha: &Sha) -> Result<String> {
+    async fn side_text(&self, key: &MrKey, path: Option<&str>, sha: &Sha) -> Result<String> {
         match path {
-            Some(path) => self.file_text(key, &path, sha).await,
+            Some(path) => self.file_text(key, path, sha).await,
             None => Ok(String::new()),
         }
     }
