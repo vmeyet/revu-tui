@@ -132,7 +132,7 @@ fn best_alignment(scores: &[Vec<f32>]) -> Vec<LinePair> {
 }
 
 /// How much of two token lists match in order, from 0 to 1; nothing alike when either is empty.
-pub(crate) fn similarity(old: &[&str], new: &[&str]) -> f32 {
+pub(super) fn similarity(old: &[&str], new: &[&str]) -> f32 {
     if old.is_empty() || new.is_empty() {
         return 0.0;
     }

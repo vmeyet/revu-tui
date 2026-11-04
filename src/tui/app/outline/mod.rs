@@ -160,7 +160,7 @@ mod tests {
     fn o_lists_the_changed_symbols_and_closes_them_again() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);
-        assert_eq!(names(&app), ["pay", "refund", "Cart.total", "_log", "_fee"]);
+        assert_eq!(names(&app), ["_fee", "pay", "refund", "Cart.total", "_log"]);
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);
