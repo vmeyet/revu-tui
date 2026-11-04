@@ -46,7 +46,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `agent/` | Coding-agent sessions per MR (`a`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
-| `docs.rs`, `sources.rs` | Writes `docs/reference/` from the code (`revu docs`); tests only, the crate's own source files for checks that read them |
+| `docs.rs`, `sources.rs` | Tests only: `docs/reference/` checked against the code, written with `UPDATE_DOCS=1`; the crate's own source files for checks that read them |
 | `usage.rs`, `reactions.rs`, `log.rs` | Local usage counts (revu's `Rules` for vtui's `usage`: the actions it lists, their groups and the file in the cache), the reactions used most, the log file |
 | `vtui` (crate) | The TUI pieces no app owns, shared with the other vmeyet TUIs: `screen` (raw mode, the alternate screen, `Screen::lend`), `ground` (the terminal's background, asked once at startup), `clipboard` (OSC 52), `motion` (how often the screen moves on its own), `field` (the input box), `text` (text cut to terminal columns), `theme` (the colour tokens and named palettes), `pane` (the frame of a pane or modal), `fuzzy` (fzf-style matching), `toward` (which way a move goes through a list that wraps around), `palette` (the `ctrl-k` line with tab completion, generic over revu's modes), `help` (the `?` overlay over the groups revu builds), `usage` (the counts, the screen-time clock, the `usage.jsonl` format and the report) |
 | `mrref.rs`, `query.rs`, `render.rs` | Parsing `group/project!42`, the filter language, terminal output |
@@ -79,7 +79,7 @@ Handling a key:
 
 A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/app/paste.rs`) types it whole into the box `App::receiver` (`tui/app/receiver.rs`) says takes the next key, and drops it where no box is open.
 
-Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `docs`, ...) at once.
+Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
 
 ## Boundaries
@@ -133,10 +133,10 @@ The internals:
 
 ## Where to add things
 
-- **A key**: an `Act` variant, its row in `act.rs` `ROWS` and its line in `HELP`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `cargo run -- docs`.
+- **A key**: an `Act` variant, its row in `act.rs` `ROWS` and its line in `HELP`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `UPDATE_DOCS=1 cargo test docs`.
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
 - **A forge field**: the field in `forge/model/`, filled by both backends in `forge/gitlab/` and `forge/github/`.
-- **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `cargo run -- docs`.
+- **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `UPDATE_DOCS=1 cargo test docs`.
 - **A config key**: the field in `config/` and a row in `docs::SETTINGS`; a test fails without it.
 - **A syntax language**: see `AGENTS.md`.
 

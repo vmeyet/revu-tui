@@ -28,7 +28,6 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Update(args)) => return commands::update::run(&args),
         Some(Command::Usage(args)) => return commands::usage::run(&args, cli.json),
         Some(Command::News(args)) => return commands::news::run(&args, cli.json),
-        Some(Command::Docs(args)) => return commands::docs::run(&args),
         Some(Command::Ai(args)) => return commands::ai::run(args, cli.json),
         Some(Command::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "revu", &mut std::io::stdout());
@@ -55,7 +54,6 @@ async fn run(cli: Cli) -> Result<()> {
             | Command::Logout { .. }
             | Command::Completions { .. }
             | Command::Update(_)
-            | Command::Docs(_)
             | Command::Usage(_)
             | Command::News(_),
         ) => {

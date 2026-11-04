@@ -1,7 +1,6 @@
-//! The user docs stay true and readable: reference pages match the code, links resolve, and the
-//! prose follows the house style (one sentence per line, short sentences, no em dash, no filler).
+//! The user docs stay readable: links resolve, and the prose follows the house style (one sentence
+//! per line, short sentences, no em dash, no filler). `src/docs.rs` checks the reference pages against the code.
 #![cfg(test)]
-use assert_cmd::Command;
 use std::path::{Path, PathBuf};
 
 const MAX_WORDS: usize = 25;
@@ -91,11 +90,6 @@ fn words(line: &str) -> usize {
 }
 
 #[test]
-fn the_reference_pages_match_the_code() {
-    Command::cargo_bin("revu").unwrap().current_dir(root()).args(["docs", "--check"]).assert().success();
-}
-
-#[test]
 fn the_docs_follow_the_house_style() {
     let mut faults = vec![];
     for page in pages() {
@@ -149,7 +143,7 @@ fn every_relative_link_points_at_a_file() {
 fn the_style_checks_catch_what_they_should() {
     assert!(second_sentence("One idea. Two ideas.").is_some());
     assert!(second_sentence("Press `a.b` then go.").is_none());
-    assert!(second_sentence(&plain("Run `revu docs`. It writes.")).is_some());
+    assert!(second_sentence(&plain("Run `revu list`. It lists.")).is_some());
     assert_eq!(words(&plain("Open `revu list --json` and [the guide](a/b.md).")), 5);
     assert!(second_sentence(without_marker("1. Press `P`.")).is_none());
 }

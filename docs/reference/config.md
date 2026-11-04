@@ -1,4 +1,4 @@
-<!-- Written by `revu docs` from the code. Edit the code, then run `revu docs`. -->
+<!-- Written from the code by `src/docs.rs`. Edit the code, then run `UPDATE_DOCS=1 cargo test docs`. -->
 # Config
 
 revu reads `~/.config/revu/config.toml`, or `$XDG_CONFIG_HOME/revu/config.toml`.

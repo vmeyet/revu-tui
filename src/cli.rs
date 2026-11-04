@@ -66,20 +66,6 @@ pub enum Command {
     News(NewsArgs),
     /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen.
     Usage(UsageArgs),
-    /// Write the reference pages under `docs/reference/` from the code.
-    #[command(hide = true)]
-    Docs(DocsArgs),
-}
-
-/// Flags of `revu docs`.
-#[derive(Args, Debug)]
-pub struct DocsArgs {
-    /// Where the pages go.
-    #[arg(long, default_value = "docs/reference")]
-    pub(crate) dir: std::path::PathBuf,
-    /// Write nothing; fail when a page on disk differs from the code.
-    #[arg(long)]
-    pub(crate) check: bool,
 }
 
 /// Flags of `revu usage`.

@@ -1,4 +1,4 @@
-<!-- Written by `revu docs` from the code. Edit the code, then run `revu docs`. -->
+<!-- Written from the code by `src/docs.rs`. Edit the code, then run `UPDATE_DOCS=1 cargo test docs`. -->
 # Keys
 
 Every key revu reads, grouped by task.

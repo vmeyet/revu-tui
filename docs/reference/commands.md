@@ -1,4 +1,4 @@
-<!-- Written by `revu docs` from the code. Edit the code, then run `revu docs`. -->
+<!-- Written from the code by `src/docs.rs`. Edit the code, then run `UPDATE_DOCS=1 cargo test docs`. -->
 # Commands
 
 `revu` with no command opens the review screen; `revu 42` opens it on MR 42 of the checkout's project, in zen.
