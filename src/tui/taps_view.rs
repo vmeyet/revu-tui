@@ -47,7 +47,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let cells =
         taps.iter().zip(&spots).map(|(tap, spot)| Span::raw(format!("{:^width$}", tap.label, width = usize::from(spot.area.width))));
     f.render_widget(Paragraph::new(Line::from(cells.collect::<Vec<_>>())).style(style), area);
-    app.taps = spots;
+    app.drawn.taps = spots;
 }
 
 #[cfg(test)]

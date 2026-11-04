@@ -523,7 +523,7 @@ pub(super) fn approved_and_mine(mr: Mr) -> Mr {
 /// The review of `with_long_review`, counting.
 pub(super) fn counting() -> App {
     let mut app = with_long_review();
-    app.usage = Some(crate::usage::Tally::default());
+    app.usage.tally = Some(crate::usage::Tally::default());
     app
 }
 
@@ -554,8 +554,12 @@ pub(super) fn click(app: &mut App, at: (u16, u16)) -> Vec<Action> {
 /// Draws, then clicks the last cell of the row of `list` with cursor stop `index`.
 pub(super) fn click_row(app: &mut App, list: List, index: usize) -> Vec<Action> {
     render(app, 160, 30);
-    let row =
-        app.list_rows.iter().find(|row| row.list == list && row.index == index).unwrap_or_else(|| panic!("{list:?} row {index} on screen"));
+    let row = app
+        .drawn
+        .list_rows
+        .iter()
+        .find(|row| row.list == list && row.index == index)
+        .unwrap_or_else(|| panic!("{list:?} row {index} on screen"));
     click(app, (row.area.right() - 1, row.area.y))
 }
 

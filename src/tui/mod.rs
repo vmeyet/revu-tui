@@ -138,7 +138,7 @@ async fn event_loop(
         let frame = terminal.draw(|f| ui::draw(f, app))?;
         let changed = shown.changed(frame.buffer);
         if changed {
-            print_links(&hyperlinks(frame.buffer, &app.links));
+            print_links(&hyperlinks(frame.buffer, &app.drawn.links));
         }
         let next_tick = ticked + if changed { app.motion().tick() } else { IDLE_TICK };
         let actions = tokio::select! {

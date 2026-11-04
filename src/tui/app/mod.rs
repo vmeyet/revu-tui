@@ -67,7 +67,7 @@ pub(crate) use review::Open;
 pub(crate) use search::{Search, mark as mark_search};
 pub(crate) use session::SessionPick;
 pub(crate) use share::{Sharing, Stage as ShareStage};
-pub(crate) use state::{App, Settings};
+pub(crate) use state::{App, Drawn, Settings};
 pub(crate) use sticky::{MIN_HEIGHT as STICKY_MIN_HEIGHT, StickyRows, settle as settle_with_sticky, sticky_rows};
 pub(crate) use taps::{Tap, TapSpot};
 pub(crate) use tree::Tree;

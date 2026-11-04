@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn keys_that_do_nothing_in_the_prose_view_are_not_counted() {
         let mut app = with_markdown(FileKind::Modified);
-        app.usage = Some(crate::usage::Tally::default());
+        app.usage.tally = Some(crate::usage::Tally::default());
         press(&mut app, "v");
         read(&mut app);
         app.take_usage();

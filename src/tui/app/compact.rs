@@ -119,7 +119,7 @@ mod tests {
         let mut app = with_queue();
         phone(&mut app);
         let picked = app.queue_selected;
-        let other = *app.list_rows.iter().find(|row| row.index != picked).expect("a second MR row");
+        let other = *app.drawn.list_rows.iter().find(|row| row.index != picked).expect("a second MR row");
         assert_eq!(other.area.height, 2);
         let under_the_title = (other.area.x + 4, other.area.y + 1);
         click(&mut app, under_the_title);

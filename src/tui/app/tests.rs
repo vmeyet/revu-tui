@@ -200,15 +200,15 @@ fn snapshot_queue_scoped_with_open() {
 fn every_recorded_link_sits_on_the_text_it_names_and_a_modal_hides_them() {
     let mut app = with_review();
     let buffer = cells(&mut app, 120, 24);
-    let texts: Vec<&str> = app.links.iter().map(|l| l.text.as_str()).collect();
+    let texts: Vec<&str> = app.drawn.links.iter().map(|l| l.text.as_str()).collect();
     assert!(texts.contains(&"!42") && texts.contains(&"acme/widgets!42"), "{texts:?}");
-    for link in &app.links {
+    for link in &app.drawn.links {
         let drawn: String = (0..link.text.chars().count() as u16).map(|i| buffer[(link.x + i, link.y)].symbol().to_owned()).collect();
         assert_eq!(drawn, link.text, "{link:?}");
     }
     press(&mut app, "i");
     cells(&mut app, 120, 24);
-    assert!(app.links.is_empty(), "no link may print over a modal");
+    assert!(app.drawn.links.is_empty(), "no link may print over a modal");
 }
 
 #[test]
@@ -354,7 +354,7 @@ fn snapshot_thread_with_a_picture_the_terminal_cannot_draw() {
     let mut app = with_note("Look:\n![the chart](/uploads/0123456789abcdef0123456789abcdef/chart.png)\nthanks");
     let screen = render(&mut app, 150, 24);
     assert!(screen.contains("[image: the chart]"), "{screen}");
-    let link = app.links.iter().find(|l| l.text == "[image: the chart]").expect("the line links to the picture");
+    let link = app.drawn.links.iter().find(|l| l.text == "[image: the chart]").expect("the line links to the picture");
     assert_eq!(link.url, "https://gitlab.com/acme/widgets/uploads/0123456789abcdef0123456789abcdef/chart.png");
     insta::assert_snapshot!("thread_picture_fallback", screen);
 }
@@ -481,7 +481,7 @@ fn zen_draws_no_frames_no_status_line_and_a_centred_column() {
     press(&mut app, "zz");
     let screen = render(&mut app, 160, 45);
     assert!(!screen.contains('╭') && !screen.contains("Queue") && !screen.contains("gitlab.com ·"), "{screen}");
-    assert!(app.links.is_empty(), "no link is printed over zen's one-line header: {:?}", app.links);
+    assert!(app.drawn.links.is_empty(), "no link is printed over zen's one-line header: {:?}", app.drawn.links);
     let first = screen.lines().find(|l| !l.trim().is_empty()).unwrap();
     assert!(first.trim_start().starts_with("!42 feat: charge cards at checkout"), "{first}");
     let indent = first.len() - first.trim_start().len();
@@ -714,7 +714,7 @@ fn a_peek_badges_the_first_header_row_in_every_layout_and_leaves_the_pipeline_li
     press(&mut app, "<");
     insta::assert_snapshot!("review_peek_before", render(&mut app, 160, 24));
     let buffer = cells(&mut app, 160, 24);
-    let link = app.links.iter().find(|l| l.url.contains("/pipelines/")).unwrap();
+    let link = app.drawn.links.iter().find(|l| l.url.contains("/pipelines/")).unwrap();
     let under: String = (link.x..link.x + link.text.chars().count() as u16).map(|x| buffer[(x, link.y)].symbol().to_owned()).collect();
     assert_eq!(under, link.text, "the link still covers the pipeline word");
     let badge = (0..160).find(|&x| buffer[(x, link.y)].symbol() == "B").unwrap();

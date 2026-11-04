@@ -72,6 +72,19 @@ pub(crate) struct Poll {
     pub(crate) discussions_due: Option<Instant>,
 }
 
+/// What the last frame drew and where, so the loop and the mouse can answer it; each frame starts it over.
+#[derive(Debug, Default)]
+pub(crate) struct Drawn {
+    /// Where the `!iid`s were drawn, so the loop can make them clickable.
+    pub(crate) links: Vec<crate::tui::ui::Link>,
+    /// The rows of text a drag can select.
+    pub(crate) text_rows: Vec<crate::tui::drag::TextRow>,
+    /// The list rows a click can pick.
+    pub(crate) list_rows: Vec<super::ListRow>,
+    /// The labels of the tap bar.
+    pub(crate) taps: Vec<super::TapSpot>,
+}
+
 #[derive(Debug)]
 pub(crate) struct App {
     pub(crate) theme: Theme,
@@ -111,8 +124,6 @@ pub(crate) struct App {
     pub(crate) short: bool,
     /// `[tui] tap_bar`: the compact layout ends on a row of labels to tap.
     pub(crate) tap_bar: bool,
-    /// The labels of the tap bar, as this frame drew them.
-    pub(crate) taps: Vec<super::TapSpot>,
     /// How wide the diff reads in zen, `[tui] zen_width`; `None` grows it with the screen.
     pub(crate) zen_width: Option<u16>,
     /// The terminal widths the layout turns on, `[tui] narrow_width` and `wide_width`.
@@ -169,10 +180,7 @@ pub(crate) struct App {
     /// A quit key pressed once, and when: the same key again inside the window quits.
     pub(crate) quitting: Option<(super::quit::QuitKey, Instant)>,
     pub(crate) quit_confirm: bool,
-    /// What this session counted since the last flush; `None` when `[usage]` is off.
-    pub(crate) usage: Option<crate::usage::Tally>,
-    /// Up to when screen time is counted, and what stops it.
-    pub(crate) usage_clock: vtui::usage::Clock,
+    pub(crate) usage: super::usage::Usage,
     /// What the key in flight did, named by its handler where the same key does something else elsewhere.
     pub(crate) key_did: Option<crate::act::Act>,
     pub(crate) keymap: crate::keymap::Keymap,
@@ -195,14 +203,9 @@ pub(crate) struct App {
     pub(crate) whats_new: super::WhatsNew,
     /// The first row of the `:news` page while it is open.
     pub(crate) news_page: Option<usize>,
-    /// Where the `!iid`s were drawn this frame, so the loop can make them clickable.
-    pub(crate) links: Vec<crate::tui::ui::Link>,
+    pub(crate) drawn: Drawn,
     /// Where the panes were drawn this frame, so the wheel scrolls the one under the pointer.
     pub(crate) areas: super::Areas,
-    /// The rows of text a drag can select, as this frame drew them.
-    pub(crate) text_rows: Vec<crate::tui::drag::TextRow>,
-    /// The list rows a click can pick, as this frame drew them.
-    pub(crate) list_rows: Vec<super::ListRow>,
     /// Where the left button went down, so a release elsewhere is a drag and not a click.
     pub(crate) pressed: Option<ratatui::layout::Position>,
     /// The text a drag covers; it stays lit after the copy until the next key or click.
@@ -292,7 +295,6 @@ impl App {
             compact: false,
             short: false,
             tap_bar: settings.tap_bar,
-            taps: vec![],
             zen_width: settings.zen_width,
             widths: settings.widths,
             zen_switch: None,
@@ -324,8 +326,7 @@ impl App {
             repeat: None,
             quitting: None,
             quit_confirm: settings.quit_confirm,
-            usage: settings.usage,
-            usage_clock: vtui::usage::Clock::starting(now),
+            usage: super::usage::Usage { tally: settings.usage, clock: vtui::usage::Clock::starting(now) },
             key_did: None,
             keymap: settings.keymap,
             pending: None,
@@ -340,10 +341,8 @@ impl App {
             toast,
             whats_new: settings.whats_new,
             news_page: None,
-            links: vec![],
+            drawn: Drawn::default(),
             areas: super::Areas::default(),
-            text_rows: vec![],
-            list_rows: vec![],
             pressed: None,
             drag: None,
             kept: super::Kept::default(),

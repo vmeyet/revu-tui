@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn c_on_a_thread_counts_as_a_reply_and_on_a_line_as_a_comment() {
         let mut app = zen_with_threads(vec![thread_on_line_13("aaa", 2)]);
-        app.usage = Some(crate::usage::Tally::default());
+        app.usage.tally = Some(crate::usage::Tally::default());
         written_with(&mut app, "c");
         press(&mut app, "j");
         written_with(&mut app, "c");

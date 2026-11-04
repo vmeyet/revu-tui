@@ -65,11 +65,11 @@ impl App {
             MouseEventKind::ScrollUp => self.wheel(at, KeyCode::Up),
             MouseEventKind::Down(MouseButton::Left) => {
                 self.pressed = Some(at);
-                self.drag = Drag::start(&self.text_rows, at);
+                self.drag = Drag::start(&self.drawn.text_rows, at);
                 vec![]
             }
             MouseEventKind::Drag(MouseButton::Left) => {
-                self.drag = self.drag.map(|drag| drag.moved_to(&self.text_rows, at));
+                self.drag = self.drag.map(|drag| drag.moved_to(&self.drawn.text_rows, at));
                 vec![]
             }
             MouseEventKind::Up(MouseButton::Left) => self.release(at),
@@ -104,7 +104,7 @@ impl App {
         if self.input.is_some() || self.filtering {
             return vec![];
         }
-        let Some(row) = self.list_rows.iter().find(|row| row.area.contains(at)).copied() else { return vec![] };
+        let Some(row) = self.drawn.list_rows.iter().find(|row| row.area.contains(at)).copied() else { return vec![] };
         self.focus = row.list.pane();
         if self.picked(row.list) == Some(row.index) {
             return self.pane_key(self.focus, KeyEvent::from(KeyCode::Enter));
@@ -141,13 +141,13 @@ impl App {
             let width = u16::try_from(link.text.chars().count()).unwrap_or(u16::MAX);
             link.y == at.y && (link.x..link.x.saturating_add(width)).contains(&at.x)
         };
-        self.links.iter().find(covers).map(|link| link.url.clone())
+        self.drawn.links.iter().find(covers).map(|link| link.url.clone())
     }
 
     /// A release ends the drag: the text goes to the clipboard, the highlight stays until the next key or click.
     fn copy_drag(&mut self) -> Vec<Action> {
         self.drag = self.drag.filter(|drag| !drag.is_click());
-        let Some(text) = self.drag.map(|drag| drag.text(&self.text_rows)).filter(|text| !text.is_empty()) else {
+        let Some(text) = self.drag.map(|drag| drag.text(&self.drawn.text_rows)).filter(|text| !text.is_empty()) else {
             return vec![];
         };
         let lines = text.lines().count();
@@ -227,7 +227,7 @@ mod tests {
         use crossterm::event::{MouseButton, MouseEventKind};
         let mut app = with_review();
         render(&mut app, 160, 30);
-        let title = app.links.iter().find(|link| link.text == "acme/widgets!42").expect("the diff's title links to the MR").clone();
+        let title = app.drawn.links.iter().find(|link| link.text == "acme/widgets!42").expect("the diff's title links to the MR").clone();
         let at = (title.x + 3, title.y);
         mouse(&mut app, MouseEventKind::Down(MouseButton::Left), at);
         assert_eq!(mouse(&mut app, MouseEventKind::Up(MouseButton::Left), at), vec![Action::OpenUrl(title.url)]);
@@ -240,7 +240,7 @@ mod tests {
     fn other_row(app: &mut App, list: List) -> ListRow {
         render(app, 160, 30);
         let picked = app.picked(list);
-        *app.list_rows.iter().find(|row| row.list == list && Some(row.index) != picked).expect("a row besides the picked one")
+        *app.drawn.list_rows.iter().find(|row| row.list == list && Some(row.index) != picked).expect("a row besides the picked one")
     }
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
         let rows = app.kept.tree_rows(app.open.as_ref().unwrap()).to_vec();
         let unpicked_file =
             |row: &&ListRow| row.list == List::Tree && Some(row.index) != picked && matches!(rows[row.index], TreeRow::File { .. });
-        let row = *app.list_rows.iter().find(unpicked_file).expect("a file besides the picked row");
+        let row = *app.drawn.list_rows.iter().find(unpicked_file).expect("a file besides the picked row");
         click_row(&mut app, row.list, row.index);
         assert_eq!((app.picked(List::Tree), app.focus), (Some(row.index), Focus::Side));
         let mut walked = with_tree();
@@ -310,7 +310,7 @@ mod tests {
         };
         let mut app = with_list();
         render(&mut app, 160, 30);
-        let row = *app.list_rows.iter().rfind(|row| row.list == List::Threads).expect("a listed thread");
+        let row = *app.drawn.list_rows.iter().rfind(|row| row.list == List::Threads).expect("a listed thread");
         let before = app.open.as_ref().unwrap().selected;
         click_row(&mut app, row.list, row.index);
         assert_eq!(app.picked(List::Threads), Some(row.index));

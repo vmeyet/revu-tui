@@ -121,7 +121,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
         None => block,
     };
     if let Some(open) = app.open.as_ref().filter(|_| !zen) {
-        app.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
+        app.drawn.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
     }
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -151,7 +151,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     let pipeline = if zen { None } else { pipeline_link(&open.review, &header, inner) };
     let deployment = if zen { None } else { deployment_link(open, &header, inner) };
     f.render_widget(Paragraph::new(header), inner);
-    app.links.extend(pipeline.into_iter().chain(deployment));
+    app.drawn.links.extend(pipeline.into_iter().chain(deployment));
     if open.prose.is_some() {
         return super::prose_view::draw(f, app, body);
     }
@@ -238,7 +238,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     if let Some(area) = compose_area.filter(|area| !area.is_empty()) {
         thread_view::draw_compose(f, theme, &compose_label, &app.buffer, area);
     }
-    app.text_rows.extend(selectable);
+    app.drawn.text_rows.extend(selectable);
 }
 
 /// The diff's `body` over the compose box, drawn at its foot while what is written has no row on screen to hang

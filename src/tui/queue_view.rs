@@ -67,8 +67,8 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     drop(rows);
     app.queue_scroll = scroll;
     f.render_widget(Paragraph::new(lines), inner);
-    app.links.extend(links);
-    app.list_rows.extend(list_rows);
+    app.drawn.links.extend(links);
+    app.drawn.list_rows.extend(list_rows);
 }
 
 /// Where an MR row's `!iid` sits: which of its lines, and how many cells in.
