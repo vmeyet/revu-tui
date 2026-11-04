@@ -5,7 +5,6 @@ The agent is Claude Code, the real one: your login, your skills, your permission
 On someone else's MR you ask it about the diff; on your own you ask it for a change.
 
 It is off until you switch it on.
-It is not [Ask Claude](ai.md), which answers inside revu with an API key: this is a session of its own.
 
 ## Switch it on
 
@@ -257,4 +256,3 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 
 - [Config reference: `[agent]`](../reference/config.md).
 - [Keys](../reference/keys.md).
-- [Ask Claude](ai.md), for a short answer inside revu.

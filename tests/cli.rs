@@ -99,17 +99,6 @@ fn ai_status_names_both_providers_without_a_key() {
 }
 
 #[test]
-fn ai_ask_says_claude_is_off_before_touching_the_network() {
-    revu()
-        .args(["--host", "localhost:1", "ai", "ask", "acme/widgets!42", "why?"])
-        .env("GITLAB_TOKEN", "glpat-xxxx")
-        .env("ANTHROPIC_API_KEY", "sk-ant-xxxx")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("[ai.anthropic] enabled = true"));
-}
-
-#[test]
 fn merge_help_mentions_yes() {
     revu().args(["merge", "--help"]).assert().success().stdout(predicate::str::contains("--yes"));
 }

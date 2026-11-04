@@ -31,7 +31,7 @@ Open an issue with the message you see, and attach the log.
 
 revu writes what went wrong to `~/Library/Caches/revu/revu.log`, never to the screen.
 By default it keeps warnings: failed requests and failed actions.
-Start revu with `REVU_LOG=info` to also log every request and the tokens each Claude answer used.
+Start revu with `REVU_LOG=info` to also log every request.
 `REVU_LOG=debug` logs more, and `REVU_LOG=off` logs nothing.
 
 A request line holds the method, the host, the path, the status and the time it took.

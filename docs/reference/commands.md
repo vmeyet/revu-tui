@@ -161,20 +161,6 @@ Forget a provider's key.
 
 Which provider is on and where its key comes from (never the key)
 
-## `revu ai ask`
-
-Ask Claude about a merge request; the answer streams to stdout.
-
-| Argument | Means |
-|---|---|
-| `MR` | `group/project!42`, `!42`, an MR URL, or `-` for the current branch. |
-| `QUESTION` | The question; a summary of the MR (or an explanation of the file) without one. |
-
-| Flag | Means |
-|---|---|
-| `--file` | Ask about one file instead of the whole MR. |
-| `--lines` | With `--file`: the new-side lines asked about, `13` or `13-20`. |
-
 ## `revu completions`
 
 Generate shell completions.
