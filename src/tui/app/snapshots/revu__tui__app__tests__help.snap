@@ -32,15 +32,15 @@ expression: "render(&mut app, 160, 45)"
 │             │      / n N  find text in the MR, next, previous                             u U  open, copy the first link                      │              │
 │             │          i  the MR cover page                                                                                                   │              │
 │             │          D  inline or side by side, diff and prose                    OUTLINE PANE                                              │              │
-│             │        > <  the code after, before, alone                                     t  call tree, or the flat list                    │              │
-│             │          t  file tree                                                     enter  the call in the diff, the definition           │              │
-│             │          T  every thread of the MR                                                                                              │              │
-│             │          p  pipeline                                                  SEARCH & APP                                              │              │
-│             │          O  outline: the symbols the MR changes                            ^k ,  MRs · > commands                               │              │
-│             │          v  prose: the Markdown file rendered, its blocks marked              :  commands: :go !42, :set theme=nord             │              │
-│             │         zz  zen: the diff alone, quiet                                      o y  open in the browser, copy the link             │              │
-│             │        w W  wrap long lines, hide whitespace changes                          a  the agent session of the MR                    │              │
-│             │        = +  more lines, react on a thread                                     r  refresh                                        │              │
+│             │        > <  the code after, before, alone                                 enter  the definition in the diff                     │              │
+│             │          t  file tree                                                                                                           │              │
+│             │          T  every thread of the MR                                    SEARCH & APP                                              │              │
+│             │          p  pipeline                                                       ^k ,  MRs · > commands                               │              │
+│             │          O  outline: the symbols the MR changes                               :  commands: :go !42, :set theme=nord             │              │
+│             │          v  prose: the Markdown file rendered, its blocks marked            o y  open in the browser, copy the link             │              │
+│             │         zz  zen: the diff alone, quiet                                        a  the agent session of the MR                    │              │
+│             │        w W  wrap long lines, hide whitespace changes                          r  refresh                                        │              │
+│             │        = +  more lines, react on a thread                                     ?  this help                                      │              │
 │             │                                                                                                                                 │              │
 │             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 40 · j k scroll · esc close ╯              │
 │                                          ││                                                                                                                  │

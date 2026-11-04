@@ -1,9 +1,9 @@
-//! The outline pane: what breaks, what came and what was renamed, then the call tree of the changed symbols, or their list by file.
-use super::app::{App, Focus, List, ListRow, Outline, OutlineEntry, PaneLine, Symbols};
+//! The outline pane: what breaks, what came and what was renamed, then the changed symbols by file.
+use super::app::{App, Focus, List, ListRow, PaneLine, Symbols};
 use super::theme::Theme;
 use super::ui::{counts, draw_empty, settle_scroll, side_pane};
 use crate::diff::words::Segment;
-use crate::outline::{Change, Item, State};
+use crate::outline::{Change, State};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -16,7 +16,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(outline) = &open.outline else { return };
-    let block = side_pane(theme, &title(outline), app.focus == Focus::Side, app.zen);
+    let block = side_pane(theme, "Outline", app.focus == Focus::Side, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let tick = app.spinner();
@@ -27,7 +27,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     }
     let Symbols::Ready(reading) = &outline.symbols else { return };
     let rows = &outline.rows;
-    if rows.entries.is_empty() {
+    if reading.changes.is_empty() {
         return draw_empty(f, theme, inner, &["no function or class changed"]);
     }
     let height = inner.height as usize;
@@ -39,7 +39,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         .take(height)
         .zip(inner.y..)
         .filter_map(|(line, y)| match line {
-            PaneLine::Entry(index) => Some(ListRow { area: Rect { y, height: 1, ..inner }, list: List::Outline, index: *index }),
+            PaneLine::Change(index) => Some(ListRow { area: Rect { y, height: 1, ..inner }, list: List::Outline, index: *index }),
             _ => None,
         })
         .collect();
@@ -52,7 +52,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
             PaneLine::Path(path) => {
                 Line::from(Span::styled(format!(" {}", truncate(path, width.saturating_sub(1))), Style::default().fg(theme.faded)))
             }
-            PaneLine::Entry(index) => entry_line(&rows.entries[*index], &reading.changes, *index == outline.selected, width, theme),
+            PaneLine::Change(index) => change_line(&reading.changes[*index], *index == outline.selected, width, theme),
             PaneLine::Signature { indent, segments } => signature_line(segments, *indent, width, theme),
         })
         .collect();
@@ -60,31 +60,15 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     app.list_rows.extend(list_rows);
 }
 
-/// `Outline · calls`: how the pane shows.
-fn title(outline: &Outline) -> String {
-    format!("Outline · {}", if outline.flat { "list" } else { "calls" })
-}
-
 /// `2 breaking · 3 added · 1 renamed`, zeros left out.
 fn counts_line<'a>([breaking, added, renamed]: [usize; 3], theme: Theme) -> Line<'a> {
     counts(&[(breaking, "breaking", theme.danger), (added, "added", theme.success), (renamed, "renamed", theme.accent)], theme)
 }
 
-/// A changed symbol with its sign; a symbol shown in full elsewhere or a cycle, dimmed.
-fn entry_line<'a>(entry: &OutlineEntry, changes: &[Change], selected: bool, width: usize, theme: Theme) -> Line<'a> {
-    let dim = Style::default().fg(theme.faded);
+/// A changed symbol with its sign.
+fn change_line<'a>(change: &Change, selected: bool, width: usize, theme: Theme) -> Line<'a> {
     let bar = Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent));
-    let mut spans = vec![bar, Span::styled(entry.lines.clone(), dim)];
-    let room = width.saturating_sub(4 + entry.lines.width());
-    match (entry.change.map(|c| &changes[c]), &entry.item) {
-        (Some(change), _) if entry.full() => spans.extend(symbol_spans(change, room, theme)),
-        (Some(change), _) => spans.push(Span::styled(format!("{} {}", glyph(change.state, theme).0, truncate(&name(change), room)), dim)),
-        (None, Some(Item::Cycle(name))) => spans.push(Span::styled(format!("↺ {}", truncate(name, room)), dim)),
-        (None, _) => {}
-    }
-    if entry.unsure {
-        spans.push(Span::styled(" ?", Style::default().fg(theme.warn)));
-    }
+    let spans = [vec![bar], symbol_spans(change, width.saturating_sub(4), theme)].concat();
     Line::from(spans)
 }
 

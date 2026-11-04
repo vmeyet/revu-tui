@@ -22,7 +22,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, which lines are twins (`align.rs`), word highlighting inside them (`words.rs`), change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
-| `outline/` | The changed functions and classes of an MR and the calls between them (`O`) |
+| `outline/` | The changed functions and classes of an MR (`O`) |
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |
 | `keymap.rs` | The user's `[keys]` on top of the defaults |
 | `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
