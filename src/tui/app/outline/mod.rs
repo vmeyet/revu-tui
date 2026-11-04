@@ -6,10 +6,9 @@ mod rows;
 pub(crate) use rows::{Entry, PaneLine, Rows};
 
 use crate::act::{Act, Pane};
-use crate::outline::{Reading, Section};
+use crate::outline::Reading;
 use crate::review::{Place, Review, Row, Side};
 use crossterm::event::KeyEvent;
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// The pane while it is open: what was read, the row under the cursor, how it shows, and the rows that makes.
@@ -19,8 +18,6 @@ pub(crate) struct Outline {
     pub(crate) selected: usize,
     /// The list of changes instead of the tree, `t`.
     pub(crate) flat: bool,
-    /// The tree's folded branches, each by its child indexes from the top.
-    folded: BTreeSet<Vec<usize>>,
     /// Built whenever the rest changes, so drawing only slices it.
     pub(crate) rows: Arc<Rows>,
 }
@@ -35,13 +32,7 @@ pub(crate) enum Symbols {
 
 impl Outline {
     fn waiting() -> Self {
-        Self {
-            symbols: Symbols::Waiting,
-            selected: 0,
-            flat: false,
-            folded: BTreeSet::from([vec![Section::Tests as usize]]),
-            rows: Arc::default(),
-        }
+        Self { symbols: Symbols::Waiting, selected: 0, flat: false, rows: Arc::default() }
     }
 
     /// The cursor on entry `selected`.
@@ -49,36 +40,12 @@ impl Outline {
         Self { selected, ..self }
     }
 
-    /// The cursor on the first symbol, past the code header.
-    fn on_top(self) -> Self {
-        let first = self.rows.entries.iter().position(|e| e.header.is_none()).unwrap_or(0);
-        Self { selected: first, ..self }
-    }
-
     /// The rows built again for what changed, the cursor kept on them.
     fn rebuilt(self) -> Self {
         let Symbols::Ready(reading) = &self.symbols else { return self };
-        let rows = Rows::build(reading, self.flat, &self.folded);
+        let rows = Rows::build(reading, self.flat);
         let selected = self.selected.min(rows.entries.len().saturating_sub(1));
         Self { rows: Arc::new(rows), selected, ..self }
-    }
-
-    /// The same pane shown another way: the cursor back on top, every branch open, the sections as they were.
-    fn shown_as(&self, change: impl FnOnce(Self) -> Self) -> Self {
-        let folded = self.folded.iter().filter(|at| at.len() == 1).cloned().collect();
-        change(Self { folded, ..self.clone() }).rebuilt().on_top()
-    }
-
-    /// `zo` `zc` `za` on the branch under the cursor; `None` opens or closes it, whichever it is not.
-    fn folding(&self, open: Option<bool>) -> Self {
-        let Some(entry) = self.rows.entries.get(self.selected).filter(|e| e.children) else { return self.clone() };
-        let mut folded = self.folded.clone();
-        if open.unwrap_or(entry.folded) {
-            folded.remove(&entry.at);
-        } else {
-            folded.insert(entry.at.clone());
-        }
-        Self { folded, ..self.clone() }.rebuilt()
     }
 }
 
@@ -142,7 +109,7 @@ impl App {
             Some(Act::FullPageUp) => moved(outline.selected.saturating_sub(page)),
             Some(Act::Top) => moved(0),
             Some(Act::Bottom) => moved(last),
-            Some(Act::OutlineTree) => outline.shown_as(|o| Outline { flat: !o.flat, ..o }),
+            Some(Act::OutlineTree) => Outline { flat: !outline.flat, selected: 0, ..outline.clone() }.rebuilt(),
             Some(Act::Open) => return self.jump_from_outline(),
             Some(Act::Refresh) => return self.read_outline(),
             Some(Act::Back | Act::Outline | Act::ClosePane) => {
@@ -158,32 +125,11 @@ impl App {
         vec![]
     }
 
-    /// `zo` `zc` `za` while the outline has the keys.
-    pub(super) fn fold_outline(&mut self, act: Option<Act>) {
-        let open = match act {
-            Some(Act::FoldOpen) => Some(true),
-            Some(Act::FoldClose) => Some(false),
-            Some(Act::FoldToggle) => None,
-            _ => return,
-        };
-        if let Some(act) = act {
-            self.did(act);
-        }
-        let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return };
-        let folded = outline.folding(open);
-        self.update_open(|open| open.with_outline(Some(folded)));
-    }
-
-    /// `enter`: the diff's cursor on the call under the cursor, or on the symbol's definition at the top, and the keys to the diff;
-    /// on a section header, its fold.
+    /// `enter`: the diff's cursor on the call under the cursor, or on the symbol's definition at the top, and the keys to the diff.
     fn jump_from_outline(&mut self) -> Vec<Action> {
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return vec![] };
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
         let Some(entry) = outline.rows.entries.get(outline.selected) else { return vec![] };
-        if entry.header.is_some() {
-            self.fold_outline(Some(Act::FoldToggle));
-            return vec![];
-        }
         let place = match (&entry.site, entry.change.map(|c| &reading.changes[c])) {
             (Some(site), _) => Some((site.path.clone(), site.side, (site.line, site.line))),
             (None, Some(change)) => Some((change.path.clone(), change.side(), change.symbol.lines)),
@@ -209,7 +155,7 @@ impl App {
     /// The symbols read, or why they could not be; dropped once the pane closed.
     pub(super) fn settle_outline(&mut self, symbols: Symbols) {
         if self.outline_open() {
-            self.update_open(|open| open.with_outline(Some(Outline { symbols, ..Outline::waiting() }.rebuilt().on_top())));
+            self.update_open(|open| open.with_outline(Some(Outline { symbols, ..Outline::waiting() }.rebuilt())));
         }
     }
 }
@@ -253,44 +199,24 @@ mod tests {
     const HEAD: &str = "class Cart:\n    def total(self):\n        return pay(self, 2)\n\n\ndef pay(card, amount):\n    return _fee(card)\n\n\ndef refund(card):\n    return pay(card, 0)\n\n\ndef _fee(card):\n    return card.cost\n";
     const DIFF: &str = "@@ -1,11 +1,15 @@\n class Cart:\n     def total(self):\n-        return 1\n+        return pay(self, 2)\n \n \n-def pay(card):\n-    return card.charge()\n+def pay(card, amount):\n+    return _fee(card)\n \n \n-def _log():\n-    pass\n+def refund(card):\n+    return pay(card, 0)\n+\n+\n+def _fee(card):\n+    return card.cost\n";
 
-    const TEST: &str = "def test_refund():\n    assert refund(1) == 0\n";
-    const TEST_DIFF: &str = "@@ -0,0 +1,2 @@\n+def test_refund():\n+    assert refund(1) == 0\n";
-
     fn with_outline() -> App {
         let mut app = with_review();
         let file = DiffFile { diff: DIFF.into(), old_path: "shop/cart.py".into(), new_path: "shop/cart.py".into(), ..DiffFile::default() };
-        let test = DiffFile {
-            diff: TEST_DIFF.into(),
-            old_path: "tests/test_cart.py".into(),
-            new_path: "tests/test_cart.py".into(),
-            change: crate::review::FileKind::Added,
-            ..DiffFile::default()
-        };
-        let review = Review::new(mr(), &[file, test], vec![], &[]);
+        let review = Review::new(mr(), &[file], vec![], &[]);
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
         let actions = press(&mut app, "O");
-        let files = vec![
-            Sides { base: Some("shop/cart.py".into()), head: Some("shop/cart.py".into()) },
-            Sides { base: None, head: Some("tests/test_cart.py".into()) },
-        ];
+        let files = vec![Sides { base: Some("shop/cart.py".into()), head: Some("shop/cart.py".into()) }];
         assert_eq!(actions, vec![Action::LoadOutline { key: mr_key(), base: "aaaa".into(), head: "bbbb".into(), files }]);
-        let reading = crate::outline::read(&[
-            ("shop/cart.py".into(), BASE.into(), HEAD.into()),
-            ("tests/test_cart.py".into(), String::new(), TEST.into()),
-        ]);
+        let reading = crate::outline::read(&[("shop/cart.py".into(), BASE.into(), HEAD.into())]);
         app.apply(Incoming::Outline { key: mr_key(), reading });
         app
     }
 
-    /// Each row as its lines and the name of its change, or a word for the rest.
+    /// Each row as its lines and the name of its change.
     fn rows(app: &App) -> Vec<String> {
         let outline = app.open.as_ref().unwrap().outline.as_ref().unwrap();
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
-        let name = |entry: &super::Entry| match (entry.header, entry.change) {
-            (Some((section, count)), _) => format!("{section:?} {count}"),
-            (None, Some(change)) => reading.changes[change].symbol.name.clone(),
-            (None, None) => "?".into(),
-        };
+        let name = |entry: &super::Entry| entry.change.map_or("?".to_owned(), |change| reading.changes[change].symbol.name.clone());
         outline.rows.entries.iter().map(|entry| format!("{}{}", entry.lines, name(entry))).collect()
     }
 
@@ -303,9 +229,9 @@ mod tests {
     fn o_shows_the_call_tree_and_t_the_flat_list() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);
-        assert_eq!(rows(&app), ["Code 5", "refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay", "_log", "Tests 1"]);
+        assert_eq!(rows(&app), ["refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay", "_log"]);
         press(&mut app, "t");
-        assert_eq!(rows(&app), ["Code 5", "pay", "refund", "Cart.total", "_log", "_fee", "Tests 1"]);
+        assert_eq!(rows(&app), ["pay", "refund", "Cart.total", "_log", "_fee"]);
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);
@@ -324,26 +250,6 @@ mod tests {
     }
 
     #[test]
-    fn tests_open_with_enter_on_their_header_and_show_the_code_each_test_calls() {
-        let mut app = with_outline();
-        assert_eq!(app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, 1, "the cursor starts on the first symbol");
-        press(&mut app, "G");
-        app.handle_key(code(KeyCode::Enter));
-        assert_eq!(rows(&app)[7..], ["Tests 1", "test_refund", "└─ refund", "   └─ pay", "      └─ _fee"]);
-        press(&mut app, "zc");
-        assert_eq!(rows(&app)[7..], ["Tests 1"]);
-    }
-
-    #[test]
-    fn zc_folds_the_branch_under_the_cursor_and_zo_opens_it() {
-        let mut app = with_outline();
-        press(&mut app, "zc");
-        assert_eq!(rows(&app)[..3], ["Code 5", "refund", "Cart.total"]);
-        press(&mut app, "zo");
-        assert_eq!(rows(&app)[..3], ["Code 5", "refund", "└─ pay"]);
-    }
-
-    #[test]
     fn enter_on_a_call_goes_to_its_line_and_on_a_symbol_to_its_definition() {
         let mut app = with_outline();
         press(&mut app, "j");
@@ -351,11 +257,11 @@ mod tests {
         assert_eq!(app.focus, Focus::Review);
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(11), old: None }), "the call to pay in refund");
         press(&mut app, "l");
-        press(&mut app, "gj");
+        press(&mut app, "g");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(10), old: None }), "refund's definition");
         press(&mut app, "l");
-        press(&mut app, "tGkk");
+        press(&mut app, "tGk");
         app.handle_key(code(KeyCode::Enter));
         let Some(Place::Line { old, .. }) = place(&app) else { panic!("on a line") };
         assert_eq!(old, Some(10), "_log was on base line 10");
@@ -365,9 +271,9 @@ mod tests {
     fn a_click_on_a_call_picks_it_and_a_second_click_goes_to_its_line() {
         let mut app = with_outline();
         app.focus = Focus::Review;
-        assert_eq!(click_row(&mut app, List::Outline, 2), vec![]);
-        assert_eq!((app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, app.focus), (2, Focus::Side));
-        click_row(&mut app, List::Outline, 2);
+        assert_eq!(click_row(&mut app, List::Outline, 1), vec![]);
+        assert_eq!((app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, app.focus), (1, Focus::Side));
+        click_row(&mut app, List::Outline, 1);
         assert_eq!(app.focus, Focus::Review);
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(11), old: None }), "the call to pay in refund");
     }

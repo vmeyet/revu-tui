@@ -290,10 +290,7 @@ pub(crate) const ROWS: &[Row] = &[
         .help(&[line(Group::View, "za zc zo", "toggle, close, open the fold")])
         .section(Section::View),
     bound(Act::FoldOpen, "fold_open", &["zo"])
-        .help(&[
-            line(Group::Queue, "zo zc", "open, fold the section or stack"),
-            line(Group::Outline, "zo zc za", "open, close, toggle the branch"),
-        ])
+        .help(&[line(Group::Queue, "zo zc", "open, fold the section or stack")])
         .section(Section::View),
     bound(Act::FoldClose, "fold_close", &["zc"]).section(Section::View),
     bound(Act::FoldAll, "fold_all", &["zM"])
@@ -443,7 +440,7 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::Open, "open", &["enter"])
         .help(&[
             line(Group::Move, "enter", "open, or toggle the fold or the thread"),
-            line(Group::Outline, "enter", "the call in the diff, the definition, a section"),
+            line(Group::Outline, "enter", "the call in the diff, the definition"),
         ])
         .panes(&[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Cover])
         .section(Section::Move),
@@ -588,7 +585,7 @@ impl Group {
                 Act::Share,
             ],
             Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
-            Self::Outline => &[Act::OutlineTree, Act::FoldOpen, Act::Open],
+            Self::Outline => &[Act::OutlineTree, Act::Open],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
         }
     }
