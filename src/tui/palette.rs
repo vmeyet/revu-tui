@@ -86,7 +86,7 @@ pub(crate) enum Command {
     Outline,
     /// `:ai off`: no more AI calls this session.
     AiOff,
-    /// `:ai on`: the providers the config switched on answer again.
+    /// `:ai on`: Jev answers again, when the config switched it on.
     AiOn,
     /// `:share [target]`: post the MR through a `[share]` command, after a preview.
     Share(Option<String>),
@@ -156,7 +156,7 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "outline" => Ok(Command::Outline),
         "ai" if rest == "off" => Ok(Command::AiOff),
         "ai" if rest == "on" => Ok(Command::AiOn),
-        "ai" => Err(":ai off or :ai on; the config says which providers exist".into()),
+        "ai" => Err(":ai off or :ai on".into()),
         "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
         "session" => Ok(Command::Session),
         "news" => Ok(Command::News),

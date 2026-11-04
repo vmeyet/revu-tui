@@ -205,7 +205,7 @@ pub struct ReadyArgs {
 /// `revu ai`: one subcommand.
 #[derive(Args, Debug)]
 pub struct AiArgs {
-    /// What to do with the AI keys, or a question.
+    /// What to do with the AI keys.
     #[command(subcommand)]
     pub(crate) command: AiCommand,
 }

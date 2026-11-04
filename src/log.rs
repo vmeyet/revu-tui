@@ -195,10 +195,10 @@ mod tests {
         capture::start();
         let url = |raw: &str| url::Url::parse(raw).unwrap();
         Line::start(&reqwest::Method::GET, &url("https://gitlab.com/api/v4/user?private_token=glpat-xxxx")).write(Some(200));
-        Line::start(&reqwest::Method::POST, &url("https://api.anthropic.com/v1/messages")).write(None);
+        Line::start(&reqwest::Method::POST, &url("https://api.typesafe.ai/v1/systemone")).write(None);
         let text = capture::text();
         assert!(text.contains("INFO") && text.contains("GET gitlab.com/api/v4/user 200 "), "{text}");
-        assert!(text.contains("WARN") && text.contains("POST api.anthropic.com/v1/messages no answer "), "{text}");
+        assert!(text.contains("WARN") && text.contains("POST api.typesafe.ai/v1/systemone no answer "), "{text}");
         assert!(!text.contains("glpat") && !text.contains('?'), "{text}");
     }
 

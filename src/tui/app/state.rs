@@ -234,7 +234,7 @@ pub(crate) struct App {
     pub(crate) palette: Option<crate::tui::palette::Palette>,
     pub(crate) palette_history: Vec<String>,
     pub(crate) ground: Option<u32>,
-    /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off for good once it fails.
+    /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off after `:ai off` or a failure until `:ai on`.
     pub(crate) triage: bool,
     /// What the config switched on at start, so `:ai on` can bring it back after `:ai off`.
     pub(crate) triage_configured: bool,

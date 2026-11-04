@@ -129,7 +129,7 @@ mod tests {
             let err = store.set(account, "glpat-xxxx").unwrap_err().to_string();
             assert!(err.starts_with("not a keychain account name"), "{account:?}: {err}");
         }
-        for account in ["gitlab.com", "gitlab.acme.dev:8443", "[fd00::1]:8443", "anthropic", "slack-cli_test"] {
+        for account in ["gitlab.com", "gitlab.acme.dev:8443", "[fd00::1]:8443", "typesafe", "slack-cli_test"] {
             assert_eq!(plain(account).unwrap(), account);
         }
     }

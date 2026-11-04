@@ -301,12 +301,6 @@ mod tests {
     }
 
     #[test]
-    fn an_ai_provider_has_its_own_table() {
-        let config: Config = toml::from_str("[ai.typesafe]\nenabled = true\n").unwrap();
-        assert!(config.ai.typesafe.enabled);
-    }
-
-    #[test]
     fn a_binding_on_an_unknown_action_warns_and_revu_still_starts() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");

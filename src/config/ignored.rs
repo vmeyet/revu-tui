@@ -82,6 +82,6 @@ mod tests {
         assert!(parse("token = \"glpat-xxxx\"\n").is_err());
         assert!(parse("[tui]\napi_key = \"x\"\n").is_err());
         assert!(parse("[tui]\nkeyboard = \"x\"\n").is_ok(), "only a whole word counts");
-        assert!(parse("[keys.bind]\napi_key = \"sk-ant\"\n").is_err(), "a binding on no action is held to the same rule");
+        assert!(parse("[keys.bind]\napi_key = \"ts-key\"\n").is_err(), "a binding on no action is held to the same rule");
     }
 }
