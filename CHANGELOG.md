@@ -51,8 +51,8 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
-- **The outline's `a`, `s` and `u`, and its unchanged functions.**
-  In the outline pane: it now always lists private symbols and only the calls between changed symbols.
+- **The outline's `a`, `s`, `u`, `zo`, `zc` and `za`, its tests section and its unchanged functions.**
+  In the outline pane: it now lists every changed symbol, tests included, and only the calls between them.
 
 - **Ask Claude.**
   In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane, `revu ai ask` and `[ai.anthropic]`, which now only warns in the config.

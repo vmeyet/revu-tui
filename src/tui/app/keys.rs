@@ -150,11 +150,7 @@ impl App {
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             return None;
         }
-        let is_read = match c {
-            'z' | '[' | ']' if self.focus != Focus::Side || self.tree_open() => true,
-            'z' => self.outline_keys(),
-            _ => false,
-        };
+        let is_read = matches!(c, 'z' | '[' | ']') && (self.focus != Focus::Side || self.tree_open());
         is_read.then_some(c)
     }
 
@@ -373,8 +369,7 @@ impl App {
         actions
     }
 
-    /// The second key of a two-key default: the views and the queue's own first, then the outline's and the
-    /// prose's folds, then the diff's.
+    /// The second key of a two-key default: the views and the queue's own first, then the prose's folds, then the diff's.
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
         if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -388,10 +383,6 @@ impl App {
         let act = act::act_after(prefix, c);
         if self.focus == Focus::Queue {
             return act.map(|act| self.queue_prefixed(act)).unwrap_or_default();
-        }
-        if prefix == 'z' && self.outline_keys() {
-            self.fold_outline(act);
-            return vec![];
         }
         if self.prose_open() {
             return self.prose_prefixed(act);
@@ -432,11 +423,6 @@ impl App {
             _ => self.did_nothing(),
         }
         vec![]
-    }
-
-    /// The outline has the keys: it reads `z` itself.
-    fn outline_keys(&self) -> bool {
-        self.focus == Focus::Side && self.outline_open()
     }
 
     fn tree_open(&self) -> bool {

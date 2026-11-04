@@ -1,10 +1,9 @@
 //! The outline pane: what breaks, what came and what was renamed, then the call tree of the changed symbols, or their list by file.
 use super::app::{App, Focus, List, ListRow, Outline, OutlineEntry, PaneLine, Symbols};
-use super::queue_view::rule;
 use super::theme::Theme;
 use super::ui::{counts, draw_empty, settle_scroll, side_pane};
 use crate::diff::words::Segment;
-use crate::outline::{Change, Item, Section, State};
+use crate::outline::{Change, Item, State};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -53,13 +52,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
             PaneLine::Path(path) => {
                 Line::from(Span::styled(format!(" {}", truncate(path, width.saturating_sub(1))), Style::default().fg(theme.faded)))
             }
-            PaneLine::Entry(index) => match rows.entries[*index].header {
-                Some((section, count)) => {
-                    let name = if section == Section::Code { "CODE" } else { "TESTS" };
-                    rule(theme, name, count, !rows.entries[*index].folded, *index == outline.selected, width)
-                }
-                None => entry_line(&rows.entries[*index], &reading.changes, *index == outline.selected, width, theme),
-            },
+            PaneLine::Entry(index) => entry_line(&rows.entries[*index], &reading.changes, *index == outline.selected, width, theme),
             PaneLine::Signature { indent, segments } => signature_line(segments, *indent, width, theme),
         })
         .collect();
@@ -91,9 +84,6 @@ fn entry_line<'a>(entry: &OutlineEntry, changes: &[Change], selected: bool, widt
     }
     if entry.unsure {
         spans.push(Span::styled(" ?", Style::default().fg(theme.warn)));
-    }
-    if entry.folded {
-        spans.push(Span::styled(" …", dim));
     }
     Line::from(spans)
 }
