@@ -1,4 +1,5 @@
 //! The pipeline pane (`p`): the jobs of the head commit's CI run, failed ones first in each stage.
+use super::keys::moved_row;
 use super::{Action, App, Focus, Open};
 use crate::act::{Act, Pane};
 use crate::forge::checks::{Checks, Job, JobState};
@@ -79,34 +80,28 @@ impl App {
             _ => open.review.mr.pipeline.as_ref().and_then(|p| p.web_url.clone()),
         });
         let page = super::keys::full_page(self.areas.side).unsigned_abs();
-        let selected = match act {
-            Some(Act::MoveDown) => pipeline.selected + 1,
-            Some(Act::MoveUp) => pipeline.selected.saturating_sub(1),
-            Some(Act::PageDown) => pipeline.selected + 10,
-            Some(Act::PageUp) => pipeline.selected.saturating_sub(10),
-            Some(Act::FullPageDown) => pipeline.selected.saturating_add(page),
-            Some(Act::FullPageUp) => pipeline.selected.saturating_sub(page),
-            Some(Act::Top) => 0,
-            Some(Act::Bottom) => last,
-            Some(Act::OpenBrowser) => return url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
-            Some(Act::CopyLink) => return url.map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
+        if let Some(selected) = act.and_then(|act| moved_row(act, pipeline.selected, last, page)) {
+            self.update_open(|open| Open { pipeline: open.pipeline.map(|p| Pipeline { selected, ..p }), ..open });
+            return vec![];
+        }
+        match act {
+            Some(Act::OpenBrowser) => url.map(|u| vec![Action::OpenUrl(u)]).unwrap_or_default(),
+            Some(Act::CopyLink) => url.map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
             Some(Act::Refresh) => {
                 let action = load(open);
                 self.update_open(|open| Open { pipeline: open.pipeline.map(|p| Pipeline { due: None, ..p }), ..open });
-                return vec![action];
+                vec![action]
             }
             Some(Act::Back | Act::Pipeline | Act::ClosePane) => {
                 self.focus = Focus::Review;
                 self.update_open(|open| open.with_pipeline(None));
-                return vec![];
+                vec![]
             }
             _ => {
                 self.did_nothing();
-                return vec![];
+                vec![]
             }
-        };
-        self.update_open(|open| Open { pipeline: open.pipeline.map(|p| Pipeline { selected: selected.min(last), ..p }), ..open });
-        vec![]
+        }
     }
 
     /// The open MR's review apps asked of the forge; what was known stays shown until the answer.

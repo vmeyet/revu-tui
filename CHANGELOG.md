@@ -43,6 +43,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **`revu merge` and `revu share` ask the same way: on stderr, and `y` or `yes` in any case.**
+  In both commands without `--yes`; `revu merge --json` no longer mixes the question into its output.
+
 - **A changed line no longer runs on into blank rows while wrapping and searching.**
   In the diff with `w` on and a `/` search active, for lines ending in uncoloured text.
 

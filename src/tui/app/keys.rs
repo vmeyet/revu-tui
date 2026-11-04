@@ -454,19 +454,26 @@ impl App {
     }
 }
 
-/// The scroll a moving key gives, kept at or under `last`; `None` for any other key.
+/// The row a moving action lands on from `row`, kept at or under `last`, a full page being `page` rows; `None` for any other action.
+pub(super) fn moved_row(act: Act, row: usize, last: usize, page: usize) -> Option<usize> {
+    let half = HALF_PAGE.unsigned_abs();
+    let moved = match act {
+        Act::MoveDown => row.saturating_add(1),
+        Act::MoveUp => row.saturating_sub(1),
+        Act::PageDown => row.saturating_add(half),
+        Act::PageUp => row.saturating_sub(half),
+        Act::FullPageDown => row.saturating_add(page),
+        Act::FullPageUp => row.saturating_sub(page),
+        Act::Top => 0,
+        Act::Bottom => last,
+        _ => return None,
+    };
+    Some(moved.min(last))
+}
+
+/// The scroll a moving key gives on a page with no pane of its own to measure, kept at or under `last`; `None` for any other key.
 pub(super) fn scroll_key(scroll: usize, last: usize, key: KeyEvent) -> Option<usize> {
-    match act::act_in(Pane::Page, key)? {
-        Act::MoveDown => Some(scroll.saturating_add(1).min(last)),
-        Act::MoveUp => Some(scroll.saturating_sub(1)),
-        Act::PageDown => Some(scroll.saturating_add(HALF_PAGE.unsigned_abs()).min(last)),
-        Act::PageUp => Some(scroll.saturating_sub(HALF_PAGE.unsigned_abs())),
-        Act::FullPageDown => Some(scroll.saturating_add(2 * HALF_PAGE.unsigned_abs()).min(last)),
-        Act::FullPageUp => Some(scroll.saturating_sub(2 * HALF_PAGE.unsigned_abs())),
-        Act::Top => Some(0),
-        Act::Bottom => Some(last),
-        _ => None,
-    }
+    moved_row(act::act_in(Pane::Page, key)?, scroll, last, 2 * HALF_PAGE.unsigned_abs())
 }
 
 /// `PageDown` pages down as `ctrl-f` does and `PageUp` up as `ctrl-b`, as in a pager; space keeps
@@ -737,6 +744,17 @@ mod tests {
         assert_eq!(app.open.as_ref().unwrap().selected, top + page);
         app.handle_key(ctrl('b'));
         assert_eq!(app.open.as_ref().unwrap().selected, top);
+    }
+
+    #[test]
+    fn a_moving_action_lands_inside_the_list_and_any_other_is_no_move() {
+        use crate::act::Act;
+        let moved = |act| super::moved_row(act, 15, 20, 7);
+        assert_eq!((moved(Act::MoveDown), moved(Act::MoveUp)), (Some(16), Some(14)));
+        assert_eq!((moved(Act::PageDown), moved(Act::PageUp)), (Some(20), Some(5)));
+        assert_eq!((moved(Act::FullPageDown), moved(Act::FullPageUp)), (Some(20), Some(8)));
+        assert_eq!((moved(Act::Top), moved(Act::Bottom)), (Some(0), Some(20)));
+        assert_eq!(moved(Act::Open), None);
     }
 
     #[test]

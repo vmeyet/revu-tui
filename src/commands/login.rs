@@ -4,7 +4,7 @@ use crate::cli::LoginArgs;
 use crate::config::Config;
 use crate::forge::{Forge, Kind};
 use anyhow::{Context, Result, bail};
-use std::io::{ErrorKind, IsTerminal, Read, Write};
+use std::io::{ErrorKind, IsTerminal, Read};
 use std::process::Command;
 
 /// Verifies a token and stores it in the keychain.
@@ -130,37 +130,7 @@ fn prompt(host: &str, kind: Kind) -> Result<String> {
         bail!("no terminal to prompt on: pipe the token with `--token -`, or use `{borrow}`");
     }
     eprintln!("Create a token with the `{}` scope at {page} (or run `revu login {borrow}`)", scope(kind));
-    eprint!("Token (hidden): ");
-    std::io::stderr().flush()?;
-    let token = read_hidden()?;
-    eprintln!();
-    Ok(token)
-}
-
-/// Reads one line with echo off, restoring the terminal even when the read fails.
-pub(crate) fn read_hidden() -> Result<String> {
-    crossterm::terminal::enable_raw_mode()?;
-    let line = read_raw_line();
-    crossterm::terminal::disable_raw_mode()?;
-    line
-}
-
-fn read_raw_line() -> Result<String> {
-    use crossterm::event::{Event, KeyCode, KeyModifiers, read};
-    let mut line = String::new();
-    loop {
-        if let Event::Key(key) = read()? {
-            match key.code {
-                KeyCode::Enter => return Ok(line),
-                KeyCode::Backspace => {
-                    line.pop();
-                }
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => bail!("cancelled"),
-                KeyCode::Char(c) => line.push(c),
-                _ => {}
-            }
-        }
-    }
+    super::prompt::read_hidden("Token")
 }
 
 #[cfg(test)]

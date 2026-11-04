@@ -5,7 +5,7 @@ use crate::cli::{AiArgs, AiCommand, AiLoginArgs};
 use crate::config::Config;
 use crate::render::{Style, Theme};
 use anyhow::{Result, bail};
-use std::io::{IsTerminal, Read, Write};
+use std::io::{IsTerminal, Read};
 
 /// Runs one `revu ai` subcommand.
 pub fn run(args: AiArgs, json: bool) -> Result<()> {
@@ -83,11 +83,7 @@ fn prompt(provider: Provider) -> Result<String> {
         bail!("no terminal to prompt on: pipe the key with `--token -`");
     }
     eprintln!("Paste your {provider} key (make one at {})", provider.key_page());
-    eprint!("Key (hidden): ");
-    std::io::stderr().flush()?;
-    let key = super::login::read_hidden()?;
-    eprintln!();
-    Ok(key)
+    super::prompt::read_hidden("Key")
 }
 
 #[cfg(test)]

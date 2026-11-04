@@ -1,4 +1,5 @@
 //! The file tree in the right pane (`t`) and viewed files (`zv`, `m`).
+use super::keys::moved_row;
 use super::{Action, App, Focus, Open};
 use crate::act::{Act, Pane};
 use crate::diff::LineKind;
@@ -45,33 +46,29 @@ impl App {
         let Some(tree) = open.tree.clone() else { return vec![] };
         let rows = self.kept.tree_rows(open);
         let (last, here) = (rows.len().saturating_sub(1), rows.get(tree.selected).cloned());
-        let moved = |selected: usize| Some(Tree { selected: selected.min(last), ..tree.clone() });
         let page = super::keys::full_page(self.areas.side).unsigned_abs();
-        let next = match self.act_here(Pane::Tree, key) {
-            Some(Act::MoveDown) => moved(tree.selected + 1),
-            Some(Act::MoveUp) => moved(tree.selected.saturating_sub(1)),
-            Some(Act::PageDown) => moved(tree.selected + 10),
-            Some(Act::PageUp) => moved(tree.selected.saturating_sub(10)),
-            Some(Act::FullPageDown) => moved(tree.selected.saturating_add(page)),
-            Some(Act::FullPageUp) => moved(tree.selected.saturating_sub(page)),
-            Some(Act::Top) => moved(0),
-            Some(Act::Bottom) => moved(last),
+        let act = self.act_here(Pane::Tree, key);
+        if let Some(selected) = act.and_then(|act| moved_row(act, tree.selected, last, page)) {
+            self.update_open(|open| open.with_tree(Some(Tree { selected, ..tree })));
+            return vec![];
+        }
+        let next = match act {
             Some(Act::Back | Act::Tree | Act::ClosePane) => None,
             Some(Act::ViewFile) => {
                 if let Some(TreeRow::File { index, .. }) = here {
                     return self.view_file(index);
                 }
                 self.did_nothing();
-                Some(tree.clone())
+                Some(tree)
             }
             Some(Act::Open) => match here {
-                Some(TreeRow::Folder { path, .. }) => Some(Tree { folds: tree.folds.toggled(&path), ..tree.clone() }),
+                Some(TreeRow::Folder { path, .. }) => Some(Tree { folds: tree.folds.toggled(&path), ..tree }),
                 Some(TreeRow::File { index, .. }) => return self.show_file(index),
-                None => Some(tree.clone()),
+                None => Some(tree),
             },
             _ => {
                 self.did_nothing();
-                Some(tree.clone())
+                Some(tree)
             }
         };
         if next.is_none() {

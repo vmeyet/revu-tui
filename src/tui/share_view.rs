@@ -2,6 +2,7 @@
 use super::app::{App, ShareStage, Sharing};
 use super::theme::Theme;
 use super::thread_view::draw_compose;
+use super::ui::centred;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -22,7 +23,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, sharing: &Sharing, area: Rect) 
     let note_rows = if matches!(sharing.stage, ShareStage::Note { .. }) { NOTE_ROWS } else { 0 };
     let body_rows: u16 = body.iter().map(|line| (line.width() as u16).div_ceil(text_width).max(1)).sum();
     let height = (body_rows + note_rows + 4).min(area.height);
-    let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + area.height.saturating_sub(height) / 2, width, height };
+    let popup = centred(area, width, height);
     let inner = block.inner(popup).inner(ratatui::layout::Margin { horizontal: 0, vertical: 1 });
     f.render_widget(Clear, popup);
     f.render_widget(block.style(Style::default().bg(theme.surface)), popup);
