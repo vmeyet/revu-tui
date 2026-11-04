@@ -26,8 +26,8 @@ pub(crate) struct Open {
     pub(crate) pipeline: Option<super::Pipeline>,
     /// The Markdown file drawn rendered, when it holds the diff area.
     pub(crate) prose: Option<super::Prose>,
-    /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
-    pub(crate) pinned_file: Option<usize>,
+    /// The sticky file row at the last draw, so `za` and `zc` fold that file.
+    pub(crate) sticky_file: Option<usize>,
     /// Where the branch was deployed; `None` until the forge was asked.
     pub(crate) deployments: Option<Vec<crate::forge::Deployment>>,
 }
@@ -48,7 +48,7 @@ impl Open {
             tree: None,
             pipeline: None,
             prose: None,
-            pinned_file: None,
+            sticky_file: None,
             deployments: None,
         }
     }
@@ -286,10 +286,10 @@ impl App {
     }
 
     /// `za`: the file or hunk under the cursor; `zo` and `zc` only move in one direction.
-    /// While a file header is pinned above the diff, `za` and `zc` fold that file instead.
+    /// While a file header is sticky, `za` and `zc` fold that file instead.
     pub(super) fn fold_at_cursor(&mut self, want_open: Option<bool>) -> Vec<Action> {
         if want_open != Some(true)
-            && let Some(actions) = self.fold_pinned_file()
+            && let Some(actions) = self.fold_sticky_file()
         {
             return actions;
         }
@@ -310,11 +310,11 @@ impl App {
         self.apply_fold(next)
     }
 
-    /// Folds the pinned file and puts the cursor on its row, when the cursor sits inside it on a
-    /// line; on a hunk row the hunk still folds, as without a pin.
-    fn fold_pinned_file(&mut self) -> Option<Vec<Action>> {
+    /// Folds the sticky file and puts the cursor on its row, when the cursor sits inside it on a
+    /// line; on a hunk row the hunk still folds, as without a sticky header.
+    fn fold_sticky_file(&mut self) -> Option<Vec<Action>> {
         let open = self.open.as_ref()?;
-        let Row::File { index: file, .. } = open.rows.get(open.pinned_file?)? else { return None };
+        let Row::File { index: file, .. } = open.rows.get(open.sticky_file?)? else { return None };
         let file = *file;
         let row = open.row()?;
         let in_hunk = matches!(row, Row::Line { .. } | Row::Pair { .. } | Row::Context { .. } | Row::Thread { .. });
@@ -324,7 +324,7 @@ impl App {
         let path = open.review.files[file].new_path.clone();
         let actions = self.set_file_fold(&path, crate::diff::fold::Fold::Closed);
         let at = self.open.as_ref()?.rows.iter().position(|r| matches!(r, Row::File { index, .. } if *index == file))?;
-        self.update_open(|open| Open { pinned_file: None, ..open.move_to(at) });
+        self.update_open(|open| Open { sticky_file: None, ..open.move_to(at) });
         Some(actions)
     }
 

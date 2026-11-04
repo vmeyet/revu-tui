@@ -12,7 +12,7 @@ It takes every form `revu show` takes, `acme/widgets!42` or an MR URL too; quote
 | The queue and the pane frames | Hidden |
 | The status line | Hidden; a toast shows for two seconds at the bottom |
 | The MR header | One faded line on top; `◆3` counts the unresolved threads |
-| File and hunk headers | Pinned at the top of the column while you scroll |
+| File and hunk headers | Stay at the top of the column while you scroll |
 | The diff | A centred column, 70 % of the screen and 120 columns at least; the whole screen when `D` shows it side by side |
 | The threads of a line | In the diff, under their line: one row each, `enter` unfolds them |
 | The thread pane | Under the diff in the same column, behind a faded rule with its title, no frame; for the MR's own threads, a file's outdated ones and the list of every thread |

@@ -1,50 +1,50 @@
-//! Sticky headers: the file row, and the hunk row under the cursor, stay pinned above the diff
+//! Sticky headers: the file row, and the hunk row under the cursor, stay on top of the diff
 //! once they scroll off, so a long file never loses its name.
 use crate::review::Row;
 
-/// Below this many diff rows the pins would eat too much of the view.
+/// Below this many diff rows sticky headers would eat too much of the view.
 pub(crate) const MIN_HEIGHT: usize = 20;
 
-/// The rows pinned above the diff, as indexes into the review's rows.
+/// The rows kept on top of the diff, as indexes into the review's rows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Pins {
+pub(crate) struct StickyRows {
     pub(crate) file: Option<usize>,
     pub(crate) hunk: Option<usize>,
 }
 
-impl Pins {
-    /// How many screen rows the pins take.
+impl StickyRows {
+    /// How many screen rows they take.
     pub(crate) fn count(self) -> usize {
         usize::from(self.file.is_some()) + usize::from(self.hunk.is_some())
     }
 }
 
 /// The file header owning the top row, when it sits above the view; then the header of the
-/// cursor's hunk, when that also sits above the view and the cursor is in the pinned file.
-pub(crate) fn pins(rows: &[Row], scroll: usize, selected: usize) -> Pins {
+/// cursor's hunk, when that also sits above the view and the cursor is in the sticky file.
+pub(crate) fn sticky_rows(rows: &[Row], scroll: usize, selected: usize) -> StickyRows {
     let Some(file) = (0..=scroll.min(rows.len().saturating_sub(1))).rev().find(|&i| matches!(rows[i], Row::File { .. })) else {
-        return Pins::default();
+        return StickyRows::default();
     };
     if file >= scroll {
-        return Pins::default();
+        return StickyRows::default();
     }
-    Pins { file: Some(file), hunk: hunk_above(rows, file, scroll, selected) }
+    StickyRows { file: Some(file), hunk: hunk_above(rows, file, scroll, selected) }
 }
 
-/// Where the view starts once the pins take their rows: the cursor always stays below them.
-/// A few rounds settle it, since moving the view can change which headers are pinned.
-pub(crate) fn settle(rows: &[Row], scroll: usize, selected: usize, height: usize) -> (usize, Pins) {
+/// Where the view starts once sticky headers take their rows: the cursor always stays below them.
+/// A few rounds settle it, since moving the view can change which headers stick.
+pub(crate) fn settle(rows: &[Row], scroll: usize, selected: usize, height: usize) -> (usize, StickyRows) {
     let mut scroll = super::super::ui::settle_scroll(scroll, selected, height);
-    let mut pinned = pins(rows, scroll, selected);
+    let mut sticky = sticky_rows(rows, scroll, selected);
     for _ in 0..3 {
-        let next = super::super::ui::settle_scroll(scroll, selected, height.saturating_sub(pinned.count()));
-        let next_pins = pins(rows, next, selected);
-        if next == scroll && next_pins == pinned {
+        let next = super::super::ui::settle_scroll(scroll, selected, height.saturating_sub(sticky.count()));
+        let next_sticky = sticky_rows(rows, next, selected);
+        if next == scroll && next_sticky == sticky {
             break;
         }
-        (scroll, pinned) = (next, next_pins);
+        (scroll, sticky) = (next, next_sticky);
     }
-    (scroll, pinned)
+    (scroll, sticky)
 }
 
 fn hunk_above(rows: &[Row], file: usize, scroll: usize, selected: usize) -> Option<usize> {
@@ -91,50 +91,54 @@ mod tests {
     }
 
     #[test]
-    fn nothing_is_pinned_while_the_file_header_is_on_screen() {
-        assert_eq!(pins(&rows(), 0, 4), Pins::default());
-        assert_eq!(pins(&rows(), 1, 4), Pins::default());
-        assert_eq!(pins(&rows(), 13, 15), Pins::default(), "the next file's header at the top replaces the pin");
+    fn nothing_sticks_while_the_file_header_is_on_screen() {
+        assert_eq!(sticky_rows(&rows(), 0, 4), StickyRows::default());
+        assert_eq!(sticky_rows(&rows(), 1, 4), StickyRows::default());
+        assert_eq!(sticky_rows(&rows(), 13, 15), StickyRows::default(), "the next file's header at the top replaces the sticky one");
     }
 
     #[test]
-    fn the_file_is_pinned_once_its_header_scrolls_off() {
-        assert_eq!(pins(&rows(), 2, 3), Pins { file: Some(1), hunk: None }, "the hunk header is still visible");
-        assert_eq!(pins(&rows(), 12, 13), Pins { file: Some(1), hunk: None }, "the gap before the next file still belongs to this one");
+    fn the_file_sticks_once_its_header_scrolls_off() {
+        assert_eq!(sticky_rows(&rows(), 2, 3), StickyRows { file: Some(1), hunk: None }, "the hunk header is still visible");
+        assert_eq!(
+            sticky_rows(&rows(), 12, 13),
+            StickyRows { file: Some(1), hunk: None },
+            "the gap before the next file still belongs to this one"
+        );
     }
 
     #[test]
-    fn the_hunk_is_pinned_too_when_the_cursor_is_inside_it_and_its_header_is_gone() {
-        assert_eq!(pins(&rows(), 4, 5), Pins { file: Some(1), hunk: Some(2) });
-        assert_eq!(pins(&rows(), 9, 10), Pins { file: Some(1), hunk: Some(7) });
-        assert_eq!(pins(&rows(), 9, 12), Pins { file: Some(1), hunk: None }, "the cursor on a gap is in no hunk");
-        assert_eq!(pins(&rows(), 15, 16), Pins { file: Some(13), hunk: Some(14) });
+    fn the_hunk_sticks_too_when_the_cursor_is_inside_it_and_its_header_is_gone() {
+        assert_eq!(sticky_rows(&rows(), 4, 5), StickyRows { file: Some(1), hunk: Some(2) });
+        assert_eq!(sticky_rows(&rows(), 9, 10), StickyRows { file: Some(1), hunk: Some(7) });
+        assert_eq!(sticky_rows(&rows(), 9, 12), StickyRows { file: Some(1), hunk: None }, "the cursor on a gap is in no hunk");
+        assert_eq!(sticky_rows(&rows(), 15, 16), StickyRows { file: Some(13), hunk: Some(14) });
     }
 
     #[test]
-    fn a_cursor_on_the_file_or_hunk_row_never_pins_a_hunk() {
-        assert_eq!(pins(&rows(), 3, 7), Pins { file: Some(1), hunk: None });
+    fn a_cursor_on_the_file_or_hunk_row_never_makes_a_hunk_stick() {
+        assert_eq!(sticky_rows(&rows(), 3, 7), StickyRows { file: Some(1), hunk: None });
     }
 
     #[test]
-    fn the_cursor_is_never_hidden_under_the_pins() {
+    fn the_cursor_is_never_hidden_under_sticky_headers() {
         let rows = rows();
         for height in 3..10 {
             for selected in 0..rows.len() {
                 for from in 0..rows.len() {
-                    let (scroll, pinned) = settle(&rows, from, selected, height);
+                    let (scroll, sticky) = settle(&rows, from, selected, height);
                     assert!(selected >= scroll, "cursor above the view: h={height} sel={selected} from={from}");
-                    assert!(selected < scroll + height - pinned.count(), "cursor under the fold: h={height} sel={selected} from={from}");
-                    assert_eq!(pinned, pins(&rows, scroll, selected), "the returned pins match the view");
+                    assert!(selected < scroll + height - sticky.count(), "cursor under the fold: h={height} sel={selected} from={from}");
+                    assert_eq!(sticky, sticky_rows(&rows, scroll, selected), "the returned sticky rows match the view");
                 }
             }
         }
     }
 
     #[test]
-    fn pins_count_their_rows() {
-        assert_eq!(Pins::default().count(), 0);
-        assert_eq!(Pins { file: Some(1), hunk: Some(2) }.count(), 2);
+    fn sticky_rows_count_their_rows() {
+        assert_eq!(StickyRows::default().count(), 0);
+        assert_eq!(StickyRows { file: Some(1), hunk: Some(2) }.count(), 2);
     }
 
     /// The text of the line under the cursor, as the diff draws it.
@@ -147,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn the_cursor_line_stays_on_screen_below_the_pins() {
+    fn the_cursor_line_stays_on_screen_below_sticky_headers() {
         let mut app = with_long_review();
         for _ in 0..70 {
             press(&mut app, "j");
@@ -158,20 +162,20 @@ mod tests {
     }
 
     #[test]
-    fn za_under_a_pinned_file_folds_that_file_and_lands_on_its_row() {
+    fn za_under_a_sticky_file_folds_that_file_and_lands_on_its_row() {
         let mut app = with_long_review();
         to_step(&mut app, 40);
         render(&mut app, 120, 30);
-        assert!(app.open.as_ref().unwrap().pinned_file.is_some());
+        assert!(app.open.as_ref().unwrap().sticky_file.is_some());
         press(&mut app, "za");
         let open = app.open.as_ref().unwrap();
         assert!(!open.review.fold.file_is_open("src/pay/charge.rs"));
         assert!(matches!(open.row(), Some(Row::File { index: 0, .. })), "{:?}", open.row());
-        assert_eq!(open.pinned_file, None);
+        assert_eq!(open.sticky_file, None);
     }
 
     #[test]
-    fn zo_under_a_pinned_file_keeps_its_usual_meaning() {
+    fn zo_under_a_sticky_file_keeps_its_usual_meaning() {
         let mut app = with_long_review();
         to_step(&mut app, 40);
         render(&mut app, 120, 30);
