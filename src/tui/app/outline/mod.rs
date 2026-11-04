@@ -1,9 +1,9 @@
-//! The outline pane (`O`): the functions, methods and classes the MR changes, as a call tree or a flat list.
+//! The outline pane (`O`): the functions, methods and classes the MR changes, by file.
 use super::{Action, App, Focus, Open};
 use crate::diff::fold::FoldState;
 mod rows;
 
-pub(crate) use rows::{Entry, PaneLine, Rows};
+pub(crate) use rows::{PaneLine, Rows};
 
 use crate::act::{Act, Pane};
 use crate::outline::Reading;
@@ -16,8 +16,6 @@ use std::sync::Arc;
 pub(crate) struct Outline {
     pub(crate) symbols: Symbols,
     pub(crate) selected: usize,
-    /// The list of changes instead of the tree, `t`.
-    pub(crate) flat: bool,
     /// Built whenever the rest changes, so drawing only slices it.
     pub(crate) rows: Arc<Rows>,
 }
@@ -32,10 +30,10 @@ pub(crate) enum Symbols {
 
 impl Outline {
     fn waiting() -> Self {
-        Self { symbols: Symbols::Waiting, selected: 0, flat: false, rows: Arc::default() }
+        Self { symbols: Symbols::Waiting, selected: 0, rows: Arc::default() }
     }
 
-    /// The cursor on entry `selected`.
+    /// The cursor on change `selected`.
     pub(super) fn at(self, selected: usize) -> Self {
         Self { selected, ..self }
     }
@@ -43,8 +41,8 @@ impl Outline {
     /// The rows built again for what changed, the cursor kept on them.
     fn rebuilt(self) -> Self {
         let Symbols::Ready(reading) = &self.symbols else { return self };
-        let rows = Rows::build(reading, self.flat);
-        let selected = self.selected.min(rows.entries.len().saturating_sub(1));
+        let rows = Rows::build(reading);
+        let selected = self.selected.min(rows.line_of.len().saturating_sub(1));
         Self { rows: Arc::new(rows), selected, ..self }
     }
 }
@@ -97,7 +95,7 @@ impl App {
     pub(super) fn handle_outline_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let act = self.act_here(Pane::Outline, key);
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return vec![] };
-        let last = outline.rows.entries.len().saturating_sub(1);
+        let last = outline.rows.line_of.len().saturating_sub(1);
         let moved = |selected: usize| Outline { selected: selected.min(last), ..outline.clone() };
         let page = super::keys::full_page(self.areas.side).unsigned_abs();
         let next = match act {
@@ -109,7 +107,6 @@ impl App {
             Some(Act::FullPageUp) => moved(outline.selected.saturating_sub(page)),
             Some(Act::Top) => moved(0),
             Some(Act::Bottom) => moved(last),
-            Some(Act::OutlineTree) => Outline { flat: !outline.flat, selected: 0, ..outline.clone() }.rebuilt(),
             Some(Act::Open) => return self.jump_from_outline(),
             Some(Act::Refresh) => return self.read_outline(),
             Some(Act::Back | Act::Outline | Act::ClosePane) => {
@@ -125,18 +122,13 @@ impl App {
         vec![]
     }
 
-    /// `enter`: the diff's cursor on the call under the cursor, or on the symbol's definition at the top, and the keys to the diff.
+    /// `enter`: the diff's cursor on the symbol's definition, and the keys to the diff.
     fn jump_from_outline(&mut self) -> Vec<Action> {
         let Some(outline) = self.open.as_ref().and_then(|o| o.outline.as_ref()) else { return vec![] };
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
-        let Some(entry) = outline.rows.entries.get(outline.selected) else { return vec![] };
-        let place = match (&entry.site, entry.change.map(|c| &reading.changes[c])) {
-            (Some(site), _) => Some((site.path.clone(), site.side, (site.line, site.line))),
-            (None, Some(change)) => Some((change.path.clone(), change.side(), change.symbol.lines)),
-            (None, None) => None,
-        };
-        let Some((path, side, lines)) = place else { return vec![] };
-        let Some(target) = self.open.as_ref().and_then(|open| row_at(&open.review, &path, side, lines)) else {
+        let Some(change) = reading.changes.get(outline.selected) else { return vec![] };
+        let Some(target) = self.open.as_ref().and_then(|open| row_at(&open.review, &change.path, change.side(), change.symbol.lines))
+        else {
             self.toast("its lines are not in the diff");
             return vec![];
         };
@@ -212,12 +204,10 @@ mod tests {
         app
     }
 
-    /// Each row as its lines and the name of its change.
-    fn rows(app: &App) -> Vec<String> {
+    fn names(app: &App) -> Vec<String> {
         let outline = app.open.as_ref().unwrap().outline.as_ref().unwrap();
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
-        let name = |entry: &super::Entry| entry.change.map_or("?".to_owned(), |change| reading.changes[change].symbol.name.clone());
-        outline.rows.entries.iter().map(|entry| format!("{}{}", entry.lines, name(entry))).collect()
+        reading.changes.iter().map(|change| change.symbol.name.clone()).collect()
     }
 
     fn place(app: &App) -> Option<Place> {
@@ -226,12 +216,10 @@ mod tests {
     }
 
     #[test]
-    fn o_shows_the_call_tree_and_t_the_flat_list() {
+    fn o_lists_the_changed_symbols_and_closes_them_again() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);
-        assert_eq!(rows(&app), ["refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay", "_log"]);
-        press(&mut app, "t");
-        assert_eq!(rows(&app), ["pay", "refund", "Cart.total", "_log", "_fee"]);
+        assert_eq!(names(&app), ["pay", "refund", "Cart.total", "_log", "_fee"]);
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);
@@ -250,32 +238,28 @@ mod tests {
     }
 
     #[test]
-    fn enter_on_a_call_goes_to_its_line_and_on_a_symbol_to_its_definition() {
+    fn enter_goes_to_the_definition_of_the_symbol() {
         let mut app = with_outline();
         press(&mut app, "j");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.focus, Focus::Review);
-        assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(11), old: None }), "the call to pay in refund");
-        press(&mut app, "l");
-        press(&mut app, "g");
-        app.handle_key(code(KeyCode::Enter));
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(10), old: None }), "refund's definition");
         press(&mut app, "l");
-        press(&mut app, "tGk");
+        press(&mut app, "Gk");
         app.handle_key(code(KeyCode::Enter));
         let Some(Place::Line { old, .. }) = place(&app) else { panic!("on a line") };
         assert_eq!(old, Some(10), "_log was on base line 10");
     }
 
     #[test]
-    fn a_click_on_a_call_picks_it_and_a_second_click_goes_to_its_line() {
+    fn a_click_on_a_symbol_picks_it_and_a_second_click_goes_to_its_definition() {
         let mut app = with_outline();
         app.focus = Focus::Review;
         assert_eq!(click_row(&mut app, List::Outline, 1), vec![]);
         assert_eq!((app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, app.focus), (1, Focus::Side));
         click_row(&mut app, List::Outline, 1);
         assert_eq!(app.focus, Focus::Review);
-        assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(11), old: None }), "the call to pay in refund");
+        assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(10), old: None }), "refund's definition");
     }
 
     #[test]
@@ -290,12 +274,5 @@ mod tests {
     fn snapshot_outline_pane() {
         let mut app = with_outline();
         insta::assert_snapshot!("outline", render(&mut app, 150, 20));
-    }
-
-    #[test]
-    fn snapshot_outline_flat() {
-        let mut app = with_outline();
-        press(&mut app, "t");
-        insta::assert_snapshot!("outline_flat", render(&mut app, 150, 20));
     }
 }

@@ -51,8 +51,8 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
-- **The outline's `a`, `s`, `u`, `zo`, `zc` and `za`, its tests section, its unchanged functions and its check for local names.**
-  In the outline pane: it now lists every changed symbol, tests included, and links every call by its name alone.
+- **The outline's call tree, its tests section and its keys `a`, `s`, `t`, `u`, `zo`, `zc` and `za`.**
+  In the outline pane: it now lists every changed symbol by file.
 
 - **Ask Claude.**
   In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane, `revu ai ask` and `[ai.anthropic]`, which now only warns in the config.

@@ -90,8 +90,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 
 | Keys | Does |
 |---|---|
-| `t` | call tree, or the flat list |
-| `enter` | the call in the diff, the definition |
+| `enter` | the definition in the diff |
 
 ## Search & app
 

@@ -1,10 +1,5 @@
 //! The outline: which functions, methods and classes an MR changes. Each side of a file is read with
-//! its grammar's own tags query, then the symbols of both sides are compared by kind and name, and
-//! the calls the query finds link the changes into a tree.
-mod tree;
-
-pub(crate) use tree::{Branch, Item, Site};
-
+//! its grammar's own tags query, then the symbols of both sides are compared by kind and name.
 use crate::diff::similarity;
 use crate::forge::Side;
 use crate::syntax;
@@ -35,21 +30,6 @@ pub(crate) struct Symbol {
     /// Its first and last line, from 1.
     pub(crate) lines: (u32, u32),
     body: String,
-    calls: Vec<Call>,
-}
-
-/// A call inside a symbol's body: the name called, and the line it is on.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Call {
-    name: String,
-    line: u32,
-}
-
-impl Symbol {
-    /// The name without the classes around it, as a call names it.
-    fn short_name(&self) -> &str {
-        self.name.rsplit('.').next().unwrap_or(&self.name)
-    }
 }
 
 /// How a symbol changed, riskiest first.
@@ -100,12 +80,6 @@ impl Change {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Reading {
     pub(crate) changes: Vec<Change>,
-}
-
-impl Reading {
-    pub(crate) fn tree(&self) -> Vec<Branch> {
-        tree::build(&self.changes)
-    }
 }
 
 /// Reads each file, given as its path with its text at base and at head, empty on a side it does not exist.
@@ -183,7 +157,7 @@ fn file(path: &str, base: &str, head: &str) -> Vec<Change> {
     changes
 }
 
-/// Every function, method and class of `source`, each with the calls in its body.
+/// Every function, method and class of `source`.
 fn symbols(tags: &Tags, source: &str) -> Vec<Symbol> {
     let Some(config) = tags.configuration() else { return vec![] };
     let mut parser = Parser::new();
@@ -192,39 +166,25 @@ fn symbols(tags: &Tags, source: &str) -> Vec<Symbol> {
     let Ok((found, _)) = context.generate_tags(config, source.as_bytes(), None) else { return vec![] };
     let node_at = |range: &Range<usize>| tree.root_node().descendant_for_byte_range(range.start, range.end);
     let mut definitions: Vec<(Kind, Range<usize>, Range<usize>)> = vec![];
-    let mut calls: Vec<(Range<usize>, Call)> = vec![];
-    for tag in found.filter_map(Result::ok) {
-        let kind = config.syntax_type_name(tag.syntax_type_id);
-        match (tag.is_definition, kind_named(kind)) {
-            (true, Some(kind)) if node_at(&tag.range).is_some_and(|node| node.kind() != "pair") => {
-                definitions.push((kind, tag.range, tag.name_range));
-            }
-            (false, _) if kind == "call" => {
-                calls.push((tag.range, Call { name: source[tag.name_range].to_owned(), line: line(tag.span.start.row) }));
-            }
-            _ => {}
+    for tag in found.filter_map(Result::ok).filter(|tag| tag.is_definition) {
+        if let Some(kind) = kind_named(config.syntax_type_name(tag.syntax_type_id))
+            && node_at(&tag.range).is_some_and(|node| node.kind() != "pair")
+        {
+            definitions.push((kind, tag.range, tag.name_range));
         }
     }
     let inside = |inner: &Range<usize>, outer: &Range<usize>| outer.start <= inner.start && inner.end <= outer.end;
-    let mut owned: Vec<Vec<Call>> = vec![vec![]; definitions.len()];
-    for (at, call) in calls {
-        let innermost = definitions.iter().enumerate().filter(|(_, (_, r, _))| inside(&at, r)).min_by_key(|(_, (_, r, _))| r.len());
-        if let Some((index, _)) = innermost {
-            owned[index].push(call);
-        }
-    }
     definitions
         .iter()
-        .zip(owned)
-        .filter_map(|((kind, range, name), calls)| {
-            let node = tree.root_node().descendant_for_byte_range(range.start, range.end)?;
+        .filter_map(|(kind, range, name)| {
+            let node = node_at(range)?;
             let classes: Vec<&str> = definitions
                 .iter()
                 .filter(|(k, r, _)| *k == Kind::Class && r != range && inside(range, r))
                 .map(|(_, _, n)| &source[n.clone()])
                 .collect();
             let kind = if *kind == Kind::Function && !classes.is_empty() { Kind::Method } else { *kind };
-            Some(Symbol { calls, ..symbol(node, source, kind, &classes, &source[name.clone()], tags) })
+            Some(symbol(node, source, kind, &classes, &source[name.clone()], tags))
         })
         .collect()
 }
@@ -248,7 +208,6 @@ fn symbol(node: Node<'_>, source: &str, kind: Kind, classes: &[&str], name: &str
         public: (tags.public)(node, name),
         lines: (line(node.start_position().row), line(node.end_position().row)),
         body: collapsed(&source[body_start..node.end_byte()]),
-        calls: vec![],
     }
 }
 
@@ -475,17 +434,6 @@ mod tests {
     #[test]
     fn an_arrow_and_a_comparison_keep_their_spaces() {
         assert_eq!(collapsed("( a,\n b, ) =>  a > b"), "(a, b) => a > b");
-    }
-
-    #[test]
-    fn calls_belong_to_the_innermost_definition_around_them() {
-        let symbols = symbols(tags_for("m.py").unwrap(), CART);
-        let calls = |name: &str| {
-            symbols.iter().find(|s| s.name == name).unwrap().calls.iter().map(|c| (c.name.clone(), c.line)).collect::<Vec<_>>()
-        };
-        assert_eq!(calls("Cart.total"), vec![("sum".to_owned(), 3)]);
-        assert_eq!(calls("checkout"), vec![("pay".to_owned(), 9)]);
-        assert_eq!(calls("Cart"), vec![]);
     }
 
     #[test]

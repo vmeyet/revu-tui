@@ -57,7 +57,7 @@ pub(crate) use inbox::{Spot, progress_bar};
 pub(crate) use kept::{Kept, ReviewInputs};
 pub(crate) use mouse::{Areas, List, ListRow};
 pub(crate) use order::{QueueView, ViewChange, with_member};
-pub(crate) use outline::{Entry as OutlineEntry, Outline, PaneLine, Symbols};
+pub(crate) use outline::{Outline, PaneLine, Symbols};
 pub(crate) use pane::{ConversationList, Pane};
 pub(crate) use pin::PinChange;
 pub(crate) use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};

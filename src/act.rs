@@ -107,7 +107,6 @@ pub(crate) enum Act {
     NewLine,
     WordBack,
     Leave,
-    OutlineTree,
 }
 
 /// A task of the `?` help and its keys; a key that only works in one pane says which in its words.
@@ -440,7 +439,7 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::Open, "open", &["enter"])
         .help(&[
             line(Group::Move, "enter", "open, or toggle the fold or the thread"),
-            line(Group::Outline, "enter", "the call in the diff, the definition"),
+            line(Group::Outline, "enter", "the definition in the diff"),
         ])
         .panes(&[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Cover])
         .section(Section::Move),
@@ -516,7 +515,6 @@ pub(crate) const ROWS: &[Row] = &[
     unnamed(Act::NewLine, &[]).help(&[line(Group::Comment, "⌥enter ^o", "in the box: new line, $EDITOR")]),
     unnamed(Act::WordBack, &[]).help(&[line(Group::Comment, "⌥← ⌥→ ⌥⌫", "in the box: word back, on, delete")]),
     unnamed(Act::Leave, &["esc"]).help(&[line(Group::Comment, "esc", "drop the selection, leave the box")]),
-    unnamed(Act::OutlineTree, &["t"]).help(&[line(Group::Outline, "t", "call tree, or the flat list")]).panes(&[Pane::Outline]),
 ];
 
 impl Group {
@@ -585,7 +583,7 @@ impl Group {
                 Act::Share,
             ],
             Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
-            Self::Outline => &[Act::OutlineTree, Act::Open],
+            Self::Outline => &[Act::Open],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
         }
     }
@@ -677,7 +675,7 @@ mod tests {
         for (index, row) in ROWS.iter().enumerate() {
             assert_eq!(row.act as usize, index, "{:?} is out of place", row.act);
         }
-        assert_eq!(ROWS.len(), Act::OutlineTree as usize + 1, "an act has no row");
+        assert_eq!(ROWS.len(), Act::Leave as usize + 1, "an act has no row");
     }
 
     #[test]
