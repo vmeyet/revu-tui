@@ -378,7 +378,7 @@ impl App {
     }
 
     /// The second key of a two-key default: the views, the agent session and the queue's own first, then the
-    /// questions, the outline's and the prose's folds, then the diff's.
+    /// outline's and the prose's folds, then the diff's.
     fn handle_prefixed(&mut self, prefix: char, key: KeyEvent) -> Vec<Action> {
         let KeyCode::Char(c) = key.code else { return vec![] };
         if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -396,12 +396,6 @@ impl App {
         }
         if self.focus == Focus::Queue {
             return act.map(|act| self.queue_prefixed(act)).unwrap_or_default();
-        }
-        if prefix == 'a' {
-            if let Some(act) = act {
-                self.did(act);
-            }
-            return self.ask_key(c);
         }
         if prefix == 'z' && self.outline_keys() {
             self.fold_outline(act);
@@ -645,13 +639,13 @@ mod tests {
         let mut diff = with_review();
         assert_eq!(diff.focus, Focus::Review);
         press(&mut diff, "?");
-        assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "ask claude", "search & app"]);
+        assert_eq!(help_titles(&mut diff), ["move", "view", "comment & publish", "search & app"]);
         let mut thread = with_review();
         walk_to_any_thread(&mut thread, Toward::Next);
         thread.handle_key(code(KeyCode::Enter));
         assert_eq!(thread.focus, Focus::Side);
         press(&mut thread, "?");
-        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "outline pane", "ask claude", "search & app"]);
+        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "outline pane", "search & app"]);
         press(&mut thread, "?");
         assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(crate::act::Group::title));
         thread.handle_key(code(KeyCode::Esc));

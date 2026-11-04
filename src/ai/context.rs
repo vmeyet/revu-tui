@@ -22,8 +22,6 @@ Say what you are unsure of in one sentence; if the diff cannot answer, say so an
 pub(crate) enum Scope {
     Mr,
     File(String),
-    /// The hunk at this index of the file.
-    Hunk(String, usize),
     /// New-side line numbers in one file.
     Lines(String, RangeInclusive<u32>),
 }
@@ -78,7 +76,6 @@ fn scope_block(review: &Review, scope: &Scope, budget: usize) -> String {
     match scope {
         Scope::Mr => String::new(),
         Scope::File(path) => files_within(review.files.iter().filter(|f| f.new_path == *path), budget),
-        Scope::Hunk(path, index) => file_of(review, path).map(|f| around(f, *index)).unwrap_or_default(),
         Scope::Lines(path, lines) => file_of(review, path)
             .and_then(|f| f.hunks.iter().position(|h| covers(h, lines)).map(|i| (f, i)))
             .map(|(f, i)| format!("{}\nThe reviewer asks about {path} lines {}-{}.\n", around(f, i), lines.start(), lines.end()))
@@ -192,14 +189,6 @@ mod tests {
         let line = file.hunks[0].lines.iter().find_map(|l| l.new).unwrap();
         let text = scope_text(&Scope::Lines(file.new_path.clone(), line..=line), BUDGET);
         assert!(text.contains(&file.hunks[0].header) && text.contains(&format!("lines {line}-{line}")), "{text}");
-    }
-
-    #[test]
-    fn hunks_bring_their_code() {
-        let review = review();
-        let file = &review.files[0];
-        let text = scope_text(&Scope::Hunk(file.new_path.clone(), 0), BUDGET);
-        assert!(text.contains(&file.hunks[0].header), "{text}");
     }
 
     #[test]

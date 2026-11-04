@@ -1,7 +1,7 @@
 //! The right pane while it holds Claude's answer: the text as it streams, then how it ended.
-use super::app::{Answer, AnswerState, App, Focus, Input};
+use super::app::{Answer, AnswerState, App, Focus};
 use super::theme::Theme;
-use super::thread_view::{body_lines, box_height, draw_compose, wrap};
+use super::thread_view::{body_lines, wrap};
 use super::ui::side_pane;
 use crate::ai::anthropic::{Outcome, Stop};
 use ratatui::Frame;
@@ -15,20 +15,11 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let focused = app.focus == Focus::Side;
 
-    let compose = matches!(app.input, Some(Input::Ask { .. })).then(|| (app.input_label(), app.buffer.clone()));
     let Some(answer) = app.open.as_ref().and_then(|o| o.answer.as_ref()) else { return };
     let title = format!("Claude · {}", answer.label);
     let block = side_pane(theme, &title, focused, app.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
-    let inner = match &compose {
-        Some((label, field)) => {
-            let [list, box_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(box_height(field, inner))]).areas(inner);
-            draw_compose(f, theme, label, field, box_area);
-            list
-        }
-        None => inner,
-    };
     let [body, footer] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
     let width = body.width.saturating_sub(1) as usize;
     let lines: Vec<Line<'_>> = body_lines(&answer.text, width, theme).into_iter().flat_map(|line| wrap(line, width)).collect();

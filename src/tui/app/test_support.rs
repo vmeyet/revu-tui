@@ -49,7 +49,6 @@ pub(super) fn settings() -> Settings {
         project: None,
         ground: None,
         triage: false,
-        ask: None,
         keymap: crate::keymap::Keymap::default(),
         pictures: None,
         queue_layout: crate::config::QueueLayout::default(),
@@ -309,29 +308,6 @@ pub(super) fn ctrl_k() -> KeyEvent {
 pub(super) fn resolve_the_diff_note(app: &mut App) {
     let open = app.open.clone().unwrap();
     app.open = Some(Open { review: open.review.with_resolved(&"9f2c0aa1d4e5b6c7".into(), true), ..open });
-}
-
-pub(super) fn asking() -> App {
-    let mut app = App::new(Settings { ask: Some("claude-opus-5".into()), ..settings() });
-    app.today = today();
-    app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
-    app.queue_move(0);
-    app.handle_key(code(KeyCode::Enter));
-    app.apply(Incoming::Review { key: mr_key(), review: Box::new(review()), cached: None });
-    app
-}
-
-pub(super) fn the_ask(actions: &[Action]) -> (u64, crate::ai::anthropic::Ask) {
-    let [Action::Ask { id, request, .. }] = actions else { panic!("{actions:?}") };
-    (*id, (**request).clone())
-}
-
-pub(super) fn done(model: &str) -> crate::ai::anthropic::Outcome {
-    crate::ai::anthropic::Outcome {
-        stop: crate::ai::anthropic::Stop::Done,
-        usage: crate::ai::anthropic::Usage { cache_read: 1200, output: 40, ..Default::default() },
-        model: model.into(),
-    }
 }
 
 pub(super) fn run() -> crate::forge::checks::Checks {

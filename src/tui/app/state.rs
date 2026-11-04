@@ -24,8 +24,6 @@ pub(crate) struct Settings {
     pub(crate) ground: Option<u32>,
     /// Jev is switched on and holds a key: the queue and the files get its marks.
     pub(crate) triage: bool,
-    /// Claude's model, when it is switched on and holds a key: `a` asks it.
-    pub(crate) ask: Option<String>,
     /// `[notify] enabled`: a macOS notification when an MR lands in To review.
     pub(crate) notify: bool,
     /// The hosts the queue draws from: which forge each MR is on, and its row's tag.
@@ -238,14 +236,8 @@ pub(crate) struct App {
     pub(crate) ground: Option<u32>,
     /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off for good once it fails.
     pub(crate) triage: bool,
-    /// Claude's model while `a` may ask it; `:ai off` clears it for the session.
-    pub(crate) ask_model: Option<String>,
     /// What the config switched on at start, so `:ai on` can bring it back after `:ai off`.
-    pub(crate) ai_configured: (bool, Option<String>),
-    /// A question already went out this session: the first one says where the MR goes.
-    pub(crate) asked: bool,
-    /// The id of the last answer started.
-    pub(crate) next_answer: u64,
+    pub(crate) triage_configured: bool,
     /// The local id of the last draft written.
     pub(crate) next_draft: u64,
     /// The number of the last state save sent: one that finishes after a newer one is dropped.
@@ -373,11 +365,8 @@ impl App {
             palette: None,
             palette_history: vec![],
             ground: settings.ground,
-            ai_configured: (settings.triage, settings.ask.clone()),
+            triage_configured: settings.triage,
             triage: settings.triage,
-            ask_model: settings.ask,
-            asked: false,
-            next_answer: 0,
             next_draft: 0,
             next_save: 0,
             verdicts: HashMap::new(),

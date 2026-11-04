@@ -253,12 +253,9 @@ mod tests {
     }
 
     #[test]
-    fn a_g_is_in_the_key_list_of_every_pane_and_the_other_a_keys_still_ask() {
+    fn a_g_is_in_the_key_list_of_every_pane() {
         let mut app = with_agent(with_queue());
         press(&mut app, "?");
         assert!(render(&mut app, 120, 40).contains("the agent session of the MR"));
-        let mut app = with_agent(with_review());
-        press(&mut app, "aa");
-        assert!(app.live_toast().unwrap().text.contains("Claude is off"), "a a still asks Claude");
     }
 }

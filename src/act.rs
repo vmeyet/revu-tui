@@ -78,7 +78,6 @@ pub(crate) enum Act {
     ClosePane,
     OpenLink,
     CopyFirstLink,
-    AskFree,
     PaletteMr,
     GoCommand,
     OpenCommand,
@@ -123,7 +122,6 @@ pub(crate) enum Group {
     Comment,
     Thread,
     Outline,
-    Ask,
     App,
 }
 
@@ -210,23 +208,13 @@ pub(crate) enum Section {
     View,
     Comment,
     Thread,
-    Ask,
     App,
     Commands,
 }
 
 impl Section {
-    pub(crate) const ALL: [Section; 9] = [
-        Section::Move,
-        Section::Jump,
-        Section::Queue,
-        Section::View,
-        Section::Comment,
-        Section::Thread,
-        Section::Ask,
-        Section::App,
-        Section::Commands,
-    ];
+    pub(crate) const ALL: [Section; 8] =
+        [Section::Move, Section::Jump, Section::Queue, Section::View, Section::Comment, Section::Thread, Section::App, Section::Commands];
 
     pub(crate) fn title(self) -> &'static str {
         match self {
@@ -236,7 +224,6 @@ impl Section {
             Self::View => "view",
             Self::Comment => "comment & publish",
             Self::Thread => "thread pane",
-            Self::Ask => "ask claude",
             Self::App => "search & app",
             Self::Commands => "commands",
         }
@@ -500,7 +487,6 @@ pub(crate) const ROWS: &[Row] = &[
         .panes(&[Pane::ThreadRow])
         .section(Section::Thread),
     listed(Act::CopyFirstLink, "copy_first_link", &["U"]).panes(&[Pane::ThreadRow]).section(Section::Thread),
-    listed(Act::AskFree, "ask_free", &["aa"]).help(&[line(Group::Ask, "a a", "ask anything about the cursor")]).section(Section::Ask),
     listed(Act::PaletteMr, "palette_mr", &[]).section(Section::App),
     command!(Act::GoCommand, "go", "open an MR: :go !42 · :go acme/widgets!42"),
     command!(Act::OpenCommand, "open", "open the MR, or the line, in the browser"),
@@ -551,7 +537,6 @@ impl Group {
             Self::Comment => "comment & publish",
             Self::Thread => "thread pane",
             Self::Outline => "outline pane",
-            Self::Ask => "ask claude",
             Self::App => "search & app",
         }
     }
@@ -610,7 +595,6 @@ impl Group {
             ],
             Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
             Self::Outline => &[Act::OutlineTree, Act::OutlineCalls, Act::OutlineStack, Act::OutlinePublic, Act::FoldOpen, Act::Open],
-            Self::Ask => &[Act::AskFree],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
         }
     }

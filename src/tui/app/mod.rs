@@ -52,7 +52,7 @@ mod writes;
 mod zen;
 
 pub(crate) use apply::Confirm;
-pub(crate) use ask::{Answer, AnswerState, Part};
+pub(crate) use ask::{Answer, AnswerState};
 pub(crate) use brief::{Brief, ThreadRow};
 pub(crate) use feedback::Toast;
 pub(crate) use inbox::{Spot, progress_bar};
@@ -282,12 +282,6 @@ pub(crate) enum Action {
     },
     /// `:set theme=…`: write the theme to the config so the next start keeps it.
     SaveTheme(String),
-    /// Ask Claude; `id` names the answer the stream belongs to.
-    Ask {
-        key: MrKey,
-        id: u64,
-        request: Box<crate::ai::anthropic::Ask>,
-    },
     /// Ask Jev how urgent and how big a queue MR is.
     Triage(Box<QueueMr>),
     /// Ask Jev whether the open MR waits on me and how risky each file is, at commit `head`.
@@ -335,10 +329,6 @@ pub(crate) enum Input {
     },
     EditDraft {
         draft: crate::review::DraftId,
-    },
-    /// A question to Claude about `scope`.
-    Ask {
-        scope: Box<crate::ai::context::Scope>,
     },
 }
 
@@ -568,12 +558,6 @@ pub(crate) enum Incoming {
     Composed {
         input: Input,
         edited: vtui::editor::Edited,
-    },
-    /// A piece of Claude's answer `id` for the MR `key`.
-    Answer {
-        key: MrKey,
-        id: u64,
-        part: Part,
     },
     Triaged {
         key: MrKey,

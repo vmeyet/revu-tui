@@ -30,7 +30,6 @@ impl App {
             Input::Reply { .. } if open.pane.is_some() => None,
             Input::EditDraft { .. } if open.lists_every_thread() => None,
             Input::Reply { thread } => Some(place_of_thread(review, thread)),
-            Input::Ask { .. } => None,
             Input::EditDraft { draft } => {
                 review.drafts.iter().find(|d| d.is(*draft)).map(|draft| match (&draft.position, &draft.reply_to) {
                     (Some(position), _) => place_of_position(review, position).unwrap_or(Place::Mr),
@@ -169,7 +168,6 @@ impl App {
             }
             Input::Reply { thread } => self.add_draft(Draft::reply(thread, text)),
             Input::EditDraft { draft } => self.change_draft(draft, text),
-            Input::Ask { scope } => self.ask(&scope, text),
         }
     }
 
@@ -246,7 +244,6 @@ impl App {
                 format!("reply to {}", author.unwrap_or_else(|| "the thread".into()))
             }
             Some(Input::EditDraft { .. }) => "edit draft".to_owned(),
-            Some(Input::Ask { .. }) => "ask Claude".to_owned(),
             None => String::new(),
         }
     }
@@ -257,7 +254,7 @@ impl Post {
         match input {
             Input::Comment { position } => Some(Post::Thread(position.clone())),
             Input::Reply { thread } => Some(Post::Reply(thread.clone())),
-            Input::EditDraft { .. } | Input::Ask { .. } => None,
+            Input::EditDraft { .. } => None,
         }
     }
 
@@ -295,7 +292,6 @@ fn target_key(input: &Input) -> String {
         }
         Input::Reply { thread } => format!("reply {thread}"),
         Input::EditDraft { draft } => format!("draft {draft:?}"),
-        Input::Ask { scope } => format!("ask {scope:?}"),
     }
 }
 
