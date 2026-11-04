@@ -60,22 +60,12 @@ pub(crate) struct Candidate {
 pub(crate) enum Command {
     /// Open an MR: `!42`, `#42`, `42`, `group/project!42`, `owner/repo#42`.
     Go(String),
-    Open,
-    /// `:copy`: the link `:open` would show, on the clipboard.
+    /// `:copy`: the link `o` would open, on the clipboard.
     Copy,
-    /// `:merge`: my approved MR, after a yes.
-    Merge,
-    /// `:ready`: my MR, ready for review when a draft, a draft when ready.
-    Ready,
     Approve,
     Publish,
     /// `:threads`: every conversation of the MR in the right pane, as `T` does.
     Threads,
-    /// `:pin`, `:unpin`: the MR kept on top of the queue, or let go.
-    Pin,
-    Unpin,
-    /// This repo only, or every project.
-    All,
     Set {
         key: String,
         value: String,
@@ -92,7 +82,6 @@ pub(crate) enum Command {
     Session,
     /// `:news`: what changed in revu, version by version.
     News,
-    Help,
     Quit,
 }
 
@@ -101,23 +90,16 @@ impl Command {
     pub(crate) fn act(&self) -> Act {
         match self {
             Self::Go(_) => Act::GoCommand,
-            Self::Open => Act::OpenCommand,
             Self::Copy => Act::CopyCommand,
-            Self::Merge => Act::MergeCommand,
-            Self::Ready => Act::ReadyCommand,
             Self::Approve => Act::ApproveCommand,
             Self::Publish => Act::PublishCommand,
             Self::Threads => Act::ThreadsCommand,
-            Self::All => Act::AllCommand,
-            Self::Pin => Act::PinCommand,
-            Self::Unpin => Act::UnpinCommand,
             Self::Set { .. } => Act::SetCommand,
             Self::View(_) => Act::ViewCommand,
             Self::AiOff | Self::AiOn => Act::AiCommand,
             Self::Share(_) => Act::ShareCommand,
             Self::Session => Act::SessionCommand,
             Self::News => Act::NewsCommand,
-            Self::Help => Act::HelpCommand,
             Self::Quit => Act::QuitCommand,
         }
     }
@@ -135,16 +117,10 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "" => Err("type a command, tab completes".into()),
         "go" | "g" if rest.is_empty() => Err(":go needs an MR, like !42".into()),
         "go" | "g" => Ok(Command::Go(rest.to_owned())),
-        "open" | "o" => Ok(Command::Open),
         "copy" => Ok(Command::Copy),
         "approve" | "a" => Ok(Command::Approve),
-        "merge" => Ok(Command::Merge),
-        "ready" => Ok(Command::Ready),
         "publish" | "p" => Ok(Command::Publish),
         "threads" => Ok(Command::Threads),
-        "all" | "*" => Ok(Command::All),
-        "pin" => Ok(Command::Pin),
-        "unpin" => Ok(Command::Unpin),
         "set" => {
             let Some(Setting { key, value }) = typed.setting() else { return Err(":set needs key=value, e.g. theme=nord".into()) };
             Ok(Command::Set { key: key.to_owned(), value: value.to_owned() })
@@ -156,7 +132,6 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
         "session" => Ok(Command::Session),
         "news" => Ok(Command::News),
-        "help" | "h" | "?" => Ok(Command::Help),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
     }
@@ -210,7 +185,6 @@ mod tests {
         assert_eq!(parse(":go !42"), Ok(Command::Go("!42".into())));
         assert_eq!(parse("g acme/widgets!42"), Ok(Command::Go("acme/widgets!42".into())));
         assert_eq!(parse("set theme=nord"), Ok(Command::Set { key: "theme".into(), value: "nord".into() }));
-        assert_eq!(parse("*"), Ok(Command::All));
         assert_eq!(parse(":threads"), Ok(Command::Threads));
         assert_eq!(parse(":news"), Ok(Command::News));
         assert_eq!(parse(":session"), Ok(Command::Session));
@@ -218,6 +192,13 @@ mod tests {
         assert_eq!(parse("view old"), Ok(Command::View("old".into())));
         assert_eq!(parse("v src/a.rs:42"), Ok(Command::View("src/a.rs:42".into())));
         assert_eq!(parse("view"), Ok(Command::View(String::new())));
+    }
+
+    #[test]
+    fn a_verb_that_only_repeated_a_key_is_unknown() {
+        for line in ["open", "o", "merge", "ready", "all", "*", "pin", "unpin", "help", "h", "?"] {
+            assert!(parse(line).is_err(), "{line}");
+        }
     }
 
     #[test]

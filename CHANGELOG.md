@@ -51,6 +51,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
+- **Palette verbs that only repeated a key: `:open`, `:merge`, `:ready`, `:all`, `:pin`, `:unpin` and `:help`.**
+  In the palette: `o`, `M`, `H`, `*`, `b` and `?` stay, each in the pane it works in, so `b` pins from the queue only.
+
 - **Usage hints.**
   With `[usage] enabled = true`: no more `tip:` toasts, and no HINTS in `revu usage`.
   The counts and the rest of the report stay, and an older `usage.jsonl` still loads.

@@ -251,7 +251,7 @@ impl App {
     }
 
     /// Between the checkout's project and every project; the other list paints from its cache.
-    pub(super) fn toggle_scope(&mut self) -> Vec<Action> {
+    fn toggle_scope(&mut self) -> Vec<Action> {
         if self.project.is_none() {
             self.toast("not in a GitLab checkout: the queue already shows every project");
             return vec![];

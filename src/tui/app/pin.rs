@@ -1,6 +1,6 @@
 //! Pins: MRs the reader keeps at the top of the queue, in PINNED and out of their usual section,
 //! until the forge says they are merged or closed.
-use super::{Action, App, Focus};
+use super::{Action, App};
 use crate::forge::{MrKey, QueueMr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,43 +10,22 @@ pub(crate) enum PinChange {
 }
 
 impl App {
-    /// `b`: pins the MR under the cursor, or unpins it.
+    /// `b`: pins the MR under the queue's cursor, or unpins it.
     pub(super) fn toggle_pin(&mut self) -> Vec<Action> {
-        let Some(key) = self.pin_target() else { return vec![] };
-        let change = if self.pins.contains(&key) { PinChange::Unpin } else { PinChange::Pin };
-        self.set_pin(&key, change)
-    }
-
-    /// `:pin`, `:unpin`.
-    pub(super) fn pin_command(&mut self, change: PinChange) -> Vec<Action> {
-        let Some(key) = self.pin_target() else { return vec![] };
-        self.set_pin(&key, change)
-    }
-
-    /// The MR under the queue's cursor, or the open one outside the queue.
-    fn pin_target(&mut self) -> Option<MrKey> {
-        let target = match self.focus {
-            Focus::Queue => self.selected_mr().map(QueueMr::key),
-            Focus::Review | Focus::Side => self.open.as_ref().map(|open| open.key.clone()),
-        };
-        if target.is_none() {
+        let Some(key) = self.selected_mr().map(QueueMr::key) else {
             self.toast("no MR under the cursor");
-        }
-        target
-    }
-
-    fn set_pin(&mut self, key: &MrKey, change: PinChange) -> Vec<Action> {
-        let (done, changed) = match change {
-            PinChange::Pin => ("pinned", self.pins.insert(key.clone())),
-            PinChange::Unpin => ("unpinned", self.pins.remove(key)),
-        };
-        self.toast(format!("{done} {}{}", self.hosts.kind_of(key).sigil(), key.number));
-        if !changed {
             return vec![];
-        }
-        self.select_in_queue(key);
+        };
+        let (change, done) = if self.pins.remove(&key) {
+            (PinChange::Unpin, "unpinned")
+        } else {
+            self.pins.insert(key.clone());
+            (PinChange::Pin, "pinned")
+        };
+        self.toast(format!("{done} {}{}", self.hosts.kind_of(&key).sigil(), key.number));
+        self.select_in_queue(&key);
         self.queue_settle();
-        vec![self.save_pin(key, change)]
+        vec![self.save_pin(&key, change)]
     }
 
     /// The queue found these pins merged or closed: they go, and the cache forgets them.
@@ -129,26 +108,6 @@ mod tests {
             .collect();
         let [pinned, unpinned] = orders.as_slice() else { panic!("{actions:?}") };
         assert!(pinned < unpinned, "{orders:?}");
-    }
-
-    #[test]
-    fn colon_pin_twice_changes_nothing_the_second_time() {
-        let mut app = with_queue();
-        let mut run = |line: &str| {
-            press(&mut app, line);
-            app.handle_key(code(KeyCode::Enter))
-        };
-        assert_eq!(saved(&run(":pin")), [(42, PinChange::Pin)]);
-        assert_eq!(run(":pin"), vec![]);
-        assert_eq!(saved(&run(":unpin")), [(42, PinChange::Unpin)]);
-        assert_eq!(run(":unpin"), vec![]);
-    }
-
-    #[test]
-    fn colon_pin_in_the_review_pins_the_open_mr() {
-        let mut app = with_review();
-        press(&mut app, ":pin");
-        assert_eq!(saved(&app.handle_key(code(KeyCode::Enter))), [(42, PinChange::Pin)]);
     }
 
     #[test]

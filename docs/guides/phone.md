@@ -107,7 +107,7 @@ Copy the link instead, and paste it on the phone.
 |---|---|
 | `y` | The link of the MR, the line, the thread or the job under the cursor |
 | `U` on a thread | Its first link, or its first picture when it has no link |
-| `:copy` | The link `:open` would show |
+| `:copy` | The link `o` would open |
 
 Every copy goes to the Mac's clipboard and to the terminal you look at.
 tmux hands it on with `set -g set-clipboard on`, or with `set -g allow-passthrough on`.
