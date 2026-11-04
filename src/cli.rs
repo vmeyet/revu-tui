@@ -64,7 +64,7 @@ pub enum Command {
     Update(UpdateArgs),
     /// What changed in revu, newest version first: what is new, where, and how to use it.
     News(NewsArgs),
-    /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.
+    /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen.
     Usage(UsageArgs),
     /// Write the reference pages under `docs/reference/` from the code.
     #[command(hide = true)]

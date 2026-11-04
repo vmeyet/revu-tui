@@ -1,5 +1,5 @@
-//! What revu is used for, counted on this machine only: which actions, how long on each screen,
-//! and a few habits a faster key would replace. Opt-in with `[usage] enabled = true`.
+//! What revu is used for, counted on this machine only: which actions and how long on each screen.
+//! Opt-in with `[usage] enabled = true`.
 //! Nothing about the MRs is kept: no titles, paths, text, hosts or projects, only action names.
 //! vtui counts, keeps the file's format and sums the report; revu names what it counts and keeps the file in its cache.
 use crate::act::{self, Section};
@@ -7,31 +7,21 @@ use crate::cache::Cache;
 use anyhow::Result;
 use chrono::NaiveDate;
 pub(crate) use vtui::usage::{Counts, Tally};
-use vtui::usage::{Day, Group, Hint, Rules};
+use vtui::usage::{Day, Group, Rules};
 
 /// The file, at the cache root; deleting it starts the counts again.
 pub(crate) const FILE: &str = "usage.jsonl";
 
-/// A habit a faster key replaces, with what to try instead.
-const HINTS: &[Hint] = &[
-    Hint {
-        name: "long_walk",
-        text: "walked 15 lines or more with j or k to a hunk or a thread; ]c (next hunk) or ]n (next thread) jumps there",
-    },
-    Hint { name: "queue_after_zen", text: "left zen to open another MR from the queue; [m and ]m change MR, in zen too" },
-    Hint { name: "palette_number", text: "typed a bare number in the search; !42 (or #42 on GitHub) finds that MR directly" },
-];
-
-/// How time and hints are counted now: time stops a minute after the last input and while the terminal is in the
-/// background, and a hint fires only where a jump would have helped. Days counted before it keep only their actions.
+/// How time is counted now: it stops a minute after the last input and while the terminal is in the background.
+/// Days counted before it keep only their actions.
 const COUNTING: u32 = 2;
 
-/// What revu counts: every action the table lists, grouped as the report shows them, and its hints.
+/// What revu counts: every action the table lists, grouped as the report shows them.
 pub(crate) fn rules() -> Rules {
     Rules {
         actions: act::listed_names(),
         groups: Section::ALL.iter().map(|section| Group { title: section.title(), actions: act::listed_in(*section) }).collect(),
-        hints: HINTS,
+        hints: &[],
         renamed: &[],
         counting: COUNTING,
     }
@@ -80,6 +70,7 @@ mod tests {
                     {\"date\":\"2026-09-24\",\"version\":2,\"actions\":{\"next_thread\":3},\"screens\":{},\"hints\":{\"long_walk\":1},\"shown\":{\"long_walk\":1}}\n";
         let days = rules().parse(text);
         assert_eq!((days[0].version, days[1].version, days[1].counts.hints["long_walk"]), (1, 2, 1));
+        assert_eq!(rules().report(&days, date("2026-09-24"), Window::Days(30)).hints, [], "old hints read, and the report shows none");
         assert_eq!(rules().merge(text, date("2026-09-25"), &Counts::default()).unwrap().lines().nth(1), text.lines().nth(1));
     }
 

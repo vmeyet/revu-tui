@@ -75,11 +75,10 @@ impl App {
 
     /// A key after the user's bindings turned it into revu's own, counted when `[usage]` is on.
     fn dispatch(&mut self, key: KeyEvent) -> Vec<Action> {
-        let before = self.usage_before();
         self.repeat = Some(super::repeat::Repeat::after(self.repeat, key.code, self.now));
         self.key_did = None;
         let actions = self.dispatch_key(key);
-        self.count_key(before);
+        self.count_key();
         actions
     }
 

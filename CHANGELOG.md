@@ -51,6 +51,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
+- **Usage hints.**
+  With `[usage] enabled = true`: no more `tip:` toasts, and no HINTS in `revu usage`.
+  The counts and the rest of the report stay, and an older `usage.jsonl` still loads.
+
 - **The outline.**
   In the review: `O`, `:outline` and the call tree of the changed symbols.
   An `outline` left in `[keys.bind]` gets a warning, and the rest of the config loads.
