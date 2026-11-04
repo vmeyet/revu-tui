@@ -36,13 +36,13 @@ expression: "render(&mut app, 160, 45)"
 │             │          t  file tree                                                         :  commands: :go !42, :set theme=nord             │              │
 │             │          T  every thread of the MR                                          o y  open in the browser, copy the link             │              │
 │             │          p  pipeline                                                          a  the agent session of the MR                    │              │
-│             │          O  outline: the functions the MR changes                             r  refresh                                        │              │
-│             │          v  prose: the Markdown file rendered, its blocks marked              ?  this help                                      │              │
-│             │         zz  zen: the diff alone, quiet                                     q ^c  quit: twice; q closes a pane first             │              │
-│             │        w W  wrap long lines, hide whitespace changes                                                                            │              │
+│             │          v  prose: the Markdown file rendered, its blocks marked              r  refresh                                        │              │
+│             │         zz  zen: the diff alone, quiet                                        ?  this help                                      │              │
+│             │        w W  wrap long lines, hide whitespace changes                       q ^c  quit: twice; q closes a pane first             │              │
 │             │        = +  more lines, react on a thread                                                                                       │              │
+│             │         ^v  the file in your own program                                                                                        │              │
 │             │                                                                                                                                 │              │
-│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 40 · j k scroll · esc close ╯              │
+│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 39 · j k scroll · esc close ╯              │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

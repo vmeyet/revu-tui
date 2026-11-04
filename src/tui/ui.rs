@@ -86,8 +86,6 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
     let mut pictures = vec![];
     if app.open.as_ref().is_some_and(|o| o.pipeline.is_some()) && side_open {
         super::pipeline_view::draw(f, app, side);
-    } else if app.open.as_ref().is_some_and(|o| o.outline.is_some()) && side_open {
-        super::outline_view::draw(f, app, side);
     } else if app.open.as_ref().is_some_and(|o| o.tree.is_some()) && side_open {
         super::tree_view::draw(f, app, side);
     } else if side_open {
@@ -508,19 +506,6 @@ pub(super) fn settle_scroll(scroll: usize, selected: usize, height: usize) -> us
     } else {
         scroll
     }
-}
-
-/// `text` cut to `width` columns, an ellipsis in the last one when it does not fit.
-/// `2 passed · 1 failed`: each count in its colour, zeros left out.
-pub(crate) fn counts<'a>(parts: &[(usize, &str, Color)], theme: Theme) -> Line<'a> {
-    let mut spans = vec![Span::raw(" ")];
-    for (count, label, colour) in parts.iter().filter(|(count, _, _)| *count > 0) {
-        if spans.len() > 1 {
-            spans.push(Span::styled(" · ", Style::default().fg(theme.faded)));
-        }
-        spans.push(Span::styled(format!("{count} {label}"), Style::default().fg(*colour)));
-    }
-    Line::from(spans)
 }
 
 pub(super) fn short_age(age: Duration) -> String {

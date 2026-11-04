@@ -22,11 +22,10 @@ When a boundary or a flow changes, change this page in the same MR.
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, which lines are twins (`align.rs`), word highlighting inside them (`words.rs`), change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
-| `outline/` | The changed functions and classes of an MR (`O`) |
 | `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |
 | `keymap.rs` | The user's `[keys]` on top of the defaults |
 | `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
-| `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied; `outline/` is the outline pane's state |
+| `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied |
 | `tui/actions.rs` | The action runner: one task per `Action`, answers sent back as `Incoming` |
 | `tui/backend/mod.rs` | `Backend`: the parts behind the runner, one per concern, and `Homes`, each host's forge and cache |
 | `tui/backend/saves.rs`, `queue.rs`, `reviews.rs` | What the reader keeps (`state.json`, pins, queue view); the queue of every host; opening an MR and loading ahead |
@@ -98,7 +97,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the
 - One tokio multi-thread runtime (`#[tokio::main]`).
 - The loop is one task with a `tokio::select!` over terminal events, an unbounded `Incoming` channel and a tick; it never awaits the network.
 - Each `Action` runs in its own `tokio::spawn` task.
-- Blocking work goes to `spawn_blocking` through `blocking::run` (or `backend::run_blocking`, which hands the work its own copy of the backend part it needs): cache reads and writes, outline parsing, agent sessions, usage saves.
+- Blocking work goes to `spawn_blocking` through `blocking::run` (or `backend::run_blocking`, which hands the work its own copy of the backend part it needs): cache reads and writes, agent sessions, usage saves.
 - Child programs that answer quickly use `tokio::process`; programs that own the terminal block the loop on purpose.
 
 State shared between tasks, and why:
@@ -115,7 +114,7 @@ State shared between tasks, and why:
 | GitHub `Client::downloads: Arc<Downloads>` | Read only: the picture client is shared so the forge client stays cheap to clone |
 | `TypeSafe::slots: Arc<Semaphore>` | At most 8 Jev requests run at once, across every task that asks |
 | `log` subscriber: `Mutex<File>` | Every task writes the one log file |
-| `OnceLock` in `syntax`, `outline`, `review`; `LazyLock` in `act`, `version` | Grammars, hunk colours, the default keys and the version label are built once, on first use |
+| `OnceLock` in `syntax`, `review`; `LazyLock` in `act`, `version` | Grammars, hunk colours, the default keys and the version label are built once, on first use |
 
 ## Caching
 
@@ -155,7 +154,6 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | file | One changed file in the MR diff |
 | hunk | One `@@` block inside a file |
 | change label | How much a hunk or file's change matters: `whitespace`, `formatting`, `edited` or `rewritten`, the worst run deciding; rows draw no word for `edited`, so no label means an ordinary edit; describes the text change only, not its effect, and is display only; `diff::label::ChangeLabel` |
-| symbol | A function, method or class the outline lists |
 | prose | A Markdown file drawn rendered, block by block |
 | line | One diff row with an old and/or new number |
 | thread | One discussion, resolvable or not |

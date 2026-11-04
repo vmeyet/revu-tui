@@ -51,8 +51,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
-- **The outline's call tree, signatures, renames, languages but Python, `:outline` and every key of its pane but `r` and `esc`.**
-  In the outline pane: it now only lists the changed Python functions.
+- **The outline.**
+  In the review: `O`, `:outline` and the call tree of the changed symbols.
+  An `outline` left in `[keys.bind]` gets a warning, and the rest of the config loads.
 
 - **Ask Claude.**
   In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane, `revu ai ask` and `[ai.anthropic]`, which now only warns in the config.

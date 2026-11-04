@@ -128,7 +128,7 @@ impl App {
         if self.open.as_ref().is_some_and(|open| !open.pane_takes(&place)) {
             return;
         }
-        self.update_open(|open| Open { tree: None, pipeline: None, outline: None, ..open.with_pane(Some(Pane::at(place))) });
+        self.update_open(|open| Open { tree: None, pipeline: None, ..open.with_pane(Some(Pane::at(place))) });
         self.focus = Focus::Side;
     }
 
@@ -233,7 +233,7 @@ impl App {
     }
 
     /// The cursor on `target`; its folded file or hunk opens, and stays open like one opened by hand.
-    pub(super) fn jump_to_row(&mut self, target: &Row) -> Vec<Action> {
+    fn jump_to_row(&mut self, target: &Row) -> Vec<Action> {
         let Some(open) = self.open.take() else { return vec![] };
         let fold = unfolded_for(&open, target);
         let changed = fold != open.review.fold;

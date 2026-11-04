@@ -317,7 +317,6 @@ impl App {
             Act::Tree => self.toggle_tree(),
             Act::EveryThread => self.toggle_every_thread(),
             Act::Pipeline => return self.toggle_pipeline(),
-            Act::Outline => return self.toggle_outline(),
             Act::Whitespace => self.toggle_whitespace(),
             Act::React => {
                 self.open_react_here();
@@ -432,9 +431,6 @@ impl App {
     pub(super) fn handle_side_key(&mut self, key: KeyEvent) -> Vec<Action> {
         if self.pipeline_open() {
             return self.handle_pipeline_key(key);
-        }
-        if self.outline_open() {
-            return self.handle_outline_key(key);
         }
         if self.tree_open() {
             return self.handle_tree_key(key);

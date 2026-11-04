@@ -24,8 +24,6 @@ pub(crate) struct Open {
     pub(crate) tree: Option<super::Tree>,
     /// The CI run, when it holds the right pane.
     pub(crate) pipeline: Option<super::Pipeline>,
-    /// The symbols the MR changes, when they hold the right pane.
-    pub(crate) outline: Option<super::Outline>,
     /// The Markdown file drawn rendered, when it holds the diff area.
     pub(crate) prose: Option<super::Prose>,
     /// The file row pinned above the diff at the last draw, so `za` and `zc` fold that file.
@@ -49,7 +47,6 @@ impl Open {
             select_from: None,
             tree: None,
             pipeline: None,
-            outline: None,
             prose: None,
             pinned_file: None,
             deployments: None,
@@ -82,14 +79,14 @@ impl Open {
         })
     }
 
-    /// The right pane holds something: threads, the tree, the pipeline or the outline.
+    /// The right pane holds something: threads, the tree or the pipeline.
     pub(crate) fn side_open(&self) -> bool {
-        self.pane.is_some() || self.tree.is_some() || self.pipeline.is_some() || self.outline.is_some()
+        self.pane.is_some() || self.tree.is_some() || self.pipeline.is_some()
     }
 
-    /// The right pane shows threads: no file tree, pipeline or outline took their place.
+    /// The right pane shows threads: no file tree or pipeline took their place.
     pub(crate) fn shows_threads(&self) -> bool {
-        self.pane.is_some() && self.tree.is_none() && self.pipeline.is_none() && self.outline.is_none()
+        self.pane.is_some() && self.tree.is_none() && self.pipeline.is_none()
     }
 
     pub(crate) fn row(&self) -> Option<&Row> {
