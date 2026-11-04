@@ -128,7 +128,7 @@ impl App {
                 self.start_share(None);
                 vec![]
             }
-            Act::Session if !self.outline_keys() && !self.key_is_held() => self.open_session(),
+            Act::Session if !self.key_is_held() => self.open_session(),
             Act::FocusLeft => self.focus_left(),
             Act::FocusRight => self.focus_right(),
             _ => {
@@ -434,7 +434,7 @@ impl App {
         vec![]
     }
 
-    /// The outline has the keys: it reads `a` and `z` itself.
+    /// The outline has the keys: it reads `z` itself.
     fn outline_keys(&self) -> bool {
         self.focus == Focus::Side && self.outline_open()
     }

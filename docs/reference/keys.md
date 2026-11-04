@@ -91,9 +91,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | Keys | Does |
 |---|---|
 | `t` | call tree, or the flat list |
-| `u` | calls, or called by |
-| `s` | the whole stack, unchanged calls too |
-| `a` | public symbols only, or all |
 | `zo` `zc` `za` | open, close, toggle the branch |
 | `enter` | the call in the diff, the definition, a section |
 

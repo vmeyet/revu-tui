@@ -6,10 +6,9 @@ mod rows;
 pub(crate) use rows::{Entry, PaneLine, Rows};
 
 use crate::act::{Act, Pane};
-use crate::outline::{Direction, Reading, Section, Shape};
+use crate::outline::{Reading, Section};
 use crate::review::{Place, Review, Row, Side};
 use crossterm::event::KeyEvent;
-use rows::View;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -18,13 +17,8 @@ use std::sync::Arc;
 pub(crate) struct Outline {
     pub(crate) symbols: Symbols,
     pub(crate) selected: usize,
-    /// Private symbols too, `a`.
-    pub(crate) all: bool,
     /// The list of changes instead of the tree, `t`.
     pub(crate) flat: bool,
-    /// Every unchanged function called too, `s`.
-    pub(crate) stack: bool,
-    pub(crate) direction: Direction,
     /// The tree's folded branches, each by its child indexes from the top.
     folded: BTreeSet<Vec<usize>>,
     /// Built whenever the rest changes, so drawing only slices it.
@@ -44,10 +38,7 @@ impl Outline {
         Self {
             symbols: Symbols::Waiting,
             selected: 0,
-            all: false,
             flat: false,
-            stack: false,
-            direction: Direction::Calls,
             folded: BTreeSet::from([vec![Section::Tests as usize]]),
             rows: Arc::default(),
         }
@@ -67,8 +58,7 @@ impl Outline {
     /// The rows built again for what changed, the cursor kept on them.
     fn rebuilt(self) -> Self {
         let Symbols::Ready(reading) = &self.symbols else { return self };
-        let view = View { shape: Shape { direction: self.direction, all: self.all, stack: self.stack }, flat: self.flat };
-        let rows = Rows::build(reading, view, &self.folded);
+        let rows = Rows::build(reading, self.flat, &self.folded);
         let selected = self.selected.min(rows.entries.len().saturating_sub(1));
         Self { rows: Arc::new(rows), selected, ..self }
     }
@@ -152,10 +142,7 @@ impl App {
             Some(Act::FullPageUp) => moved(outline.selected.saturating_sub(page)),
             Some(Act::Top) => moved(0),
             Some(Act::Bottom) => moved(last),
-            Some(Act::OutlinePublic) => outline.shown_as(|o| Outline { all: !o.all, ..o }),
             Some(Act::OutlineTree) => outline.shown_as(|o| Outline { flat: !o.flat, ..o }),
-            Some(Act::OutlineCalls) => outline.shown_as(|o| Outline { direction: o.direction.reversed(), ..o }),
-            Some(Act::OutlineStack) => outline.shown_as(|o| Outline { stack: !o.stack, ..o }),
             Some(Act::Open) => return self.jump_from_outline(),
             Some(Act::Refresh) => return self.read_outline(),
             Some(Act::Back | Act::Outline | Act::ClosePane) => {
@@ -235,7 +222,7 @@ fn load(open: &Open) -> Action {
         .files
         .iter()
         .filter(|f| !f.binary && crate::outline::readable(&f.new_path))
-        .map(|f| crate::outline::Sides {
+        .map(|f| super::Sides {
             base: (f.kind != crate::review::FileKind::Added).then(|| f.old_path.clone()),
             head: (f.kind != crate::review::FileKind::Deleted).then(|| f.new_path.clone()),
         })
@@ -283,8 +270,8 @@ mod tests {
         app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
         let actions = press(&mut app, "O");
         let files = vec![
-            crate::outline::Sides { base: Some("shop/cart.py".into()), head: Some("shop/cart.py".into()) },
-            crate::outline::Sides { base: None, head: Some("tests/test_cart.py".into()) },
+            Sides { base: Some("shop/cart.py".into()), head: Some("shop/cart.py".into()) },
+            Sides { base: None, head: Some("tests/test_cart.py".into()) },
         ];
         assert_eq!(actions, vec![Action::LoadOutline { key: mr_key(), base: "aaaa".into(), head: "bbbb".into(), files }]);
         let reading = crate::outline::read(&[
@@ -313,26 +300,12 @@ mod tests {
     }
 
     #[test]
-    fn a_is_the_outlines_own_while_it_has_the_keys_and_the_session_after() {
-        let mut app = with_outline();
-        app.agent = true;
-        assert_eq!(press(&mut app, "a"), vec![]);
-        assert_eq!(rows(&app)[6..], ["_log", "Tests 1"], "private symbols, no session");
-        press(&mut app, "O");
-        assert!(matches!(press(&mut app, "a").as_slice(), [Action::Session { .. }]));
-    }
-
-    #[test]
-    fn o_shows_the_call_tree_t_the_flat_list_and_a_private_symbols_too() {
+    fn o_shows_the_call_tree_and_t_the_flat_list() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);
-        assert_eq!(rows(&app), ["Code 3", "refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay", "Tests 1"]);
-        press(&mut app, "a");
-        assert_eq!(rows(&app)[6..], ["_log", "Tests 1"]);
+        assert_eq!(rows(&app), ["Code 5", "refund", "└─ pay", "   └─ _fee", "Cart.total", "└─ pay", "_log", "Tests 1"]);
         press(&mut app, "t");
         assert_eq!(rows(&app), ["Code 5", "pay", "refund", "Cart.total", "_log", "_fee", "Tests 1"]);
-        press(&mut app, "a");
-        assert_eq!(rows(&app), ["Code 3", "pay", "refund", "Cart.total", "Tests 1"]);
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);
@@ -351,40 +324,23 @@ mod tests {
     }
 
     #[test]
-    fn u_lists_who_calls_each_symbol() {
-        let mut app = with_outline();
-        press(&mut app, "u");
-        assert_eq!(rows(&app), ["Code 3", "pay", "├─ refund", "└─ Cart.total", "Tests 1"]);
-    }
-
-    #[test]
     fn tests_open_with_enter_on_their_header_and_show_the_code_each_test_calls() {
         let mut app = with_outline();
         assert_eq!(app.open.as_ref().unwrap().outline.as_ref().unwrap().selected, 1, "the cursor starts on the first symbol");
         press(&mut app, "G");
         app.handle_key(code(KeyCode::Enter));
-        assert_eq!(rows(&app)[6..], ["Tests 1", "test_refund", "└─ refund", "   └─ pay", "      └─ _fee"]);
+        assert_eq!(rows(&app)[7..], ["Tests 1", "test_refund", "└─ refund", "   └─ pay", "      └─ _fee"]);
         press(&mut app, "zc");
-        assert_eq!(rows(&app)[6..], ["Tests 1"]);
-    }
-
-    #[test]
-    fn s_shows_the_whole_stack_and_says_so_in_the_title() {
-        let mut app = with_outline();
-        press(&mut app, "s");
-        assert!(app.open.as_ref().unwrap().outline.as_ref().unwrap().stack);
-        assert!(render(&mut app, 150, 20).contains("Outline · calls · public · stack"));
-        press(&mut app, "s");
-        assert!(render(&mut app, 150, 20).contains("Outline · calls · public ─"));
+        assert_eq!(rows(&app)[7..], ["Tests 1"]);
     }
 
     #[test]
     fn zc_folds_the_branch_under_the_cursor_and_zo_opens_it() {
         let mut app = with_outline();
         press(&mut app, "zc");
-        assert_eq!(rows(&app)[..3], ["Code 3", "refund", "Cart.total"]);
+        assert_eq!(rows(&app)[..3], ["Code 5", "refund", "Cart.total"]);
         press(&mut app, "zo");
-        assert_eq!(rows(&app)[..3], ["Code 3", "refund", "└─ pay"]);
+        assert_eq!(rows(&app)[..3], ["Code 5", "refund", "└─ pay"]);
     }
 
     #[test]
@@ -399,7 +355,7 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(place(&app), Some(Place::Line { file: 0, new: Some(10), old: None }), "refund's definition");
         press(&mut app, "l");
-        press(&mut app, "taGkk");
+        press(&mut app, "tGkk");
         app.handle_key(code(KeyCode::Enter));
         let Some(Place::Line { old, .. }) = place(&app) else { panic!("on a line") };
         assert_eq!(old, Some(10), "_log was on base line 10");

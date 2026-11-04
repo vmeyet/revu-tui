@@ -63,7 +63,7 @@ pub(crate) use pin::PinChange;
 pub(crate) use pins::{MIN_HEIGHT as PIN_MIN_HEIGHT, Pins, pins, settle as settle_with_pins};
 pub(crate) use pipeline::{Pipeline, Run};
 pub(crate) use prefetch::Ahead;
-pub(crate) use prose::{Prose, Texts, Versions};
+pub(crate) use prose::{Prose, Sides, Texts, Versions};
 pub(crate) use queue::{Badge, QueueRow};
 pub(crate) use react::{Pick, Prompt, failure as react_failure};
 pub(crate) use review::Open;
@@ -263,14 +263,14 @@ pub(crate) enum Action {
         key: MrKey,
         base: Sha,
         head: Sha,
-        files: Vec<crate::outline::Sides>,
+        files: Vec<Sides>,
     },
     /// `v`: the Markdown file of `sides`, read at commits `base` and `head`.
     LoadProse {
         key: MrKey,
         base: Sha,
         head: Sha,
-        sides: crate::outline::Sides,
+        sides: Sides,
     },
     /// The review apps of the MR of `branch`, `head` telling which run it as it is now.
     LoadDeployments {
@@ -522,7 +522,7 @@ pub(crate) enum Incoming {
     /// Both sides of the Markdown file the prose view shows.
     Prose {
         key: MrKey,
-        sides: crate::outline::Sides,
+        sides: Sides,
         versions: Versions,
     },
     /// The open MR's review apps, newest deployment of each environment.

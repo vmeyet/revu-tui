@@ -4,7 +4,7 @@ use super::queue_view::rule;
 use super::theme::Theme;
 use super::ui::{counts, draw_empty, settle_scroll, side_pane};
 use crate::diff::words::Segment;
-use crate::outline::{Change, Direction, Item, Section, State};
+use crate::outline::{Change, Item, Section, State};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -29,8 +29,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let Symbols::Ready(reading) = &outline.symbols else { return };
     let rows = &outline.rows;
     if rows.entries.is_empty() {
-        let hint = if outline.all { "" } else { "a lists private ones too" };
-        return draw_empty(f, theme, inner, &["no function or class changed", hint]);
+        return draw_empty(f, theme, inner, &["no function or class changed"]);
     }
     let height = inner.height as usize;
     let scroll = settle_scroll(0, rows.line_of.get(outline.selected).copied().unwrap_or(0), height);
@@ -68,15 +67,9 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     app.list_rows.extend(list_rows);
 }
 
-/// `Outline · calls · public`: how the pane shows.
+/// `Outline · calls`: how the pane shows.
 fn title(outline: &Outline) -> String {
-    let shape = match (outline.flat, outline.direction) {
-        (true, _) => "list",
-        (false, Direction::Calls) => "calls",
-        (false, Direction::CalledBy) => "called by",
-    };
-    let stack = if outline.stack { " · stack" } else { "" };
-    format!("Outline · {shape} · {}{stack}", if outline.all { "all" } else { "public" })
+    format!("Outline · {}", if outline.flat { "list" } else { "calls" })
 }
 
 /// `2 breaking · 3 added · 1 renamed`, zeros left out.
