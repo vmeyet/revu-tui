@@ -1,20 +1,15 @@
 //! The outline pane (`O`): the functions, methods and classes the MR changes, by file.
 use super::{Action, App, Focus, Open};
-mod rows;
-
-pub(crate) use rows::PaneLine;
 
 use crate::act::{Act, Pane};
 use crate::outline::Reading;
 use crossterm::event::KeyEvent;
 use std::sync::Arc;
 
-/// The pane while it is open: what was read, and the rows that makes.
+/// The pane while it is open: what was read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Outline {
     pub(crate) symbols: Symbols,
-    /// Built whenever the rest changes, so drawing only reads it.
-    pub(crate) rows: Arc<Vec<PaneLine>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,14 +22,7 @@ pub(crate) enum Symbols {
 
 impl Outline {
     fn waiting() -> Self {
-        Self { symbols: Symbols::Waiting, rows: Arc::default() }
-    }
-
-    /// The rows built again for what changed.
-    fn rebuilt(self) -> Self {
-        let Symbols::Ready(reading) = &self.symbols else { return self };
-        let rows = rows::build(reading);
-        Self { rows: Arc::new(rows), ..self }
+        Self { symbols: Symbols::Waiting }
     }
 }
 
@@ -69,15 +57,6 @@ impl App {
         vec![action]
     }
 
-    /// `:outline`: the pane, open or opened.
-    pub(super) fn show_outline(&mut self) -> Vec<Action> {
-        if self.outline_open() {
-            self.focus = Focus::Side;
-            return vec![];
-        }
-        self.toggle_outline()
-    }
-
     fn close_outline(&mut self) {
         self.update_open(|open| open.with_outline(None));
         self.focus = Focus::Review;
@@ -107,7 +86,7 @@ impl App {
     /// The symbols read, or why they could not be; dropped once the pane closed.
     pub(super) fn settle_outline(&mut self, symbols: Symbols) {
         if self.outline_open() {
-            self.update_open(|open| open.with_outline(Some(Outline { symbols, ..Outline::waiting() }.rebuilt())));
+            self.update_open(|open| open.with_outline(Some(Outline { symbols })));
         }
     }
 }
@@ -153,14 +132,14 @@ mod tests {
     fn names(app: &App) -> Vec<String> {
         let outline = app.open.as_ref().unwrap().outline.as_ref().unwrap();
         let Symbols::Ready(reading) = &outline.symbols else { return vec![] };
-        reading.changes.iter().map(|change| change.symbol.name.clone()).collect()
+        reading.changes.iter().map(|change| change.name.clone()).collect()
     }
 
     #[test]
     fn o_lists_the_changed_symbols_and_closes_them_again() {
         let mut app = with_outline();
         assert_eq!(app.focus, Focus::Side);
-        assert_eq!(names(&app), ["_fee", "pay", "refund", "Cart.total", "_log"]);
+        assert_eq!(names(&app), ["_fee", "_log", "pay", "refund", "total"]);
         press(&mut app, "O");
         assert!(app.open.as_ref().unwrap().outline.is_none());
         assert_eq!(app.focus, Focus::Review);

@@ -82,8 +82,6 @@ pub(crate) enum Command {
     },
     /// The file in the reader's program: nothing for the cursor's file, `old` for its base version, or `path[:line]`.
     View(String),
-    /// `:outline`: the symbols the MR changes in the right pane, as `O` does.
-    Outline,
     /// `:ai off`: no more AI calls this session.
     AiOff,
     /// `:ai on`: Jev answers again, when the config switched it on.
@@ -115,7 +113,6 @@ impl Command {
             Self::Unpin => Act::UnpinCommand,
             Self::Set { .. } => Act::SetCommand,
             Self::View(_) => Act::ViewCommand,
-            Self::Outline => Act::OutlineCommand,
             Self::AiOff | Self::AiOn => Act::AiCommand,
             Self::Share(_) => Act::ShareCommand,
             Self::Session => Act::SessionCommand,
@@ -153,7 +150,6 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
             Ok(Command::Set { key: key.to_owned(), value: value.to_owned() })
         }
         "view" | "v" => Ok(Command::View(rest.to_owned())),
-        "outline" => Ok(Command::Outline),
         "ai" if rest == "off" => Ok(Command::AiOff),
         "ai" if rest == "on" => Ok(Command::AiOn),
         "ai" => Err(":ai off or :ai on".into()),

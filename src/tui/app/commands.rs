@@ -153,7 +153,6 @@ impl App {
             Command::Unpin => self.pin_command(PinChange::Unpin),
             Command::Set { key, value } => self.set(&key, &value),
             Command::View(argument) => self.view_command(&argument),
-            Command::Outline => self.show_outline(),
             Command::AiOff => {
                 self.ai_off();
                 vec![]
