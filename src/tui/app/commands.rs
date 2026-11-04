@@ -88,10 +88,6 @@ impl App {
                 self.count("palette_mr");
                 self.open_key(key)
             }
-            Some(Target::Answer(index)) => {
-                self.show_past_answer(index);
-                vec![]
-            }
             Some(Target::Session(index)) => self.pick_session(index),
             None => vec![],
         }
@@ -102,7 +98,6 @@ impl App {
     pub(crate) fn palette_candidates(&self, palette: &Palette) -> Vec<Candidate> {
         match palette.mode {
             Mode::Mrs => self.mr_candidates(&palette.input),
-            Mode::Answers => self.answer_candidates(&palette.input),
             Mode::Sessions => self.session_candidates(&palette.input),
             Mode::Commands => vec![],
         }
@@ -120,17 +115,6 @@ impl App {
         let ranked: Vec<Candidate> =
             if words.is_empty() { kept.map(|(_, c)| c).collect() } else { fuzzy::rank(&words, kept).into_iter().map(|(_, c)| c).collect() };
         ranked.into_iter().take(MAX_SHOWN).collect()
-    }
-
-    /// The kept answers, newest first, each with its age and a word when the MR moved on since.
-    fn answer_candidates(&self, typed: &str) -> Vec<Candidate> {
-        let head = self.open.as_ref().map(|o| &o.review.mr.refs.head);
-        let answers = self.past_answers.iter().enumerate().map(|(i, past)| {
-            let age = crate::tui::ui::short_age((self.today - past.asked_at).to_std().unwrap_or_default());
-            let detail = if Some(&past.head) == head { age } else { format!("{age} · older push") };
-            (past.label.clone(), Candidate { label: past.label.clone(), detail, target: Target::Answer(i) })
-        });
-        fuzzy::rank(typed, answers).into_iter().map(|(_, c)| c).take(MAX_SHOWN).collect()
     }
 
     /// What the token under the cursor completes to, for tab and the ghost text.

@@ -135,8 +135,6 @@ pub(crate) struct App {
     pub(crate) reactions: crate::reactions::History,
     /// What `/` looks for in the diff, while it is typed and after, until `esc`.
     pub(crate) search: Option<super::Search>,
-    /// The answers `a h` found kept for the open MR, which the search box lists.
-    pub(crate) past_answers: Vec<super::PastAnswer>,
     pub(crate) ascii: bool,
     pub(crate) notify: bool,
     pub(crate) hosts: crate::forge::Hosts,
@@ -317,7 +315,6 @@ impl App {
             react: None,
             reactions: settings.reactions,
             search: None,
-            past_answers: vec![],
             ascii: settings.ascii,
             notify: settings.notify,
             hosts: settings.hosts,

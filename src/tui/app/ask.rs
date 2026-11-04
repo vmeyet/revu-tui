@@ -1,50 +1,25 @@
 //! `a`: questions to Claude about what is under the cursor, answered in the right pane.
 use super::{Action, App, Focus, Input, MrKey, Open};
 use crate::act::{Act, Pane};
-use crate::ai::anthropic::{self, Ask, Outcome, Role, Turn};
+use crate::ai::anthropic::{self, Outcome};
 use crate::ai::context::{self, Prompt, Scope};
-use crate::forge::Position;
 use crate::review::Row;
-use chrono::{DateTime, Utc};
 use crossterm::event::KeyEvent;
 
 const HALF_PAGE: usize = 10;
 
-/// Claude's answer in the right pane, and the conversation that led to it.
+/// Claude's answer in the right pane.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Answer {
     /// Grows with every question, so pieces of an older stream can be told apart and dropped.
     pub(crate) id: u64,
-    /// `explain · charge.rs`, the pane's title.
+    /// `ask · charge.rs`, the pane's title.
     pub(crate) label: String,
-    /// Everything sent so far; the question being answered is its last turn.
-    pub(crate) request: Ask,
     pub(crate) text: String,
     pub(crate) state: AnswerState,
     /// Painted from the cache: the same question was answered before for this diff.
     pub(crate) cached: bool,
     pub(crate) scroll: usize,
-    /// Where `c` puts a draft made of the answer: the lines asked about, or the thread.
-    pub(crate) target: Target,
-}
-
-/// An answer Claude gave before on this MR, kept in the cache.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PastAnswer {
-    pub(crate) label: String,
-    pub(crate) asked_at: DateTime<Utc>,
-    /// The commit asked about: once the MR moved on, the answer reads an older push.
-    pub(crate) head: crate::forge::Sha,
-    pub(crate) request: Ask,
-    pub(crate) text: String,
-    pub(crate) outcome: Outcome,
-}
-
-/// Where an answer may come from: `CacheFirst` reuses one kept for the same question.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AnswerSource {
-    CacheFirst,
-    Fresh,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,13 +61,6 @@ impl Open {
     }
 }
 
-/// Where an answer can become a draft.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Target {
-    Lines(Box<Position>),
-    Nowhere,
-}
-
 /// What a piece of Claude's stream brings to the app.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Part {
@@ -108,30 +76,19 @@ pub(crate) enum Part {
 }
 
 impl App {
-    /// `a` then a letter: `a` asks anything about the hunk, file or lines under the cursor, `h` lists the answers kept.
+    /// `a` then a letter: `a` asks anything about the hunk, file or lines under the cursor.
     pub(super) fn ask_key(&mut self, c: char) -> Vec<Action> {
-        if c == 'h' {
-            return self.open.as_ref().map(|o| vec![Action::LoadAnswers(o.key.clone())]).unwrap_or_default();
-        }
         if self.ask_model.is_none() {
             self.warn("Claude is off · set [ai.anthropic] enabled = true and run revu ai login anthropic");
             return vec![];
         }
         let Some(open) = &self.open else { return vec![] };
         if c != 'a' {
-            self.toast("a then a asks anything · h answers kept · g agent session");
+            self.toast("a then a asks anything · g agent session");
             return vec![];
         }
         let scope = scope_at_cursor(open);
-        self.question_box(Input::Ask { scope: Box::new(scope), target: Box::new(self.lines_target()) })
-    }
-
-    /// The first question of a conversation, built from the review as it is now.
-    pub(super) fn ask(&mut self, scope: &Scope, prompt: &Prompt, target: Target) -> Vec<Action> {
-        let Some(open) = &self.open else { return vec![] };
-        let request = context::ask(&open.review, scope, prompt, context::BUDGET);
-        let label = format!("{} · {}", label_of(prompt), scope_label(scope));
-        self.start_answer(label, request, target, AnswerSource::CacheFirst)
+        self.question_box(Input::Ask { scope: Box::new(scope) })
     }
 
     /// `:ask <question>`: about what `a a` would ask about.
@@ -145,74 +102,31 @@ impl App {
             return vec![];
         };
         let scope = scope_at_cursor(open);
-        let target = self.lines_target();
-        self.ask(&scope, &Prompt::Free(question), target)
+        self.ask(&scope, question)
     }
 
-    /// `enter` in the answer: the next question goes on the same conversation.
-    pub(super) fn follow_up(&mut self, question: String) -> Vec<Action> {
-        let Some(answer) = self.open.as_ref().and_then(|o| o.answer.as_ref()) else { return vec![] };
-        let mut request = answer.request.clone();
-        request.turns.push(Turn { role: Role::Assistant, text: answer.text.clone() });
-        request.turns.push(Turn { role: Role::User, text: question });
-        let (label, target) = (answer.label.clone(), answer.target.clone());
-        self.start_answer(label, request, target, AnswerSource::CacheFirst)
-    }
-
-    fn start_answer(&mut self, label: String, request: Ask, target: Target, source: AnswerSource) -> Vec<Action> {
+    /// The question, built from the review as it is now.
+    pub(super) fn ask(&mut self, scope: &Scope, question: String) -> Vec<Action> {
         if !self.asked {
             self.asked = true;
             let model = self.ask_model.clone().unwrap_or_default();
             self.toast(format!("asking Claude ({model}) · this MR goes to Anthropic"));
         }
         let Some(open) = &self.open else { return vec![] };
+        let request = context::ask(&open.review, scope, &Prompt::Free(question), context::BUDGET);
         self.next_answer += 1;
         let answer = Answer {
             id: self.next_answer,
-            label,
-            request: request.clone(),
+            label: format!("ask · {}", scope_label(scope)),
             text: String::new(),
             state: AnswerState::Streaming,
             cached: false,
             scroll: 0,
-            target,
         };
-        let (key, head) = (open.key.clone(), open.review.mr.refs.head.clone());
-        let ask = Action::Ask { key, id: self.next_answer, request: Box::new(request), source, label: answer.label.clone(), head };
+        let ask = Action::Ask { key: open.key.clone(), id: self.next_answer, request: Box::new(request) };
         self.update_open(|open| open.showing_answer(answer));
         self.focus = Focus::Side;
         vec![ask]
-    }
-
-    /// The answers kept for the open MR, listed in the search box to pick one; a word when none is.
-    pub(super) fn apply_past_answers(&mut self, key: &MrKey, answers: Vec<PastAnswer>) {
-        if self.open.as_ref().is_none_or(|o| o.key != *key) {
-            return;
-        }
-        if answers.is_empty() {
-            self.toast("no answer kept for this MR yet · a then e, r, s, t, c or a asks");
-            return;
-        }
-        self.past_answers = answers;
-        self.open_palette(crate::tui::palette::Mode::Answers);
-    }
-
-    /// A kept answer back in the pane, as it was, ready for a follow-up.
-    pub(super) fn show_past_answer(&mut self, index: usize) {
-        let Some(past) = self.past_answers.get(index).filter(|_| self.open.is_some()) else { return };
-        self.next_answer += 1;
-        let answer = Answer {
-            id: self.next_answer,
-            label: past.label.clone(),
-            request: past.request.clone(),
-            text: past.text.clone(),
-            state: AnswerState::Done(past.outcome.clone()),
-            cached: true,
-            scroll: 0,
-            target: Target::Nowhere,
-        };
-        self.update_open(|open| open.showing_answer(answer));
-        self.focus = Focus::Side;
     }
 
     pub(super) fn apply_answer(&mut self, key: &MrKey, id: u64, part: Part) {
@@ -221,9 +135,7 @@ impl App {
     }
 
     pub(super) fn handle_answer_key(&mut self, key: KeyEvent) -> Vec<Action> {
-        let act = self.act_here(Pane::Answer, key);
-        let Some(answer) = self.open.as_ref().and_then(|o| o.answer.as_ref()) else { return vec![] };
-        match act {
+        match self.act_here(Pane::Answer, key) {
             Some(Act::MoveDown) => self.scroll_answer(1),
             Some(Act::MoveUp) => self.scroll_answer(-1),
             Some(Act::PageDown) => self.scroll_answer(HALF_PAGE as isize),
@@ -232,13 +144,6 @@ impl App {
             Some(Act::FullPageUp) => self.scroll_answer(-super::keys::full_page(self.areas.side)),
             Some(Act::Top) => self.scroll_answer(isize::MIN / 2),
             Some(Act::Bottom) => self.scroll_answer(isize::MAX / 2),
-            Some(Act::AnswerCopy) => return vec![Action::Copy { text: answer.text.clone(), done: "copied".into() }],
-            Some(Act::AnswerDraft) => self.draft_from_answer(&answer.clone()),
-            Some(Act::AnswerFollowUp) if answer.state != AnswerState::Streaming => return self.question_box(Input::FollowUp),
-            Some(Act::AnswerAgain) => {
-                let (label, request, target) = (answer.label.clone(), answer.request.clone(), answer.target.clone());
-                return self.start_answer(label, request, target, AnswerSource::Fresh);
-            }
             Some(Act::Back | Act::ClosePane) => self.close_answer(),
             _ => self.did_nothing(),
         }
@@ -260,18 +165,6 @@ impl App {
         self.focus = Focus::Review;
     }
 
-    /// `c`: the answer, editable first, as a draft on the lines asked about or as a reply in the thread.
-    fn draft_from_answer(&mut self, answer: &Answer) {
-        if answer.text.trim().is_empty() {
-            self.toast("nothing to turn into a comment yet");
-            return;
-        }
-        match &answer.target {
-            Target::Lines(position) => self.open_input(Input::Comment { position: position.clone() }, &answer.text),
-            Target::Nowhere => self.toast("a comment needs a line: ask with a a on one"),
-        }
-    }
-
     /// The compose box for a question, shown in the answer pane.
     fn question_box(&mut self, input: Input) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
@@ -279,12 +172,10 @@ impl App {
             let waiting = Answer {
                 id: 0,
                 label: "ask".into(),
-                request: Ask { system: vec![], turns: vec![] },
                 text: String::new(),
                 state: AnswerState::Done(Outcome { stop: anthropic::Stop::Done, usage: anthropic::Usage::default(), model: String::new() }),
                 cached: false,
                 scroll: 0,
-                target: Target::Nowhere,
             };
             self.update_open(|open| open.showing_answer(waiting));
         }
@@ -293,15 +184,6 @@ impl App {
         self.focus = Focus::Side;
         self.input = Some(input);
         vec![]
-    }
-
-    /// The typed text of a question box: a concern for a comment, a free question, or a follow-up.
-    pub(super) fn submit_question(&mut self, input: Input, text: String) -> Vec<Action> {
-        match input {
-            Input::Ask { scope, target, .. } => self.ask(&scope, &Prompt::Free(text), *target),
-            Input::FollowUp => self.follow_up(text),
-            _ => vec![],
-        }
     }
 
     /// `:ai off`: nothing more goes to an AI provider until `:ai on` or `revu` starts again.
@@ -324,13 +206,9 @@ impl App {
         self.ask_model = ask;
         self.toast(format!("AI on: {}", names.join(" and ")));
     }
-
-    fn lines_target(&self) -> Target {
-        self.position_here().map_or(Target::Nowhere, |p| Target::Lines(Box::new(p)))
-    }
 }
 
-/// What `a e` and `a a` are about: the hunk under the cursor, its file on a file row, else the MR.
+/// What `a a` is about: the hunk under the cursor, its file on a file row, else the MR.
 fn scope_at_cursor(open: &Open) -> Scope {
     match open.row() {
         Some(Row::Line { file, hunk, .. } | Row::Pair { file, hunk, .. } | Row::Hunk { file, index: hunk, .. }) => {
@@ -338,14 +216,6 @@ fn scope_at_cursor(open: &Open) -> Scope {
         }
         Some(Row::File { index, .. }) => Scope::File(open.review.files[*index].new_path.clone()),
         _ => Scope::Mr,
-    }
-}
-
-fn label_of(prompt: &Prompt) -> &'static str {
-    match prompt {
-        Prompt::Explain => "explain",
-        Prompt::Summary => "summary",
-        Prompt::Free(_) => "ask",
     }
 }
 
@@ -386,8 +256,7 @@ mod tests {
     fn a_a_asks_about_the_hunk_under_the_cursor_and_streams_into_the_pane() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, request, source) = the_ask(&ask_here(&mut app, "what does it do?"));
-        assert_eq!(source, AnswerSource::CacheFirst);
+        let (id, request) = the_ask(&ask_here(&mut app, "what does it do?"));
         assert_eq!(request.system.len(), 3, "rules, the MR, the hunk");
         assert!(request.system[2].text.contains("@@"));
         assert_eq!(request.turns.last().unwrap().text, "what does it do?");
@@ -411,50 +280,12 @@ mod tests {
     fn pieces_waiting_together_apply_in_order_before_the_next_draw() {
         let mut app = asking();
         on_line(&mut app);
-        let (id, _, _) = the_ask(&ask_here(&mut app, "why?"));
+        let (id, _) = the_ask(&ask_here(&mut app, "why?"));
         app.take_actions();
         let piece = |text: &str| Incoming::Answer { key: mr_key(), id, part: Part::Text(text.into()) };
         let actions = app.apply_all([piece("one "), piece("two "), piece("three")]);
         assert!(actions.is_empty(), "{actions:?}");
         assert_eq!(answer(&app).text, "one two three");
-    }
-
-    #[test]
-    fn an_answer_becomes_a_draft_on_the_lines_asked_about() {
-        let mut app = asking();
-        on_line(&mut app);
-        let (id, ..) = the_ask(&ask_here(&mut app, "why?"));
-        app.apply(Incoming::Answer {
-            key: mr_key(),
-            id,
-            part: Part::Done { outcome: done("claude-opus-5"), cached_text: Some("Rename this.".into()) },
-        });
-        assert!(answer(&app).cached);
-        press(&mut app, "c");
-        assert!(matches!(app.input, Some(Input::Comment { .. })), "{:?}", app.input);
-        assert_eq!(app.buffer.text(), "Rename this.", "editable before it is saved");
-        let actions = app.handle_key(code(KeyCode::Enter));
-        assert!(matches!(actions.as_slice(), [Action::SaveDraft { .. }]), "{actions:?}");
-    }
-
-    #[test]
-    fn a_follow_up_carries_the_conversation_and_r_asks_again_fresh() {
-        let mut app = asking();
-        on_line(&mut app);
-        let (id, ..) = the_ask(&ask_here(&mut app, "why?"));
-        app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Text("First answer.".into()) });
-        app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done { outcome: done("claude-opus-5"), cached_text: None } });
-        app.handle_key(code(KeyCode::Enter));
-        assert_eq!(app.input, Some(Input::FollowUp));
-        let (next, request, _) = the_ask(&type_text(&mut app, "and the tests?"));
-        assert!(next > id);
-        let roles: Vec<_> = request.turns.iter().map(|t| (t.role, t.text.as_str())).collect();
-        assert_eq!(
-            roles[1..],
-            [(crate::ai::anthropic::Role::Assistant, "First answer."), (crate::ai::anthropic::Role::User, "and the tests?")]
-        );
-        let (_, again, source) = the_ask(&press(&mut app, "R"));
-        assert!(source == AnswerSource::Fresh && again == request, "R asks the same thing past the cache");
     }
 
     #[test]
@@ -490,48 +321,5 @@ mod tests {
         assert_eq!(press(&mut app, "aa"), [] as [Action; 0]);
         press(&mut app, ":ask why");
         assert_eq!(app.handle_key(code(KeyCode::Enter)), [] as [Action; 0]);
-    }
-
-    fn past(label: &str, head: &str, asked_at: DateTime<Utc>, text: &str) -> PastAnswer {
-        let request = crate::ai::anthropic::Ask {
-            system: vec![],
-            turns: vec![crate::ai::anthropic::Turn { role: crate::ai::anthropic::Role::User, text: "Explain this hunk".into() }],
-        };
-        PastAnswer { label: label.into(), asked_at, head: head.into(), request, text: text.into(), outcome: done("claude-opus-5") }
-    }
-
-    #[test]
-    fn a_h_lists_the_kept_answers_and_enter_brings_one_back_ready_for_a_follow_up() {
-        let mut app = asking();
-        on_line(&mut app);
-        assert_eq!(press(&mut app, "ah"), vec![Action::LoadAnswers(mr_key())]);
-        let head = app.open.as_ref().unwrap().review.mr.refs.head.clone();
-        let hours_ago = |h: i64| app.today - chrono::Duration::hours(h);
-        let answers = vec![
-            past("explain · charge.rs", head.as_str(), hours_ago(1), "It retries."),
-            past("summary", "01de51", hours_ago(30), "Cards charged once."),
-        ];
-        app.apply(Incoming::PastAnswers { key: mr_key(), answers });
-        let screen = render(&mut app, 150, 30);
-        assert!(screen.contains("explain · charge.rs") && screen.contains("summary"), "{screen}");
-        assert!(screen.contains("1d · older push"), "an answer from before the last push says so:\n{screen}");
-        press(&mut app, "sum");
-        app.handle_key(code(KeyCode::Enter));
-        let shown = answer(&app);
-        assert_eq!((shown.label.as_str(), shown.text.as_str(), shown.cached), ("summary", "Cards charged once.", true));
-        assert_eq!(app.focus, Focus::Side);
-        app.handle_key(code(KeyCode::Enter));
-        let actions = type_text(&mut app, "why once?");
-        let (_, request, _) = the_ask(&actions);
-        assert_eq!(request.turns.len(), 3, "the kept question, its answer, the follow-up");
-    }
-
-    #[test]
-    fn a_h_with_nothing_kept_says_how_to_ask() {
-        let mut app = with_review();
-        press(&mut app, "ah");
-        app.apply(Incoming::PastAnswers { key: mr_key(), answers: vec![] });
-        assert!(app.palette.is_none());
-        assert!(app.live_toast().unwrap().text.contains("no answer kept"));
     }
 }

@@ -204,12 +204,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.files.view(key, &path, &sha, line, note).await;
                 send(outcome.unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }));
             }
-            Action::Ask { key, id, request, source, label, head } => backend.ai.ask(&key, id, &request, source, &label, &head, &send).await,
-            Action::LoadAnswers(key) => {
-                let wanted = key.clone();
-                let answers = read_cache(&backend.ai, move |ai| ai.past_answers(&wanted)).await;
-                send(Incoming::PastAnswers { key, answers });
-            }
+            Action::Ask { key, id, request } => backend.ai.ask(&key, id, &request, &send).await,
             Action::Triage(mr) => {
                 send(backend.ai.triage(&mr).await.unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }));
             }

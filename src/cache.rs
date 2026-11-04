@@ -91,14 +91,6 @@ impl Cache {
         self.dir.join(key).is_file()
     }
 
-    /// The entries of folder `dir` whose names start with `prefix`, as keys `read` takes; none
-    /// when the folder is not there.
-    pub(crate) fn keys_in(&self, dir: &str, prefix: &str) -> Vec<String> {
-        let Ok(listed) = std::fs::read_dir(self.dir.join(dir)) else { return vec![] };
-        let names = listed.filter_map(|entry| entry.ok()?.file_name().into_string().ok());
-        names.filter(|name| name.starts_with(prefix) && !name.ends_with(UNREADABLE)).map(|name| format!("{dir}/{name}")).collect()
-    }
-
     /// Every MR this cache holds a folder for, with when anything in it was last written.
     pub(crate) fn kept_mrs(&self) -> Vec<Kept> {
         let mrs = self.dir.join("mr");
@@ -398,11 +390,6 @@ pub(crate) mod keys {
         format!("{}/ai/answer.{}.json", dir(key), sha1_smol::Sha1::from(request.as_bytes()).digest())
     }
 
-    /// Where every answer about an MR lies, and what their names start with.
-    pub(crate) fn answers(key: &MrKey) -> (String, &'static str) {
-        (format!("{}/ai", dir(key)), "answer.")
-    }
-
     /// What Jev read in an MR at one head commit.
     pub(crate) fn reading(key: &MrKey, head: &Sha) -> String {
         format!("{}/ai/reading.{head}.json", dir(key))
@@ -557,20 +544,6 @@ mod tests {
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         assert_eq!(names, vec!["state.json"]);
-    }
-
-    #[test]
-    fn keys_in_lists_one_folders_entries_by_prefix() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache = Cache::in_dir(dir.path());
-        cache.write("mr/a/1/ai/answer.1.json", &1).unwrap();
-        cache.write("mr/a/1/ai/answer.2.json", &2).unwrap();
-        cache.write("mr/a/1/ai/verdict.json", &3).unwrap();
-        cache.write("mr/a/1/ai/answer.3.json.unreadable", &4).unwrap();
-        let mut found = cache.keys_in("mr/a/1/ai", "answer.");
-        found.sort();
-        assert_eq!(found, ["mr/a/1/ai/answer.1.json", "mr/a/1/ai/answer.2.json"]);
-        assert_eq!(cache.keys_in("mr/a/2/ai", "answer."), [] as [String; 0]);
     }
 
     #[test]

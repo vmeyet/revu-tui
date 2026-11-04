@@ -12,8 +12,6 @@ pub(crate) enum Mode {
     #[default]
     Mrs,
     Commands,
-    /// The answers Claude gave before on the open MR, `a h`.
-    Answers,
     /// The agent sessions that could be an MR's, `a g`.
     Sessions,
 }
@@ -37,7 +35,6 @@ impl Mode {
         match self {
             Mode::Mrs => ("", "MRs · @author !42 ~label draft:no"),
             Mode::Commands => (">", "commands"),
-            Mode::Answers => ("", "answers kept for this MR"),
             Mode::Sessions => ("", "sessions of this checkout"),
         }
     }
@@ -46,8 +43,6 @@ impl Mode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Target {
     Mr(MrKey),
-    /// A kept answer, by its index in the list `a h` found.
-    Answer(usize),
     /// An agent session, by its index in the list `a g` found; `None` for a new one.
     Session(Option<usize>),
 }

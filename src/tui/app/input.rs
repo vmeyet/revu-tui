@@ -30,7 +30,7 @@ impl App {
             Input::Reply { .. } if open.pane.is_some() => None,
             Input::EditDraft { .. } if open.lists_every_thread() => None,
             Input::Reply { thread } => Some(place_of_thread(review, thread)),
-            Input::Ask { .. } | Input::FollowUp => None,
+            Input::Ask { .. } => None,
             Input::EditDraft { draft } => {
                 review.drafts.iter().find(|d| d.is(*draft)).map(|draft| match (&draft.position, &draft.reply_to) {
                     (Some(position), _) => place_of_position(review, position).unwrap_or(Place::Mr),
@@ -169,7 +169,7 @@ impl App {
             }
             Input::Reply { thread } => self.add_draft(Draft::reply(thread, text)),
             Input::EditDraft { draft } => self.change_draft(draft, text),
-            question @ (Input::Ask { .. } | Input::FollowUp) => self.submit_question(question, text),
+            Input::Ask { scope } => self.ask(&scope, text),
         }
     }
 
@@ -247,7 +247,6 @@ impl App {
             }
             Some(Input::EditDraft { .. }) => "edit draft".to_owned(),
             Some(Input::Ask { .. }) => "ask Claude".to_owned(),
-            Some(Input::FollowUp) => "follow-up".to_owned(),
             None => String::new(),
         }
     }
@@ -258,7 +257,7 @@ impl Post {
         match input {
             Input::Comment { position } => Some(Post::Thread(position.clone())),
             Input::Reply { thread } => Some(Post::Reply(thread.clone())),
-            Input::EditDraft { .. } | Input::Ask { .. } | Input::FollowUp => None,
+            Input::EditDraft { .. } | Input::Ask { .. } => None,
         }
     }
 
@@ -296,8 +295,7 @@ fn target_key(input: &Input) -> String {
         }
         Input::Reply { thread } => format!("reply {thread}"),
         Input::EditDraft { draft } => format!("draft {draft:?}"),
-        Input::Ask { scope, .. } => format!("ask {scope:?}"),
-        Input::FollowUp => "follow-up".to_owned(),
+        Input::Ask { scope } => format!("ask {scope:?}"),
     }
 }
 

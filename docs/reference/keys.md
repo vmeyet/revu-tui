@@ -102,8 +102,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | Keys | Does |
 |---|---|
 | `a` `a` | ask anything about the cursor |
-| `a` `h` | answers kept for this MR |
-| `c` `⏎` `R` `y` | answer: draft, follow up, again, copy |
 
 ## Search & app
 
