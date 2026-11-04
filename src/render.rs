@@ -1,7 +1,6 @@
 //! Plain-terminal output for the scriptable commands: colours only on a tty, columns aligned by width.
 use crate::forge::PipelineStatus;
 use chrono::{DateTime, Utc};
-use owo_colors::OwoColorize;
 use std::io::IsTerminal;
 use unicode_width::UnicodeWidthStr;
 
@@ -53,15 +52,16 @@ impl Theme {
         if !self.color {
             return text.to_owned();
         }
-        match style {
-            Style::Plain => text.to_owned(),
-            Style::Dim => text.dimmed().to_string(),
-            Style::Bold => text.bold().to_string(),
-            Style::Accent => text.cyan().to_string(),
-            Style::Ok => text.green().to_string(),
-            Style::Warn => text.yellow().to_string(),
-            Style::Bad => text.red().to_string(),
-        }
+        let (on, off) = match style {
+            Style::Plain => return text.to_owned(),
+            Style::Dim => (2, 0),
+            Style::Bold => (1, 0),
+            Style::Accent => (36, 39),
+            Style::Ok => (32, 39),
+            Style::Warn => (33, 39),
+            Style::Bad => (31, 39),
+        };
+        format!("\x1b[{on}m{text}\x1b[{off}m")
     }
 
     /// Rows as aligned lines; every column is padded to its widest cell, the last one is not.
@@ -134,6 +134,25 @@ pub(crate) fn truncate(text: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn paint_writes_these_exact_escapes_when_colour_is_on() {
+        let theme = Theme { color: true };
+        assert_eq!(theme.paint("x", Style::Plain), "x");
+        assert_eq!(theme.paint("x", Style::Dim), "\x1b[2mx\x1b[0m");
+        assert_eq!(theme.paint("x", Style::Bold), "\x1b[1mx\x1b[0m");
+        assert_eq!(theme.paint("x", Style::Accent), "\x1b[36mx\x1b[39m");
+        assert_eq!(theme.paint("x", Style::Ok), "\x1b[32mx\x1b[39m");
+        assert_eq!(theme.paint("x", Style::Warn), "\x1b[33mx\x1b[39m");
+        assert_eq!(theme.paint("x", Style::Bad), "\x1b[31mx\x1b[39m");
+    }
+
+    #[test]
+    fn paint_adds_nothing_when_colour_is_off() {
+        for style in [Style::Plain, Style::Dim, Style::Bold, Style::Accent, Style::Ok, Style::Warn, Style::Bad] {
+            assert_eq!(Theme::plain().paint("x", style), "x");
+        }
+    }
 
     #[test]
     fn columns_align_by_display_width_and_numbers_go_right() {

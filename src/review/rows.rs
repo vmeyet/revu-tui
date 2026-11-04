@@ -91,7 +91,7 @@ impl Review {
         if self.shows_side_by_side() {
             return words::side_by_side_pairs(hunk);
         }
-        if self.quiet_whitespace { words::inline_or_whitespace_pairs(hunk, self.inline) } else { words::inline_pairs(hunk, self.inline) }
+        if self.quiet_whitespace { words::inline_or_whitespace_pairs(hunk) } else { words::inline_pairs(hunk) }
     }
 
     /// The rows of a hunk's lines. An added line waiting ahead of a later twin reads before that twin's row,

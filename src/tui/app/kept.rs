@@ -4,7 +4,8 @@ use super::pane::ConversationList;
 use super::{Open, Pane, Versions};
 use crate::review::tree::{self, TreeFolds, TreeRow};
 use crate::review::{Draft, File, Markers, Thread};
-use crate::tui::prose_view::{self, Rows};
+use crate::tui::prose;
+use crate::tui::prose_view::Rows;
 use crate::tui::theme::Theme;
 use std::sync::Arc;
 
@@ -95,7 +96,7 @@ impl Kept {
     /// The prose view's rows in `width` columns, inline or `beside`, rendered again only for other texts, width or theme.
     pub(crate) fn prose_rows(&mut self, versions: &Arc<Versions>, width: usize, beside: bool, theme: Theme) -> &Rows {
         let kept = if beside { &mut self.prose_beside } else { &mut self.prose };
-        kept.get_or_build((ByIdentity::new(versions), width, theme), || prose_view::rows(versions, width, beside, theme))
+        kept.get_or_build((ByIdentity::new(versions), width, theme), || prose::render(&versions.base, &versions.head, width, beside, theme))
     }
 }
 

@@ -9,8 +9,7 @@ use revu::ctx::Ctx;
 async fn main() {
     let cli = Cli::parse();
     revu::log::start();
-    let opens_tui = matches!(cli.command, None | Some(Command::Tui(_)));
-    if !opens_tui {
+    if cli.command.is_some() {
         commands::warn_of_ignored_settings();
     }
     if let Err(err) = run(cli).await {
@@ -50,8 +49,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Publish(args)) => commands::publish::run(&ctx, args).await,
         Some(Command::Share(args)) => commands::share::run(&ctx, args).await,
         Some(Command::Ai(args)) => commands::ai::ask(&ctx, args).await,
-        Some(Command::Tui(args)) => commands::tui::run(ctx, args).await,
-        None => commands::tui::run(ctx, cli.tui).await,
+        None => commands::tui::run(ctx, cli.mr).await,
         Some(
             Command::Login(_)
             | Command::Logout { .. }

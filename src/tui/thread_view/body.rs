@@ -5,6 +5,7 @@ use crate::review::Review;
 use crate::review::image::{self, Image};
 use crate::syntax::{self, Language};
 use crate::tui::diff_view::{coloured, paint};
+use crate::tui::prose::{self, Linked, Links};
 use crate::tui::theme::Theme;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
@@ -92,13 +93,11 @@ fn segments(body: &str) -> Vec<Segment<'_>> {
 }
 
 /// Markdown as mrk draws it, each row copied as drawn and its links clickable where `fences` says.
-#[cfg(feature = "prose")]
 fn markdown(lines: &[String], width: usize, fences: &Fences<'_>, theme: Theme) -> Vec<Piece> {
-    use crate::tui::prose::Links;
     // The forges show each line break of a comment, so each line ends in a hard break.
     let text = lines.iter().map(|line| format!("{line}  ")).collect::<Vec<_>>().join("\n");
     let shown = if matches!(fences, Fences::Coloured(_)) { Links::Clickable } else { Links::Printed };
-    let rows = crate::tui::prose::markdown(&text, width, shown, theme);
+    let rows = prose::markdown(&text, width, shown, theme);
     rows.into_iter()
         .map(|row| {
             let links = anchors(&row);
@@ -109,15 +108,8 @@ fn markdown(lines: &[String], width: usize, fences: &Fences<'_>, theme: Theme) -
         .collect()
 }
 
-/// Without mrk, the Markdown as written.
-#[cfg(not(feature = "prose"))]
-fn markdown(lines: &[String], _: usize, _: &Fences<'_>, _: Theme) -> Vec<Piece> {
-    lines.iter().map(|line| written(Line::raw(line.clone()), line, vec![])).collect()
-}
-
 /// The links a row of mrk's spans draws, each run of spans to one target as one.
-#[cfg(feature = "prose")]
-fn anchors(row: &[crate::tui::prose::Linked]) -> Vec<Anchor> {
+fn anchors(row: &[Linked]) -> Vec<Anchor> {
     let mut column = 0;
     let runs = row.chunk_by(|a, b| a.link == b.link).filter_map(|run| {
         let cells = column..column + run.iter().map(|linked| linked.span.width()).sum::<usize>();
@@ -128,20 +120,12 @@ fn anchors(row: &[crate::tui::prose::Linked]) -> Vec<Anchor> {
 }
 
 /// Wider than any pane, so mrk keeps a short text on one row: the caller wraps it.
-#[cfg(feature = "prose")]
 const ONE_ROW: usize = u16::MAX as usize;
 
 /// One line of Markdown as spans, for the panes that draw a short text inline; a link's target follows its text.
-#[cfg(feature = "prose")]
 pub(in crate::tui) fn inline<'a>(text: &str, theme: Theme) -> Vec<Span<'a>> {
-    let rows = crate::tui::prose::markdown(text, ONE_ROW, crate::tui::prose::Links::Printed, theme);
+    let rows = prose::markdown(text, ONE_ROW, Links::Printed, theme);
     rows.into_iter().flatten().map(|linked| linked.span).collect()
-}
-
-/// Without mrk, the text as written.
-#[cfg(not(feature = "prose"))]
-pub(in crate::tui) fn inline<'a>(text: &str, _: Theme) -> Vec<Span<'a>> {
-    vec![Span::raw(text.to_owned())]
 }
 
 /// A fenced block in the syntax colours of the language its tag names, all in `theme.code` where none;
@@ -199,7 +183,6 @@ pub(super) struct LinkUrl(String);
 impl LinkUrl {
     /// A link revu can open: `http(s)://…` or an absolute `/path`; a relative path, an `#anchor`
     /// or a `mailto:` would open the wrong page, so they stay text.
-    #[cfg(feature = "prose")]
     fn parse(url: &str) -> Option<Self> {
         let web = url.starts_with("http://") || url.starts_with("https://");
         let path = url.starts_with('/') && !url.starts_with("//");

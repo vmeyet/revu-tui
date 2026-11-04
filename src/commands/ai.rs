@@ -11,11 +11,8 @@ use crate::render::{Style, Theme};
 use crate::review::Review;
 use anyhow::{Context, Result, bail};
 use std::io::{IsTerminal, Read, Write};
-use std::process::Command;
 
 const ANTHROPIC_API: &str = "https://api.anthropic.com";
-/// Where slack-tui keeps its TypeSafe key, which `revu ai login typesafe` offers to reuse.
-const SLACK_TUI_SERVICE: &str = "typesafe";
 
 /// Runs one `revu ai` key subcommand; `ask` goes through [`ask`], which needs the forge.
 pub async fn run(args: AiArgs, json: bool) -> Result<()> {
@@ -141,11 +138,8 @@ fn describe(status: &Status, theme: Theme) -> String {
     format!("{:<10} {state} · {key}{model}", status.provider.to_string())
 }
 
-/// The key from stdin, slack-tui's keychain entry, or a hidden prompt, in that order of asking.
+/// The key from stdin, or a hidden prompt.
 fn read_key(args: &AiLoginArgs) -> Result<Secret> {
-    if args.from_slack_tui && args.provider != Provider::Typesafe {
-        bail!("--from-slack-tui only holds a TypeSafe key");
-    }
     let raw = match args.token.as_deref() {
         Some("-") => {
             let mut text = String::new();
@@ -153,7 +147,6 @@ fn read_key(args: &AiLoginArgs) -> Result<Secret> {
             text
         }
         Some(other) => bail!("--token only accepts `-` (read from stdin), got {other:?}; a key in argv shows up in `ps`"),
-        None if args.from_slack_tui => slack_tui_key()?.context("slack-tui holds no TypeSafe key (keychain service `typesafe`)")?,
         None => prompt(args.provider)?,
     };
     let key = raw.trim();
@@ -167,33 +160,12 @@ fn prompt(provider: Provider) -> Result<String> {
     if !std::io::stdin().is_terminal() {
         bail!("no terminal to prompt on: pipe the key with `--token -`");
     }
-    if provider == Provider::Typesafe && slack_tui_key()?.is_some() && confirm("slack-tui already stores a TypeSafe key; use it?")? {
-        return slack_tui_key()?.context("the slack-tui key vanished");
-    }
     eprintln!("Paste your {provider} key (make one at {})", provider.key_page());
     eprint!("Key (hidden): ");
     std::io::stderr().flush()?;
     let key = super::login::read_hidden()?;
     eprintln!();
     Ok(key)
-}
-
-fn confirm(question: &str) -> Result<bool> {
-    eprint!("{question} [Y/n] ");
-    std::io::stderr().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().read_line(&mut answer)?;
-    Ok(!answer.trim().to_lowercase().starts_with('n'))
-}
-
-/// slack-tui stores its key under service `typesafe` with no fixed account, so this reads by service alone.
-fn slack_tui_key() -> Result<Option<String>> {
-    let output = Command::new("/usr/bin/security")
-        .args(["find-generic-password", "-s", SLACK_TUI_SERVICE, "-w"])
-        .output()
-        .context("running security")?;
-    let key = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    Ok((output.status.success() && !key.is_empty()).then_some(key))
 }
 
 /// Lists the models, which costs nothing, so a wrong key is refused before it is stored.

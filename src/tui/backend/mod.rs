@@ -16,7 +16,6 @@ use crate::ai::anthropic::Claude;
 use crate::ai::typesafe::TypeSafe;
 use crate::blocking;
 use crate::cache::Cache;
-use crate::diff::words::InlineRule;
 use crate::forge::{Forge, MrKey};
 use crate::log::OrWarn as _;
 use ai::Ai;
@@ -60,7 +59,6 @@ pub(super) struct Setup {
     pub(super) watch_labels: Vec<String>,
     pub(super) rules: crate::forge::rules::Rules,
     pub(super) ready_command: Option<String>,
-    pub(super) inline: InlineRule,
     pub(super) open: crate::config::Open,
     pub(super) checkout: Option<crate::open::Checkout>,
     pub(super) jev: Option<TypeSafe>,
@@ -93,13 +91,7 @@ impl Backend {
                 rules: setup.rules,
                 ready_command: setup.ready_command,
             },
-            reviews: Reviews {
-                homes: Arc::clone(&homes),
-                saves: saves.clone(),
-                fold_globs: setup.fold_globs,
-                inline: setup.inline,
-                opening: Arc::default(),
-            },
+            reviews: Reviews { homes: Arc::clone(&homes), saves: saves.clone(), fold_globs: setup.fold_globs, opening: Arc::default() },
             drafts: Drafts { homes: Arc::clone(&homes), lanes: Lanes::default() },
             ai: Ai { homes: Arc::clone(&homes), jev: setup.jev, claude: setup.claude },
             files: Files { homes: Arc::clone(&homes), open: setup.open, checkout: setup.checkout },

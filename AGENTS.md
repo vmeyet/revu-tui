@@ -4,7 +4,6 @@
 Read [`ARCHITECTURE.md`](ARCHITECTURE.md) first: the module map, the data flow, the boundaries and where to add things.
 The code is the contract; `ARCHITECTURE.md` describes it.
 When an MR changes a boundary or a flow, it updates `ARCHITECTURE.md` too.
-`archive/specs/` holds the old design notes: history, not kept up to date.
 
 ## Ground rules
 

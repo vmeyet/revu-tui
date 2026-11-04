@@ -1,6 +1,5 @@
 //! The prose view in the diff area: the file's title, then the rows in view of its rendered blocks.
-use super::app::{App, Texts, Versions};
-use super::theme::Theme;
+use super::app::{App, Texts};
 use super::ui::draw_empty;
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -41,16 +40,4 @@ impl Rows {
     pub(crate) fn shown(&self, unfolded: bool) -> &[Line<'static>] {
         if unfolded { &self.unfolded } else { &self.folded }
     }
-}
-
-#[cfg(feature = "prose")]
-pub(crate) fn rows(versions: &Versions, width: usize, beside: bool, theme: Theme) -> Rows {
-    super::prose::render(&versions.base, &versions.head, width, beside, theme)
-}
-
-#[cfg(not(feature = "prose"))]
-pub(crate) fn rows(_: &Versions, _: usize, _: bool, theme: Theme) -> Rows {
-    let message =
-        vec![Line::styled("this revu was built without the prose view (cargo feature `prose`)", Style::default().fg(theme.muted))];
-    Rows { folded: message.clone(), unfolded: message }
 }

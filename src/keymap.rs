@@ -6,7 +6,6 @@ use crate::config::{Keys, Layout};
 use anyhow::{Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;
-use vtui::usage::Renamed;
 
 /// One key as the terminal reports it; letters keep their case, so shift is not a separate flag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -185,7 +184,7 @@ pub(crate) struct Keymap {
 }
 
 impl Keymap {
-    /// Fails on an unknown action, a key that does not parse, or a key already taken.
+    /// Leaves out a binding on an unknown action; fails on a key that does not parse or a key already taken.
     pub(crate) fn new(keys: &Keys) -> Result<Self> {
         let azerty = keys.layout == Layout::Azerty;
         let mut owners: BTreeMap<Vec<Key>, &str> = BTreeMap::new();
@@ -194,10 +193,8 @@ impl Keymap {
             map.aliases.insert(vec![Key::char('(')], vec![Key::char('[')]);
             map.aliases.insert(vec![Key::char(')')], vec![Key::char(']')]);
         }
-        for (action, texts) in keys.bind.iter().filter(|(action, _)| !is_gone(action)) {
-            let Some((_, default)) = act::bindable().find(|(name, _)| *name == current(action)) else {
-                bail!("`[keys.bind] {action}` is not an action; the actions are {}", names());
-            };
+        for (action, texts) in &keys.bind {
+            let Some((_, default)) = act::bindable().find(|(name, _)| name == action) else { continue };
             let target = parse(default)?;
             for text in texts.all() {
                 let binding = parse(text).map_err(|e| anyhow::anyhow!("`[keys.bind] {action}`: {e}"))?;
@@ -307,38 +304,9 @@ fn label(keys: &[Key]) -> String {
     keys.iter().map(|k| k.label()).collect()
 }
 
-/// Actions renamed since a config or a usage file could name them.
-pub(crate) const RENAMED: &[Renamed] = &[Renamed { old: "split", new: "side_by_side" }];
-
-/// Actions an older revu let `[keys.bind]` name and this one no longer has.
-const GONE: &[&str] = &[
-    "group_by_author",
-    "fold_header",
-    "next_any_thread",
-    "prev_any_thread",
-    "next_file_unresolved",
-    "prev_file_unresolved",
-    "next_review",
-    "prev_review",
-];
-
-fn is_gone(action: &str) -> bool {
-    GONE.contains(&current(action))
-}
-
-/// One warning per `[keys.bind]` entry on an action this revu no longer has: the binding is left out, the rest loads.
-pub(crate) fn ignored(keys: &Keys) -> Vec<String> {
-    let gone = keys.bind.keys().filter(|action| is_gone(action));
-    gone.map(|action| format!("`{action}` is not an action this revu knows; it is ignored")).collect()
-}
-
-/// The name `action` goes by today: an old name reads as its new one.
-pub(crate) fn current(action: &str) -> &str {
-    RENAMED.iter().find(|renamed| renamed.old == action).map_or(action, |renamed| renamed.new)
-}
-
-fn names() -> String {
-    act::bindable().map(|(name, _)| name).collect::<Vec<_>>().join(", ")
+/// The `[keys.bind]` entries on an action this revu does not have.
+pub(crate) fn unknown_actions(keys: &Keys) -> impl Iterator<Item = &str> {
+    keys.bind.keys().map(String::as_str).filter(|action| !act::bindable().any(|(name, _)| name == *action))
 }
 
 #[cfg(test)]
@@ -452,17 +420,12 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_action_fails_and_lists_the_real_ones() {
-        let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thred", &["n"])])).unwrap_err().to_string();
-        assert!(err.contains("next_thred") && err.contains("next_thread"), "{err}");
-    }
-
-    #[test]
-    fn a_renamed_action_still_binds_under_its_old_name() {
-        let map = Keymap::new(&keys(Layout::Qwerty, &[("split", &["zx"])])).unwrap();
-        assert_eq!(chars(&map.feed(Some(press('z')), press('x'))), "D", "`split` is `side_by_side` now");
-        assert_eq!(current("split"), "side_by_side");
-        assert_eq!(current("zen"), "zen");
+    fn a_binding_on_an_unknown_action_is_left_out_and_the_rest_binds() {
+        let bound = keys(Layout::Qwerty, &[("next_thred", &["x"]), ("next_thread", &["f"])]);
+        let map = Keymap::new(&bound).unwrap();
+        assert_eq!(chars(&map.feed(None, press('x'))), "x", "`x` stays what it was");
+        assert_eq!(chars(&map.feed(None, press('f'))), "]n");
+        assert_eq!(unknown_actions(&bound).collect::<Vec<_>>(), ["next_thred"]);
     }
 
     #[test]

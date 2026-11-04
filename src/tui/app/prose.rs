@@ -167,7 +167,6 @@ mod tests {
     }
 
     /// A README with a removed heading, an edited paragraph and an added bullet.
-    #[cfg(feature = "prose")]
     fn read_edited(app: &mut App) {
         let base = "# Widgets\n\n## Install\n\nRun the installer once.\n\n- one\n- two\n\nThe end.\n";
         let head = base.replace("## Install\n\n", "").replace("once", "twice").replace("- two\n", "- two\n- three\n");
@@ -247,7 +246,6 @@ mod tests {
         assert_eq!(app.open.as_ref().unwrap().selected, selected, "the hidden diff does not move");
     }
 
-    #[cfg(feature = "prose")]
     #[test]
     fn g_scrolls_to_the_last_screen_and_g_back_to_the_top() {
         let mut app = with_markdown(FileKind::Modified);
@@ -260,7 +258,6 @@ mod tests {
         assert_eq!(prose(&app).unwrap().scroll, 0);
     }
 
-    #[cfg(feature = "prose")]
     #[test]
     fn snapshot_prose_view() {
         let mut app = with_markdown(FileKind::Modified);
@@ -269,7 +266,6 @@ mod tests {
         insta::assert_snapshot!("prose", render(&mut app, 120, 20));
     }
 
-    #[cfg(feature = "prose")]
     #[test]
     fn snapshot_prose_side_by_side() {
         let mut app = with_markdown(FileKind::Modified);
@@ -278,7 +274,6 @@ mod tests {
         insta::assert_snapshot!("prose_side_by_side", render(&mut app, 180, 26));
     }
 
-    #[cfg(feature = "prose")]
     #[test]
     fn d_in_a_narrow_pane_keeps_prose_inline_and_says_so() {
         let mut app = with_markdown(FileKind::Modified);

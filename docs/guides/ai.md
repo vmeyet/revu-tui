@@ -11,7 +11,7 @@ Switching one on sends MR content to its provider.
 2. Switch the provider on in the config.
 
 ```sh
-revu ai login typesafe     # Jev; add --from-slack-tui to reuse slack-tui's key
+revu ai login typesafe     # Jev
 revu ai login anthropic    # Claude; revu checks the key before it saves it
 revu ai status             # which provider is on, and where its key comes from
 ```
