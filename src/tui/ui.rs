@@ -297,6 +297,11 @@ pub(super) fn rule_pane(theme: Theme, title: &str) -> Block<'static> {
     Block::new().borders(Borders::TOP).border_style(Style::default().fg(theme.border)).title(title).padding(Padding::horizontal(1))
 }
 
+/// A modal of this size in the middle of `area`; an odd spare row or column goes below or to the right.
+pub(super) fn centred(area: Rect, width: u16, height: u16) -> Rect {
+    Rect { x: area.x + area.width.saturating_sub(width) / 2, y: area.y + area.height.saturating_sub(height) / 2, width, height }
+}
+
 pub(super) fn draw_empty(f: &mut Frame<'_>, theme: Theme, area: Rect, lines: &[&str]) {
     let text: Vec<Line<'_>> = lines.iter().map(|l| Line::from(Span::styled((*l).to_owned(), Style::default().fg(theme.faded)))).collect();
     let top = area.y + area.height.saturating_sub(text.len() as u16) / 2;
@@ -693,6 +698,18 @@ mod columns_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_centred_modal_leaves_the_odd_spare_cell_after_it() {
+        let area = Rect { x: 3, y: 2, width: 21, height: 11 };
+        assert_eq!(centred(area, 10, 4), Rect { x: 8, y: 5, width: 10, height: 4 });
+    }
+
+    #[test]
+    fn a_modal_wider_than_the_screen_starts_at_its_edge() {
+        let area = Rect { x: 3, y: 2, width: 15, height: 11 };
+        assert_eq!(centred(area, 20, 11), Rect { x: 3, y: 2, width: 20, height: 11 });
+    }
 
     #[test]
     fn settle_scroll_only_moves_when_the_selection_leaves_the_window() {

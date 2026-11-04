@@ -10,7 +10,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | Module | What it holds |
 |---|---|
 | `main.rs`, `cli.rs` | The clap command line and the dispatch to `commands/` |
-| `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit` |
+| `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit`; `prompt.rs` asks on the terminal |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends; every method takes and returns the neutral model |
 | `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `reaction.rs` |
@@ -89,7 +89,7 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the
 - `tui/app/` is pure: it reads time from `app.now` and `app.today`, set by the loop, and never does I/O; its tests drive it with keys and `Incoming` values.
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `vtui::screen::Screen::lend`, with the key stream paused.
-- Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands: `revu login` takes a token from `glab`, `gh` or stdin.
+- Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands, which ask through `commands/prompt.rs`: `revu login` takes a token from `glab`, `gh` or stdin.
 - Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments) and Jev's client.
 
 ## Concurrency

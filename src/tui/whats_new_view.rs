@@ -2,6 +2,7 @@
 use super::app::{App, WhatsNew};
 use super::theme::Theme;
 use super::thread_view::{inline, wrap};
+use super::ui::centred;
 use crate::changelog::{Entry, Section};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -24,7 +25,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let Some(scroll) = app.news_page else { return };
     let width = (area.width * SIZE_PCT / 100).clamp(area.width.min(40), MAX_WIDTH).min(area.width);
     let lines = lines(&app.whats_new, theme, usize::from(width.saturating_sub(2 + 2 * PAD_X)));
-    let popup = centred(area, width, lines.len());
+    let popup = page_area(area, width, lines.len());
     let block = pane::framed(&theme, &format!("what's new · revu {}", app.whats_new.changelog.running), true)
         .padding(Padding::new(PAD_X, PAD_X, PAD_Y, PAD_Y))
         .title_bottom(Line::from(Span::styled(" j k scroll · esc close ", Style::default().fg(theme.faded))));
@@ -37,10 +38,10 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
 }
 
 /// The page in the middle of `area`, as tall as its `rows` need and the screen allows.
-fn centred(area: Rect, width: u16, rows: usize) -> Rect {
+fn page_area(area: Rect, width: u16, rows: usize) -> Rect {
     let rows = u16::try_from(rows).unwrap_or(u16::MAX);
     let height = rows.saturating_add(2 + 2 * PAD_Y).min(area.height * SIZE_PCT / 100).max(area.height.min(10));
-    Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height }
+    centred(area, width, height)
 }
 
 /// Every section, a blank row between two.

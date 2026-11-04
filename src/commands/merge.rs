@@ -1,8 +1,8 @@
+use super::prompt::confirmed;
 use super::target;
 use crate::cli::MergeArgs;
 use crate::ctx::Ctx;
 use anyhow::{Result, bail};
-use std::io::{BufRead, IsTerminal, Write};
 
 /// Merges my own approved MR, the way its project merges, after a yes on a terminal.
 pub async fn run(ctx: &Ctx, args: MergeArgs) -> Result<()> {
@@ -14,7 +14,7 @@ pub async fn run(ctx: &Ctx, args: MergeArgs) -> Result<()> {
     }
     let branch = if mr.merge.remove_branch { ", delete the branch" } else { "" };
     let question = format!("merge {name} into {} ({}{branch})?", mr.target_branch, mr.merge.method.word());
-    if !args.yes && !confirmed(&question)? {
+    if !args.yes && !confirmed(&question, &format!("{question} Pass --yes to merge without a terminal"))? {
         println!("not merged");
         return Ok(());
     }
@@ -24,16 +24,4 @@ pub async fn run(ctx: &Ctx, args: MergeArgs) -> Result<()> {
     }
     println!("merged {name} into {}", mr.target_branch);
     Ok(())
-}
-
-/// A `y` on the terminal; without one, scripts must say `--yes`.
-fn confirmed(question: &str) -> Result<bool> {
-    if !std::io::stdin().is_terminal() {
-        bail!("{question} Pass --yes to merge without a terminal");
-    }
-    print!("{question} [y/N] ");
-    std::io::stdout().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().lock().read_line(&mut answer)?;
-    Ok(answer.trim().eq_ignore_ascii_case("y"))
 }

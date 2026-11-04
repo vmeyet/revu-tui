@@ -1,5 +1,6 @@
 //! The publish modal: every draft on one screen, the approval tick, one key to send them all.
 use super::app::{App, Publish};
+use super::ui::centred;
 use crate::review::{Draft, Side};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -20,7 +21,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, publish: &Publish, area: Rect) 
     let files = drafts.iter().filter_map(|d| d.anchor.as_ref().map(|a| a.path.as_str())).collect::<std::collections::BTreeSet<_>>().len();
     let width = WIDTH.min(area.width);
     let height = (drafts.len() as u16 + CHROME_ROWS).min(area.height);
-    let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
+    let popup = centred(area, width, height);
     let block = pane::framed(&theme, "Publish review", true);
     let inner = block.inner(popup);
     let room = inner.width as usize;

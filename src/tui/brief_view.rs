@@ -4,7 +4,7 @@ use super::app::{App, Brief};
 use super::diff_view::pipeline_glyph;
 use super::theme::Theme;
 use super::thread_view::body_lines;
-use super::ui::{DEPLOYED, Link, short_age};
+use super::ui::{DEPLOYED, Link, centred, short_age};
 use crate::forge::ReviewState;
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
@@ -35,7 +35,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let rows = wrapped_rows(&lines, text_w);
     let frame_y = 2 + 2 * PAD_Y;
     let height = (rows as u16).saturating_add(frame_y).min(area.height * SIZE_PCT / 100).max(area.height.min(10));
-    let popup = Rect { x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height };
+    let popup = centred(area, width, height);
     let hint = match (from_review, brief.selected_thread()) {
         (true, Some(thread)) => {
             let keys = " · enter go there · esc close ";

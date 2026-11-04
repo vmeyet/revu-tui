@@ -1,9 +1,9 @@
+use super::prompt::confirmed;
 use super::target;
 use crate::cli::ShareArgs;
 use crate::ctx::Ctx;
 use crate::share::{self, Fields, Target};
 use anyhow::{Result, bail};
-use std::io::{BufRead, IsTerminal, Write};
 
 /// Prints the message, asks unless `--yes`, then pipes it to the target's command.
 pub async fn run(ctx: &Ctx, args: ShareArgs) -> Result<()> {
@@ -16,7 +16,8 @@ pub async fn run(ctx: &Ctx, args: ShareArgs) -> Result<()> {
     if args.dry_run {
         return Ok(());
     }
-    if !args.yes && !confirmed(&target)? {
+    let question = format!("send it to `{}`?", target.command);
+    if !args.yes && !confirmed(&question, "no terminal to ask on: pass --yes to send, or --dry-run to only print")? {
         println!("not shared");
         return Ok(());
     }
@@ -38,17 +39,6 @@ fn pick(targets: &[Target], wanted: Option<&str>) -> Result<Target> {
         (None, [only]) => Ok(only.clone()),
         (None, _) => bail!("several share targets: pick one with --target ({})", names()),
     }
-}
-
-fn confirmed(target: &Target) -> Result<bool> {
-    if !std::io::stdin().is_terminal() {
-        bail!("no terminal to ask on: pass --yes to send, or --dry-run to only print");
-    }
-    eprint!("send it to `{}`? [y/N] ", target.command);
-    std::io::stderr().flush()?;
-    let mut answer = String::new();
-    std::io::stdin().lock().read_line(&mut answer)?;
-    Ok(matches!(answer.trim(), "y" | "Y" | "yes"))
 }
 
 #[cfg(test)]
