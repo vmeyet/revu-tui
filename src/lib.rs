@@ -11,6 +11,7 @@ pub mod commands;
 mod config;
 pub mod ctx;
 mod diff;
+#[cfg(test)]
 mod docs;
 mod forge;
 mod http;

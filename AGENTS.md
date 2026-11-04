@@ -10,7 +10,7 @@ When an MR changes a boundary or a flow, it updates `ARCHITECTURE.md` too.
 - One MR per change a reviewer can read in one sitting, under 500 changed lines excluding fixtures and snapshots.
 - Branches: `<scope>/<kebab-title>` with scope in `feat fix chore refactor docs test ci`; worktrees under `.claude/worktrees/<scope>+<kebab-title>`.
 - Commits follow conventional commits; body in two short imperative sentences at most.
-- `docs/` is for users; `revu docs` writes `docs/reference/` from the code, and a test fails when it is stale.
+- `docs/` is for users; `UPDATE_DOCS=1 cargo test docs` writes `docs/reference/` from the code, and `cargo test` fails when it is stale.
 - Markdown files put one sentence per line.
 
 ## Code
@@ -82,7 +82,7 @@ Grammars load on first use, so a new language costs nothing until a file of it i
 cargo test                      # unit, wiremock, snapshots, CLI, docs staleness
 cargo test -- --ignored         # the real keychain round trip, touches the login keychain
 cargo insta review              # after a deliberate rendering change
-cargo run -- docs               # rewrite docs/reference/ after changing keys, commands or config
+UPDATE_DOCS=1 cargo test docs   # rewrite docs/reference/ after changing keys, commands or config
 cargo run -- login --from-glab && cargo run -- whoami   # against gitlab.com with the token glab holds
 ```
 

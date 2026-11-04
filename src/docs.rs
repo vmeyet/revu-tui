@@ -1,5 +1,6 @@
-//! The reference pages under `docs/reference/`, written from the code so they never drift:
+//! Tests only: the reference pages under `docs/reference/`, checked against the code so they never drift:
 //! keys from the action table and the keymap, commands from clap, config keys from [`SETTINGS`].
+//! `UPDATE_DOCS=1 cargo test docs` writes them.
 use crate::act;
 use crate::cli::Cli;
 use crate::config::{Keys, Layout};
@@ -9,15 +10,15 @@ use anyhow::Result;
 use clap::{Arg, Command, CommandFactory};
 
 /// One config key as the reference page shows it.
-pub(crate) struct Setting {
+struct Setting {
     /// The TOML table, `""` for the top level.
-    pub(crate) table: &'static str,
-    pub(crate) key: &'static str,
-    pub(crate) kind: &'static str,
-    pub(crate) default: &'static str,
-    pub(crate) meaning: &'static str,
+    table: &'static str,
+    key: &'static str,
+    kind: &'static str,
+    default: &'static str,
+    meaning: &'static str,
     /// A TOML value the config accepts for this key, as written after `key = `.
-    pub(crate) example: &'static str,
+    example: &'static str,
 }
 
 /// Every key `config.toml` accepts; a test fails when `src/config.rs` or `src/config/` gains a field missing here.
@@ -354,11 +355,11 @@ const SETTINGS: &[Setting] = &[
 ];
 
 /// Each page: its path under `docs/reference/`, then its text.
-pub(crate) fn pages() -> Result<Vec<(&'static str, String)>> {
+fn pages() -> Result<Vec<(&'static str, String)>> {
     Ok(vec![("keys.md", keys_page()?), ("config.md", config_page()), ("commands.md", commands_page())])
 }
 
-const GENERATED: &str = "<!-- Written by `revu docs` from the code. Edit the code, then run `revu docs`. -->";
+const GENERATED: &str = "<!-- Written from the code by `src/docs.rs`. Edit the code, then run `UPDATE_DOCS=1 cargo test docs`. -->";
 
 fn keys_page() -> Result<String> {
     let azerty = Keymap::new(&Keys { layout: Layout::Azerty, ..Keys::default() })?;
@@ -548,6 +549,7 @@ fn finish(lines: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn the_example_config_is_a_config_revu_accepts() {
@@ -605,6 +607,41 @@ mod tests {
                 field.trim()
             );
         }
+    }
+
+    fn write_pages(dir: &Path, pages: &[(&str, String)]) {
+        for (name, text) in pages {
+            std::fs::write(dir.join(name), text).unwrap();
+        }
+    }
+
+    /// The names of the pages `dir` lacks or holds with other text.
+    fn stale_pages<'a>(dir: &Path, pages: &[(&'a str, String)]) -> Vec<&'a str> {
+        let is_stale = |(name, text): &&(&str, String)| std::fs::read_to_string(dir.join(name)).ok().as_deref() != Some(text.as_str());
+        pages.iter().filter(is_stale).map(|(name, _)| *name).collect()
+    }
+
+    /// `UPDATE_DOCS=1` writes the pages first, as `INSTA_UPDATE` does for snapshots; CI never sets it, so stale pages fail there.
+    #[test]
+    fn the_reference_pages_match_the_code() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/reference");
+        let pages = pages().unwrap();
+        if std::env::var("UPDATE_DOCS").as_deref() == Ok("1") {
+            write_pages(&dir, &pages);
+        }
+        let stale = stale_pages(&dir, &pages);
+        assert!(stale.is_empty(), "out of date, run `UPDATE_DOCS=1 cargo test docs`: {}", stale.join(", "));
+    }
+
+    #[test]
+    fn a_page_missing_or_with_other_text_is_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let pages = pages().unwrap();
+        write_pages(dir.path(), &pages);
+        assert_eq!(stale_pages(dir.path(), &pages), Vec::<&str>::new());
+        std::fs::write(dir.path().join("keys.md"), "older text").unwrap();
+        std::fs::remove_file(dir.path().join("commands.md")).unwrap();
+        assert_eq!(stale_pages(dir.path(), &pages), ["keys.md", "commands.md"]);
     }
 
     #[test]
