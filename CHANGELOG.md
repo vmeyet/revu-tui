@@ -51,8 +51,8 @@ Each entry says what changed, then where, then how to use it.
 
 ### Removed
 
-- **The outline's call tree, its tests section and its keys `a`, `s`, `t`, `u`, `zo`, `zc` and `za`.**
-  In the outline pane: it now lists every changed symbol by file.
+- **The outline's call tree, its tests section and every key of its pane but `r` and `esc`.**
+  In the outline pane: it now only lists the changed symbols by file.
 
 - **Ask Claude.**
   In the review and on the command line: `a a`, `a h`, `:ask`, the answer pane, `revu ai ask` and `[ai.anthropic]`, which now only warns in the config.

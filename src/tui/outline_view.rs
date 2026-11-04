@@ -1,7 +1,7 @@
 //! The outline pane: what breaks, what came and what was renamed, then the changed symbols by file.
-use super::app::{App, Focus, List, ListRow, PaneLine, Symbols};
+use super::app::{App, Focus, PaneLine, Symbols};
 use super::theme::Theme;
-use super::ui::{counts, draw_empty, settle_scroll, side_pane};
+use super::ui::{counts, draw_empty, side_pane};
 use crate::diff::words::Segment;
 use crate::outline::{Change, State};
 use ratatui::Frame;
@@ -12,7 +12,7 @@ use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 use vtui::text::truncate;
 
-pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
+pub(crate) fn draw(f: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = app.theme;
     let Some(open) = &app.open else { return };
     let Some(outline) = &open.outline else { return };
@@ -26,38 +26,25 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         Symbols::Ready(_) => {}
     }
     let Symbols::Ready(reading) = &outline.symbols else { return };
-    let rows = &outline.rows;
     if reading.changes.is_empty() {
         return draw_empty(f, theme, inner, &["no function or class changed"]);
     }
-    let height = inner.height as usize;
-    let scroll = settle_scroll(0, rows.line_of.get(outline.selected).copied().unwrap_or(0), height);
     let width = inner.width as usize;
-    let window = &rows.lines[scroll.min(rows.lines.len())..];
-    let list_rows: Vec<ListRow> = window
+    let shown: Vec<Line<'_>> = outline
+        .rows
         .iter()
-        .take(height)
-        .zip(inner.y..)
-        .filter_map(|(line, y)| match line {
-            PaneLine::Change(index) => Some(ListRow { area: Rect { y, height: 1, ..inner }, list: List::Outline, index: *index }),
-            _ => None,
-        })
-        .collect();
-    let shown: Vec<Line<'_>> = window
-        .iter()
-        .take(height)
+        .take(inner.height as usize)
         .map(|line| match line {
             PaneLine::Counts(counted) => counts_line(*counted, theme),
             PaneLine::Blank => Line::default(),
             PaneLine::Path(path) => {
                 Line::from(Span::styled(format!(" {}", truncate(path, width.saturating_sub(1))), Style::default().fg(theme.faded)))
             }
-            PaneLine::Change(index) => change_line(&reading.changes[*index], *index == outline.selected, width, theme),
+            PaneLine::Change(index) => change_line(&reading.changes[*index], width, theme),
             PaneLine::Signature { indent, segments } => signature_line(segments, *indent, width, theme),
         })
         .collect();
     f.render_widget(Paragraph::new(shown), inner);
-    app.list_rows.extend(list_rows);
 }
 
 /// `2 breaking · 3 added · 1 renamed`, zeros left out.
@@ -66,9 +53,8 @@ fn counts_line<'a>([breaking, added, renamed]: [usize; 3], theme: Theme) -> Line
 }
 
 /// A changed symbol with its sign.
-fn change_line<'a>(change: &Change, selected: bool, width: usize, theme: Theme) -> Line<'a> {
-    let bar = Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent));
-    let spans = [vec![bar], symbol_spans(change, width.saturating_sub(4), theme)].concat();
+fn change_line<'a>(change: &Change, width: usize, theme: Theme) -> Line<'a> {
+    let spans = [vec![Span::raw("  ")], symbol_spans(change, width.saturating_sub(4), theme)].concat();
     Line::from(spans)
 }
 

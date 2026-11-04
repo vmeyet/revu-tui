@@ -117,7 +117,6 @@ pub(crate) enum Group {
     View,
     Comment,
     Thread,
-    Outline,
     App,
 }
 
@@ -169,7 +168,7 @@ pub(crate) enum Pane {
 }
 
 /// Every pane with a cursor or a scroll: where the moving keys work.
-const MOVES: &[Pane] = &[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Page, Pane::Cover];
+const MOVES: &[Pane] = &[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Pipeline, Pane::Page, Pane::Cover];
 
 /// What an action is called, and who uses the name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -437,11 +436,8 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::Top, "top", &["g"]).help(&[line(Group::Move, "g G", "first, last")]).panes(MOVES).section(Section::Move),
     listed(Act::Bottom, "bottom", &["G"]).panes(MOVES).section(Section::Move),
     listed(Act::Open, "open", &["enter"])
-        .help(&[
-            line(Group::Move, "enter", "open, or toggle the fold or the thread"),
-            line(Group::Outline, "enter", "the definition in the diff"),
-        ])
-        .panes(&[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Outline, Pane::Cover])
+        .help(&[line(Group::Move, "enter", "open, or toggle the fold or the thread")])
+        .panes(&[Pane::Queue, Pane::Diff, Pane::Threads, Pane::Tree, Pane::Cover])
         .section(Section::Move),
     listed(Act::Back, "back", &["esc"])
         .panes(&[Pane::Queue, Pane::Diff, Pane::Tree, Pane::Outline, Pane::Pipeline, Pane::Prose, Pane::Cover, Pane::Page])
@@ -525,7 +521,6 @@ impl Group {
             Self::View => "view",
             Self::Comment => "comment & publish",
             Self::Thread => "thread pane",
-            Self::Outline => "outline pane",
             Self::App => "search & app",
         }
     }
@@ -583,7 +578,6 @@ impl Group {
                 Act::Share,
             ],
             Self::Thread => &[Act::Reply, Act::Resolve, Act::EveryThread, Act::Mine, Act::EditDraft, Act::ApplySuggestion, Act::OpenLink],
-            Self::Outline => &[Act::Open],
             Self::App => &[Act::Jump, Act::Palette, Act::OpenBrowser, Act::Session, Act::Refresh, Act::Help, Act::Quit],
         }
     }

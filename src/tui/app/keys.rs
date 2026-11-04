@@ -609,7 +609,7 @@ mod tests {
         thread.handle_key(code(KeyCode::Enter));
         assert_eq!(thread.focus, Focus::Side);
         press(&mut thread, "?");
-        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "outline pane", "search & app"]);
+        assert_eq!(help_titles(&mut thread), ["comment & publish", "thread pane", "search & app"]);
         press(&mut thread, "?");
         assert_eq!(help_titles(&mut thread), crate::tui::help::GROUPS.map(crate::act::Group::title));
         thread.handle_key(code(KeyCode::Esc));
