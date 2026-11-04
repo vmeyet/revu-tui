@@ -86,12 +86,6 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `S` `+` | apply the suggestion, react |
 | `u` `U` | open, copy the first link |
 
-## Outline pane
-
-| Keys | Does |
-|---|---|
-| `enter` | the definition in the diff |
-
 ## Search & app
 
 | Keys | Does |

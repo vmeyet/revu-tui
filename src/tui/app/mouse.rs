@@ -3,7 +3,7 @@
 //! A click on a link opens it: the terminal hands revu the clicks, so it no longer opens links itself.
 //! A click on a list row picks it, and a click on the picked row does what `enter` does on it.
 //! A click on a label of the tap bar presses its keys.
-use super::{Action, App, Focus, Open, Pane, Tree};
+use super::{Action, App, Focus, Pane, Tree};
 use crate::tui::drag::Drag;
 use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Position, Rect};
@@ -37,7 +37,6 @@ impl Areas {
 pub(crate) enum List {
     Queue,
     Tree,
-    Outline,
     Threads,
 }
 
@@ -119,7 +118,6 @@ impl App {
         match list {
             List::Queue => Some(self.queue_selected),
             List::Tree => open?.tree.as_ref().map(|tree| tree.selected),
-            List::Outline => open?.outline.as_ref().map(|outline| outline.selected),
             List::Threads => open?.pane.as_ref().map(|pane| pane.note),
         }
     }
@@ -131,7 +129,6 @@ impl App {
                 let tree = open.tree.clone().map(|tree| Tree { selected: index, ..tree });
                 open.with_tree(tree)
             }),
-            List::Outline => self.update_open(|open| Open { outline: open.outline.map(|outline| outline.at(index)), ..open }),
             List::Threads => self.update_open(|open| {
                 let pane = open.pane.clone().map(|pane| Pane { note: index, ..pane });
                 open.with_pane(pane)
@@ -176,7 +173,7 @@ impl List {
     fn pane(self) -> Focus {
         match self {
             Self::Queue => Focus::Queue,
-            Self::Tree | Self::Outline | Self::Threads => Focus::Side,
+            Self::Tree | Self::Threads => Focus::Side,
         }
     }
 }

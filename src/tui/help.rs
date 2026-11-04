@@ -8,7 +8,7 @@ use ratatui::layout::Rect;
 use vtui::help::{Help, Row, Section};
 
 /// The groups, in the order a review goes.
-pub(crate) const GROUPS: [Group; 7] = [Group::Move, Group::Queue, Group::View, Group::Comment, Group::Thread, Group::Outline, Group::App];
+pub(crate) const GROUPS: [Group; 6] = [Group::Move, Group::Queue, Group::View, Group::Comment, Group::Thread, Group::App];
 
 /// The panes whose first `?` shows the group.
 fn panes(group: Group) -> &'static [Focus] {
@@ -17,7 +17,7 @@ fn panes(group: Group) -> &'static [Focus] {
         Group::Queue => &[Focus::Queue],
         Group::View => &[Focus::Review],
         Group::Comment => &[Focus::Review, Focus::Side],
-        Group::Thread | Group::Outline => &[Focus::Side],
+        Group::Thread => &[Focus::Side],
         Group::App => &[Focus::Queue, Focus::Review, Focus::Side],
     }
 }
@@ -88,7 +88,7 @@ mod tests {
         let titles = |every_key, focus| groups(every_key, focus).map(Group::title).collect::<Vec<_>>();
         assert_eq!(titles(false, Focus::Queue), ["move", "queue", "search & app"]);
         assert_eq!(titles(false, Focus::Review), ["move", "view", "comment & publish", "search & app"]);
-        assert_eq!(titles(false, Focus::Side), ["comment & publish", "thread pane", "outline pane", "search & app"]);
+        assert_eq!(titles(false, Focus::Side), ["comment & publish", "thread pane", "search & app"]);
         assert_eq!(titles(true, Focus::Side), GROUPS.map(Group::title));
     }
 }

@@ -1,7 +1,6 @@
 //! The outline: which functions, methods and classes an MR changes. Each side of a file is read with
 //! its grammar's own tags query, then the symbols of both sides are compared by kind and name.
 use crate::diff::similarity;
-use crate::forge::Side;
 use crate::syntax;
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -28,7 +27,7 @@ pub(crate) struct Symbol {
     pub(crate) signature: String,
     pub(crate) public: bool,
     /// Its first and last line, from 1.
-    pub(crate) lines: (u32, u32),
+    lines: (u32, u32),
     body: String,
 }
 
@@ -57,11 +56,6 @@ impl Change {
     /// Public at head, or at base: a symbol that stopped being exported still counts.
     pub(crate) fn public(&self) -> bool {
         self.symbol.public || self.before.as_ref().is_some_and(|before| before.public)
-    }
-
-    /// The side its lines are on: base for a removed symbol, head for every other.
-    pub(crate) fn side(&self) -> Side {
-        if self.state == State::Removed { Side::Old } else { Side::New }
     }
 
     /// A public symbol gone, or called differently now.
