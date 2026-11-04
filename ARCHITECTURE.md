@@ -128,7 +128,6 @@ The internals:
 - Opening an MR paints the cached review at once, then fetches it again; when the head did not move, the diffs are not read again.
 - Diffs are keyed by head sha; a file at a sha is cached forever.
 - Each MR keeps `state.json`: folds, viewed files, the cursor spot, the side-by-side setting.
-- Claude's answers are keyed by MR and the whole request: model, context and question.
 - MRs waiting on the reader load ahead, two at a time, so `enter` paints at once.
 - Once a day the cache drops MRs the forge says are merged or closed, any MR untouched for 30 days, and any file set aside as unreadable 30 days ago.
 

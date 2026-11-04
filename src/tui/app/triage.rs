@@ -1,5 +1,5 @@
 //! Jev's marks in the app: which MRs to ask about, what came back, and how a row wears it.
-use super::{Action, App, MrKey};
+use super::{Action, App, MrKey, Open};
 use crate::ai::triage::{self, Reading, Verdict};
 use crate::forge::QueueMr;
 
@@ -15,6 +15,27 @@ pub(crate) enum Mark {
 }
 
 impl App {
+    /// `:ai off`: nothing more goes to an AI provider until `:ai on` or `revu` starts again.
+    pub(super) fn ai_off(&mut self) {
+        self.ask_model = None;
+        self.triage = false;
+        self.update_open(Open::without_answer);
+        self.toast("AI off: :ai on brings it back");
+    }
+
+    /// `:ai on`: back to what the config switched on, after `:ai off` or a Jev failure.
+    pub(super) fn ai_on(&mut self) {
+        let (triage, ask) = self.ai_configured.clone();
+        if !triage && ask.is_none() {
+            self.toast("no AI provider is on in the config: see revu ai status");
+            return;
+        }
+        let names: Vec<&str> = [triage.then_some("Jev"), ask.as_ref().map(|_| "Claude")].into_iter().flatten().collect();
+        self.triage = triage;
+        self.ask_model = ask;
+        self.toast(format!("AI on: {}", names.join(" and ")));
+    }
+
     /// After a fresh queue: every MR Jev has not seen as it is now, once.
     pub(super) fn ask_triage(&mut self) {
         if !self.triage {
@@ -185,5 +206,38 @@ mod tests {
         assert!(app.live_toast().is_some_and(|t| t.text.contains("quota")), "the second failure stays quiet");
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
         assert_eq!(app.take_actions(), [] as [Action; 0]);
+    }
+
+    #[test]
+    fn ai_on_brings_back_what_the_config_switched_on() {
+        let mut app = asking();
+        app.ai_configured = (true, app.ask_model.clone());
+        press(&mut app, ":ai off");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!((app.ask_model.is_some(), app.triage), (false, false));
+        press(&mut app, ":ai on");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!((app.ask_model.is_some(), app.triage), (true, true));
+    }
+
+    #[test]
+    fn ai_on_without_a_provider_in_the_config_says_so() {
+        let mut app = asking();
+        app.ai_configured = (false, None);
+        press(&mut app, ":ai on");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(app.ask_model.is_some(), "nothing changes");
+        assert!(app.live_toast().unwrap().text.contains("revu ai status"));
+    }
+
+    #[test]
+    fn ai_off_stops_every_ai_call_for_the_session() {
+        let mut app = asking();
+        app.triage = true;
+        on_line(&mut app);
+        press(&mut app, ":ai off");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!((app.ask_model.as_deref(), app.triage), (None, false));
+        assert_eq!(press(&mut app, "aa"), [] as [Action; 0]);
     }
 }

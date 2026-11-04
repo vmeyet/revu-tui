@@ -38,7 +38,7 @@ model = "claude-opus-5"
 ## Ask Claude
 
 Press `a`, then `a`, and type a question about the change under the cursor.
-The answer streams into the right pane.
+The answer streams into the right pane; asking again asks Claude again.
 
 `:ai off` stops both helpers until you type `:ai on`.
 

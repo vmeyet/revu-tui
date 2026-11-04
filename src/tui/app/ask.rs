@@ -17,8 +17,6 @@ pub(crate) struct Answer {
     pub(crate) label: String,
     pub(crate) text: String,
     pub(crate) state: AnswerState,
-    /// Painted from the cache: the same question was answered before for this diff.
-    pub(crate) cached: bool,
     pub(crate) scroll: usize,
 }
 
@@ -34,9 +32,7 @@ impl Answer {
         match part {
             Part::Text(more) => Self { text: self.text + &more, ..self },
             Part::Restart => Self { text: String::new(), ..self },
-            Part::Done { outcome, cached_text } => {
-                Self { cached: cached_text.is_some(), text: cached_text.unwrap_or(self.text), state: AnswerState::Done(outcome), ..self }
-            }
+            Part::Done(outcome) => Self { state: AnswerState::Done(outcome), ..self },
             Part::Failed(message) => Self { state: AnswerState::Failed(message), ..self },
         }
     }
@@ -56,7 +52,7 @@ impl Open {
         Self { answer: Some(answer), pane: None, tree: None, pipeline: None, outline: None, ..self }
     }
 
-    fn without_answer(self) -> Self {
+    pub(super) fn without_answer(self) -> Self {
         Self { answer: None, ..self }
     }
 }
@@ -67,11 +63,7 @@ pub(crate) enum Part {
     Text(String),
     /// The model declined and another one starts over: the partial text is void.
     Restart,
-    /// Finished; `text` is the whole answer when it came from the cache.
-    Done {
-        outcome: Outcome,
-        cached_text: Option<String>,
-    },
+    Done(Outcome),
     Failed(String),
 }
 
@@ -91,20 +83,6 @@ impl App {
         self.question_box(Input::Ask { scope: Box::new(scope) })
     }
 
-    /// `:ask <question>`: about what `a a` would ask about.
-    pub(super) fn ask_free(&mut self, question: String) -> Vec<Action> {
-        if self.ask_model.is_none() {
-            self.warn("Claude is off · set [ai.anthropic] enabled = true and run revu ai login anthropic");
-            return vec![];
-        }
-        let Some(open) = &self.open else {
-            self.toast("open an MR first");
-            return vec![];
-        };
-        let scope = scope_at_cursor(open);
-        self.ask(&scope, question)
-    }
-
     /// The question, built from the review as it is now.
     pub(super) fn ask(&mut self, scope: &Scope, question: String) -> Vec<Action> {
         if !self.asked {
@@ -120,7 +98,6 @@ impl App {
             label: format!("ask · {}", scope_label(scope)),
             text: String::new(),
             state: AnswerState::Streaming,
-            cached: false,
             scroll: 0,
         };
         let ask = Action::Ask { key: open.key.clone(), id: self.next_answer, request: Box::new(request) };
@@ -174,7 +151,6 @@ impl App {
                 label: "ask".into(),
                 text: String::new(),
                 state: AnswerState::Done(Outcome { stop: anthropic::Stop::Done, usage: anthropic::Usage::default(), model: String::new() }),
-                cached: false,
                 scroll: 0,
             };
             self.update_open(|open| open.showing_answer(waiting));
@@ -184,27 +160,6 @@ impl App {
         self.focus = Focus::Side;
         self.input = Some(input);
         vec![]
-    }
-
-    /// `:ai off`: nothing more goes to an AI provider until `:ai on` or `revu` starts again.
-    pub(super) fn ai_off(&mut self) {
-        self.ask_model = None;
-        self.triage = false;
-        self.update_open(Open::without_answer);
-        self.toast("AI off: :ai on brings it back");
-    }
-
-    /// `:ai on`: back to what the config switched on, after `:ai off` or a Jev failure.
-    pub(super) fn ai_on(&mut self) {
-        let (triage, ask) = self.ai_configured.clone();
-        if !triage && ask.is_none() {
-            self.toast("no AI provider is on in the config: see revu ai status");
-            return;
-        }
-        let names: Vec<&str> = [triage.then_some("Jev"), ask.as_ref().map(|_| "Claude")].into_iter().flatten().collect();
-        self.triage = triage;
-        self.ask_model = ask;
-        self.toast(format!("AI on: {}", names.join(" and ")));
     }
 }
 
@@ -270,7 +225,7 @@ mod tests {
         app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Text("a retry.".into()) });
         app.apply(Incoming::Answer { key: mr_key(), id: id + 7, part: Part::Text(" stale".into()) });
         assert_eq!(answer(&app).text, "a retry.", "a restart voids the partial text and an older stream is ignored");
-        app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done { outcome: done("claude-opus-5"), cached_text: None } });
+        app.apply(Incoming::Answer { key: mr_key(), id, part: Part::Done(done("claude-opus-5")) });
         assert_eq!(answer(&app).state, AnswerState::Done(done("claude-opus-5")));
         let screen = render(&mut app, 150, 24);
         assert!(screen.contains("Claude · ask") && screen.contains("a retry.") && screen.contains("1.2k cached"), "{screen}");
@@ -286,40 +241,5 @@ mod tests {
         let actions = app.apply_all([piece("one "), piece("two "), piece("three")]);
         assert!(actions.is_empty(), "{actions:?}");
         assert_eq!(answer(&app).text, "one two three");
-    }
-
-    #[test]
-    fn ai_on_brings_back_what_the_config_switched_on() {
-        let mut app = asking();
-        app.ai_configured = (true, app.ask_model.clone());
-        press(&mut app, ":ai off");
-        app.handle_key(code(KeyCode::Enter));
-        assert_eq!((app.ask_model.is_some(), app.triage), (false, false));
-        press(&mut app, ":ai on");
-        app.handle_key(code(KeyCode::Enter));
-        assert_eq!((app.ask_model.is_some(), app.triage), (true, true));
-    }
-
-    #[test]
-    fn ai_on_without_a_provider_in_the_config_says_so() {
-        let mut app = asking();
-        app.ai_configured = (false, None);
-        press(&mut app, ":ai on");
-        app.handle_key(code(KeyCode::Enter));
-        assert!(app.ask_model.is_some(), "nothing changes");
-        assert!(app.live_toast().unwrap().text.contains("revu ai status"));
-    }
-
-    #[test]
-    fn ai_off_stops_every_ai_call_for_the_session() {
-        let mut app = asking();
-        app.triage = true;
-        on_line(&mut app);
-        press(&mut app, ":ai off");
-        app.handle_key(code(KeyCode::Enter));
-        assert_eq!((app.ask_model.as_deref(), app.triage), (None, false));
-        assert_eq!(press(&mut app, "aa"), [] as [Action; 0]);
-        press(&mut app, ":ask why");
-        assert_eq!(app.handle_key(code(KeyCode::Enter)), [] as [Action; 0]);
     }
 }

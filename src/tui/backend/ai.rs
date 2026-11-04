@@ -1,13 +1,12 @@
 //! Claude's answers and Jev's verdicts and readings, each kept in the cache once given.
 use super::{Homes, read_cache, write_cache};
-use crate::ai::anthropic::{self, Ask, Claude, Outcome, Stop, Usage};
+use crate::ai::anthropic::{self, Ask, Claude};
 use crate::ai::triage::{self, Verdict};
 use crate::ai::typesafe::{TypeSafe, Unavailable};
 use crate::cache::keys;
 use crate::forge::{MrKey, Sha};
 use crate::tui::app::{Incoming, Part};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -19,54 +18,22 @@ pub(in crate::tui) struct Ai {
     pub(super) claude: Option<Claude>,
 }
 
-/// An answer kept in the cache: asking the same thing about the same diff paints it at once.
-#[derive(Serialize, Deserialize)]
-pub(super) struct SavedAnswer {
-    text: String,
-    model: String,
-    usage: Usage,
-}
-
 impl Ai {
-    /// Claude's answer, piece by piece as it streams, or at once from the cache.
-    /// Only a finished answer is kept, so a cut or refused one is asked again next time.
+    /// Claude's answer, piece by piece as it streams.
     pub(in crate::tui) async fn ask(&self, key: &MrKey, id: u64, request: &Ask, send: &impl Fn(Incoming)) {
         let part = |part: Part| Incoming::Answer { key: key.clone(), id, part };
         let Some(claude) = &self.claude else {
             send(part(Part::Failed("Claude is off".into())));
             return;
         };
-        let cache_key = keys::answer(key, &anthropic::body(claude.model(), request).to_string());
-        let (wanted, reading) = (key.clone(), cache_key.clone());
-        let saved = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read::<SavedAnswer>(&reading)).await;
-        if let Some(saved) = saved {
-            let outcome = Outcome { stop: Stop::Done, usage: saved.usage, model: saved.model };
-            send(part(Part::Done { outcome, cached_text: Some(saved.text) }));
-            return;
-        }
-        let mut text = String::new();
         let streamed = claude
             .stream(request, |event| match event {
-                anthropic::Event::Text(more) => {
-                    text.push_str(&more);
-                    send(part(Part::Text(more)));
-                }
-                anthropic::Event::Restart => {
-                    text.clear();
-                    send(part(Part::Restart));
-                }
+                anthropic::Event::Text(more) => send(part(Part::Text(more))),
+                anthropic::Event::Restart => send(part(Part::Restart)),
             })
             .await;
         match streamed {
-            Ok(outcome) => {
-                if outcome.stop == Stop::Done {
-                    let saved = SavedAnswer { text, model: outcome.model.clone(), usage: outcome.usage };
-                    let wanted = key.clone();
-                    write_cache("caching Claude's answer", &self.homes, move |homes| homes.cache_of(&wanted).write(&cache_key, &saved))
-                        .await;
-                }
-                send(part(Part::Done { outcome, cached_text: None }));
-            }
+            Ok(outcome) => send(part(Part::Done(outcome))),
             Err(failure) => send(part(Part::Failed(failure.0))),
         }
     }
@@ -144,7 +111,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_answer_streams_once_then_comes_from_the_cache() {
+    async fn an_answer_streams_in_pieces_then_ends() {
         use wiremock::matchers::method;
         let server = wiremock::MockServer::start().await;
         let stream = [
@@ -167,15 +134,8 @@ mod tests {
         let heard = std::sync::Mutex::new(vec![]);
         let listen = |incoming: Incoming| heard.lock().unwrap().push(incoming);
         ai.ask(&key(), 1, &request, &listen).await;
-        ai.ask(&key(), 2, &request, &listen).await;
         let heard = heard.into_inner().unwrap();
-        let cached: Vec<_> = heard
-            .iter()
-            .filter_map(|i| match i {
-                Incoming::Answer { id, part: Part::Done { cached_text, .. }, .. } => Some((*id, cached_text.clone())),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(cached, vec![(1, None), (2, Some("Looks fine.".into()))], "the second answer never reaches the API");
+        assert!(matches!(&heard[0], Incoming::Answer { part: Part::Text(text), .. } if text == "Looks fine."), "{heard:?}");
+        assert!(matches!(&heard[1], Incoming::Answer { part: Part::Done(_), .. }), "{heard:?}");
     }
 }

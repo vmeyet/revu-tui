@@ -162,7 +162,6 @@ impl App {
                 self.ai_on();
                 vec![]
             }
-            Command::Ask(question) => self.ask_free(question),
             Command::Share(target) => {
                 self.start_share(target.as_deref());
                 vec![]
