@@ -187,7 +187,7 @@ What changed in revu, newest version first: what is new, where, and how to use i
 
 ## `revu usage`
 
-What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen, hints.
+What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen.
 
 | Flag | Means |
 |---|---|

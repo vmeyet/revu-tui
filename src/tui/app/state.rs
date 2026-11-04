@@ -173,10 +173,6 @@ pub(crate) struct App {
     pub(crate) usage: Option<crate::usage::Tally>,
     /// Up to when screen time is counted, and what stops it.
     pub(crate) usage_clock: vtui::usage::Clock,
-    /// The j or k in a row moving through the diff.
-    pub(crate) walk: super::usage::Walk,
-    /// When zen was left with a key, and on which MR.
-    pub(crate) left_zen: Option<(Instant, MrKey)>,
     /// What the key in flight did, named by its handler where the same key does something else elsewhere.
     pub(crate) key_did: Option<crate::act::Act>,
     pub(crate) keymap: crate::keymap::Keymap,
@@ -330,8 +326,6 @@ impl App {
             quit_confirm: settings.quit_confirm,
             usage: settings.usage,
             usage_clock: vtui::usage::Clock::starting(now),
-            walk: super::usage::Walk::default(),
-            left_zen: None,
             key_did: None,
             keymap: settings.keymap,
             pending: None,

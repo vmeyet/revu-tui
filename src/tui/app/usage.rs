@@ -2,47 +2,12 @@
 //! Writing them is the runtime's job, so nothing here touches the disk.
 use super::{App, Focus};
 use crate::act::{Act, Pane};
-use crate::review::Row;
 use crate::tui::palette::Command;
 use crate::usage::Counts;
 use crossterm::event::KeyEvent;
 use std::time::Duration;
 
-/// A walk this long that reached a hunk or a thread is worth a hint: a jump would have got there.
-const LONG_WALK: u32 = 15;
-/// Opening another MR from the queue this soon after leaving zen is changing MR, which `[m` `]m` do in zen.
-const ZEN_TO_QUEUE: Duration = Duration::from_secs(30);
-
-/// The j or k in a row moving through the diff.
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct Walk {
-    steps: u32,
-    hinted: bool,
-}
-
-impl Walk {
-    /// One more step, and whether it calls for the hint: once per walk, on a step that reached a hunk or a thread.
-    fn step(self, reached_a_jump_stop: bool) -> (Self, bool) {
-        let steps = self.steps + 1;
-        let is_long = reached_a_jump_stop && steps >= LONG_WALK && !self.hinted;
-        (Self { steps, hinted: self.hinted || is_long }, is_long)
-    }
-}
-
-/// What counting a key needs to know from before the key changed anything.
-pub(super) struct Before {
-    focus: Focus,
-    row: Option<usize>,
-    zen: bool,
-}
-
 impl App {
-    /// Where the key lands, read before it changes anything; `None` when off.
-    pub(super) fn usage_before(&self) -> Option<Before> {
-        self.usage.as_ref()?;
-        Some(Before { focus: self.focus, row: self.open.as_ref().map(|open| open.selected), zen: self.zen })
-    }
-
     /// Names what the key in flight did, unless its handler already named something closer.
     pub(super) fn did(&mut self, act: Act) {
         self.key_did.get_or_insert(act);
@@ -60,54 +25,10 @@ impl App {
         self.key_did = None;
     }
 
-    /// Counts what a key did, as its handler named it, and the habits a faster key would replace.
-    pub(super) fn count_key(&mut self, before: Option<Before>) {
-        let did = self.key_did.take();
-        let Some(before) = before else { return };
-        let Some(act) = did else { return };
-        self.count_walk(act, &before);
-        self.count_zen_return(act, &before);
-        if let Some(name) = act.row().name.counted() {
+    /// Counts what a key did, as its handler named it.
+    pub(super) fn count_key(&mut self) {
+        if let Some(name) = self.key_did.take().and_then(|act| act.row().name.counted()) {
             self.count(name);
-        }
-    }
-
-    fn count_walk(&mut self, act: Act, before: &Before) {
-        let is_step = matches!(act, Act::MoveDown | Act::MoveUp) && before.focus == Focus::Review;
-        if !is_step {
-            self.walk = Walk::default();
-            return;
-        }
-        let (walk, is_long) = self.walk.step(self.reached_a_jump_stop(before.row));
-        self.walk = walk;
-        if is_long {
-            self.count_hint("long_walk");
-        }
-    }
-
-    /// The cursor went onto or past a row `]c` or `]n` stops on since `from`.
-    fn reached_a_jump_stop(&self, from: Option<usize>) -> bool {
-        let (Some(open), Some(from)) = (&self.open, from) else { return false };
-        let to = open.selected;
-        let passed = if to > from { from + 1..to + 1 } else { to..from };
-        let stops = |row: &Row| matches!(row, Row::Hunk { .. }) || open.is_marked(row);
-        open.rows.get(passed).is_some_and(|rows| rows.iter().any(stops))
-    }
-
-    fn count_zen_return(&mut self, act: Act, before: &Before) {
-        if before.zen && !self.zen {
-            self.left_zen = self.open.as_ref().map(|open| (self.now, open.key.clone()));
-            return;
-        }
-        let is_queue_open = matches!(act, Act::Open | Act::FocusRight) && before.focus == Focus::Queue;
-        if !is_queue_open {
-            return;
-        }
-        let Some((left_at, left_mr)) = self.left_zen.take() else { return };
-        let is_soon = self.now.saturating_duration_since(left_at) <= ZEN_TO_QUEUE;
-        let is_another_mr = self.selected_mr().is_some_and(|mr| mr.key() != left_mr);
-        if is_soon && is_another_mr {
-            self.count_hint("queue_after_zen");
         }
     }
 
@@ -115,24 +36,6 @@ impl App {
         if let Some(tally) = &mut self.usage {
             tally.act(name);
         }
-    }
-
-    /// Counts a hint, and shows it as a toast its first few times.
-    pub(super) fn count_hint(&mut self, name: &'static str) {
-        let is_shown = self.usage.as_mut().is_some_and(|tally| tally.hint(name));
-        if is_shown && let Some(tip) = self.tip(name) {
-            self.toast(tip);
-        }
-    }
-
-    fn tip(&self, hint: &str) -> Option<String> {
-        let label = |keys| self.keymap.label(keys);
-        Some(match hint {
-            "long_walk" => format!("tip: {} jumps to the next hunk, {} to the next thread", label("]c"), label("]n")),
-            "queue_after_zen" => format!("tip: {} and {} change MR without leaving zen", label("[m"), label("]m")),
-            "palette_number" => "tip: !42 finds MR 42 directly, #42 on GitHub".to_owned(),
-            _ => return None,
-        })
     }
 
     pub(super) fn count_command(&mut self, command: &Command) {
@@ -192,15 +95,6 @@ mod tests {
 
     fn seconds_on(app: &mut App, screen: &str) -> Option<u64> {
         app.take_usage().and_then(|counts| counts.screens.get(screen).copied())
-    }
-
-    fn hints(app: &mut App, hint: &str) -> Option<u64> {
-        app.take_usage().and_then(|counts| counts.hints.get(hint).copied())
-    }
-
-    fn walk(app: &mut App, from_step: usize, steps: usize) {
-        to_step(app, from_step);
-        press(app, &"j".repeat(steps));
     }
 
     #[test]
@@ -298,78 +192,6 @@ mod tests {
     }
 
     #[test]
-    fn a_long_walk_onto_a_hunk_is_a_hint_once_and_shows_as_a_toast() {
-        let mut app = counting();
-        walk(&mut app, 0, 40);
-        assert_eq!(hints(&mut app, "long_walk"), Some(1), "one hint per walk, not per step");
-        assert!(app.live_toast().is_some_and(|toast| toast.text.contains("]c jumps to the next hunk")));
-    }
-
-    #[test]
-    fn a_walk_inside_one_hunk_or_past_a_hunk_soon_after_it_starts_is_no_hint() {
-        let mut inside = counting();
-        walk(&mut inside, 0, 25);
-        assert_eq!(hints(&mut inside, "long_walk"), None, "no jump stop on the way");
-        let mut early = counting();
-        walk(&mut early, 25, 25);
-        assert_eq!(hints(&mut early, "long_walk"), None, "the hunk came after five steps, a jump saved little");
-    }
-
-    #[test]
-    fn another_action_starts_the_walk_again() {
-        let mut app = counting();
-        walk(&mut app, 10, 10);
-        press(&mut app, "w");
-        press(&mut app, &"j".repeat(15));
-        assert_eq!(hints(&mut app, "long_walk"), None, "ten steps to the hunk since `w`");
-    }
-
-    #[test]
-    fn a_hint_shows_as_a_toast_until_it_was_shown_three_times() {
-        let mut app = counting();
-        let shown_twice = crate::usage::rules().parse("{\"date\":\"2026-09-24\",\"version\":2,\"shown\":{\"long_walk\":2}}");
-        app.usage = Some(crate::usage::Tally::after(&shown_twice));
-        walk(&mut app, 0, 40);
-        assert!(app.live_toast().is_some(), "the third time");
-        press(&mut app, "w");
-        app.toast = None;
-        walk(&mut app, 0, 40);
-        assert!(app.live_toast().is_none(), "the fourth time is only counted");
-        assert_eq!(hints(&mut app, "long_walk"), Some(2));
-    }
-
-    fn zen_left_from(app: &mut App) {
-        press(app, "zz");
-        press(app, "h");
-        assert_eq!(app.focus, Focus::Queue);
-    }
-
-    #[test]
-    fn opening_another_mr_from_the_queue_soon_after_leaving_zen_is_a_hint() {
-        let mut app = counting();
-        zen_left_from(&mut app);
-        app.now += Duration::from_secs(10);
-        press(&mut app, "j");
-        app.handle_key(code(KeyCode::Enter));
-        assert_eq!(hints(&mut app, "queue_after_zen"), Some(1));
-    }
-
-    #[test]
-    fn opening_from_the_queue_is_no_hint_on_the_same_mr_long_after_zen_or_without_it() {
-        let mut same = counting();
-        zen_left_from(&mut same);
-        same.handle_key(code(KeyCode::Enter));
-        assert_eq!(hints(&mut same, "queue_after_zen"), None, "back to the MR zen showed");
-        let mut later = counting();
-        zen_left_from(&mut later);
-        later.now += Duration::from_secs(31);
-        press(&mut later, "jl");
-        assert_eq!(hints(&mut later, "queue_after_zen"), None, "half a minute after zen is a new choice");
-        press(&mut later, "hjl");
-        assert_eq!(hints(&mut later, "queue_after_zen"), None, "zen was used once, this open is not after it");
-    }
-
-    #[test]
     fn q_and_esc_that_close_the_pane_count_as_closing_it() {
         let mut app = with_review();
         app.usage = Some(crate::usage::Tally::default());
@@ -453,14 +275,12 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_number_in_the_search_is_a_hint_and_commands_are_counted() {
+    fn the_search_and_commands_are_counted() {
         let mut app = counting();
         app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
         press(&mut app, "42");
         app.handle_key(code(KeyCode::Enter));
-        let counts = app.take_usage().unwrap();
-        assert_eq!(counts.actions.get("jump"), Some(&1));
-        assert_eq!(counts.hints.get("palette_number"), Some(&1));
+        assert_eq!(app.take_usage().unwrap().actions.get("jump"), Some(&1));
         press(&mut app, ":help");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.take_usage().unwrap().actions.get(":help"), Some(&1));

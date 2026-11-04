@@ -93,7 +93,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         ascii: ctx.config.tui.ascii,
         reactions: crate::reactions::read(&Cache::shared()),
         quit_confirm: ctx.config.keys.quit_confirm,
-        usage: ctx.config.usage.enabled.then(|| crate::usage::Tally::after(&crate::usage::read(&Cache::shared()))),
+        usage: ctx.config.usage.enabled.then(crate::usage::Tally::default),
         whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
         ignored_settings: crate::config::warnings(),
         agent: backend.agent.is_some(),
