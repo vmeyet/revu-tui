@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.12.0 - 2026-11-04
+
 ### New
 
 - **`a` opens the agent session: it was `a g`.**
