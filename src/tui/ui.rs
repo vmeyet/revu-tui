@@ -84,9 +84,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
         diff_view::draw(f, app, review, gutter(app));
     }
     let mut pictures = vec![];
-    if app.open.as_ref().is_some_and(|o| o.answer.is_some()) && side_open {
-        super::answer_view::draw(f, app, side);
-    } else if app.open.as_ref().is_some_and(|o| o.pipeline.is_some()) && side_open {
+    if app.open.as_ref().is_some_and(|o| o.pipeline.is_some()) && side_open {
         super::pipeline_view::draw(f, app, side);
     } else if app.open.as_ref().is_some_and(|o| o.outline.is_some()) && side_open {
         super::outline_view::draw(f, app, side);

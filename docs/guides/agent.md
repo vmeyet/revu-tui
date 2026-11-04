@@ -23,7 +23,7 @@ You need the `claude` command, logged in, and a checkout of the project that Cla
 3. Talk to the session.
 
 It works in the queue, in the diff, in zen and on a phone.
-While Claude's answer or the outline has the keys, `a` is theirs: type `:session` there.
+While the outline has the keys, `a` is its own: type `:session` there.
 
 ## Which session opens
 

@@ -63,13 +63,7 @@ impl App {
             return vec![];
         }
         let action = load(open);
-        self.update_open(|open| Open {
-            pane: None,
-            tree: None,
-            answer: None,
-            outline: None,
-            ..open.with_pipeline(Some(Pipeline::waiting()))
-        });
+        self.update_open(|open| Open { pane: None, tree: None, outline: None, ..open.with_pipeline(Some(Pipeline::waiting())) });
         self.focus = Focus::Side;
         vec![action]
     }

@@ -128,7 +128,7 @@ impl App {
         if self.open.as_ref().is_some_and(|open| !open.pane_takes(&place)) {
             return;
         }
-        self.update_open(|open| Open { tree: None, answer: None, pipeline: None, outline: None, ..open.with_pane(Some(Pane::at(place))) });
+        self.update_open(|open| Open { tree: None, pipeline: None, outline: None, ..open.with_pane(Some(Pane::at(place))) });
         self.focus = Focus::Side;
     }
 
