@@ -2,7 +2,7 @@
 //! Opt-in with `[usage] enabled = true`.
 //! Nothing about the MRs is kept: no titles, paths, text, hosts or projects, only action names.
 //! vtui counts, keeps the file's format and sums the report; revu names what it counts and keeps the file in its cache.
-use crate::act::{self, Section};
+use crate::act;
 use crate::cache::Cache;
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -20,7 +20,7 @@ const COUNTING: u32 = 2;
 pub(crate) fn rules() -> Rules {
     Rules {
         actions: act::listed_names(),
-        groups: Section::ALL.iter().map(|section| Group { title: section.title(), actions: act::listed_in(*section) }).collect(),
+        groups: act::Group::REPORT_ORDER.iter().map(|group| Group { title: group.title(), actions: act::listed_in(*group) }).collect(),
         hints: &[],
         renamed: &[],
         counting: COUNTING,

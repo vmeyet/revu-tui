@@ -19,6 +19,7 @@ fn panes(group: Group) -> &'static [Focus] {
         Group::Comment => &[Focus::Review, Focus::Side],
         Group::Thread => &[Focus::Side],
         Group::App => &[Focus::Queue, Focus::Review, Focus::Side],
+        Group::Jump | Group::Commands => &[],
     }
 }
 
