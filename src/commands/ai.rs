@@ -7,23 +7,18 @@ use crate::render::{Style, Theme};
 use anyhow::{Result, bail};
 use std::io::{IsTerminal, Read, Write};
 
-const ANTHROPIC_API: &str = "https://api.anthropic.com";
-
 /// Runs one `revu ai` subcommand.
-pub async fn run(args: AiArgs, json: bool) -> Result<()> {
+pub fn run(args: AiArgs, json: bool) -> Result<()> {
     let store = SecurityCli::new(auth::SERVICE);
     match args.command {
-        AiCommand::Login(login) => self::login(&login, &store).await,
+        AiCommand::Login(login) => self::login(&login, &store),
         AiCommand::Logout { provider } => logout(provider, &store),
         AiCommand::Status => status(&store, json),
     }
 }
 
-async fn login(args: &AiLoginArgs, store: &dyn SecretStore) -> Result<()> {
+fn login(args: &AiLoginArgs, store: &dyn SecretStore) -> Result<()> {
     let key = read_key(args)?;
-    if args.provider == Provider::Anthropic {
-        verify_anthropic(ANTHROPIC_API, &key).await?;
-    }
     store.set(args.provider.account(), key.expose())?;
     let enabled = args.provider.enabled(&Config::load()?.ai);
     println!("stored the {} key in the keychain (service `revu`, account `{}`)", args.provider, args.provider.account());
@@ -62,8 +57,7 @@ fn describe(status: &Status, theme: Theme) -> String {
         Some(KeySource::Keychain) => "key in the keychain".to_owned(),
         None => format!("no key: `revu ai login {}`", status.provider),
     };
-    let model = status.model.as_deref().map(|m| format!(" · {m}")).unwrap_or_default();
-    format!("{:<10} {state} · {key}{model}", status.provider.to_string())
+    format!("{:<10} {state} · {key}", status.provider.to_string())
 }
 
 /// The key from stdin, or a hidden prompt.
@@ -96,51 +90,15 @@ fn prompt(provider: Provider) -> Result<String> {
     Ok(key)
 }
 
-/// Lists the models, which costs nothing, so a wrong key is refused before it is stored.
-async fn verify_anthropic(base: &str, key: &Secret) -> Result<()> {
-    let response = crate::http::client()
-        .build()?
-        .get(format!("{base}/v1/models"))
-        .header("x-api-key", key.expose())
-        .header("anthropic-version", "2023-06-01")
-        .send()
-        .await
-        .map_err(|e| anyhow::anyhow!("could not reach Anthropic: {}", e.without_url()))?;
-    match response.status().as_u16() {
-        200..=299 => Ok(()),
-        401 | 403 => bail!("Anthropic refused this key (HTTP {})", response.status().as_u16()),
-        status => bail!("Anthropic answered HTTP {status} while checking the key"),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::matchers::{header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    #[tokio::test]
-    async fn a_key_is_checked_against_the_models_list_before_it_is_stored() {
-        let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/v1/models"))
-            .and(header("x-api-key", "sk-ant-good"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": []})))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET")).and(path("/v1/models")).respond_with(ResponseTemplate::new(401)).mount(&server).await;
-        verify_anthropic(&server.uri(), &Secret::new("sk-ant-good")).await.unwrap();
-        let err = verify_anthropic(&server.uri(), &Secret::new("sk-ant-bad")).await.unwrap_err().to_string();
-        assert!(err.contains("refused") && !err.contains("sk-ant-bad"), "{err}");
-    }
 
     #[test]
     fn status_says_where_the_key_is_never_what_it_is() {
-        let line = |enabled, key| {
-            describe(&Status { provider: Provider::Anthropic, enabled, key, model: Some("claude-opus-5".into()) }, Theme { color: false })
-        };
-        assert_eq!(line(true, Some(KeySource::Env)), "anthropic  on  · key from ANTHROPIC_API_KEY · claude-opus-5");
-        assert_eq!(line(false, None), "anthropic  off · no key: `revu ai login anthropic` · claude-opus-5");
-        assert_eq!(line(true, None), "anthropic  on, no key · no key: `revu ai login anthropic` · claude-opus-5");
+        let line = |enabled, key| describe(&Status { provider: Provider::Typesafe, enabled, key }, Theme { color: false });
+        assert_eq!(line(true, Some(KeySource::Env)), "typesafe   on  · key from TYPESAFE_API_KEY");
+        assert_eq!(line(false, None), "typesafe   off · no key: `revu ai login typesafe`");
+        assert_eq!(line(true, None), "typesafe   on, no key · no key: `revu ai login typesafe`");
     }
 }

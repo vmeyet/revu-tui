@@ -29,7 +29,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Usage(args)) => return commands::usage::run(&args, cli.json),
         Some(Command::News(args)) => return commands::news::run(&args, cli.json),
         Some(Command::Docs(args)) => return commands::docs::run(&args),
-        Some(Command::Ai(args)) => return commands::ai::run(args, cli.json).await,
+        Some(Command::Ai(args)) => return commands::ai::run(args, cli.json),
         Some(Command::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "revu", &mut std::io::stdout());
             return Ok(());

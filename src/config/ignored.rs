@@ -51,6 +51,12 @@ mod tests {
     }
 
     #[test]
+    fn the_table_of_a_removed_provider_loads_with_a_warning() {
+        let warnings = warned("[ai.anthropic]\nenabled = true\nmodel = \"claude-opus-5\"\n");
+        assert_eq!(warnings, ["`ai.anthropic` is not a setting this revu knows; it is ignored"]);
+    }
+
+    #[test]
     fn a_config_of_known_keys_warns_of_nothing() {
         assert_eq!(warned("host = \"gitlab.com\"\n[agent]\nenabled = true\n[keys.bind]\nnext_thread = \"F\"\n"), [] as [String; 0]);
     }
@@ -71,8 +77,8 @@ mod tests {
 
     #[test]
     fn a_key_that_looks_like_a_secret_fails_to_load() {
-        let err = parse("[ai.anthropic]\nkey = \"sk-ant\"\n").unwrap_err().to_string();
-        assert!(err.contains("`ai.anthropic.key`") && err.contains("keychain"), "{err}");
+        let err = parse("[ai.typesafe]\nkey = \"ts-key\"\n").unwrap_err().to_string();
+        assert!(err.contains("`ai.typesafe.key`") && err.contains("keychain"), "{err}");
         assert!(parse("token = \"glpat-xxxx\"\n").is_err());
         assert!(parse("[tui]\napi_key = \"x\"\n").is_err());
         assert!(parse("[tui]\nkeyboard = \"x\"\n").is_ok(), "only a whole word counts");

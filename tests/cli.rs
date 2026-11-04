@@ -82,20 +82,19 @@ fn update_help_mentions_force() {
 
 #[test]
 fn ai_login_refuses_a_key_in_argv() {
-    revu().args(["ai", "login", "anthropic", "--token", "sk-ant-x"]).assert().failure().stderr(predicate::str::contains("ps"));
+    revu().args(["ai", "login", "typesafe", "--token", "ts-key"]).assert().failure().stderr(predicate::str::contains("ps"));
 }
 
 #[test]
-fn ai_status_names_both_providers_without_a_key() {
+fn ai_status_names_the_provider_without_its_key() {
     revu()
         .args(["ai", "status"])
-        .env("ANTHROPIC_API_KEY", "sk-ant-secret")
-        .env_remove("TYPESAFE_API_KEY")
+        .env("TYPESAFE_API_KEY", "ts-secret")
         .assert()
         .success()
-        .stdout(predicate::str::contains("typesafe").and(predicate::str::contains("anthropic")))
-        .stdout(predicate::str::contains("ANTHROPIC_API_KEY"))
-        .stdout(predicate::str::contains("sk-ant-secret").not());
+        .stdout(predicate::str::contains("typesafe"))
+        .stdout(predicate::str::contains("TYPESAFE_API_KEY"))
+        .stdout(predicate::str::contains("ts-secret").not());
 }
 
 #[test]

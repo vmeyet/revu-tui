@@ -170,14 +170,12 @@ fn on() -> bool {
     true
 }
 
-/// `[ai]`: each provider is switched on by itself, and both are off until then, because enabling
+/// `[ai]`: each provider is switched on by itself, and off until then, because enabling
 /// one sends MR content to it. Keys are never here: they live in the keychain (`revu ai login`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Ai {
     #[serde(default, skip_serializing_if = "Typesafe::is_default")]
     pub(crate) typesafe: Typesafe,
-    #[serde(default, skip_serializing_if = "Anthropic::is_default")]
-    pub(crate) anthropic: Anthropic,
 }
 
 impl Ai {
@@ -196,28 +194,6 @@ pub(crate) struct Typesafe {
 impl Typesafe {
     fn is_default(&self) -> bool {
         *self == Self::default()
-    }
-}
-
-/// `[ai.anthropic]`: Claude answers questions about the MR.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Anthropic {
-    #[serde(default)]
-    pub(crate) enabled: bool,
-    /// `claude-opus-5` when unset.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) model: Option<String>,
-}
-
-impl Anthropic {
-    const DEFAULT_MODEL: &str = "claude-opus-5";
-
-    fn is_default(&self) -> bool {
-        *self == Self::default()
-    }
-
-    pub(crate) fn model(&self) -> &str {
-        self.model.as_deref().unwrap_or(Self::DEFAULT_MODEL)
     }
 }
 
@@ -325,10 +301,9 @@ mod tests {
     }
 
     #[test]
-    fn each_ai_provider_has_its_own_table_and_the_old_switch_names_the_new_one() {
-        let config: Config = toml::from_str("[ai.anthropic]\nenabled = true\n\n[ai.typesafe]\nenabled = true\n").unwrap();
-        assert!(config.ai.anthropic.enabled && config.ai.typesafe.enabled);
-        assert_eq!(config.ai.anthropic.model(), "claude-opus-5");
+    fn an_ai_provider_has_its_own_table() {
+        let config: Config = toml::from_str("[ai.typesafe]\nenabled = true\n").unwrap();
+        assert!(config.ai.typesafe.enabled);
     }
 
     #[test]
@@ -349,7 +324,7 @@ mod tests {
         let loaded = Config::read(&path).unwrap();
         assert_eq!(loaded.config.tui.theme.as_deref(), Some("nord"));
         assert_eq!(loaded.warnings.len(), 2, "{:?}", loaded.warnings);
-        std::fs::write(&path, "[ai.anthropic]\nkey = \"sk-ant\"\n").unwrap();
+        std::fs::write(&path, "[ai.typesafe]\nkey = \"ts-key\"\n").unwrap();
         let err = format!("{:#}", Config::load_from(&path).unwrap_err());
         assert!(err.contains("config.toml") && err.contains("keychain"), "a key in the config is refused: {err}");
     }
