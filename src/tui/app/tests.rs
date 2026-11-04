@@ -540,41 +540,41 @@ fn in_zen_the_compose_box_lets_the_pane_under_the_diff_grow() {
 }
 
 #[test]
-fn a_long_file_keeps_its_name_and_hunk_pinned_above_the_diff() {
+fn a_long_file_keeps_its_name_and_hunk_on_top_of_the_diff() {
     let mut app = with_long_review();
     to_step(&mut app, 55);
     let screen = render(&mut app, 120, 30);
     let open = app.open.as_ref().unwrap();
-    assert!(open.pinned_file.is_some(), "{screen}");
+    assert!(open.sticky_file.is_some(), "{screen}");
     let body: Vec<&str> = screen.lines().skip_while(|l| !l.contains("charge.rs")).collect();
     assert!(body.first().is_some_and(|l| l.contains("src/pay/charge.rs")), "the file is the first diff row:\n{screen}");
     assert!(body.get(1).is_some_and(|l| l.contains("fn refund")), "the cursor's hunk follows it:\n{screen}");
-    insta::assert_snapshot!("review_pinned", screen);
+    insta::assert_snapshot!("review_sticky", screen);
 }
 
 #[test]
-fn zen_pins_the_file_and_hunk_inside_its_column() {
+fn zen_keeps_the_file_and_hunk_sticky_inside_its_column() {
     let mut app = with_long_review();
     to_step(&mut app, 55);
     press(&mut app, "zz");
     let screen = render(&mut app, 160, 45);
-    assert!(app.open.as_ref().unwrap().pinned_file.is_some(), "{screen}");
-    let pinned = screen.lines().find(|l| l.contains("src/pay/charge.rs")).expect(&screen);
-    let indent = pinned.len() - pinned.trim_start().len();
+    assert!(app.open.as_ref().unwrap().sticky_file.is_some(), "{screen}");
+    let sticky = screen.lines().find(|l| l.contains("src/pay/charge.rs")).expect(&screen);
+    let indent = sticky.len() - sticky.trim_start().len();
     assert!(indent >= (160 - 120) / 2, "inside the centred column:\n{screen}");
     assert!(screen.contains("fn refund"), "the cursor's hunk too:\n{screen}");
-    insta::assert_snapshot!("zen_pinned", screen);
+    insta::assert_snapshot!("zen_sticky", screen);
     let _ = render(&mut app, 160, 18);
-    assert_eq!(app.open.as_ref().unwrap().pinned_file, None, "short screens still pin nothing, in zen too");
+    assert_eq!(app.open.as_ref().unwrap().sticky_file, None, "short screens still stick nothing, in zen too");
 }
 
 #[test]
-fn a_short_view_pins_nothing() {
+fn a_short_view_has_no_sticky_header() {
     let mut app = with_long_review();
     to_step(&mut app, 40);
     let screen = render(&mut app, 120, 18);
-    assert_eq!(app.open.as_ref().unwrap().pinned_file, None);
-    insta::assert_snapshot!("review_pinned_hidden", screen);
+    assert_eq!(app.open.as_ref().unwrap().sticky_file, None);
+    insta::assert_snapshot!("review_sticky_hidden", screen);
 }
 
 #[test]

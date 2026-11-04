@@ -162,3 +162,4 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | review | The set of drafts, published together with `P` |
 | viewed | A file the reviewer marked as read; it folds |
 | pin | An MR kept on top of the queue, in `PINNED`, until it is merged or closed |
+| sticky header | The file row, and the cursor's hunk row, kept on top of the diff once they scroll off; `tui/app/sticky.rs` |

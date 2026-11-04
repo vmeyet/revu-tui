@@ -9,7 +9,7 @@ mod side_by_side;
 mod test_support;
 mod wrap;
 
-use super::app::{App, Focus, Open, PIN_MIN_HEIGHT, Pins, pins, settle_with_pins};
+use super::app::{App, Focus, Open, STICKY_MIN_HEIGHT, StickyRows, settle_with_sticky, sticky_rows};
 use super::theme::Theme;
 use super::thread_view;
 use super::ui::{draw_empty, settle_scroll};
@@ -198,27 +198,26 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
         let room = compose.filter(|(row, _)| *row == i).map_or(0, |(_, rows)| rows);
         row_lines(open, i).into_iter().chain(std::iter::repeat_n(Line::default(), room)).collect()
     };
-    let pinning = height >= PIN_MIN_HEIGHT;
-    let pinned_at = |open: &Open| if pinning { pins(&open.rows, open.scroll, open.selected) } else { Pins::default() };
-    open.scroll = if pinning {
-        settle_with_pins(&open.rows, open.scroll, open.selected, height).0
+    let room_for_sticky = height >= STICKY_MIN_HEIGHT;
+    let sticky_at = |open: &Open| if room_for_sticky { sticky_rows(&open.rows, open.scroll, open.selected) } else { StickyRows::default() };
+    open.scroll = if room_for_sticky {
+        settle_with_sticky(&open.rows, open.scroll, open.selected, height).0
     } else {
         settle_scroll(open.scroll, open.selected, height)
     };
     let mut drawn: VecDeque<Vec<Line<'_>>> = (open.scroll..=open.selected).map(|i| render(open, i)).collect();
     let mut drawn_height: usize = drawn.iter().map(Vec::len).sum();
-    while open.scroll < open.selected && drawn_height > height.saturating_sub(pinned_at(open).count()) {
+    while open.scroll < open.selected && drawn_height > height.saturating_sub(sticky_at(open).count()) {
         drawn_height -= drawn.pop_front().map_or(0, |row| row.len());
         open.scroll += 1;
     }
-    let pinned = pinned_at(open);
-    open.pinned_file = pinned.file;
-    let pinned_lines: Vec<Line<'_>> = [pinned.file, pinned.hunk]
+    let sticky = sticky_at(open);
+    open.sticky_file = sticky.file;
+    let mut lines: Vec<Line<'_>> = [sticky.file, sticky.hunk]
         .into_iter()
         .flatten()
-        .map(|i| pinned_line(&open.review, &anchors, &open.rows[i], gutter, width, theme))
+        .map(|i| sticky_line(&open.review, &anchors, &open.rows[i], gutter, width, theme))
         .collect();
-    let mut lines: Vec<Line<'_>> = pinned_lines;
     let mut selectable = vec![];
     let mut compose_area = None;
     for i in open.scroll..open.rows.len() {
@@ -259,9 +258,9 @@ fn thread_lines(rows: &[Line<'static>], marked: bool, gutter: Gutter, theme: The
     rows.iter().map(|row| Line::from([vec![bar.clone(), rule.clone()], row.spans.clone()].concat())).collect()
 }
 
-/// A header row pinned above the diff: drawn like the row itself, on the surface colour so it
+/// A sticky header row: drawn like the row itself, on the surface colour so it
 /// reads as a bar the diff scrolls under.
-fn pinned_line<'a>(review: &Review, anchors: &Anchors<'_>, row: &Row, gutter: Gutter, width: usize, theme: Theme) -> Line<'a> {
+fn sticky_line<'a>(review: &Review, anchors: &Anchors<'_>, row: &Row, gutter: Gutter, width: usize, theme: Theme) -> Line<'a> {
     let line = row_line(review, anchors, row, false, gutter, Overflow::Cut(width), theme);
     let used: usize = line.spans.iter().map(Span::width).sum();
     let mut spans = line.spans;
