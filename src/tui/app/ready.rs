@@ -5,10 +5,7 @@ use crate::forge::{MrKey, Readiness};
 impl App {
     /// `H`: the other state for my open MR, else why not.
     pub(super) fn toggle_draft(&mut self) -> Vec<Action> {
-        let Some(open) = &self.open else {
-            self.toast("open an MR first");
-            return vec![];
-        };
+        let Some(open) = &self.open else { return vec![] };
         let mr = &open.review.mr;
         if let Some(reason) = mr.draft_refusal() {
             self.warn(format!("cannot change {}{}: {reason}", self.hosts.kind_of(&open.key).sigil(), mr.number));
@@ -47,12 +44,5 @@ mod tests {
         let mut app = with_mr(|mr| mr);
         assert_eq!(press(&mut app, "H"), vec![]);
         assert_eq!(app.live_toast().unwrap().text, "cannot change !42: it is not yours");
-    }
-
-    #[test]
-    fn colon_ready_flips_like_big_h() {
-        let mut app = with_mr(|mr| Mr { mine: true, ..mr });
-        press(&mut app, ":ready");
-        assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![Action::SetReadiness { key: mr_key(), readiness: Readiness::Draft }]);
     }
 }

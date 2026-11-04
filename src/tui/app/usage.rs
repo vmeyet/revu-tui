@@ -281,8 +281,8 @@ mod tests {
         press(&mut app, "42");
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.take_usage().unwrap().actions.get("jump"), Some(&1));
-        press(&mut app, ":help");
+        press(&mut app, ":news");
         app.handle_key(code(KeyCode::Enter));
-        assert_eq!(app.take_usage().unwrap().actions.get(":help"), Some(&1));
+        assert_eq!(app.take_usage().unwrap().actions.get(":news"), Some(&1));
     }
 }

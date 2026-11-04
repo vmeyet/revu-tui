@@ -76,12 +76,13 @@ mod tests {
 
     #[test]
     fn counts_of_an_action_revu_no_longer_has_still_read() {
-        let text = "{\"date\":\"2026-09-24\",\"version\":2,\"actions\":{\"ask_free\":3,\":ask\":1,\"zen\":2}}\n";
+        let text = "{\"date\":\"2026-09-24\",\"version\":2,\"actions\":{\"ask_free\":3,\":ask\":1,\":open\":1,\":merge\":1,\":ready\":1,\":all\":1,\":pin\":1,\":unpin\":1,\":help\":1,\"zen\":2}}\n";
         let days = rules().parse(text);
         let report = rules().report(&days, date("2026-09-24"), Window::Days(30));
-        assert_eq!(days[0].counts.actions["zen"], 2);
-        assert!(report.rarely.iter().all(|count| !count.action.contains("ask")), "the report lists only what revu still has");
-        assert!(report.never.iter().flat_map(|unused| &unused.actions).all(|name| !name.contains("ask")));
+        assert_eq!((days[0].counts.actions["zen"], days[0].counts.actions[":merge"]), (2, 1));
+        let is_gone = |name: &str| ["ask_free", ":ask", ":open", ":merge", ":ready", ":all", ":pin", ":unpin", ":help"].contains(&name);
+        assert!(report.rarely.iter().all(|count| !is_gone(&count.action)), "the report lists only what revu still has");
+        assert!(report.never.iter().flat_map(|unused| &unused.actions).all(|name| !is_gone(name)));
     }
 
     #[test]
@@ -102,7 +103,7 @@ mod tests {
     #[test]
     fn every_countable_action_is_known_once_in_the_order_of_the_table() {
         let known = rules().actions;
-        for name in ["pin", ":ready", ":pin", ":unpin", ":session", ":news"] {
+        for name in ["pin", ":session", ":news"] {
             assert!(known.contains(&name), "`{name}` is counted, so it shows when unused");
         }
         assert_eq!(known.iter().filter(|name| **name == "viewed").count(), 1, "`m` and `zv` share a name");

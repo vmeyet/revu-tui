@@ -5,10 +5,7 @@ use crate::forge::MrKey;
 impl App {
     /// `M`: the question when the MR may merge, else why not.
     pub(super) fn merge_here(&mut self) -> Vec<Action> {
-        let Some(open) = &self.open else {
-            self.toast("open an MR first");
-            return vec![];
-        };
+        let Some(open) = &self.open else { return vec![] };
         let mr = &open.review.mr;
         if let Some(reason) = mr.merge_refusal() {
             self.warn(format!("cannot merge: {reason}"));
@@ -81,13 +78,5 @@ mod tests {
             assert!(app.confirm.is_none());
             assert_eq!(app.live_toast().unwrap().text, reason);
         }
-    }
-
-    #[test]
-    fn colon_merge_asks_like_big_m() {
-        let mut app = with_mr(approved_and_mine);
-        press(&mut app, ":merge");
-        app.handle_key(code(KeyCode::Enter));
-        assert!(matches!(app.confirm, Some(Confirm::Merge { .. })));
     }
 }
