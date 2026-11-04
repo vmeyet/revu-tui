@@ -43,7 +43,7 @@ pub(crate) struct Config {
     /// `[share]`: where `Y` posts an MR, through a command of the user's choosing.
     #[serde(default, skip_serializing_if = "Share::is_default")]
     pub(crate) share: Share,
-    /// `[agent]`: the coding-agent session `a g` opens on an MR.
+    /// `[agent]`: the coding-agent session `a` opens on an MR.
     #[serde(default, skip_serializing_if = "Agent::is_default")]
     pub(crate) agent: Agent,
     /// Per-host settings, for a host whose name does not say which forge it runs.

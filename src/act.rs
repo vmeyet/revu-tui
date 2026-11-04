@@ -388,7 +388,10 @@ pub(crate) const ROWS: &[Row] = &[
         .help(&[line(Group::Comment, "Y", "share the MR, after a preview")])
         .panes(&[Pane::Anywhere])
         .section(Section::Comment),
-    bound(Act::Session, "session", &["ag"]).help(&[line(Group::App, "ag", "the agent session of the MR: a, then g")]).section(Section::App),
+    bound(Act::Session, "session", &["a"])
+        .help(&[line(Group::App, "a", "the agent session of the MR")])
+        .panes(&[Pane::Anywhere])
+        .section(Section::App),
     bound(Act::React, "react", &["+"]).panes(&[Pane::Diff, Pane::ThreadRow]).section(Section::Thread),
     bound(Act::OpenBrowser, "open_browser", &["o"])
         .help(&[line(Group::App, "o y", "open in the browser, copy the link")])

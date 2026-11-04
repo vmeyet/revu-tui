@@ -338,6 +338,12 @@ mod tests {
     }
 
     #[test]
+    fn a_is_taken_by_the_session_so_a_binding_cannot_start_with_it() {
+        let err = Keymap::new(&keys(Layout::Qwerty, &[("next_thread", &["ax"])])).unwrap_err().to_string();
+        assert!(err.contains("already revu's `a` (session)"), "{err}");
+    }
+
+    #[test]
     fn keys_parse_as_one_or_two_plain_keys_or_one_named_key() {
         assert_eq!(parse("n").unwrap(), vec![Key::char('n')]);
         assert_eq!(parse(")n").unwrap(), vec![Key::char(')'), Key::char('n')]);

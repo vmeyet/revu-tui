@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **`a` opens the agent session: it was `a g`.**
+  In the queue, the diff and every right pane but the outline, where `a` still switches to public symbols and `:session` opens it.
+  Press `a` alone: a `g` typed out of habit now counts as its own key.
+
 - **`↑` on an empty line brings back the last command, as in pgbg and slack.**
   In the palette, on commands, once the top of the list is highlighted.
   `↑` `↓` walk the commands you ran until you type, `↓` still picks from the list, and `ctrl-p` `ctrl-n` still recall from any line.

@@ -1,4 +1,4 @@
-//! `a g` and `:session`: the agent session of the MR under the cursor. The runner finds or starts it;
+//! `a` and `:session`: the agent session of the MR under the cursor. The runner finds or starts it;
 //! when several could be the one, the search box lists them, a new one first.
 use super::{Action, App, Focus};
 use crate::agent::{Choice, Mr, Session};
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn disabled_the_key_says_how_to_turn_it_on_and_asks_for_nothing() {
         let mut app = with_queue();
-        assert_eq!(press(&mut app, "ag"), [] as [Action; 0]);
+        assert_eq!(press(&mut app, "a"), [] as [Action; 0]);
         let toast = app.live_toast().unwrap().text.clone();
         assert!(toast.contains("[agent] enabled = true") && toast.contains("docs/guides/agent.md"), "{toast}");
         press(&mut app, ":session");
@@ -131,11 +131,11 @@ mod tests {
     }
 
     #[test]
-    fn in_the_queue_a_g_asks_for_the_session_of_the_selected_mr() {
+    fn in_the_queue_a_asks_for_the_session_of_the_selected_mr() {
         let mut app = with_agent(with_queue());
         app.queue_move(0);
         let selected = app.selected_mr().unwrap().clone();
-        let actions = press(&mut app, "ag");
+        let actions = press(&mut app, "a");
         let (mr, choice) = asked(&actions);
         assert_eq!(*choice, Choice::Find);
         assert_eq!((mr.key.clone(), mr.fields.url.as_str()), (selected.key(), selected.web_url.as_str()));
@@ -148,13 +148,13 @@ mod tests {
     fn in_the_diff_in_zen_and_from_the_command_line_it_is_the_open_mr() {
         let mut app = with_agent(with_mr(|mr| Mr { mine: true, ..mr }));
         let open = Arc::clone(&app.open.as_ref().unwrap().review.mr);
-        let actions = press(&mut app, "ag");
+        let actions = press(&mut app, "a");
         let (mr, _) = asked(&actions);
         assert_eq!((mr.key.clone(), mr.fields.title.as_str(), mr.mine), (mr_key(), open.title.as_str(), true));
         assert_eq!((mr.fields.branch.as_str(), mr.target.as_str()), (open.source_branch.as_str(), open.target_branch.as_str()));
         press(&mut app, "zz");
         assert!(app.zen);
-        assert_eq!(asked(&press(&mut app, "ag")).0.key, mr_key());
+        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key());
         press(&mut app, ":session");
         assert_eq!(asked(&app.handle_key(code(KeyCode::Enter))).0.key, mr_key());
     }
@@ -164,7 +164,7 @@ mod tests {
         let mut app = with_agent(with_review());
         phone(&mut app);
         assert!(app.compact);
-        assert_eq!(asked(&press(&mut app, "ag")).0.key, mr_key());
+        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key());
     }
 
     #[test]
@@ -178,7 +178,7 @@ mod tests {
     fn picking() -> App {
         let mut app = with_agent(with_queue());
         app.queue_move(0);
-        let actions = press(&mut app, "ag");
+        let actions = press(&mut app, "a");
         let mr = asked(&actions).0.clone();
         let sessions = vec![session("11ve0000", "revu: nxt", true), session("01d00000", "widgets: cache", false)];
         app.apply(Incoming::SessionPick { mr: Box::new(mr), sessions });
@@ -253,7 +253,22 @@ mod tests {
     }
 
     #[test]
-    fn a_g_is_in_the_key_list_of_every_pane() {
+    fn a_held_down_asks_once() {
+        let mut app = with_agent(with_review());
+        assert_eq!(press(&mut app, "aaa").len(), 1);
+        app.now += Duration::from_secs(1);
+        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key(), "a press after the key was let go asks again");
+    }
+
+    #[test]
+    fn a_alone_asks_and_waits_for_no_second_key() {
+        let mut app = with_agent(with_review());
+        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key());
+        assert_eq!(app.pending, None);
+    }
+
+    #[test]
+    fn a_is_in_the_key_list_of_every_pane() {
         let mut app = with_agent(with_queue());
         press(&mut app, "?");
         assert!(render(&mut app, 120, 40).contains("the agent session of the MR"));

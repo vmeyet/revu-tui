@@ -5,7 +5,7 @@ use super::{Call, Run};
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
-/// The terminal Ghostty has in front: revu's own at the moment `a g` is pressed.
+/// The terminal Ghostty has in front: revu's own at the moment `a` is pressed.
 const GHOSTTY_FRONT: &str = r#"tell application "Ghostty" to return id of focused terminal of selected tab of front window"#;
 
 /// Arguments: the terminal to split, the line its shell types, its folder. Prints the new terminal's id.
@@ -77,7 +77,7 @@ pub(super) const CLEAR: &str = r"printf '\033[H\033[2J\033[3J'";
 /// A terminal revu knows how to split, with what it needs to find revu's own pane in it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Terminal {
-    /// Its panes carry no id revu can read from inside: revu's own is the one in front when `a g` is pressed.
+    /// Its panes carry no id revu can read from inside: revu's own is the one in front when `a` is pressed.
     Ghostty,
     /// `session` is the id of the session revu runs in.
     ITerm { session: String },
