@@ -1,11 +1,7 @@
-//! The call tree: the changed symbols nothing changed calls as roots, what they call under them in full,
-//! linked through at most two unchanged functions of the changed files.
+//! The call tree: the changed symbols no other change calls as roots, the changes they call under them in full.
 use super::{Change, State, Symbol};
 use crate::forge::Side;
 use std::collections::HashMap;
-
-/// Unchanged functions shown in a row between two changed ones; a longer chain folds into one row.
-const BRIDGES: usize = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Item {
@@ -13,10 +9,6 @@ pub(crate) enum Item {
     Changed(usize),
     /// A changed symbol shown in full elsewhere.
     Seen(usize),
-    /// An unchanged function linking two changed symbols.
-    Bridge(String),
-    /// Unchanged calls folded away, how many.
-    Fold(usize),
     /// A call back to a symbol above it.
     Cycle(String),
 }
@@ -38,25 +30,16 @@ pub(crate) struct Site {
     pub(crate) line: u32,
 }
 
-/// One symbol of the graph: a change, or an unchanged symbol of a changed file, read on `side`.
-struct Node<'a> {
-    path: &'a str,
-    symbol: &'a Symbol,
-    change: Option<usize>,
-    side: Side,
-}
-
-/// A link to follow: the node it leads to, and the call making it, in node `caller` at `line`.
+/// A call from one change to another: the change it leads to, and the line of the call.
 #[derive(Clone, Copy)]
 struct Link {
     to: usize,
-    caller: usize,
     line: u32,
     unsure: bool,
 }
 
 struct Graph<'a> {
-    nodes: Vec<Node<'a>>,
+    changes: &'a [Change],
     links: Vec<Vec<Link>>,
 }
 
@@ -67,16 +50,16 @@ pub(crate) enum Section {
     Tests,
 }
 
-/// Code roots first among the changes nothing changed reaches, then any change still unseen, both riskiest first.
+/// Code roots first among the changes no other change calls, then any change still unseen, both riskiest first.
 /// Test roots are every changed test symbol, in order; nothing links into a test file.
-pub(super) fn build(changes: &[Change], unchanged: &[(String, Symbol)], section: Section) -> Vec<Branch> {
-    let graph = Graph::new(changes, unchanged, section);
+pub(super) fn build(changes: &[Change], section: Section) -> Vec<Branch> {
+    let graph = Graph::new(changes, section);
     let in_section = |change: usize| super::is_test(&changes[change].path) == (section == Section::Tests);
-    let mut walk = Walk { graph: &graph, seen: vec![false; graph.nodes.len()] };
+    let mut walk = Walk { graph: &graph, seen: vec![false; changes.len()] };
     if section == Section::Tests {
         return (0..changes.len()).filter(|&change| in_section(change)).filter_map(|change| walk.unseen(change)).collect();
     }
-    let reached = graph.reached_from_changed();
+    let reached = graph.called_by_another();
     let candidates: Vec<usize> = (0..changes.len()).filter(|&change| in_section(change)).collect();
     let first: Vec<usize> = candidates.iter().copied().filter(|&change| !reached[change]).collect();
     first.into_iter().chain(candidates).filter_map(|change| walk.unseen(change)).collect()
@@ -106,19 +89,12 @@ fn names(change: &Change) -> (Option<&str>, Option<&str>) {
 }
 
 impl<'a> Graph<'a> {
-    /// Changes come first, so a change's node is its index; a call links to every code symbol of its name on its own side.
-    /// Test symbols call from the tests section only.
-    fn new(changes: &'a [Change], unchanged: &'a [(String, Symbol)], section: Section) -> Self {
-        let nodes: Vec<Node<'_>> = changes
-            .iter()
-            .enumerate()
-            .map(|(index, c)| Node { path: &c.path, symbol: &c.symbol, change: Some(index), side: c.side() })
-            .chain(unchanged.iter().map(|(path, symbol)| Node { path, symbol, change: None, side: Side::New }))
-            .collect();
+    /// A call links to every code change of its name on its own side; test symbols call from the tests section only.
+    fn new(changes: &'a [Change], section: Section) -> Self {
         let mut on_head: HashMap<&str, Vec<usize>> = HashMap::new();
         let mut on_base: HashMap<&str, Vec<usize>> = HashMap::new();
-        for (index, node) in nodes.iter().enumerate().filter(|(_, node)| !super::is_test(node.path)) {
-            let (head, base) = node.change.map_or((Some(node.symbol.short_name()), Some(node.symbol.short_name())), |c| names(&changes[c]));
+        for (index, change) in changes.iter().enumerate().filter(|(_, change)| !super::is_test(&change.path)) {
+            let (head, base) = names(change);
             if let Some(name) = head {
                 on_head.entry(name).or_default().push(index);
             }
@@ -126,61 +102,34 @@ impl<'a> Graph<'a> {
                 on_base.entry(name).or_default().push(index);
             }
         }
-        let mut links = vec![vec![]; nodes.len()];
-        let calling = |node: &Node<'_>| section == Section::Tests || !super::is_test(node.path);
-        for (caller, node) in nodes.iter().enumerate().filter(|(_, node)| calling(node)) {
-            let named = if node.side == Side::Old { &on_base } else { &on_head };
-            for call in &node.symbol.calls {
+        let mut links = vec![vec![]; changes.len()];
+        let calling = |change: &Change| section == Section::Tests || !super::is_test(&change.path);
+        for (caller, change) in changes.iter().enumerate().filter(|(_, change)| calling(change)) {
+            let named = if change.side() == Side::Old { &on_base } else { &on_head };
+            for call in &change.symbol.calls {
                 let called = named.get(call.name.as_str()).map_or(&[][..], Vec::as_slice);
                 for &to in called {
-                    push_once(&mut links[caller], Link { to, caller, line: call.line, unsure: called.len() > 1 });
+                    push_once(&mut links[caller], Link { to, line: call.line, unsure: called.len() > 1 });
                 }
             }
         }
-        Self { nodes, links }
+        Self { changes, links }
     }
 
-    fn change(&self, node: usize) -> Option<usize> {
-        self.nodes[node].change
+    fn name(&self, change: usize) -> String {
+        self.changes[change].symbol.name.clone()
     }
 
-    fn name(&self, node: usize) -> String {
-        self.nodes[node].symbol.name.clone()
+    fn site(&self, caller: usize, link: &Link) -> Site {
+        let change = &self.changes[caller];
+        Site { path: change.path.clone(), side: change.side(), line: link.line }
     }
 
-    fn site(&self, link: &Link) -> Site {
-        let caller = &self.nodes[link.caller];
-        Site { path: caller.path.to_owned(), side: caller.side, line: link.line }
-    }
-
-    /// The changes another change links to, directly or through unchanged functions.
-    fn reached_from_changed(&self) -> Vec<bool> {
-        let mut reached = vec![false; self.nodes.len()];
-        for from in (0..self.nodes.len()).filter(|&node| self.change(node).is_some()) {
-            for (to, _) in self.beyond(from, &[from]) {
-                reached[to] = true;
-            }
-        }
-        reached
-    }
-
-    /// The changed nodes reached from `start` through unchanged ones only, each with how many unchanged calls lead there.
-    fn beyond(&self, start: usize, path: &[usize]) -> Vec<(usize, usize)> {
-        let mut reached: Vec<(usize, usize)> = vec![];
-        let mut visited = vec![false; self.nodes.len()];
-        let first = usize::from(self.change(start).is_none());
-        let mut queue = std::collections::VecDeque::from([(start, first)]);
-        visited[start] = true;
-        while let Some((node, hops)) = queue.pop_front() {
-            for link in &self.links[node] {
-                match self.change(link.to) {
-                    Some(_) if !path.contains(&link.to) && !reached.iter().any(|(n, _)| *n == link.to) => reached.push((link.to, hops)),
-                    None if !visited[link.to] && !path.contains(&link.to) => {
-                        visited[link.to] = true;
-                        queue.push_back((link.to, hops + 1));
-                    }
-                    _ => {}
-                }
+    fn called_by_another(&self) -> Vec<bool> {
+        let mut reached = vec![false; self.changes.len()];
+        for (caller, links) in self.links.iter().enumerate() {
+            for link in links.iter().filter(|link| link.to != caller) {
+                reached[link.to] = true;
             }
         }
         reached
@@ -193,32 +142,7 @@ impl Walk<'_> {
         (!self.seen[change]).then(|| self.changed(change, &[]))
     }
 
-    /// What hangs under `from`, `path` being the nodes above it and `bridges` the unchanged ones right above.
-    fn children(&mut self, from: usize, bridges: usize, path: &[usize]) -> Vec<Branch> {
-        let graph = self.graph;
-        let mut found = vec![];
-        for link in &graph.links[from] {
-            let linked = |branch: Branch| Branch { site: Some(graph.site(link)), unsure: link.unsure, ..branch };
-            match graph.change(link.to) {
-                Some(_) => found.push(linked(self.changed(link.to, path))),
-                None if path.contains(&link.to) => {}
-                None if bridges < BRIDGES => {
-                    let children = self.children(link.to, bridges + 1, &[path, &[link.to]].concat());
-                    if !children.is_empty() {
-                        found.push(linked(Branch { children, ..Branch::new(Item::Bridge(graph.name(link.to))) }));
-                    }
-                }
-                None => {
-                    for (node, hops) in graph.beyond(link.to, path) {
-                        found.push(linked(Branch { children: vec![self.changed(node, path)], ..Branch::new(Item::Fold(hops)) }));
-                    }
-                }
-            }
-        }
-        found
-    }
-
-    /// A change, whose node is its index: in full the first time, a reference after, a cycle when it is above.
+    /// In full the first time, a reference after, a cycle when it is above, `path` being the changes above it.
     fn changed(&mut self, change: usize, path: &[usize]) -> Branch {
         if path.contains(&change) {
             return Branch::new(Item::Cycle(self.graph.name(change)));
@@ -227,7 +151,13 @@ impl Walk<'_> {
             return Branch::new(Item::Seen(change));
         }
         self.seen[change] = true;
-        Branch { children: self.children(change, 0, &[path, &[change]].concat()), ..Branch::new(Item::Changed(change)) }
+        let graph = self.graph;
+        let below = [path, &[change]].concat();
+        let children = graph.links[change]
+            .iter()
+            .map(|link| Branch { site: Some(graph.site(change, link)), unsure: link.unsure, ..self.changed(link.to, &below) })
+            .collect();
+        Branch { children, ..Branch::new(Item::Changed(change)) }
     }
 }
 
@@ -251,8 +181,6 @@ mod tests {
                 let text = match &branch.item {
                     Item::Changed(change) => name(*change),
                     Item::Seen(change) => format!("({})", name(*change)),
-                    Item::Bridge(name) => format!("· {name}()"),
-                    Item::Fold(hops) => format!("… {hops} calls"),
                     Item::Cycle(name) => format!("↺ {name}"),
                 };
                 out.push(format!("{}{text}{}", "  ".repeat(depth), if branch.unsure { " ?" } else { "" }));
@@ -306,20 +234,6 @@ mod tests {
         let [call] = current.children.as_slice() else { panic!("one call: {:?}", current.children) };
         let Item::Changed(callee) = call.item else { panic!("a change: {call:?}") };
         assert_eq!((reading.changes[callee].state, reading.changes[callee].path.as_str(), call.unsure), (State::Added, "b.py", false));
-    }
-
-    #[test]
-    fn two_unchanged_functions_bridge_and_a_longer_chain_folds() {
-        let head = "def pay():\n    return a()\n\ndef a():\n    return b()\n\ndef b():\n    return c()\n\ndef c():\n    return d()\n\ndef d():\n    return _end()\n\ndef _end():\n    return 1\n";
-        let reading = read(&[python("pay.py", &["pay", "_end"], head)]);
-        assert_eq!(sketch(&reading), ["pay", "  · a()", "    · b()", "      … 2 calls", "        _end"]);
-    }
-
-    #[test]
-    fn an_unchanged_function_leading_nowhere_changed_does_not_show() {
-        let head = "def pay():\n    return log()\n\ndef log():\n    return fmt() + fmt()\n\ndef fmt():\n    return log()\n";
-        let reading = read(&[python("pay.py", &["pay"], head)]);
-        assert_eq!(sketch(&reading), ["pay"]);
     }
 
     #[test]

@@ -77,7 +77,7 @@ fn counts_line<'a>([breaking, added, renamed]: [usize; 3], theme: Theme) -> Line
     counts(&[(breaking, "breaking", theme.danger), (added, "added", theme.success), (renamed, "renamed", theme.accent)], theme)
 }
 
-/// A changed symbol with its sign; a symbol shown in full elsewhere, a bridge, a fold or a cycle, dimmed.
+/// A changed symbol with its sign; a symbol shown in full elsewhere or a cycle, dimmed.
 fn entry_line<'a>(entry: &OutlineEntry, changes: &[Change], selected: bool, width: usize, theme: Theme) -> Line<'a> {
     let dim = Style::default().fg(theme.faded);
     let bar = Span::styled(if selected { "▎ " } else { "  " }, Style::default().fg(theme.accent));
@@ -86,8 +86,6 @@ fn entry_line<'a>(entry: &OutlineEntry, changes: &[Change], selected: bool, widt
     match (entry.change.map(|c| &changes[c]), &entry.item) {
         (Some(change), _) if entry.full() => spans.extend(symbol_spans(change, room, theme)),
         (Some(change), _) => spans.push(Span::styled(format!("{} {}", glyph(change.state, theme).0, truncate(&name(change), room)), dim)),
-        (None, Some(Item::Bridge(name))) => spans.push(Span::styled(format!("· {}", truncate(&format!("{name}()"), room)), dim)),
-        (None, Some(Item::Fold(hops))) => spans.push(Span::styled(format!("… {hops} calls"), dim)),
         (None, Some(Item::Cycle(name))) => spans.push(Span::styled(format!("↺ {}", truncate(name, room)), dim)),
         (None, _) => {}
     }

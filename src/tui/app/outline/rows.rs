@@ -124,7 +124,7 @@ fn entries_of(branch: &Branch, lines: String, lead: &str, at: &[usize], folded: 
     let closed = folded.contains(at);
     let change = match branch.item {
         Item::Changed(index) | Item::Seen(index) => Some(index),
-        _ => None,
+        Item::Cycle(_) => None,
     };
     let mut entries = vec![Entry {
         lines,
