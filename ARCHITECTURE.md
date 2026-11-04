@@ -22,7 +22,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, which lines are twins (`align.rs`), word highlighting inside them (`words.rs`), change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
-| `act.rs` | Every action in one table: name, default keys, help, palette verb, panes, usage section |
+| `act.rs` | Every action in one table: name, default keys, palette verb, panes, usage group; the lines of the `?` help in a table beside it |
 | `keymap.rs` | The user's `[keys]` on top of the defaults |
 | `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
 | `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied |
@@ -133,7 +133,7 @@ The internals:
 
 ## Where to add things
 
-- **A key**: an `Act` variant and its row in `act.rs` `ROWS`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `cargo run -- docs`.
+- **A key**: an `Act` variant, its row in `act.rs` `ROWS` and its line in `HELP`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `cargo run -- docs`.
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
 - **A forge field**: the field in `forge/model/`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `cargo run -- docs`.
