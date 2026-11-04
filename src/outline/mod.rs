@@ -1,6 +1,6 @@
 //! The outline: which functions, methods and classes an MR changes. Each side of a file is read with
 //! its grammar's own tags query, then the symbols of both sides are compared by kind and name, and
-//! the calls the query finds link them into a tree.
+//! the calls the query finds link the changes into a tree.
 mod tree;
 
 pub(crate) use tree::{Branch, Item, Section, Site};
@@ -96,30 +96,22 @@ impl Change {
     }
 }
 
-/// What the outline read in the MR: the changed symbols, by file then risk, and the unchanged ones of their files at head.
+/// What the outline read in the MR: the changed symbols, by file then risk.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Reading {
     pub(crate) changes: Vec<Change>,
-    unchanged: Vec<(String, Symbol)>,
 }
 
 impl Reading {
     /// The call tree over the changes of `section`.
     pub(crate) fn tree(&self, section: Section) -> Vec<Branch> {
-        tree::build(&self.changes, &self.unchanged, section)
+        tree::build(&self.changes, section)
     }
 }
 
 /// Reads each file, given as its path with its text at base and at head, empty on a side it does not exist.
 pub(crate) fn read(files: &[(String, String, String)]) -> Reading {
-    let mut changes = vec![];
-    let mut unchanged = vec![];
-    for (path, base, head) in files {
-        let (changed, kept) = file(path, base, head);
-        changes.extend(changed);
-        unchanged.extend(kept.into_iter().map(|symbol| (path.clone(), symbol)));
-    }
-    Reading { changes, unchanged }
+    Reading { changes: files.iter().flat_map(|(path, base, head)| file(path, base, head)).collect() }
 }
 
 /// One syntax language with a tags query, named as in [`syntax::LANGUAGES`], which says which files it reads.
@@ -192,12 +184,12 @@ pub(crate) fn readable(path: &str) -> bool {
     tags_for(path).is_some()
 }
 
-/// The symbols that changed between the two sides of `path`, riskiest first, and those of head that did not.
-fn file(path: &str, base: &str, head: &str) -> (Vec<Change>, Vec<Symbol>) {
-    let Some(tags) = tags_for(path) else { return (vec![], vec![]) };
-    let (mut changes, unchanged) = compare(path, symbols(tags, base), symbols(tags, head));
+/// The symbols that changed between the two sides of `path`, riskiest first.
+fn file(path: &str, base: &str, head: &str) -> Vec<Change> {
+    let Some(tags) = tags_for(path) else { return vec![] };
+    let mut changes = compare(path, symbols(tags, base), symbols(tags, head));
     changes.sort_by_key(Change::risk);
-    (changes, unchanged)
+    changes
 }
 
 /// Every function, method and class of `source`, each with the calls in its body.
@@ -351,22 +343,21 @@ fn collapsed(text: &str) -> String {
     })
 }
 
-/// Symbols matched by kind and name, and those that did not change; a removed one and an added one alike enough read as a rename.
+/// Symbols matched by kind and name; a removed one and an added one alike enough read as a rename.
 /// A class lists only when it comes, goes or changes its signature: its methods carry its body.
-fn compare(path: &str, base: Vec<Symbol>, head: Vec<Symbol>) -> (Vec<Change>, Vec<Symbol>) {
+fn compare(path: &str, base: Vec<Symbol>, head: Vec<Symbol>) -> Vec<Change> {
     let keyed =
         |symbols: Vec<Symbol>| -> BTreeMap<(Kind, String), Symbol> { symbols.into_iter().map(|s| ((s.kind, s.name.clone()), s)).collect() };
     let (mut old, new) = (keyed(base), keyed(head));
     let change = |state, symbol: Symbol, before: Option<Symbol>| Change { path: path.to_owned(), state, symbol, before };
     let mut changes = vec![];
     let mut added = vec![];
-    let mut unchanged = vec![];
     for (key, after) in new {
         match old.remove(&key) {
             None => added.push(after),
             Some(before) if before.signature != after.signature => changes.push(change(State::Signature, after, Some(before))),
             Some(before) if before.body != after.body && after.kind != Kind::Class => changes.push(change(State::Body, after, None)),
-            Some(_) => unchanged.push(after),
+            Some(_) => {}
         }
     }
     let mut removed: Vec<Symbol> = old.into_values().collect();
@@ -378,7 +369,7 @@ fn compare(path: &str, base: Vec<Symbol>, head: Vec<Symbol>) -> (Vec<Change>, Ve
         }
     }
     changes.extend(added.into_iter().map(|after| change(State::Added, after, None)));
-    (changes, unchanged)
+    changes
 }
 
 /// The added symbol most alike `before`, of its kind and scope, when alike enough.
@@ -411,7 +402,7 @@ mod tests {
     }
 
     fn changes(path: &str, base: &str, head: &str) -> Vec<Change> {
-        file(path, base, head).0
+        file(path, base, head)
     }
 
     fn states(path: &str, base: &str, head: &str) -> Vec<(State, String)> {
