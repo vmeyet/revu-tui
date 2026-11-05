@@ -112,6 +112,12 @@ impl Client {
         read_mr(&repo, find(&worktrees, key)?, &self.choice()).await
     }
 
+    /// The worktree as `mr` names it, opening empty for `reason`.
+    pub(crate) async fn mr_saying(&self, key: &MrKey, reason: String) -> Result<Mr> {
+        let git::Listing { repo, worktrees } = self.listing().await?;
+        Ok(Mr { no_diff: Some(reason), ..bare_mr(&repo, find(&worktrees, key)?, &self.choice().target)? })
+    }
+
     /// One row per worktree, in three lists: the one revu ran in, those ahead of the target, the rest.
     pub(crate) async fn queue(&self) -> Result<Fetched> {
         let git::Listing { repo, worktrees } = self.listing().await?;
@@ -205,7 +211,9 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
         _ => worktree.head.clone(),
     };
     let base = base.unwrap_or_else(|| worktree.head.clone());
-    let (committed, files) = tokio::try_join!(git::commit_time(&worktree.path), git::uncommitted_files(&worktree.path))?;
+    let committed = git::commit_time(&worktree.path).await?;
+    let files = git::uncommitted_files(&worktree.path).await;
+    let files = files.inspect_err(|e| tracing::warn!("counting uncommitted files failed: {e:#}")).unwrap_or_default();
     let saved = git::last_saved(&worktree.path, &files).await;
     Ok(Mr {
         updated_at: saved.map_or(committed, |saved| saved.max(committed)),

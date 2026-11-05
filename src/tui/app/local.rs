@@ -1,5 +1,5 @@
 //! What only `revu local` does: `B`, `I`, and the keys it has no use for.
-use super::{Action, App, Focus};
+use super::{Action, App, Focus, Open, QueueRow};
 use crate::act::{self, Pane};
 use crate::forge::Kind;
 use crate::forge::local::Change;
@@ -65,11 +65,15 @@ impl App {
         vec![Action::Open(key)]
     }
 
-    /// A look failed: looks again soon, and says why once, the same reason coming back every 2s.
+    /// A look failed: looks again soon, says why once and marks the header; the pane may be saying it already.
     pub(super) fn local_look_failed(&mut self, reason: String) {
-        if self.failure_said.as_ref() != Some(&reason) {
+        let said = self
+            .open
+            .as_ref()
+            .is_some_and(|open| open.look_failed.as_ref() == Some(&reason) || open.review.mr.no_diff.as_ref() == Some(&reason));
+        if !said {
             self.warn(reason.clone());
-            self.failure_said = Some(reason);
+            self.update_open(|open| Open { look_failed: Some(reason), ..open });
         }
         self.back_off();
     }
@@ -79,11 +83,28 @@ impl App {
         self.opening.as_ref().or(self.open.as_ref().map(|open| &open.key))
     }
 
-    /// New rows may sort another way: the cursor stays on the worktree that shows.
-    pub(super) fn keep_cursor_on_the_shown_worktree(&mut self) {
-        if let Some(key) = self.shown_worktree().filter(|key| key.is_local()).cloned() {
+    /// The folded section whose header the cursor sits on, on a local screen, before new rows move it.
+    pub(super) fn folded_header_here(&self) -> Option<&'static str> {
+        match self.queue_rows().get(self.queue_selected).filter(|_| self.is_local()) {
+            Some(QueueRow::Section { name, open: false, .. }) => Some(*name),
+            _ => None,
+        }
+    }
+
+    /// New rows may sort another way: the cursor stays on its folded header, else on the worktree that shows.
+    pub(super) fn keep_cursor(&mut self, folded_header: Option<&str>) {
+        let header = self.queue_rows().iter().position(|row| matches!(row, QueueRow::Section { name, .. } if Some(*name) == folded_header));
+        if let Some(header) = header {
+            self.queue_selected = header;
+        } else if let Some(key) = self.shown_worktree().filter(|key| key.is_local()).cloned() {
             self.select_in_queue(&key);
         }
+    }
+
+    /// The worktree that shows is in no list any more, a folded section being still a list.
+    pub(super) fn shown_worktree_left(&self) -> bool {
+        let listed = |key: &&super::MrKey| self.sections.iter().flat_map(crate::forge::Sections::all).any(|mr| mr.key() == **key);
+        self.shown_worktree().is_some_and(|key| !listed(&key))
     }
 
     /// A look found the head still there but the merge base gone elsewhere: the files on screen no longer match.
@@ -504,18 +525,71 @@ mod tests {
     }
 
     #[test]
-    fn the_same_failure_is_said_once_until_a_look_works_or_the_reason_changes() {
+    fn a_failing_look_says_why_once_and_marks_the_header_until_a_look_works() {
+        let mut app = local_app();
+        look_failed(&mut app, "git broke");
+        assert!(app.live_toast().is_some());
+        app.toast = None;
+        look_failed(&mut app, "git broke");
+        assert_eq!(app.live_toast(), None, "the same reason stays quiet");
+        assert!(first_rows(&mut app, 4).contains("git broke"), "the mark outlives the toast");
+        app.apply(Incoming::Mr { key: local_key(), mr: Box::new(local_mr(0, "bbbb")) });
+        assert!(!first_rows(&mut app, 4).contains("git broke"));
+    }
+
+    #[test]
+    fn zen_marks_a_failing_look_too() {
+        let mut app = local_app();
+        app.zen = true;
+        look_failed(&mut app, "git broke");
+        assert!(first_rows(&mut app, 3).contains("git broke"));
+    }
+
+    #[test]
+    fn an_r_the_reader_asked_for_always_answers() {
         let mut app = local_app();
         look_failed(&mut app, "git broke");
         app.toast = None;
+        assert_eq!(press(&mut app, "r"), vec![Action::RefreshMr(local_key())]);
         look_failed(&mut app, "git broke");
-        assert_eq!(app.live_toast(), None);
-        look_failed(&mut app, "git broke again");
-        assert_eq!(app.live_toast().map(|toast| toast.text.as_str()), Some("git broke again"));
-        app.toast = None;
-        app.apply(Incoming::Mr { key: local_key(), mr: Box::new(local_mr(0, "bbbb")) });
-        look_failed(&mut app, "git broke again");
         assert!(app.live_toast().is_some());
+    }
+
+    #[test]
+    fn an_r_on_the_screen_answers_too() {
+        let mut app = on_the_screen();
+        app.queue_loading = false;
+        look_failed(&mut app, "git broke");
+        app.toast = None;
+        press(&mut app, "r");
+        look_failed(&mut app, "git broke");
+        assert!(app.live_toast().is_some());
+    }
+
+    #[test]
+    fn a_look_failing_with_the_reason_the_pane_already_says_stays_quiet() {
+        let no_diff = Some("HEAD~1 is not a commit here".to_owned());
+        let mut app = local_opened(Mr { no_diff, ..local_mr(0, "bbbb") }, &[]);
+        look_failed(&mut app, "HEAD~1 is not a commit here");
+        assert_eq!(app.live_toast(), None);
+        assert_eq!(first_rows(&mut app, 4).matches("HEAD~1").count(), 0, "the pane says it, not the header");
+    }
+
+    #[test]
+    fn a_rescan_that_adds_a_row_leaves_the_cursor_on_its_folded_section_and_opens_nothing() {
+        let mut app = on_the_screen();
+        press(&mut app, "G");
+        let key = app.opening.clone().unwrap();
+        app.apply(Incoming::Review { key, review: Box::new(review()), cached: None });
+        press(&mut app, "zc");
+        let at_header =
+            |app: &App| matches!(app.queue_rows().get(app.queue_selected), Some(QueueRow::Section { name: "NOTHING AHEAD", .. }));
+        assert!(at_header(&app));
+        let mut more = worktrees();
+        more.to_review.push(QueueMr { number: 11, ..more.to_review[0].clone() });
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: more, opened: HashMap::new(), cached: false });
+        assert!(!app.take_actions().iter().any(|action| matches!(action, Action::Open(_))));
+        assert!(at_header(&app));
     }
 
     #[test]
@@ -530,10 +604,10 @@ mod tests {
     fn a_failed_look_keeps_the_diff_and_the_viewed_marks() {
         let mut app = local_app();
         press(&mut app, "zv");
-        let before = app.open.clone();
-        assert!(!before.as_ref().unwrap().review.viewed.is_empty());
+        let before = app.open.as_ref().unwrap().review.clone();
+        assert!(!before.viewed.is_empty());
         look_failed(&mut app, "dev is not a commit here");
-        assert_eq!(app.open, before);
+        assert_eq!(app.open.as_ref().unwrap().review, before);
     }
 
     #[test]

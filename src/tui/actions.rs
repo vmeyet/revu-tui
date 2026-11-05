@@ -76,7 +76,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
                 let fresh = match &painted {
                     Some(head) => backend.reviews.reopen(key.clone(), head).await,
-                    None => backend.reviews.fetch_review(key.clone()).await,
+                    None => backend.reviews.open_fresh(key.clone()).await,
                 };
                 let arrived = fresh.is_ok();
                 send(fresh.unwrap_or_else(|e| failed(Failure::Open { key: key.clone() }, &e)));

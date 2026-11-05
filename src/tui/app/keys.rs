@@ -247,6 +247,7 @@ impl App {
     }
 
     pub(super) fn refresh_queue(&mut self) -> Vec<Action> {
+        self.update_open(|open| super::Open { look_failed: None, ..open });
         if self.queue_loading {
             return vec![];
         }
@@ -367,8 +368,9 @@ impl App {
     }
 
     /// A refresh also posts again every draft GitLab does not hold yet.
-    fn refresh_open(&self) -> Vec<Action> {
+    fn refresh_open(&mut self) -> Vec<Action> {
         let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
+        self.update_open(|open| super::Open { look_failed: None, ..open });
         let mut actions = vec![Action::RefreshMr(key)];
         actions.extend(self.retry_unsaved());
         actions

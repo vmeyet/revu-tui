@@ -32,7 +32,7 @@ impl Repo {
             .unwrap()
     }
 
-    fn git(&self, args: &[&str]) -> String {
+    pub(crate) fn git(&self, args: &[&str]) -> String {
         let output = self.command(args);
         assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
         String::from_utf8(output.stdout).unwrap()
@@ -59,7 +59,7 @@ impl Repo {
         (client, key)
     }
 
-    async fn open_on(&self, target: &str) -> (Client, MrKey) {
+    pub(crate) async fn open_on(&self, target: &str) -> (Client, MrKey) {
         let client = Client::open(self.0.path(), Some(target)).await.unwrap();
         let key = client.here_key().await.unwrap();
         (client, key)
@@ -408,13 +408,17 @@ async fn a_linked_worktree_of_a_submodule_lists_no_git_folder() {
 }
 
 #[tokio::test]
-async fn a_broken_index_is_a_failure_for_the_diff_and_a_reason_on_its_row() {
+async fn a_broken_index_loses_only_the_uncommitted_count() {
     let repo = Repo::new();
+    repo.write("b.txt", "new\n");
+    repo.commit("work");
     let (client, key) = repo.open().await;
     std::fs::write(repo.path().join(".git/index"), "garbage").unwrap();
-    assert!(client.mr(&key).await.is_err());
-    let Fetched { queue, .. } = client.queue().await.unwrap();
-    assert!(queue.authored[0].worktree.as_ref().unwrap().no_diff.is_some());
+    let mr = client.mr(&key).await.unwrap();
+    assert_eq!((mr.uncommitted, mr.no_diff), (0, None));
+    assert_eq!(client.diffs(&key).await.unwrap().len(), 1);
+    client.toggle_uncommitted();
+    assert!(client.mr(&key).await.is_err(), "uncommitted work cannot be shown");
 }
 
 #[tokio::test]

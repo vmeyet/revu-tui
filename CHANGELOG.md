@@ -17,6 +17,11 @@ Each entry says what changed, then where, then how to use it.
   In `revu local`, after `esc`: `HERE`, `AHEAD` and `NOTHING AHEAD`, newest first, with `●` on uncommitted work.
   Move with `j` `k`; the diff follows the cursor, looks again every 2 seconds and on terminal focus, and rebuilds only when its head moved.
 
+### Fixed
+
+- **The cursor stays on its file when a refresh changes the list of files.**
+  In the diff of any MR or worktree.
+
 ## 0.12.0 - 2026-11-04
 
 ### New

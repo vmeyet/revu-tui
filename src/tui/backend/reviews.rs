@@ -60,6 +60,14 @@ impl Reviews {
         Some(Incoming::Review { key: key.clone(), review: Box::new(review), cached: Some(age) })
     }
 
+    /// Opening with nothing painted: a worktree that cannot be read opens empty and says why, so the pane agrees with the cursor.
+    pub(in crate::tui) async fn open_fresh(&self, key: MrKey) -> Result<Incoming> {
+        let answer = self.fetch_review(key.clone()).await;
+        let (Err(failed), Forge::Local(client)) = (&answer, self.homes.forge_of(&key)) else { return answer };
+        let mr = client.mr_saying(&key, failed.to_string()).await?;
+        self.reviewed(key, Fetched { mr, diffs: vec![], discussions: vec![], drafts: vec![] }).await
+    }
+
     pub(in crate::tui) async fn fetch_review(&self, key: MrKey) -> Result<Incoming> {
         let fetched = self.fetch(&key).await?;
         self.reviewed(key, fetched).await
@@ -331,6 +339,20 @@ mod tests {
         let head = reviews.homes.forge.mr(&key).await.unwrap().refs.head;
         let Ok(Incoming::Mr { .. }) = reviews.poll_review(key, &head).await else { panic!("the head did not move") };
         assert_eq!(std::fs::read_dir(dir.path()).map_or(0, Iterator::count), 0);
+    }
+
+    #[tokio::test]
+    async fn a_worktree_that_fails_to_read_opens_empty_saying_why() {
+        let (repo, dir) = (local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        repo.write("one.txt", "one\n");
+        repo.commit("one");
+        let short = repo.path().join("short");
+        repo.git(&["worktree", "add", "-q", "-b", "short", short.to_str().unwrap(), "main"]);
+        let (client, _) = repo.open_on("HEAD~1").await;
+        let there = client.queue().await.unwrap().queue.open[0].key();
+        let reviews = reviews(Homes { forge: Forge::Local(client), cache: crate::cache::Cache::in_dir(dir.path()), others: vec![] });
+        let Ok(Incoming::Review { review, .. }) = reviews.open_fresh(there).await else { panic!("no review") };
+        assert_eq!(review.mr.no_diff.as_deref(), Some("HEAD~1 is not a commit here"));
     }
 
     #[tokio::test]
