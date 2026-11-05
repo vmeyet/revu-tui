@@ -38,6 +38,12 @@ pub(crate) struct Mr {
     /// I wrote it, as the host that holds it knows me: a queue can mix hosts, and names differ on each.
     #[serde(default)]
     pub(crate) mine: bool,
+    /// How many uncommitted files a local diff leaves out; a forge has none, so it is never written.
+    #[serde(default, skip_serializing)]
+    pub(crate) uncommitted: u32,
+    /// Why a local diff has nothing to compare: its worktree shares no history with the target. Never on a forge.
+    #[serde(default, skip_serializing)]
+    pub(crate) no_diff: Option<String>,
 }
 
 impl Mr {
@@ -337,6 +343,8 @@ mod tests {
             approvals: Approvals { approved: true, approved_by: vec![lea], ..Approvals::default() },
             merge: MergePlan::default(),
             mine: true,
+            uncommitted: 0,
+            no_diff: None,
         }
     }
 

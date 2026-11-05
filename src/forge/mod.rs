@@ -6,7 +6,7 @@ pub(crate) mod github;
 pub(crate) mod gitlab;
 mod http;
 pub(crate) mod image;
-#[expect(dead_code, reason = "the client comes with the next change")]
+#[expect(dead_code, reason = "`revu local` comes with the next change")]
 pub(crate) mod local;
 mod model;
 mod queue;
@@ -32,6 +32,9 @@ pub(crate) enum Kind {
     #[default]
     GitLab,
     GitHub,
+    /// A worktree on this machine: the config cannot name it, only `revu local` starts it.
+    #[serde(skip)]
+    Local,
 }
 
 impl Kind {
@@ -44,7 +47,7 @@ impl Kind {
     /// What goes between a project and a number: `group/project!42`, `owner/repo#42`.
     pub(crate) fn sigil(self) -> char {
         match self {
-            Kind::GitLab => '!',
+            Kind::GitLab | Kind::Local => '!',
             Kind::GitHub => '#',
         }
     }
@@ -53,7 +56,7 @@ impl Kind {
     pub(crate) fn any_emoji(self) -> bool {
         match self {
             Kind::GitLab => true,
-            Kind::GitHub => false,
+            Kind::GitHub | Kind::Local => false,
         }
     }
 
@@ -62,6 +65,7 @@ impl Kind {
         match self {
             Kind::GitLab => gitlab::line_url(web_url, path, line),
             Kind::GitHub => github::line_url(web_url, path, line),
+            Kind::Local => web_url.to_owned(),
         }
     }
 }
@@ -97,6 +101,9 @@ impl Hosts {
 pub(crate) enum Forge {
     GitLab(gitlab::Client),
     GitHub(github::Client),
+    #[expect(dead_code, reason = "`revu local` comes with the next change")]
+    /// Its calls are boxed in each arm: they hold whole diffs, and every caller's future would carry them.
+    Local(local::Client),
 }
 
 impl Forge {
@@ -105,6 +112,7 @@ impl Forge {
         match kind {
             Kind::GitLab => Ok(Forge::GitLab(gitlab::Client::new(credentials)?)),
             Kind::GitHub => Ok(Forge::GitHub(github::Client::new(credentials)?)),
+            Kind::Local => anyhow::bail!("a local diff connects to no host"),
         }
     }
 
@@ -112,6 +120,7 @@ impl Forge {
         match self {
             Forge::GitLab(_) => Kind::GitLab,
             Forge::GitHub(_) => Kind::GitHub,
+            Forge::Local(_) => Kind::Local,
         }
     }
 
@@ -119,6 +128,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.host(),
             Forge::GitHub(client) => client.host(),
+            Forge::Local(_) => local::HOST,
         }
     }
 
@@ -126,6 +136,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.me().await,
             Forge::GitHub(client) => client.me().await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -135,6 +146,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.queue(project).await,
             Forge::GitHub(client) => client.queue(project).await,
+            Forge::Local(_) => Ok(local::queue()),
         }
     }
 
@@ -143,6 +155,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.project_path(id).await,
             Forge::GitHub(client) => client.project_path(id).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -151,6 +164,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.mr_for_branch(project, branch).await,
             Forge::GitHub(client) => client.mr_for_branch(project, branch).await,
+            Forge::Local(_) => Ok(None),
         }
     }
 
@@ -158,6 +172,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.mr(key).await,
             Forge::GitHub(client) => client.mr(key).await,
+            Forge::Local(client) => Box::pin(client.mr(key)).await,
         }
     }
 
@@ -166,6 +181,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.rate(),
             Forge::GitHub(client) => client.rate(),
+            Forge::Local(_) => RateLimit::default(),
         }
     }
 
@@ -174,6 +190,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.file(&key.project, path, sha.as_str()).await,
             Forge::GitHub(client) => client.file(&key.project, path, sha.as_str()).await,
+            Forge::Local(client) => Box::pin(client.file(key, path, sha)).await,
         }
     }
 
@@ -184,6 +201,7 @@ impl Forge {
             match self {
                 Forge::GitLab(client) => client.image(&key.project, url).await,
                 Forge::GitHub(client) => client.image(url).await,
+                Forge::Local(_) => local::forge_only(),
             }
         };
         tokio::time::timeout(image::TIMEOUT, fetch).await.map_err(|_elapsed| anyhow::anyhow!("timed out"))?
@@ -194,6 +212,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.apply(suggestion).await,
             Forge::GitHub(client) => client.apply(key, branch, suggestion).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -202,6 +221,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.checks(key).await,
             Forge::GitHub(client) => client.checks(key, head.as_str()).await,
+            Forge::Local(_) => Ok(None),
         }
     }
 
@@ -210,6 +230,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.deployments(key, branch, head.as_str()).await,
             Forge::GitHub(client) => client.deployments(key, branch, head.as_str()).await,
+            Forge::Local(_) => Ok(vec![]),
         }
     }
 
@@ -218,6 +239,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.finished(project, numbers).await,
             Forge::GitHub(client) => client.finished(project, numbers).await,
+            Forge::Local(_) => Ok(vec![]),
         }
     }
 
@@ -225,6 +247,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.diffs(key).await,
             Forge::GitHub(client) => client.diffs(key).await,
+            Forge::Local(client) => Box::pin(client.diffs(key)).await,
         }
     }
 
@@ -232,6 +255,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.discussions(key).await,
             Forge::GitHub(client) => client.discussions(key).await,
+            Forge::Local(_) => Ok(vec![]),
         }
     }
 
@@ -240,6 +264,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.drafts(key).await,
             Forge::GitHub(client) => client.drafts(key).await,
+            Forge::Local(_) => Ok(vec![]),
         }
     }
 
@@ -247,6 +272,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.create_draft(key, draft).await,
             Forge::GitHub(client) => client.create_draft(key, draft).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -255,6 +281,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.update_draft(key, id, draft).await,
             Forge::GitHub(client) => client.update_draft(key, id, draft).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -262,6 +289,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.delete_draft(key, id).await,
             Forge::GitHub(client) => client.delete_draft(key, id).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -270,6 +298,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.publish(key, kind).await,
             Forge::GitHub(client) => client.publish(key, kind).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -277,6 +306,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.resolve(key, discussion, resolved).await,
             Forge::GitHub(client) => client.resolve(discussion, resolved).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -285,6 +315,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.approve(key, change).await,
             Forge::GitHub(client) => client.approve(key, change).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -294,6 +325,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.react(node, emoji, change).await,
             Forge::GitHub(client) => client.react(node, emoji, change).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -302,6 +334,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.merge(key, head.as_str(), plan).await,
             Forge::GitHub(client) => client.merge(key, head.as_str(), plan).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -310,6 +343,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.set_readiness(key, readiness).await,
             Forge::GitHub(client) => client.set_readiness(key, readiness).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -318,6 +352,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.comment(key, body, position).await,
             Forge::GitHub(client) => client.comment(key, body, position).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 
@@ -326,6 +361,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.reply(key, discussion, body).await,
             Forge::GitHub(client) => client.reply(key, discussion, body).await,
+            Forge::Local(_) => local::forge_only(),
         }
     }
 }
