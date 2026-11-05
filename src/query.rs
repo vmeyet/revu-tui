@@ -179,6 +179,7 @@ mod tests {
             notes: 0,
             commenters: vec![],
             reason: None,
+            worktree: None,
         }
     }
 

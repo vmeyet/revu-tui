@@ -62,7 +62,7 @@ pub(crate) use pin::PinChange;
 pub(crate) use pipeline::{Pipeline, Run};
 pub(crate) use prefetch::Ahead;
 pub(crate) use prose::{Prose, Sides, Texts, Versions};
-pub(crate) use queue::{Badge, QueueRow};
+pub(crate) use queue::{Badge, HERE, QueueRow};
 pub(crate) use react::{Pick, Prompt, failure as react_failure};
 pub(crate) use review::Open;
 pub(crate) use search::{Search, mark as mark_search};

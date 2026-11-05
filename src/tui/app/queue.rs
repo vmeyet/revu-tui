@@ -12,6 +12,9 @@ pub(crate) enum Badge {
     Draft,
 }
 
+/// The section of the worktree revu ran from: always one row, so it counts none.
+pub(crate) const HERE: &str = "HERE";
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum QueueRow<'a> {
     Section {
@@ -43,6 +46,9 @@ impl App {
     /// MR leaves its section for PINNED, on top.
     pub(crate) fn queue_rows(&self) -> Vec<QueueRow<'_>> {
         let Some(sections) = &self.sections else { return vec![] };
+        if self.is_local() {
+            return self.worktree_rows(sections);
+        }
         let groups: [(&'static str, &Vec<QueueMr>); 8] = [
             ("TO REVIEW", &sections.to_review),
             ("MINE", &sections.mine),
@@ -68,6 +74,21 @@ impl App {
                 continue;
             }
             rows.extend(self.stacked(&matching));
+        }
+        rows
+    }
+
+    /// The worktree screen: what the local backend sorted in three lists, a section for each that holds a row.
+    fn worktree_rows<'m>(&self, sections: &'m Sections) -> Vec<QueueRow<'m>> {
+        let groups = [(HERE, &sections.mine), ("AHEAD", &sections.to_review), ("NOTHING AHEAD", &sections.open)];
+        let mut rows = Vec::new();
+        for (name, mrs) in groups.into_iter().filter(|(_, mrs)| !mrs.is_empty()) {
+            let open = !self.queue_view.closed_sections.contains(name);
+            let matching = self.in_order(name, mrs.iter().filter(|mr| self.matches_filter(mr)).collect());
+            rows.push(QueueRow::Section { name, count: matching.len(), open });
+            if open {
+                rows.extend(matching.into_iter().map(QueueRow::Mr));
+            }
         }
         rows
     }

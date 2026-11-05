@@ -1,7 +1,7 @@
 //! Every `git` call of the local backend, on `tokio::process` so nothing blocks the loop.
 use super::Target;
 use super::split::DIFF_FLAGS;
-use crate::forge::{ProjectPath, Sha};
+use crate::forge::{ProjectPath, Sha, Size};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
@@ -109,10 +109,43 @@ pub(super) async fn commit_time(dir: &Path) -> Result<DateTime<Utc>> {
     time.trim().parse().with_context(|| format!("git answered `{}` for a commit time", time.trim()))
 }
 
-/// How many files hold uncommitted work: staged, unstaged or untracked.
-pub(super) async fn uncommitted_files(dir: &Path) -> Result<u32> {
+/// The files holding uncommitted work: staged, unstaged or untracked.
+pub(super) async fn uncommitted_files(dir: &Path) -> Result<Vec<String>> {
     let status = run(dir, &["status", "--porcelain", "--no-renames", "--untracked-files=all", "-z"]).await?;
-    Ok(u32::try_from(status.split('\0').filter(|entry| !entry.is_empty()).count()).unwrap_or(u32::MAX))
+    Ok(status.split('\0').filter_map(|entry| entry.get(3..)).map(str::to_owned).collect())
+}
+
+/// When any of `files` was last saved; one that is gone, as a deleted file is, does not count.
+pub(super) async fn last_saved(dir: &Path, files: &[String]) -> Option<DateTime<Utc>> {
+    let (dir, files) = (dir.to_owned(), files.to_vec());
+    let newest = move || Ok(files.iter().filter_map(|file| std::fs::metadata(dir.join(file)).ok()?.modified().ok()).max());
+    crate::blocking::run(newest)
+        .await
+        .inspect_err(|e| tracing::warn!("reading when files were saved: {e:#}"))
+        .ok()
+        .flatten()
+        .map(DateTime::from)
+}
+
+/// How many commits lead from `base` to `head`.
+pub(super) async fn commits_between(dir: &Path, base: &Sha, head: &Sha) -> Result<u32> {
+    let count = run(dir, &["rev-list", "--count", &format!("{base}..{head}")]).await?;
+    count.trim().parse().with_context(|| format!("git answered `{}` for a count", count.trim()))
+}
+
+/// What changed from `base` to `head`, in lines and files; a binary file counts as a file only.
+pub(super) async fn size_between(dir: &Path, base: &Sha, head: &Sha) -> Result<Size> {
+    let args: Vec<&str> = ["diff", "--numstat"].into_iter().chain(DIFF_FLAGS).chain([base.as_str(), head.as_str()]).collect();
+    Ok(parse_numstat(&run(dir, &args).await?))
+}
+
+fn parse_numstat(numstat: &str) -> Size {
+    let count = |word: Option<&str>| word.and_then(|word| word.parse::<u32>().ok()).unwrap_or(0);
+    numstat.lines().map(|line| line.split('\t')).fold(Size { additions: 0, deletions: 0, files: 0 }, |size, mut words| Size {
+        additions: size.additions + count(words.next()),
+        deletions: size.deletions + count(words.next()),
+        files: size.files + 1,
+    })
 }
 
 /// `git diff` from `base`: to `head`, or to the files on disk without one.

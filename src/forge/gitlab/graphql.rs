@@ -242,6 +242,7 @@ impl TryFrom<WireMr> for QueueMr {
             notes: w.user_notes_count,
             commenters: w.commenters.map(|c| c.nodes.into_iter().map(|u| u.username).collect()).unwrap_or_default(),
             reason: None,
+            worktree: None,
         })
     }
 }

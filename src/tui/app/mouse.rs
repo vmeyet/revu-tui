@@ -110,7 +110,7 @@ impl App {
             return self.pane_key(self.focus, KeyEvent::from(KeyCode::Enter));
         }
         self.pick(row.list, row.index);
-        vec![]
+        self.show_selected_worktree()
     }
 
     fn picked(&self, list: List) -> Option<usize> {

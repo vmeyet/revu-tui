@@ -59,6 +59,18 @@ pub(crate) struct QueueMr {
     /// Why the "needs me" rules moved it, or sorted it last; set when the sections are built.
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub(crate) reason: Option<Reason>,
+    /// What only a worktree's row says; `None` on a forge, and never cached.
+    #[serde(skip)]
+    pub(crate) worktree: Option<WorktreeRow>,
+}
+
+/// A worktree's row, beside its size: how far it is ahead, and the work not committed yet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorktreeRow {
+    pub(crate) commits: u32,
+    pub(crate) uncommitted: u32,
+    /// Why it has nothing to compare: it shares no history with the target.
+    pub(crate) no_diff: Option<String>,
 }
 
 /// `revu list --json` has spelled a row's pipeline in upper case since before it had a type.
@@ -249,6 +261,7 @@ impl QueueMr {
             notes: 0,
             commenters: vec![],
             reason: None,
+            worktree: None,
         })
     }
 

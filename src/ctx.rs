@@ -39,6 +39,7 @@ impl Ctx {
         config.agent.enabled = false;
         config.notify.enabled = false;
         config.queue.prefetch = 0;
+        config.queue.rules.enabled = false;
         config.queue.ready.command = None;
         Ok(Self {
             forge: Forge::Local(client),

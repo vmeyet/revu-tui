@@ -30,7 +30,7 @@ impl App {
     /// How a queue row reads: two lines in the compact layout whatever `[tui] queue` says, one line leaving a
     /// title no room there.
     pub(crate) fn row_layout(&self) -> QueueLayout {
-        if self.compact { QueueLayout::Comfortable } else { self.queue_layout }
+        if self.compact || self.is_local() { QueueLayout::Comfortable } else { self.queue_layout }
     }
 
     /// The number of the line under the diff's cursor, or of the line its thread row hangs under: the new side's,
