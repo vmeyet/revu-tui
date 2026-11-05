@@ -147,7 +147,7 @@ async fn event_loop(
                 Event::Mouse(mouse) => { wake(app); app.handle_mouse(mouse) }
                 Event::FocusGained => { wake(app); app.focus_gained() }
                 Event::FocusLost => { wake(app); app.terminal_focus(false); vec![] }
-                Event::Paste(text) => { wake(app); app.handle_paste(&text); vec![] }
+                Event::Paste(text) => { wake(app); app.handle_paste(&text) }
                 _ => vec![],
             },
             Some(incoming) = rx.recv() => {

@@ -141,7 +141,11 @@ fn worktree_lines(app: &App, mr: &QueueMr, worktree: &WorktreeRow, selected: boo
     };
     let size = mr.size.filter(|_| worktree.commits > 0).map(|s| format!(" · +{} −{}", s.additions, s.deletions)).unwrap_or_default();
     let since = (app.today - mr.updated_at).to_std().unwrap_or_default();
-    let age = if since.as_secs() < 60 { "now".to_owned() } else { short_age(since) };
+    let age = match () {
+        () if worktree.no_diff.is_some() => String::new(),
+        () if since.as_secs() < 60 => "now".to_owned(),
+        () => short_age(since),
+    };
     let dot = if worktree.uncommitted > 0 { "●" } else { " " };
     let room = width.saturating_sub(BAR_W + age.width() + 4);
     let text = truncate(worktree.no_diff.as_deref().unwrap_or(&format!("{commits}{size}")), room);

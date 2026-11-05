@@ -253,6 +253,8 @@ pub(crate) struct App {
     /// Since when refreshes fail while a cached view is shown.
     pub(crate) offline: Option<Instant>,
     pub(crate) poll: Poll,
+    /// False once the terminal said it lost focus: a local diff stops looking until it comes back.
+    pub(crate) terminal_focused: bool,
     pub(crate) should_quit: bool,
     pub(crate) started: Instant,
     /// Set by the event loop each time it wakes, so nothing below reads the clock.
@@ -369,6 +371,7 @@ impl App {
             readings: HashMap::new(),
             offline: None,
             poll: Poll::default(),
+            terminal_focused: true,
             should_quit: false,
             started: now,
             now,
@@ -402,7 +405,8 @@ impl App {
             actions.push(Action::LoadQueue { scope: self.scope(), from_cache: false });
         }
         let Some((key, head)) = self.open.as_ref().map(|o| (o.key.clone(), o.review.mr.refs.head.clone())) else { return actions };
-        if self.poll.mr_due.is_some_and(|due| self.now >= due) {
+        let away = self.is_local() && !self.terminal_focused;
+        if !away && self.poll.mr_due.is_some_and(|due| self.now >= due) {
             self.poll.mr_due = None;
             actions.push(Action::PollMr { key: key.clone(), head });
         }
@@ -455,9 +459,14 @@ impl App {
 
     /// Five minutes, or as long as the forge asked to wait when that is longer.
     pub(super) fn back_off(&mut self) {
-        let wait = if self.is_local() { LOCAL_EVERY } else { self.rate.wait.unwrap_or_default().max(BACKOFF) };
+        if self.is_local() {
+            self.poll.mr_due = Some(self.now + LOCAL_EVERY);
+            self.poll.queue_due = Some(self.now + QUEUE_EVERY);
+            return;
+        }
+        let wait = self.rate.wait.unwrap_or_default().max(BACKOFF);
         let later = Some(self.now + wait);
-        self.poll = Poll { queue_due: later, mr_due: later, discussions_due: later.filter(|_| !self.is_local()) };
+        self.poll = Poll { queue_due: later, mr_due: later, discussions_due: later };
     }
 
     pub(crate) fn loading(&self) -> bool {

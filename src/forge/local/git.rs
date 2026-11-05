@@ -10,8 +10,6 @@ use tokio::process::Command;
 
 /// How many untracked files are read at once.
 const UNTRACKED_AT_ONCE: usize = 8;
-/// Git's name for a commit that does not exist yet: a worktree on an unborn branch.
-const NO_COMMIT: &str = "0000000000000000000000000000000000000000";
 
 /// One entry of `git worktree list` that can be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,7 +65,7 @@ pub(super) fn parse_listing(output: &str) -> Listing {
 fn parse_worktree(fields: &[&str]) -> Option<Worktree> {
     let value = |name: &str| fields.iter().find_map(|field| field.strip_prefix(name)?.strip_prefix(' '));
     let has = |name: &str| fields.iter().any(|field| field.split(' ').next() == Some(name));
-    if has("bare") || has("prunable") || value("HEAD") == Some(NO_COMMIT) {
+    if has("bare") || has("prunable") {
         return None;
     }
     let branch = value("branch").map(|branch| branch.strip_prefix("refs/heads/").unwrap_or(branch).to_owned());
@@ -76,6 +74,19 @@ fn parse_worktree(fields: &[&str]) -> Option<Worktree> {
 
 pub(super) async fn toplevel(dir: &Path) -> Result<PathBuf> {
     Ok(run(dir, &["rev-parse", "--show-toplevel"]).await?.trim().into())
+}
+
+/// The folder holding the repository's objects, as `git worktree list` names it in a submodule.
+pub(super) async fn common_dir(dir: &Path) -> Result<PathBuf> {
+    Ok(run(dir, &["rev-parse", "--path-format=absolute", "--git-common-dir"]).await?.trim().into())
+}
+
+/// The worktree in `dir`, asked of git itself, for when its list does not name that folder.
+pub(super) async fn worktree_at(dir: &Path) -> Result<Worktree> {
+    let head = parse_sha(&run(dir, &["rev-parse", "HEAD"]).await?)?;
+    // Fails only on a detached `HEAD`, which has no branch to name.
+    let branch = run(dir, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await.ok().map(|branch| branch.trim().to_owned());
+    Ok(Worktree { path: dir.to_owned(), head, branch })
 }
 
 /// What `target` names, refused when that is no commit.
@@ -198,7 +209,9 @@ async fn run(dir: &Path, args: &[&str]) -> Result<String> {
 }
 
 fn first_line(stderr: &[u8]) -> String {
-    String::from_utf8_lossy(stderr).lines().next().unwrap_or("git failed").to_owned()
+    let text = String::from_utf8_lossy(stderr);
+    let line = text.lines().next().unwrap_or("git failed");
+    line.strip_prefix("fatal: ").unwrap_or(line).to_owned()
 }
 
 /// `GIT_OPTIONAL_LOCKS=0`: a read every 2s must not take the index lock from the reader's own git.

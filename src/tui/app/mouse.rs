@@ -51,6 +51,11 @@ pub(crate) struct ListRow {
 impl App {
     /// The wheel, a left drag, a click on a link or on a list row; over an overlay only its links answer, over a prompt nothing.
     pub(crate) fn handle_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
+        let actions = self.route_mouse(mouse);
+        self.after_input(actions)
+    }
+
+    fn route_mouse(&mut self, mouse: MouseEvent) -> Vec<Action> {
         self.count_input();
         let at = Position::new(mouse.column, mouse.row);
         if self.confirm.is_some() || self.react.is_some() {
@@ -110,7 +115,7 @@ impl App {
             return self.pane_key(self.focus, KeyEvent::from(KeyCode::Enter));
         }
         self.pick(row.list, row.index);
-        self.show_selected_worktree()
+        vec![]
     }
 
     fn picked(&self, list: List) -> Option<usize> {

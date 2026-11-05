@@ -67,6 +67,7 @@ impl App {
 
     /// The terminal came to the front or went to the background: the clock runs only while it is in front.
     pub(crate) fn terminal_focus(&mut self, focused: bool) {
+        self.terminal_focused = focused;
         let read = if focused { self.usage.clock.to_front(self.now) } else { self.usage.clock.to_back(self.now) };
         self.spend(read);
     }

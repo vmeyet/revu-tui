@@ -22,7 +22,7 @@ impl App {
         if self.quitting == pending {
             self.quitting = None;
         }
-        self.sending(actions)
+        self.after_input(actions)
     }
 
     fn route_key(&mut self, key: KeyEvent) -> Vec<Action> {
@@ -243,7 +243,7 @@ impl App {
             }
             _ => self.did_nothing(),
         }
-        self.show_selected_worktree()
+        vec![]
     }
 
     pub(super) fn refresh_queue(&mut self) -> Vec<Action> {

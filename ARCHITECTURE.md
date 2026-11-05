@@ -83,7 +83,7 @@ A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/ap
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
 `revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host, no Jev and no agent, and `tui::run` takes it like any other.
-Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is polled every 2s and on terminal focus.
+Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is looked at every 2s while the terminal has focus, and when it comes back.
 
 ## Boundaries
 
