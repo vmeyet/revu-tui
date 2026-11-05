@@ -43,6 +43,24 @@ fn login_refuses_a_token_in_argv() {
 }
 
 #[test]
+fn local_outside_a_repository_says_so_without_asking_for_a_login() {
+    let outside = tempfile::tempdir().unwrap();
+    revu().arg("local").current_dir(outside.path()).assert().failure().stderr(predicate::str::contains("not a git repository"));
+}
+
+/// Deletes a keychain entry that does not exist, in whatever keychain `security` finds.
+#[test]
+#[ignore = "touches the login keychain"]
+fn logout_also_wipes_what_local_diffs_kept() {
+    let cache = tempfile::tempdir().unwrap();
+    let state = cache.path().join("local/mr/local+widgets/7/state.json");
+    std::fs::create_dir_all(state.parent().unwrap()).unwrap();
+    std::fs::write(&state, "{}").unwrap();
+    revu().args(["logout", "gl.acme.test"]).env("REVU_CACHE_DIR", cache.path()).assert().success();
+    assert!(!state.exists());
+}
+
+#[test]
 fn completions_render_for_zsh() {
     revu().args(["completions", "zsh"]).assert().success().stdout(predicate::str::contains("_revu"));
 }

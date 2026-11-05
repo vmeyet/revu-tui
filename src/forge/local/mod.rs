@@ -37,6 +37,15 @@ impl std::fmt::Display for Target {
     }
 }
 
+/// What `B` and `I` ask for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Change {
+    /// Compare against this, as the user typed it.
+    Target(String),
+    /// Show uncommitted work, or hide it.
+    Uncommitted,
+}
+
 /// What the reader chose for every worktree, for this session.
 #[derive(Clone, Debug)]
 struct Choice {
@@ -71,15 +80,25 @@ impl Client {
         key_of(here)
     }
 
-    /// From now on, diffs compare against `target`; one that names no commit changes nothing.
-    pub(crate) async fn set_target(&self, target: &str) -> Result<()> {
+    /// What the next answers show; a target that names no commit changes nothing.
+    pub(crate) async fn change(&self, change: Change) -> Result<()> {
+        match change {
+            Change::Target(target) => self.set_target(&target).await,
+            Change::Uncommitted => {
+                self.toggle_uncommitted();
+                Ok(())
+            }
+        }
+    }
+
+    async fn set_target(&self, target: &str) -> Result<()> {
         let target = checked(&self.here, target).await?;
         self.choice.write().unwrap_or_else(PoisonError::into_inner).target = target;
         Ok(())
     }
 
     /// Uncommitted work goes in the diffs, or back out.
-    pub(crate) fn toggle_uncommitted(&self) {
+    fn toggle_uncommitted(&self) {
         let mut choice = self.choice.write().unwrap_or_else(PoisonError::into_inner);
         choice.uncommitted = !choice.uncommitted;
     }
@@ -117,6 +136,14 @@ impl Client {
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
 
+    /// Where the worktree holds the file on disk, unless `sha` is an older commit, which only git holds.
+    pub(crate) async fn real_file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<Option<PathBuf>> {
+        safe_path(path)?;
+        let worktree = self.worktree(key).await?;
+        let is_older = *sha != worktree.head && git::is_commit(&worktree.path, sha).await;
+        Ok((!is_older).then(|| worktree.path.join(path)))
+    }
+
     async fn worktree(&self, key: &MrKey) -> Result<Worktree> {
         find(&git::listing(&self.here).await?.worktrees, key).cloned()
     }
@@ -129,7 +156,7 @@ pub(super) fn queue() -> Fetched {
 }
 
 /// What fails on a local diff: the keys that reach it are hidden, so only a stray call gets here.
-pub(super) fn forge_only<T>() -> Result<T> {
+pub(crate) fn forge_only<T>() -> Result<T> {
     bail!("a local diff has no forge behind it")
 }
 

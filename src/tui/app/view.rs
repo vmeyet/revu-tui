@@ -63,7 +63,7 @@ impl App {
         let Some(open) = &self.open else { return vec![] };
         let file = &open.review.files[file];
         if file.binary {
-            self.toast("binary file · o opens it in the browser");
+            self.toast(if self.is_local() { "binary file" } else { "binary file · o opens it in the browser" });
             return vec![];
         }
         let (side, note) = match (side, file.kind) {

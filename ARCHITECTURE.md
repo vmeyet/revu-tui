@@ -12,9 +12,10 @@ When a boundary or a flow changes, change this page in the same MR.
 | `main.rs`, `cli.rs` | The clap command line and the dispatch to `commands/` |
 | `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit`; `prompt.rs` asks on the terminal |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
-| `forge/mod.rs` | `Forge`, one enum over the backends; every method takes and returns the neutral model |
+| `forge/mod.rs` | `Forge`, one enum over the backends (GitLab, GitHub, local); every method takes and returns the neutral model |
 | `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `reaction.rs` |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and GraphQL (`graphql.rs` on GitLab, `graphql/` on GitHub), shared shapes and conversion in `wire.rs` |
+| `forge/local/` | The local backend, `revu local`: a worktree's branch read with `git`, in `git.rs`, cut into files by `split.rs`, with no host and no token |
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
 | `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
@@ -81,10 +82,12 @@ A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/ap
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
+`revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host, no Jev and no agent, and `tui::run` takes it like any other.
 
 ## Boundaries
 
 - Only `src/forge/<backend>/` sees a GitLab or GitHub field; everything else uses `forge/model/`.
+- Only `src/forge/local/` runs the git commands that read a local diff; a key with no use on it says so with `Reach` in `act.rs`, which keys, help and palette read, and `.key.is_local()` says what is not cached.
 - Side effects live at the edges: `main.rs`, `commands/`, `tui/mod.rs` (the loop and the terminal), `tui/actions.rs` and `tui/backend/` (network, cache, processes).
 - `tui/app/` is pure: it reads time from `app.now` and `app.today`, set by the loop, and never does I/O; its tests drive it with keys and `Incoming` values.
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
@@ -105,6 +108,7 @@ State shared between tasks, and why:
 | What | Why |
 |---|---|
 | `Reviews::opening: Arc<AtomicUsize>` | Loading ahead waits while the reader opens an MR |
+| `forge::local::Client::choice: Arc<RwLock<Choice>>` | `B` and `I` answer for every clone of the client, since `Forge` methods take only a key; `Action::ChangeLocal` is its one writer |
 | `Saves::saved: Arc<Mutex<HashMap<MrKey, u64>>>` | The one lock every `state.json` write takes, the reader's saves and the opened stamp alike; saves finish out of order, and one older than the last is dropped |
 | `Saves::changed: Arc<Mutex<HashMap<String, u64>>>` | The same for pins and the queue view |
 | `Drafts::lanes: Lanes` | Draft writes and publishing of one MR run one at a time: on GitHub each reads the pending review, then writes it |
@@ -128,6 +132,7 @@ The internals:
 - Opening an MR paints the cached review at once, then fetches it again; when the head did not move, the diffs are not read again.
 - Diffs are keyed by head sha; a file at a sha is cached forever.
 - Each MR keeps `state.json`: folds, viewed files, the cursor spot, the side-by-side setting.
+- A local diff keeps its `state.json` and how the queue is sorted, under `local/`: one head can hold many diffs, so no diff, file or MR of it is cached. `revu logout` wipes `local/` with the host's folder.
 - MRs waiting on the reader load ahead, two at a time, so `enter` paints at once.
 - Once a day the cache drops MRs the forge says are merged or closed, any MR untouched for 30 days, and any file set aside as unreadable 30 days ago.
 

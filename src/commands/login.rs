@@ -55,6 +55,7 @@ pub fn logout(host: Option<&str>) -> Result<()> {
     }
     config.save()?;
     Cache::for_host(&host)?.clear()?;
+    Cache::for_host(crate::forge::local::HOST)?.clear()?;
     println!("logged out of {host}");
     Ok(())
 }

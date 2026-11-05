@@ -32,6 +32,8 @@ pub enum Command {
         /// Forge host, the configured one by default.
         host: Option<String>,
     },
+    /// Read a local branch's diff, with no forge and no token.
+    Local(LocalArgs),
     /// Show who you are logged in as.
     Whoami,
     /// The merge requests waiting on you, yours, and the ones you watch.
@@ -66,6 +68,13 @@ pub enum Command {
     News(NewsArgs),
     /// What you use revu for, from `[usage]` counts: unused keys, favourites, time per screen.
     Usage(UsageArgs),
+}
+
+/// Arguments of `revu local`.
+#[derive(Args, Debug)]
+pub struct LocalArgs {
+    /// What the diff compares against: `origin/HEAD`, else `main`, else `master` by default.
+    pub(crate) target: Option<String>,
 }
 
 /// Flags of `revu usage`.

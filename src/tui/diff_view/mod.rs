@@ -16,7 +16,7 @@ use super::ui::{draw_empty, settle_scroll};
 use crate::review::{Review, Row};
 use anchors::{Anchors, focused_range};
 pub(super) use header::pipeline_glyph;
-use header::{deployment_link, header_lines, mr_ref, pipeline_link, title_link, zen_header};
+use header::{deployment_link, header_lines, local_header, local_zen_header, mr_ref, nothing_ahead, pipeline_link, title_link, zen_header};
 use line::number;
 pub(super) use line::{coloured, paint};
 use ratatui::Frame;
@@ -104,6 +104,7 @@ impl Gutter {
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter) {
     let theme = app.theme;
     let title = match &app.open {
+        Some(open) if open.key.is_local() => truncate(&open.review.mr.title, area.width.saturating_sub(4) as usize),
         Some(open) => {
             format!(
                 "{} · {}",
@@ -120,7 +121,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
         Some(line) => block.title_top(line),
         None => block,
     };
-    if let Some(open) = app.open.as_ref().filter(|_| !zen) {
+    if let Some(open) = app.open.as_ref().filter(|o| !zen && !o.key.is_local()) {
         app.drawn.links.push(title_link(&open.review, app.hosts.kind_of(&open.key), area));
     }
     let inner = block.inner(area);
@@ -142,9 +143,12 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     let compose_label = app.input_label();
     let composes_at_foot = app.composes_outside_the_diff() && app.areas.side.is_empty();
     let Some(open) = app.open.as_mut() else { return };
+    let local = open.key.is_local();
     let header = match () {
+        () if zen && local => vec![local_zen_header(open, theme, inner.width as usize), Line::default()],
         () if zen => vec![zen_header(open, sigil, theme, inner.width as usize), Line::default()],
         () if short => vec![],
+        () if local => local_header(open, theme, today, inner.width as usize),
         () => header_lines(open, theme, today, inner.width as usize),
     };
     let body = Rect { y: inner.y + header.len() as u16, height: inner.height.saturating_sub(header.len() as u16), ..inner };
@@ -154,6 +158,9 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     app.drawn.links.extend(pipeline.into_iter().chain(deployment));
     if open.prose.is_some() {
         return super::prose_view::draw(f, app, body);
+    }
+    if local && open.review.files.is_empty() {
+        return draw_empty(f, theme, body, &[&nothing_ahead(&open.review.mr)]);
     }
     let body = if composes_at_foot { above_compose(f, theme, &compose_label, &app.buffer, body) } else { body };
     let compose_box = gutter.thread_box(body);

@@ -9,6 +9,8 @@ pub mod comment;
 pub mod diff;
 /// `revu list`.
 pub mod list;
+/// `revu local`.
+pub mod local;
 /// `revu login` and `revu logout`.
 pub mod login;
 /// `revu merge`.

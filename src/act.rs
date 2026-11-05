@@ -90,9 +90,12 @@ pub(crate) enum Act {
     ShareCommand,
     SessionCommand,
     NewsCommand,
+    TargetCommand,
     QuitCommand,
     Pin,
     ViewedNext,
+    ChangeTarget,
+    ToggleUncommitted,
     Search,
     Mine,
 }
@@ -129,6 +132,8 @@ pub(crate) enum Reach {
     Both,
     /// It talks to the forge: `revu local` has none.
     Forge,
+    /// `revu local` alone.
+    Local,
 }
 
 impl Reach {
@@ -136,6 +141,7 @@ impl Reach {
         match self {
             Self::Both => true,
             Self::Forge => kind != Kind::Local,
+            Self::Local => kind == Kind::Local,
         }
     }
 }
@@ -379,9 +385,12 @@ pub(crate) const ROWS: &[Row] = &[
     command!(Act::ShareCommand, "share", "post the MR through a [share] command: :share · :share review").reach(Reach::Forge),
     command!(Act::SessionCommand, "session", "open the agent session of the MR, or start one").reach(Reach::Forge),
     command!(Act::NewsCommand, "news", "what changed in revu, the newest version first"),
+    command!(Act::TargetCommand, "target", "compare a local diff against this branch: :target main").reach(Reach::Local),
     command!(Act::QuitCommand, "quit", "leave"),
     listed(Act::Pin, "pin", &["b"]).panes(&[Pane::Queue]).report(Group::Queue),
     listed(Act::ViewedNext, "viewed", &["m"]).panes(&[Pane::Diff]).report(Group::View),
+    listed(Act::ChangeTarget, "change_target", &["B"]).panes(&[Pane::Queue, Pane::Diff]).report(Group::View).reach(Reach::Local),
+    listed(Act::ToggleUncommitted, "toggle_uncommitted", &["I"]).panes(&[Pane::Queue, Pane::Diff]).report(Group::View).reach(Reach::Local),
     unnamed(Act::Search, &["/"]).panes(&[Pane::Diff]),
     unnamed(Act::Mine, &["m"]).panes(&[Pane::Threads]),
 ];
@@ -418,6 +427,8 @@ const HELP: &[Line] = &[
     line(Group::View, "w W", "wrap long lines, hide whitespace changes"),
     line(Group::View, "=", "more lines"),
     line(Group::View, "+", "react on a thread").reach(Reach::Forge),
+    line(Group::View, "B", "`revu local`: compare against another branch").reach(Reach::Local),
+    line(Group::View, "I", "`revu local`: show uncommitted work, or hide it").reach(Reach::Local),
     line(Group::View, "^v", "the file in your own program"),
     line(Group::View, "za zc zo", "toggle, close, open the fold"),
     line(Group::View, "zR zM", "in prose: show, fold the unchanged blocks"),

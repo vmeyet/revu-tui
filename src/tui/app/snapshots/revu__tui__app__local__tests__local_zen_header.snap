@@ -1,0 +1,6 @@
+---
+source: src/tui/app/local.rs
+expression: "first_rows(&mut app, 3)"
+---
+
+ widgets ~ feat/checkout · feat/checkout → main · +5 −3 · ● 3 uncommitted, not shown · I shows

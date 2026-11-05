@@ -19,6 +19,10 @@ impl Homes {
     /// At most once a day, what the cache keeps for merged, closed or long untouched MRs goes:
     /// their diffs and threads. Safe to run twice; a failure leaves the cache as it is.
     pub(in crate::tui) async fn prune_daily(&self) {
+        // No forge to ask, and the stamp belongs to the hosts: a daily `revu local` must not put off their prune.
+        if matches!(self.forge, Forge::Local(_)) {
+            return prune(&self.forge, &self.cache).await;
+        }
         let last = blocking::run(|| Ok(Cache::shared().read_entry::<()>(&keys::pruned()))).await.inspect_err(warn_stopped).ok().flatten();
         if last.is_some_and(|entry| entry.age(Utc::now()) < PRUNE_EVERY) {
             return;
