@@ -98,6 +98,7 @@ impl App {
 
     /// Back from the program: what happened, in the status line.
     pub(super) fn apply_viewed(&mut self, view: &open::View, outcome: Result<(), String>) {
+        self.terminal_focused = true;
         match outcome {
             Ok(()) => {
                 let note = view.note.as_ref().map(|n| format!(" · {n}")).unwrap_or_default();

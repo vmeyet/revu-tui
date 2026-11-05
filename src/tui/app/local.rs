@@ -35,16 +35,26 @@ impl App {
         self.leave_zen()
     }
 
-    /// What every key, click and paste leaves through: rows may have moved under the cursor, by a key, a sort or a filter,
-    /// and the cursor's worktree shows beside them.
+    /// What every key, click and paste leaves through: the terminal is in front, rows may have moved under the cursor,
+    /// by a key, a sort or a filter, and the cursor's worktree shows beside them. With the keys elsewhere, the rows are
+    /// left alone: another way of opening may have moved the diff away from the cursor.
     pub(super) fn after_input(&mut self, actions: Vec<Action>) -> Vec<Action> {
+        self.terminal_focused = true;
         let sent = self.sending(actions);
-        [sent, self.show_selected_worktree()].concat()
+        [sent, self.follow_the_row()].concat()
+    }
+
+    /// The cursor's worktree, while the keys are on the rows.
+    pub(super) fn follow_the_row(&mut self) -> Vec<Action> {
+        if self.focus != Focus::Queue || self.zen {
+            return vec![];
+        }
+        self.show_selected_worktree()
     }
 
     /// The diff of the row under the cursor, asked for unless it is on its way or on screen.
-    fn show_selected_worktree(&mut self) -> Vec<Action> {
-        if !self.is_local() || self.focus != Focus::Queue || self.zen {
+    pub(super) fn show_selected_worktree(&mut self) -> Vec<Action> {
+        if !self.is_local() {
             return vec![];
         }
         let Some(key) = self.selected_mr().map(crate::forge::QueueMr::key) else { return vec![] };
@@ -53,6 +63,15 @@ impl App {
         }
         self.opening = Some(key.clone());
         vec![Action::Open(key)]
+    }
+
+    /// A look failed: looks again soon, and says why once, the same reason coming back every 2s.
+    pub(super) fn local_look_failed(&mut self, reason: String) {
+        if self.failure_said.as_ref() != Some(&reason) {
+            self.warn(reason.clone());
+            self.failure_said = Some(reason);
+        }
+        self.back_off();
     }
 
     /// The worktree being opened, else the open one.
@@ -226,7 +245,7 @@ mod tests {
 
     #[test]
     fn snapshot_no_commits_ahead_says_where_the_work_is() {
-        let mut app = local_opened(local_mr(3, "bbbb"), &[]);
+        let mut app = local_opened(at_the_base(3), &[]);
         app.zen = true;
         insta::assert_snapshot!("local_empty", render(&mut app, 100, 12));
     }
@@ -241,7 +260,7 @@ mod tests {
 
     #[test]
     fn with_nothing_hidden_the_empty_diff_only_says_nothing_is_ahead() {
-        let mut app = local_opened(local_mr(0, "bbbb"), &[]);
+        let mut app = local_opened(at_the_base(0), &[]);
         let screen = render(&mut app, 120, 12);
         assert!(screen.contains("no commits ahead") && !screen.contains("uncommitted"), "{screen}");
     }
@@ -456,12 +475,119 @@ mod tests {
         assert_eq!((app.offline, app.opening.clone(), app.live_toast().map(|toast| toast.text.as_str())), (None, None, Some("git broke")));
     }
 
+    fn look_failed(app: &mut App, message: &str) {
+        app.apply(Incoming::Failed { what: Failure::Poll { key: local_key() }, message: message.into() });
+    }
+
     #[test]
     fn a_failure_looks_again_soon_and_leaves_the_queue_rescan_at_its_pace() {
         let mut app = on_the_screen();
-        app.apply(Incoming::Failed { what: Failure::Poll { key: local_key() }, message: "git broke".into() });
-        assert_eq!(app.poll.mr_due, Some(app.now + Duration::from_secs(2)));
-        assert_eq!(app.poll.queue_due, Some(app.now + Duration::from_secs(60)));
+        app.queue_loading = false;
+        let due = app.poll.queue_due;
+        for _ in 0..40 {
+            app.now += Duration::from_secs(1);
+            look_failed(&mut app, "git broke");
+            assert_eq!(app.poll.mr_due, Some(app.now + Duration::from_secs(2)));
+            assert_eq!(app.poll.queue_due, due, "many failures do not put it off");
+        }
+    }
+
+    #[test]
+    fn failed_looks_do_not_cancel_the_rescan_a_new_target_asked_for() {
+        let mut app = on_the_screen();
+        app.queue_loading = false;
+        press(&mut app, "B");
+        press(&mut app, "dev");
+        app.handle_key(code(KeyCode::Enter));
+        look_failed(&mut app, "git broke");
+        assert!(app.tick().contains(&Action::LoadQueue { scope: None, from_cache: false }));
+    }
+
+    #[test]
+    fn the_same_failure_is_said_once_until_a_look_works_or_the_reason_changes() {
+        let mut app = local_app();
+        look_failed(&mut app, "git broke");
+        app.toast = None;
+        look_failed(&mut app, "git broke");
+        assert_eq!(app.live_toast(), None);
+        look_failed(&mut app, "git broke again");
+        assert_eq!(app.live_toast().map(|toast| toast.text.as_str()), Some("git broke again"));
+        app.toast = None;
+        app.apply(Incoming::Mr { key: local_key(), mr: Box::new(local_mr(0, "bbbb")) });
+        look_failed(&mut app, "git broke again");
+        assert!(app.live_toast().is_some());
+    }
+
+    #[test]
+    fn a_shown_worktree_gone_from_the_rows_gives_way_to_the_row_under_the_cursor() {
+        let mut app = on_the_screen();
+        let without = Sections { mine: vec![], ..worktrees() };
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: without, opened: HashMap::new(), cached: false });
+        assert_eq!(app.take_actions(), vec![Action::Open(app.selected_mr().unwrap().key())]);
+    }
+
+    #[test]
+    fn a_failed_look_keeps_the_diff_and_the_viewed_marks() {
+        let mut app = local_app();
+        press(&mut app, "zv");
+        let before = app.open.clone();
+        assert!(!before.as_ref().unwrap().review.viewed.is_empty());
+        look_failed(&mut app, "dev is not a commit here");
+        assert_eq!(app.open, before);
+    }
+
+    #[test]
+    fn the_wheel_over_the_rows_shows_the_row_with_the_diff_focused() {
+        let mut app = on_the_screen();
+        app.focus = Focus::Review;
+        render(&mut app, 220, 30);
+        let at = app.drawn.list_rows.iter().find(|row| row.index == app.queue_selected).copied().unwrap().area;
+        let kind = crossterm::event::MouseEventKind::ScrollDown;
+        let actions = app.handle_mouse(crossterm::event::MouseEvent { kind, column: at.x + 1, row: at.y, modifiers: KeyModifiers::NONE });
+        let row = app.selected_mr().unwrap().key();
+        assert_ne!(row, local_key());
+        assert_eq!(actions, vec![Action::Open(row)]);
+    }
+
+    #[test]
+    fn a_key_with_the_diff_focused_does_not_open_the_row_under_the_cursor() {
+        let mut app = on_the_screen();
+        press(&mut app, "j");
+        app.focus = Focus::Review;
+        app.opening = None;
+        assert_eq!(press(&mut app, "w"), vec![]);
+    }
+
+    #[test]
+    fn a_key_says_the_terminal_is_in_front_after_a_lost_focus() {
+        let mut app = local_app();
+        app.terminal_focus(false);
+        press(&mut app, "w");
+        app.now += Duration::from_secs(10);
+        assert_eq!(app.tick(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+    }
+
+    #[test]
+    fn coming_back_from_a_program_says_the_terminal_is_in_front() {
+        let mut app = local_app();
+        app.terminal_focus(false);
+        let view = crate::open::View { argv: vec!["hx".into()], shown: "a.rs:1".into(), note: None, _copy: None };
+        app.apply(Incoming::Viewed { view, outcome: Ok(()) });
+        app.now += Duration::from_secs(10);
+        assert_eq!(app.tick(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+    }
+
+    #[test]
+    fn an_empty_commit_ahead_says_no_changes_and_not_no_commits() {
+        let mut app = local_opened(local_mr(0, "bbbb"), &[]);
+        let screen = render(&mut app, 120, 12);
+        assert!(screen.contains("no changes ahead") && !screen.contains("no commits ahead"), "{screen}");
+    }
+
+    /// A worktree at its merge base: no commit ahead of the target.
+    fn at_the_base(hidden: u32) -> Mr {
+        let at: Sha = "bbbb".into();
+        Mr { refs: crate::forge::Refs { base: at.clone(), start: at.clone(), head: at }, ..local_mr(hidden, "bbbb") }
     }
 
     #[test]

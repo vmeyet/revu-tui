@@ -395,6 +395,46 @@ async fn revu_can_start_in_a_submodule_and_reads_its_own_branch() {
     assert_eq!((queue.authored.len(), queue.review_requested.len(), queue.open.len()), (1, 0, 0), "only the submodule's own folder");
 }
 
+#[tokio::test]
+async fn a_linked_worktree_of_a_submodule_lists_no_git_folder() {
+    let (inner, outer) = (Repo::new(), Repo::new());
+    outer.git(&["-c", "protocol.file.allow=always", "submodule", "add", "-q", inner.path().to_str().unwrap(), "sub"]);
+    let linked = outer.path().join("linked");
+    outer.git(&["-C", outer.path().join("sub").to_str().unwrap(), "worktree", "add", "-q", "-b", "lk", linked.to_str().unwrap()]);
+    let client = Client::open(&linked, Some("HEAD")).await.unwrap();
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    let titles: Vec<&str> = queue.authored.iter().chain(&queue.review_requested).chain(&queue.open).map(|row| row.title.as_str()).collect();
+    assert_eq!(titles, ["lk"]);
+}
+
+#[tokio::test]
+async fn a_broken_index_is_a_failure_for_the_diff_and_a_reason_on_its_row() {
+    let repo = Repo::new();
+    let (client, key) = repo.open().await;
+    std::fs::write(repo.path().join(".git/index"), "garbage").unwrap();
+    assert!(client.mr(&key).await.is_err());
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert!(queue.authored[0].worktree.as_ref().unwrap().no_diff.is_some());
+}
+
+#[tokio::test]
+async fn a_target_gone_a_moment_is_a_failure_with_its_reason_and_the_diff_comes_back() {
+    let repo = Repo::new();
+    repo.write("mine.txt", "mine\n");
+    repo.commit("mine");
+    repo.git(&["branch", "dev", "main"]);
+    let (client, key) = repo.open_on("dev").await;
+    let before = client.mr(&key).await.unwrap();
+    repo.git(&["branch", "-m", "dev", "tmp"]);
+    assert_eq!(client.mr(&key).await.unwrap_err().to_string(), "dev is not a commit here");
+    assert!(client.diffs(&key).await.is_err());
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert_eq!(queue.authored[0].worktree.as_ref().unwrap().no_diff.as_deref(), Some("dev is not a commit here"));
+    repo.git(&["branch", "-m", "tmp", "dev"]);
+    assert_eq!(client.mr(&key).await.unwrap().refs, before.refs);
+    assert_eq!(client.diffs(&key).await.unwrap().len(), 1);
+}
+
 #[test]
 fn a_huge_file_withholds_its_body() {
     let body = "+x\n".repeat(20_001);

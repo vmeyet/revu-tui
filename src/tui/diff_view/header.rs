@@ -175,12 +175,14 @@ fn hidden_work(uncommitted: u32) -> Option<String> {
     (uncommitted > 0).then(|| format!("● {uncommitted} uncommitted, not shown · I shows"))
 }
 
-/// What a worktree's empty diff says: why there can be none, or where the work is.
+/// What a worktree's empty diff says: why there can be none, or where the work is; commits past the base that change
+/// no file are still commits.
 pub(super) fn nothing_ahead(mr: &Mr) -> String {
+    let ahead = if mr.refs.base == mr.refs.head { "no commits ahead" } else { "no changes ahead" };
     match (&mr.no_diff, mr.uncommitted) {
         (Some(reason), _) => format!("no diff: {reason}"),
-        (None, 0) => "no commits ahead".to_owned(),
-        (None, hidden) => format!("no commits ahead · {hidden} uncommitted · I shows them"),
+        (None, 0) => ahead.to_owned(),
+        (None, hidden) => format!("{ahead} · {hidden} uncommitted · I shows them"),
     }
 }
 

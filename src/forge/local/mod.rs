@@ -128,7 +128,8 @@ impl Client {
         let worktree = self.worktree(key).await?;
         let Choice { target, uncommitted } = self.choice();
         // `Mr::no_diff` says why there is no base.
-        let Ok(base) = git::merge_base(&worktree.path, &target).await else { return Ok(vec![]) };
+        let base = if worktree.unreadable().await.is_some() { None } else { git::merge_base(&worktree.path, &target).await? };
+        let Some(base) = base else { return Ok(vec![]) };
         if !uncommitted {
             return Ok(split::files(&git::patch(&worktree.path, &base, Some(&worktree.head)).await?));
         }
@@ -161,17 +162,15 @@ impl Client {
         find(&self.listing().await?.worktrees, key).cloned()
     }
 
-    /// What `git worktree list` says, the folder revu ran in always among it: in a submodule, the list names the
-    /// repository's git folder instead.
+    /// What `git worktree list` says, without the git folder a submodule's list names, the folder revu ran in always among it.
     async fn listing(&self) -> Result<git::Listing> {
-        let listing = git::listing(&self.here).await?;
-        if listing.worktrees.iter().any(|worktree| worktree.path == self.here) {
-            return Ok(listing);
-        }
+        let git::Listing { repo, worktrees } = git::listing(&self.here).await?;
         let git_folder = git::common_dir(&self.here).await?;
-        let here = git::worktree_at(&self.here).await?;
-        let others = listing.worktrees.into_iter().filter(|worktree| worktree.path != git_folder);
-        Ok(git::Listing { repo: listing.repo, worktrees: others.chain([here]).collect() })
+        let mut worktrees: Vec<Worktree> = worktrees.into_iter().filter(|worktree| worktree.path != git_folder).collect();
+        if !worktrees.iter().any(|worktree| worktree.path == self.here) {
+            worktrees.push(git::worktree_at(&self.here).await?);
+        }
+        Ok(git::Listing { repo, worktrees })
     }
 }
 
@@ -188,24 +187,24 @@ fn find<'a>(worktrees: &'a [Worktree], key: &MrKey) -> Result<&'a Worktree> {
     worktrees.iter().find(|worktree| worktree.number() == key.number).with_context(|| format!("{} is no longer a worktree", key.project))
 }
 
-/// The worktree as a review reads it; one git cannot read opens empty and says why.
+/// The worktree as a review reads it; one with nothing to read opens empty and says why.
 async fn read_mr(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
-    match mr_of(repo, worktree, choice).await {
-        Ok(mr) => Ok(mr),
-        Err(unreadable) => Ok(Mr { no_diff: Some(unreadable.to_string()), ..bare_mr(repo, worktree, &choice.target)? }),
+    match worktree.unreadable().await {
+        Some(reason) => Ok(Mr { no_diff: Some(reason.to_owned()), ..bare_mr(repo, worktree, &choice.target)? }),
+        None => mr_of(repo, worktree, choice).await,
     }
 }
 
 /// One with no merge base opens empty and says why.
 async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
     let Choice { target, uncommitted } = choice;
-    let base = git::merge_base(&worktree.path, target).await;
-    let no_diff = base.as_ref().err().map(ToString::to_string);
+    let base = git::merge_base(&worktree.path, target).await?;
+    let no_diff = base.is_none().then(|| format!("{target} shares no history with this branch"));
     let head = match &base {
-        Ok(base) if *uncommitted => shown_head(worktree, base).await?,
+        Some(base) if *uncommitted => shown_head(worktree, base).await?,
         _ => worktree.head.clone(),
     };
-    let base = base.unwrap_or_else(|_| worktree.head.clone());
+    let base = base.unwrap_or_else(|| worktree.head.clone());
     let (committed, files) = tokio::try_join!(git::commit_time(&worktree.path), git::uncommitted_files(&worktree.path))?;
     let saved = git::last_saved(&worktree.path, &files).await;
     Ok(Mr {
@@ -248,10 +247,13 @@ fn bare_mr(repo: &str, worktree: &Worktree, target: &Target) -> Result<Mr> {
     })
 }
 
-/// The worktree as the screen lists it: its commits against the target, whatever `I` shows; one git cannot read
-/// keeps its row and says why.
+/// The worktree as the screen lists it: its commits against the target, whatever `I` shows; whatever goes wrong
+/// reading one, it keeps its row and says why.
 async fn row(repo: &str, worktree: &Worktree, committed: &Choice) -> Result<QueueMr> {
-    let mr = read_mr(repo, worktree, committed).await?;
+    let mr = match read_mr(repo, worktree, committed).await {
+        Ok(mr) => mr,
+        Err(failed) => Mr { no_diff: Some(failed.to_string()), ..bare_mr(repo, worktree, &committed.target)? },
+    };
     let Refs { base, head, .. } = &mr.refs;
     let (commits, size) = if mr.no_diff.is_some() {
         (0, Size { additions: 0, deletions: 0, files: 0 })

@@ -253,6 +253,8 @@ pub(crate) struct App {
     /// Since when refreshes fail while a cached view is shown.
     pub(crate) offline: Option<Instant>,
     pub(crate) poll: Poll,
+    /// The failure of a local look the reader was told, so one that repeats every 2s is said once.
+    pub(crate) failure_said: Option<String>,
     /// False once the terminal said it lost focus: a local diff stops looking until it comes back.
     pub(crate) terminal_focused: bool,
     pub(crate) should_quit: bool,
@@ -371,6 +373,7 @@ impl App {
             readings: HashMap::new(),
             offline: None,
             poll: Poll::default(),
+            failure_said: None,
             terminal_focused: true,
             should_quit: false,
             started: now,
@@ -461,7 +464,7 @@ impl App {
     pub(super) fn back_off(&mut self) {
         if self.is_local() {
             self.poll.mr_due = Some(self.now + LOCAL_EVERY);
-            self.poll.queue_due = Some(self.now + QUEUE_EVERY);
+            self.poll.queue_due.get_or_insert(self.now + QUEUE_EVERY);
             return;
         }
         let wait = self.rate.wait.unwrap_or_default().max(BACKOFF);

@@ -41,6 +41,8 @@ impl App {
                 self.offline = None;
                 self.keep_cursor_on_the_shown_worktree();
                 self.queue_settle();
+                let follow = self.follow_the_row();
+                self.composed.extend(follow);
                 self.schedule_queue();
                 self.ask_triage();
                 let notice = self.notify_new();
@@ -164,6 +166,7 @@ impl App {
         if cached.is_none() {
             self.opening.take_if(|opening| *opening == key);
             self.offline = None;
+            self.failure_said = None;
             self.opened.insert(key, self.today);
             self.schedule_review();
             self.ask_reading();
@@ -191,6 +194,7 @@ impl App {
         let same_head = open.review.mr.refs.head == mr.refs.head;
         self.open = Some(if same_head { Open { review: open.review.with_mr(mr), cached: None, ..open } } else { open });
         self.offline = None;
+        self.failure_said = None;
         self.schedule_review();
     }
 
@@ -206,13 +210,9 @@ impl App {
             }
             Failure::Open { .. } if self.is_local() && self.open.is_some() => {
                 self.opening = None;
-                self.warn(message);
-                self.back_off();
+                self.local_look_failed(message);
             }
-            Failure::Poll { .. } if self.is_local() => {
-                self.warn(message);
-                self.back_off();
-            }
+            Failure::Poll { .. } if self.is_local() => self.local_look_failed(message),
             Failure::Open { .. } => {
                 self.opening = None;
                 if self.open.is_some() {

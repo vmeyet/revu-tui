@@ -87,7 +87,11 @@ impl App {
         let Some(pane) = self.areas.under(at) else { return vec![] };
         self.repeat = None;
         let times = if pane == Focus::Review { DIFF_ROWS } else { 1 };
-        (0..times).flat_map(|_| self.pane_key(pane, KeyEvent::from(arrow))).collect()
+        let moved: Vec<Action> = (0..times).flat_map(|_| self.pane_key(pane, KeyEvent::from(arrow))).collect();
+        if pane != Focus::Queue {
+            return moved;
+        }
+        [moved, self.show_selected_worktree()].concat()
     }
 
     /// A release where the press was is a click, on a link, a label of the tap bar or a list row; any other ends
