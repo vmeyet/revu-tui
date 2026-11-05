@@ -87,6 +87,9 @@ impl App {
         if let Some(prefix) = self.pending.take() {
             return self.handle_prefixed(prefix, key);
         }
+        if self.out_of_reach(key) {
+            return vec![];
+        }
         if let Some(mode) = palette_key(key) {
             self.did(if mode == crate::tui::palette::Mode::Commands { Act::Palette } else { Act::Jump });
             self.open_palette(mode);

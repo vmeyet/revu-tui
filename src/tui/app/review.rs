@@ -141,13 +141,16 @@ impl Open {
         self.relaid(|review| review.with_quiet_whitespace(quiet))
     }
 
-    /// The review changed by `change` and laid out again, the cursor kept on what it pointed at.
+    /// The review changed by `change` and laid out again, the cursor kept on what it pointed at: the same file by
+    /// its path, whatever files came or went before it; once that file is gone, the nearest row of a file.
     pub(super) fn relaid(self, change: impl FnOnce(Review) -> Review) -> Self {
-        let anchor = self.row().cloned();
+        let anchor = self.row().filter(|row| **row != Row::Gap).cloned();
+        let before = Arc::clone(&self.review.files);
         let review = change(self.review);
         let rows = review.rows();
-        let found = anchor.and_then(|row| find_again(&review, &rows, &row));
-        let selected = found.unwrap_or(self.selected).min(rows.len().saturating_sub(1));
+        let moved = anchor.and_then(|row| row_after_refresh(&row, &before, &review.files));
+        let found = moved.and_then(|row| find_again(&review, &rows, &row));
+        let selected = found.unwrap_or_else(|| nearest_of_a_file(&rows, self.selected));
         Self { review, rows, selected, ..self }
     }
 
@@ -203,13 +206,29 @@ pub(super) fn same_place(before: &Row, after: &Row) -> bool {
     }
 }
 
-/// Where `row` sits in `rows`: itself or its pair, a thread row that went the stop before it or its line, else the
-/// hunk it sat in.
+/// `row` as it reads over the files `after`, its file found by path; `None` once that file is gone.
+fn row_after_refresh(row: &Row, before: &[crate::review::File], after: &[crate::review::File]) -> Option<Row> {
+    let Some(file) = row.file() else { return Some(row.clone()) };
+    let path = &before.get(file)?.new_path;
+    after.iter().position(|f| f.new_path == *path).map(|moved| row.in_file(moved))
+}
+
+/// The row of a file closest to `at`, later ones first; `at` kept in range when no row has a file.
+fn nearest_of_a_file(rows: &[Row], at: usize) -> usize {
+    let at = at.min(rows.len().saturating_sub(1));
+    let of_a_file = |r: &Row| r.file().is_some();
+    let after = rows.iter().skip(at).position(of_a_file).map(|ahead| at + ahead);
+    after.or_else(|| rows.iter().rposition(of_a_file)).unwrap_or(at)
+}
+
+/// Where `row` sits in `rows`: itself or its pair, a thread row that went the stop before it or its line, the hunk it
+/// sat in, else its file's own row.
 fn find_again(review: &Review, rows: &[Row], row: &Row) -> Option<usize> {
     let hunk = row.hunk();
     let in_hunk = |r: &Row| hunk.is_some() && matches!(r, Row::Hunk { .. }) && r.hunk() == hunk;
+    let file_row = |r: &Row| matches!(r, Row::File { .. }) && r.file() == row.file();
     let same = rows.iter().position(|r| same_place(r, row));
-    same.or_else(|| before_stop(review, rows, row)).or_else(|| rows.iter().position(in_hunk))
+    same.or_else(|| before_stop(review, rows, row)).or_else(|| rows.iter().position(in_hunk)).or_else(|| rows.iter().position(file_row))
 }
 
 /// The last row of the line a thread row hangs under that comes before its stop.
@@ -464,6 +483,60 @@ impl App {
 #[cfg(test)]
 mod tests {
     use crate::tui::app::test_support::*;
+
+    fn one_line(path: &str) -> DiffFile {
+        DiffFile { diff: "@@ -1 +1 @@\n-old\n+new\n".into(), old_path: path.into(), new_path: path.into(), ..DiffFile::default() }
+    }
+
+    fn opened_on(paths: &[&str]) -> App {
+        with_opened(Review::new(mr(), &paths.iter().map(|path| one_line(path)).collect::<Vec<_>>(), vec![], &[]))
+    }
+
+    fn refreshed_to(app: &mut App, paths: &[&str]) {
+        let files: Vec<DiffFile> = paths.iter().map(|path| one_line(path)).collect();
+        app.apply(Incoming::Review { key: mr_key(), review: Box::new(Review::new(mr(), &files, vec![], &[])), cached: None });
+    }
+
+    fn file_under_cursor(app: &App) -> Option<String> {
+        let open = app.open.as_ref().unwrap();
+        open.row().and_then(Row::file).map(|file| open.review.files[file].new_path.clone())
+    }
+
+    #[test]
+    fn a_refresh_adding_a_file_before_the_cursor_keeps_it_on_its_file() {
+        let mut app = opened_on(&["b.rs", "c.rs"]);
+        app.review_jump_to(|row| matches!(row, Row::File { index: 1, .. }));
+        refreshed_to(&mut app, &["a.rs", "b.rs", "c.rs"]);
+        assert_eq!(file_under_cursor(&app).as_deref(), Some("c.rs"));
+    }
+
+    #[test]
+    fn a_refresh_removing_a_file_before_the_cursor_keeps_it_on_its_file() {
+        let mut app = opened_on(&["a.rs", "b.rs", "c.rs"]);
+        app.review_jump_to(|row| matches!(row, Row::File { index: 2, .. }));
+        refreshed_to(&mut app, &["b.rs", "c.rs"]);
+        assert_eq!(file_under_cursor(&app).as_deref(), Some("c.rs"));
+    }
+
+    #[test]
+    fn a_refresh_that_folds_the_cursors_line_away_lands_on_its_file_and_not_a_gap() {
+        let mut app = opened_on(&["b.rs", "c.rs"]);
+        app.review_jump_to(|row| matches!(row, Row::File { index: 0, .. }));
+        press(&mut app, "zv");
+        app.review_jump_to(|row| matches!(row, Row::File { index: 1, .. }));
+        press(&mut app, "\r");
+        refreshed_to(&mut app, &["a.rs", "b.rs", "c.rs"]);
+        assert_ne!(app.open.as_ref().unwrap().row(), Some(&Row::Gap));
+        assert_eq!(file_under_cursor(&app).as_deref(), Some("c.rs"));
+    }
+
+    #[test]
+    fn a_refresh_that_drops_the_cursors_file_lands_on_the_nearest_row_of_a_file() {
+        let mut app = opened_on(&["a.rs", "b.rs", "c.rs"]);
+        app.review_jump_to(|row| matches!(row, Row::File { index: 2, .. }));
+        refreshed_to(&mut app, &["a.rs", "b.rs"]);
+        assert!(file_under_cursor(&app).is_some(), "{:?}", app.open.as_ref().unwrap().row());
+    }
 
     #[test]
     fn tab_and_brackets_jump_between_files_hunks_and_threads() {

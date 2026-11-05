@@ -47,7 +47,8 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `v` | prose: the Markdown file rendered, its blocks marked |
 | `zz` | zen: the diff alone, quiet |
 | `w` `W` | wrap long lines, hide whitespace changes |
-| `=` `+` | more lines, react on a thread |
+| `=` | more lines |
+| `+` | react on a thread |
 | `^v` | the file in your own program |
 | `za` `zc` `zo` | toggle, close, open the fold |
 | `zR` `zM` | in prose: show, fold the unchanged blocks |

@@ -39,11 +39,13 @@ fn shown(app: &App, every_key: bool) -> Vec<Section> {
     let keymap: &Keymap = &app.keymap;
     if app.compact && !every_key {
         let page = app.page();
-        let rows = page.taps().iter().map(|tap| Row { keys: keymap.label(tap.keys), does: tap.does }).collect();
+        let rows = app.taps_here().iter().map(|tap| Row { keys: keymap.label(tap.keys), does: tap.does }).collect();
         return vec![Section { title: page.name(), rows }];
     }
+    let row = |line: &crate::act::Line| Row { keys: keymap.label(line.keys), does: line.does };
     groups(every_key, app.focus)
-        .map(|g| Section { title: g.title(), rows: g.lines().map(|line| Row { keys: keymap.label(line.keys), does: line.does }).collect() })
+        .map(|g| Section { title: g.title(), rows: g.lines_on(app.kind()).map(row).collect() })
+        .filter(|section| !section.rows.is_empty())
         .collect()
 }
 

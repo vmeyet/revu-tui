@@ -1,6 +1,7 @@
 //! Every action revu has, in one table: the name `[keys.bind]` and `revu usage` give it, its default keys, its
 //! palette verb; every `?` help line has a table of its own. The keymap, the help, the palette, the usage report and
 //! `docs/reference/keys.md` all read it from here.
+use crate::forge::Kind;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::sync::LazyLock;
 
@@ -102,6 +103,7 @@ pub(crate) struct Line {
     pub(crate) group: Group,
     pub(crate) keys: &'static str,
     pub(crate) does: &'static str,
+    reach: Reach,
 }
 
 pub(crate) use vtui::palette::Verb;
@@ -118,6 +120,24 @@ pub(crate) struct Row {
     pub(crate) panes: &'static [Pane],
     /// Where `revu usage` lists it; `None` for an action it does not count.
     pub(crate) report: Option<Group>,
+    pub(crate) reach: Reach,
+}
+
+/// Which diffs an action makes sense on; the keys, the help and the palette all read it through [`Reach::serves`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Reach {
+    Both,
+    /// It talks to the forge: `revu local` has none.
+    Forge,
+}
+
+impl Reach {
+    pub(crate) fn serves(self, kind: Kind) -> bool {
+        match self {
+            Self::Both => true,
+            Self::Forge => kind != Kind::Local,
+        }
+    }
 }
 
 /// Where a key does an action.
@@ -187,6 +207,19 @@ impl Group {
         HELP.iter().filter(move |line| line.group == self)
     }
 
+    /// Its lines that do something on `kind`.
+    pub(crate) fn lines_on(self, kind: Kind) -> impl Iterator<Item = &'static Line> {
+        self.lines().filter(move |line| line.reach.serves(kind))
+    }
+
+    /// Writing and threads need a forge, all of them.
+    const fn reach(self) -> Reach {
+        match self {
+            Self::Comment | Self::Thread => Reach::Forge,
+            _ => Reach::Both,
+        }
+    }
+
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Move => "move",
@@ -202,7 +235,7 @@ impl Group {
 }
 
 const fn row(act: Act, name: Name, keys: &'static [&'static str]) -> Row {
-    Row { act, name, keys, verb: None, panes: &[], report: None }
+    Row { act, name, keys, verb: None, panes: &[], report: None, reach: Reach::Both }
 }
 
 const fn bound(act: Act, name: &'static str, keys: &'static [&'static str]) -> Row {
@@ -229,16 +262,26 @@ macro_rules! command {
 }
 
 const fn line(group: Group, keys: &'static str, does: &'static str) -> Line {
-    Line { group, keys, does }
+    Line { group, keys, does, reach: group.reach() }
+}
+
+impl Line {
+    const fn reach(self, reach: Reach) -> Self {
+        Self { reach, ..self }
+    }
 }
 
 impl Row {
     const fn report(self, group: Group) -> Self {
-        Self { report: Some(group), ..self }
+        Self { report: Some(group), reach: group.reach(), ..self }
     }
 
     const fn panes(self, panes: &'static [Pane]) -> Self {
         Self { panes, ..self }
+    }
+
+    const fn reach(self, reach: Reach) -> Self {
+        Self { reach, ..self }
     }
 }
 
@@ -263,14 +306,14 @@ pub(crate) const ROWS: &[Row] = &[
     bound(Act::PeekAfter, "peek_after", &[">"]).panes(&[Pane::Diff]).report(Group::View),
     bound(Act::PeekBefore, "peek_before", &["<"]).panes(&[Pane::Diff]).report(Group::View),
     bound(Act::Tree, "tree", &["t"]).panes(&[Pane::Diff, Pane::Tree]).report(Group::View),
-    bound(Act::EveryThread, "every_thread", &["T"]).panes(&[Pane::Diff, Pane::Threads]).report(Group::Thread),
-    bound(Act::Pipeline, "pipeline", &["p"]).panes(&[Pane::Diff, Pane::Pipeline, Pane::Cover]).report(Group::View),
+    bound(Act::EveryThread, "every_thread", &["T"]).panes(&[Pane::Diff, Pane::Threads]).report(Group::Thread).reach(Reach::Both),
+    bound(Act::Pipeline, "pipeline", &["p"]).panes(&[Pane::Diff, Pane::Pipeline, Pane::Cover]).report(Group::View).reach(Reach::Forge),
     bound(Act::Prose, "prose", &["v"]).panes(&[Pane::Diff, Pane::Prose]).report(Group::View),
     bound(Act::Wrap, "wrap", &["w"]).panes(&[Pane::Diff]).report(Group::View),
     bound(Act::Whitespace, "whitespace", &["W"]).panes(&[Pane::Diff]).report(Group::View),
     bound(Act::MoreContext, "more_context", &["="]).panes(&[Pane::Diff]).report(Group::View),
     bound(Act::ViewFile, "view_file", &["ctrl-v"]).panes(&[Pane::Diff, Pane::ThreadRow, Pane::Tree]).report(Group::View),
-    bound(Act::Description, "description", &["i"]).panes(&[Pane::Queue, Pane::Diff, Pane::Cover]).report(Group::View),
+    bound(Act::Description, "description", &["i"]).panes(&[Pane::Queue, Pane::Diff, Pane::Cover]).report(Group::View).reach(Reach::Forge),
     bound(Act::Comment, "comment", &["c"]).panes(&[Pane::Diff]).report(Group::Comment),
     bound(Act::CommentOld, "comment_old", &["C"]).panes(&[Pane::Diff]).report(Group::Comment),
     bound(Act::Select, "select", &["V"]).panes(&[Pane::Diff]).report(Group::Comment),
@@ -282,15 +325,17 @@ pub(crate) const ROWS: &[Row] = &[
     bound(Act::Merge, "merge", &["M"]).panes(&[Pane::Diff]).report(Group::Comment),
     bound(Act::Ready, "ready", &["H"]).panes(&[Pane::Diff]).report(Group::Comment),
     bound(Act::Share, "share", &["Y"]).panes(&[Pane::Anywhere]).report(Group::Comment),
-    bound(Act::Session, "session", &["a"]).panes(&[Pane::Anywhere]).report(Group::App),
+    bound(Act::Session, "session", &["a"]).panes(&[Pane::Anywhere]).report(Group::App).reach(Reach::Forge),
     bound(Act::React, "react", &["+"]).panes(&[Pane::Diff, Pane::ThreadRow]).report(Group::Thread),
     bound(Act::OpenBrowser, "open_browser", &["o"])
         .panes(&[Pane::Queue, Pane::Diff, Pane::ThreadRow, Pane::Pipeline, Pane::Cover])
-        .report(Group::App),
+        .report(Group::App)
+        .reach(Reach::Forge),
     bound(Act::CopyLink, "copy_link", &["y"])
         .panes(&[Pane::Queue, Pane::Diff, Pane::ThreadRow, Pane::Pipeline, Pane::Cover])
-        .report(Group::App),
-    bound(Act::Scope, "scope", &["*"]).panes(&[Pane::Queue]).report(Group::Queue),
+        .report(Group::App)
+        .reach(Reach::Forge),
+    bound(Act::Scope, "scope", &["*"]).panes(&[Pane::Queue]).report(Group::Queue).reach(Reach::Forge),
     bound(Act::SortQueue, "sort_queue", &["s"]).panes(&[Pane::Queue]).report(Group::Queue),
     bound(Act::Filter, "filter", &["/"]).panes(&[Pane::Queue]).report(Group::Queue),
     bound(Act::Palette, "palette", &[":"]).panes(&[Pane::Anywhere]).report(Group::App),
@@ -324,15 +369,15 @@ pub(crate) const ROWS: &[Row] = &[
     listed(Act::CopyFirstLink, "copy_first_link", &["U"]).panes(&[Pane::ThreadRow]).report(Group::Thread),
     listed(Act::PaletteMr, "palette_mr", &[]).report(Group::App),
     command!(Act::GoCommand, "go", "open an MR: :go !42 · :go acme/widgets!42"),
-    command!(Act::CopyCommand, "copy", "copy the link of the MR, or of the line"),
-    command!(Act::ApproveCommand, "approve", "approve the open MR, or take the approval back"),
-    command!(Act::PublishCommand, "publish", "publish every draft, in the publish modal"),
+    command!(Act::CopyCommand, "copy", "copy the link of the MR, or of the line").reach(Reach::Forge),
+    command!(Act::ApproveCommand, "approve", "approve the open MR, or take the approval back").reach(Reach::Forge),
+    command!(Act::PublishCommand, "publish", "publish every draft, in the publish modal").reach(Reach::Forge),
     command!(Act::ThreadsCommand, "threads", "every thread of the MR in the right pane"),
     command!(Act::SetCommand, "set", "change and save a setting: :set theme=nord"),
     command!(Act::ViewCommand, "view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     command!(Act::AiCommand, "ai", "switch AI off or back on for this session: :ai off, :ai on"),
-    command!(Act::ShareCommand, "share", "post the MR through a [share] command: :share · :share review"),
-    command!(Act::SessionCommand, "session", "open the agent session of the MR, or start one"),
+    command!(Act::ShareCommand, "share", "post the MR through a [share] command: :share · :share review").reach(Reach::Forge),
+    command!(Act::SessionCommand, "session", "open the agent session of the MR, or start one").reach(Reach::Forge),
     command!(Act::NewsCommand, "news", "what changed in revu, the newest version first"),
     command!(Act::QuitCommand, "quit", "leave"),
     listed(Act::Pin, "pin", &["b"]).panes(&[Pane::Queue]).report(Group::Queue),
@@ -357,21 +402,22 @@ const HELP: &[Line] = &[
     line(Group::Move, "]m [m", "next, previous MR in the queue"),
     line(Group::Queue, "/", "filter: words @author !42 ~label"),
     line(Group::Queue, "' 1-9", "a saved view, by letter or rank"),
-    line(Group::Queue, "*", "this repo, or every project"),
+    line(Group::Queue, "*", "this repo, or every project").reach(Reach::Forge),
     line(Group::Queue, "s", "next sort order"),
     line(Group::Queue, "b", "pin on top of the queue, or unpin"),
     line(Group::Queue, "zo zc", "open, fold the section or stack"),
     line(Group::View, "/ n N", "find text in the MR, next, previous"),
-    line(Group::View, "i", "the MR cover page"),
+    line(Group::View, "i", "the MR cover page").reach(Reach::Forge),
     line(Group::View, "D", "inline or side by side, diff and prose"),
     line(Group::View, "> <", "the code after, before, alone"),
     line(Group::View, "t", "file tree"),
     line(Group::View, "T", "every thread of the MR"),
-    line(Group::View, "p", "pipeline"),
+    line(Group::View, "p", "pipeline").reach(Reach::Forge),
     line(Group::View, "v", "prose: the Markdown file rendered, its blocks marked"),
     line(Group::View, "zz", "zen: the diff alone, quiet"),
     line(Group::View, "w W", "wrap long lines, hide whitespace changes"),
-    line(Group::View, "= +", "more lines, react on a thread"),
+    line(Group::View, "=", "more lines"),
+    line(Group::View, "+", "react on a thread").reach(Reach::Forge),
     line(Group::View, "^v", "the file in your own program"),
     line(Group::View, "za zc zo", "toggle, close, open the fold"),
     line(Group::View, "zR zM", "in prose: show, fold the unchanged blocks"),
@@ -400,8 +446,8 @@ const HELP: &[Line] = &[
     line(Group::Thread, "u U", "open, copy the first link"),
     line(Group::App, "^k ,", "MRs · > commands"),
     line(Group::App, ":", "commands: :go !42, :set theme=nord"),
-    line(Group::App, "o y", "open in the browser, copy the link"),
-    line(Group::App, "a", "the agent session of the MR"),
+    line(Group::App, "o y", "open in the browser, copy the link").reach(Reach::Forge),
+    line(Group::App, "a", "the agent session of the MR").reach(Reach::Forge),
     line(Group::App, "r", "refresh"),
     line(Group::App, "?", "this help"),
     line(Group::App, "q ^c", "quit: twice; q closes a pane first"),
@@ -410,6 +456,11 @@ const HELP: &[Line] = &[
 /// The palette's verbs, in the order its list shows them.
 pub(crate) fn verbs() -> impl Iterator<Item = Verb> {
     ROWS.iter().filter_map(|row| row.verb)
+}
+
+/// The palette's verbs that do something on `kind`.
+pub(crate) fn verbs_on(kind: Kind) -> impl Iterator<Item = Verb> {
+    ROWS.iter().filter(move |row| row.reach.serves(kind)).filter_map(|row| row.verb)
 }
 
 impl Act {

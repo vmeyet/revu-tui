@@ -41,7 +41,7 @@ pub(super) fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, 
     let mr = &open.review.mr;
     let muted = Style::default().fg(theme.muted);
     let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
-    let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
+    let (adds, dels) = line_totals(open);
     let age = short_age((today - mr.updated_at).to_std().unwrap_or_default());
     let status = mr.pipeline.as_ref().map(|p| p.status);
     let (glyph, colour) = status.map_or(("", theme.faded), |s| pipeline_glyph(s, theme));
@@ -92,16 +92,12 @@ pub(super) fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, 
         second.push(dot());
         second.push(Span::styled("conflicts", Style::default().fg(theme.danger)));
     }
-    let progress = open.review.progress();
-    if progress.viewed > 0 {
+    let progress = viewed_spans(open, theme);
+    if !progress.is_empty() {
         if second.len() > 1 {
             second.push(dot());
         }
-        let (done, left) = progress_bar(progress.viewed, progress.files, PROGRESS_W);
-        let folded = if progress.folded > 0 { format!(" · {} folded", progress.folded) } else { String::new() };
-        second.push(Span::styled(format!("viewed {}/{}{folded} ", progress.viewed, progress.files), muted));
-        second.push(Span::styled(done, Style::default().fg(if progress.done() { theme.success } else { theme.accent })));
-        second.push(Span::styled(left, Style::default().fg(theme.faded)));
+        second.extend(progress);
     }
     if let Some(deployment) = open.deployments.as_deref().and_then(Deployment::to_try) {
         if second.len() > 1 {
@@ -113,6 +109,26 @@ pub(super) fn header_lines<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, 
         return vec![first];
     }
     vec![first, Line::from(second)]
+}
+
+/// Lines added and removed, in every file.
+fn line_totals(open: &Open) -> (usize, usize) {
+    open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions))
+}
+
+/// How far the reading went, once a file was marked viewed.
+fn viewed_spans<'a>(open: &Open, theme: Theme) -> Vec<Span<'a>> {
+    let progress = open.review.progress();
+    if progress.viewed == 0 {
+        return vec![];
+    }
+    let (done, left) = progress_bar(progress.viewed, progress.files, PROGRESS_W);
+    let folded = if progress.folded > 0 { format!(" · {} folded", progress.folded) } else { String::new() };
+    vec![
+        Span::styled(format!("viewed {}/{}{folded} ", progress.viewed, progress.files), Style::default().fg(theme.muted)),
+        Span::styled(done, Style::default().fg(if progress.done() { theme.success } else { theme.accent })),
+        Span::styled(left, Style::default().fg(theme.faded)),
+    ]
 }
 
 /// The review app to try, `+n` for the others the pipeline pane lists, and a word when it runs an older push.
@@ -144,7 +160,7 @@ pub(super) fn deployment_link(open: &Open, header: &[Line<'_>], area: Rect) -> O
 /// Zen's one line on top: which MR, whose, its size, its pipeline and its unresolved threads, all quiet.
 pub(super) fn zen_header<'a>(open: &Open, sigil: char, theme: Theme, width: usize) -> Line<'a> {
     let mr = &open.review.mr;
-    let (adds, dels) = open.review.files.iter().fold((0, 0), |(a, d), f| (a + f.additions, d + f.deletions));
+    let (adds, dels) = line_totals(open);
     let pipeline = mr.pipeline.as_ref().map(|p| format!(" {}", pipeline_glyph(p.status, theme).0)).unwrap_or_default();
     let unresolved = open.review.unresolved();
     let threads = if unresolved > 0 { format!(" · ◆{unresolved}") } else { String::new() };

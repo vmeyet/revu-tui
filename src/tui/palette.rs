@@ -3,7 +3,7 @@
 //! `query`), `>` runs commands. `:` opens it on commands, with fuzzy tab completion, a ghost
 //! suggestion and history.
 use crate::act::{self, Act, Verb};
-use crate::forge::MrKey;
+use crate::forge::{Kind, MrKey};
 use vtui::palette::typed::{Setting, TypedLine, Typing, unknown_verb};
 
 /// What the palette searches, from the first character typed.
@@ -106,8 +106,8 @@ impl Command {
 }
 
 /// revu's commands that match what is typed, best first.
-pub(super) fn verbs_for(input: &str) -> Vec<Verb> {
-    vtui::palette::verbs_for(input, act::verbs())
+pub(super) fn verbs_for(input: &str, kind: Kind) -> Vec<Verb> {
+    vtui::palette::verbs_for(input, act::verbs_on(kind))
 }
 
 pub(crate) fn parse(line: &str) -> Result<Command, String> {
@@ -252,9 +252,9 @@ mod tests {
 
     #[test]
     fn the_command_list_follows_the_typed_verb() {
-        assert_eq!(verbs_for("").len(), act::verbs().count().min(vtui::palette::MAX_SHOWN));
-        assert_eq!(verbs_for("pub").first().map(|verb| verb.word), Some("publish"));
-        assert_eq!(verbs_for("go !42").first().map(|verb| verb.word), Some("go"));
+        assert_eq!(verbs_for("", Kind::GitLab).len(), act::verbs_on(Kind::GitLab).count().min(vtui::palette::MAX_SHOWN));
+        assert_eq!(verbs_for("pub", Kind::GitLab).first().map(|verb| verb.word), Some("publish"));
+        assert_eq!(verbs_for("go !42", Kind::GitLab).first().map(|verb| verb.word), Some("go"));
         assert!(typed("pu").naming_command() && !typed("go !4").naming_command());
     }
 }

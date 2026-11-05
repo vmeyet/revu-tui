@@ -14,7 +14,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, palette: &Palette, area: Rect) 
     let prompt = view::prompt(theme, palette, sign, |input| app.completions_for(input));
     let popup = Popup { title: &title, prompt, footer: footer(palette.mode) };
     view::draw(f, theme, area, popup, |room| match palette.mode {
-        Mode::Commands => view::verb_lines(theme, palette, &verbs_for(&palette.input), room),
+        Mode::Commands => view::verb_lines(theme, palette, &verbs_for(&palette.input, app.kind()), room),
         Mode::Mrs | Mode::Sessions => list_lines(app, palette, room),
     });
 }
