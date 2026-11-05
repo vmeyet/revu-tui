@@ -6,6 +6,8 @@ pub(crate) mod github;
 pub(crate) mod gitlab;
 mod http;
 pub(crate) mod image;
+#[expect(dead_code, reason = "the client comes with the next change")]
+pub(crate) mod local;
 mod model;
 mod queue;
 pub(crate) mod rules;
