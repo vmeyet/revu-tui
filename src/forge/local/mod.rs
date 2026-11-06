@@ -74,7 +74,7 @@ impl Client {
 
     /// The key of the worktree revu ran in.
     pub(crate) async fn here_key(&self) -> Result<MrKey> {
-        let listing = git::listing(&self.here).await?;
+        let listing = self.listing().await?;
         let here =
             listing.worktrees.iter().find(|worktree| worktree.path == self.here).context("this worktree is not in `git worktree list`")?;
         key_of(here)
@@ -108,13 +108,13 @@ impl Client {
     }
 
     pub(crate) async fn mr(&self, key: &MrKey) -> Result<Mr> {
-        let git::Listing { repo, worktrees } = git::listing(&self.here).await?;
-        mr_of(&repo, find(&worktrees, key)?, &self.choice()).await
+        let git::Listing { repo, worktrees } = self.listing().await?;
+        read_mr(&repo, find(&worktrees, key)?, &self.choice()).await
     }
 
     /// One row per worktree, in three lists: the one revu ran in, those ahead of the target, the rest.
     pub(crate) async fn queue(&self) -> Result<Fetched> {
-        let git::Listing { repo, worktrees } = git::listing(&self.here).await?;
+        let git::Listing { repo, worktrees } = self.listing().await?;
         let committed = Choice { uncommitted: false, ..self.choice() };
         let rows = futures_util::future::try_join_all(worktrees.iter().map(|worktree| row(&repo, worktree, &committed))).await?;
         let here_number = worktrees.iter().find(|worktree| worktree.path == self.here).map(Worktree::number);
@@ -148,16 +148,30 @@ impl Client {
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
 
-    /// Where the worktree holds the file on disk, unless `sha` is an older commit, which only git holds.
+    /// Where the worktree holds the file on disk, unless `sha` is an older commit, which only git holds; with uncommitted
+    /// work shown, even `HEAD` is older than the disk.
     pub(crate) async fn real_file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<Option<PathBuf>> {
         safe_path(path)?;
         let worktree = self.worktree(key).await?;
-        let is_older = *sha != worktree.head && git::is_commit(&worktree.path, sha).await;
+        let is_older = (self.choice().uncommitted || *sha != worktree.head) && git::is_commit(&worktree.path, sha).await;
         Ok((!is_older).then(|| worktree.path.join(path)))
     }
 
     async fn worktree(&self, key: &MrKey) -> Result<Worktree> {
-        find(&git::listing(&self.here).await?.worktrees, key).cloned()
+        find(&self.listing().await?.worktrees, key).cloned()
+    }
+
+    /// What `git worktree list` says, the folder revu ran in always among it: in a submodule, the list names the
+    /// repository's git folder instead.
+    async fn listing(&self) -> Result<git::Listing> {
+        let listing = git::listing(&self.here).await?;
+        if listing.worktrees.iter().any(|worktree| worktree.path == self.here) {
+            return Ok(listing);
+        }
+        let git_folder = git::common_dir(&self.here).await?;
+        let here = git::worktree_at(&self.here).await?;
+        let others = listing.worktrees.into_iter().filter(|worktree| worktree.path != git_folder);
+        Ok(git::Listing { repo: listing.repo, worktrees: others.chain([here]).collect() })
     }
 }
 
@@ -174,9 +188,16 @@ fn find<'a>(worktrees: &'a [Worktree], key: &MrKey) -> Result<&'a Worktree> {
     worktrees.iter().find(|worktree| worktree.number() == key.number).with_context(|| format!("{} is no longer a worktree", key.project))
 }
 
-/// The worktree as a review reads it; one with no merge base opens empty and says why.
+/// The worktree as a review reads it; one git cannot read opens empty and says why.
+async fn read_mr(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
+    match mr_of(repo, worktree, choice).await {
+        Ok(mr) => Ok(mr),
+        Err(unreadable) => Ok(Mr { no_diff: Some(unreadable.to_string()), ..bare_mr(repo, worktree, &choice.target)? }),
+    }
+}
+
+/// One with no merge base opens empty and says why.
 async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
-    let key = key_of(worktree)?;
     let Choice { target, uncommitted } = choice;
     let base = git::merge_base(&worktree.path, target).await;
     let no_diff = base.as_ref().err().map(ToString::to_string);
@@ -187,6 +208,19 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
     let base = base.unwrap_or_else(|_| worktree.head.clone());
     let (committed, files) = tokio::try_join!(git::commit_time(&worktree.path), git::uncommitted_files(&worktree.path))?;
     let saved = git::last_saved(&worktree.path, &files).await;
+    Ok(Mr {
+        updated_at: saved.map_or(committed, |saved| saved.max(committed)),
+        refs: Refs { start: base.clone(), base, head },
+        uncommitted: if *uncommitted { 0 } else { u32::try_from(files.len()).unwrap_or(u32::MAX) },
+        no_diff,
+        ..bare_mr(repo, worktree, target)?
+    })
+}
+
+/// What needs no git to say: its names, at its `HEAD`, as nothing ahead of anything.
+fn bare_mr(repo: &str, worktree: &Worktree, target: &Target) -> Result<Mr> {
+    let key = key_of(worktree)?;
+    let head = worktree.head.clone();
     let label = worktree.label();
     Ok(Mr {
         project: key.project,
@@ -199,8 +233,8 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
         source_branch: label,
         target_branch: target.to_string(),
         web_url: String::new(),
-        updated_at: saved.map_or(committed, |saved| saved.max(committed)),
-        refs: Refs { start: base.clone(), base, head },
+        updated_at: chrono::DateTime::UNIX_EPOCH,
+        refs: Refs { base: head.clone(), start: head.clone(), head },
         pipeline: None,
         changes_count: None,
         conflicts: false,
@@ -209,15 +243,15 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
         approvals: Approvals::default(),
         merge: MergePlan::default(),
         mine: false,
-        uncommitted: if *uncommitted { 0 } else { u32::try_from(files.len()).unwrap_or(u32::MAX) },
-        no_diff,
+        uncommitted: 0,
+        no_diff: None,
     })
 }
 
-/// The worktree as the screen lists it: its commits against the target, whatever `I` shows; one with no merge base
+/// The worktree as the screen lists it: its commits against the target, whatever `I` shows; one git cannot read
 /// keeps its row and says why.
 async fn row(repo: &str, worktree: &Worktree, committed: &Choice) -> Result<QueueMr> {
-    let mr = mr_of(repo, worktree, committed).await?;
+    let mr = read_mr(repo, worktree, committed).await?;
     let Refs { base, head, .. } = &mr.refs;
     let (commits, size) = if mr.no_diff.is_some() {
         (0, Size { additions: 0, deletions: 0, files: 0 })

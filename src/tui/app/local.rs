@@ -35,25 +35,41 @@ impl App {
         self.leave_zen()
     }
 
-    /// The cursor's worktree shows beside the rows: its diff is asked for as the cursor lands on it.
-    pub(super) fn show_selected_worktree(&mut self) -> Vec<Action> {
-        if !self.is_local() {
+    /// What every key, click and paste leaves through: rows may have moved under the cursor, by a key, a sort or a filter,
+    /// and the cursor's worktree shows beside them.
+    pub(super) fn after_input(&mut self, actions: Vec<Action>) -> Vec<Action> {
+        let sent = self.sending(actions);
+        [sent, self.show_selected_worktree()].concat()
+    }
+
+    /// The diff of the row under the cursor, asked for unless it is on its way or on screen.
+    fn show_selected_worktree(&mut self) -> Vec<Action> {
+        if !self.is_local() || self.focus != Focus::Queue || self.zen {
             return vec![];
         }
         let Some(key) = self.selected_mr().map(crate::forge::QueueMr::key) else { return vec![] };
-        let shown = self.opening.as_ref().or(self.open.as_ref().map(|open| &open.key));
-        if shown == Some(&key) {
+        if self.shown_worktree() == Some(&key) {
             return vec![];
         }
         self.opening = Some(key.clone());
         vec![Action::Open(key)]
     }
 
-    /// New rows may sort another way: the cursor stays on the worktree whose diff shows.
+    /// The worktree being opened, else the open one.
+    fn shown_worktree(&self) -> Option<&super::MrKey> {
+        self.opening.as_ref().or(self.open.as_ref().map(|open| &open.key))
+    }
+
+    /// New rows may sort another way: the cursor stays on the worktree that shows.
     pub(super) fn keep_cursor_on_the_shown_worktree(&mut self) {
-        if let Some(key) = self.open.as_ref().filter(|open| open.key.is_local()).map(|open| open.key.clone()) {
+        if let Some(key) = self.shown_worktree().filter(|key| key.is_local()).cloned() {
             self.select_in_queue(&key);
         }
+    }
+
+    /// A look found the head still there but the merge base gone elsewhere: the files on screen no longer match.
+    pub(super) fn local_base_moved(&self, key: &super::MrKey, mr: &crate::forge::Mr) -> bool {
+        key.is_local() && self.open.as_ref().is_some_and(|open| open.key == *key && open.review.mr.refs.base != mr.refs.base)
     }
 
     /// The terminal came back into focus: a local diff looks at once for what changed behind it, unless a look is on its way.
@@ -390,6 +406,116 @@ mod tests {
         let before = app.open.as_ref().unwrap().row().cloned();
         head_moved(&mut app, "bbbb", &files);
         assert_eq!(app.open.as_ref().unwrap().row().cloned(), before);
+    }
+
+    fn row_key(number: u64) -> MrKey {
+        MrKey { number, ..local_key() }
+    }
+
+    #[test]
+    fn a_review_of_the_open_worktree_leaves_the_one_being_opened_alone() {
+        let mut app = on_the_screen();
+        press(&mut app, "j");
+        let moved = app.opening.clone().unwrap();
+        app.apply(Incoming::Review { key: local_key(), review: Box::new(review()), cached: None });
+        assert_eq!(app.opening, Some(moved));
+    }
+
+    #[test]
+    fn a_moved_merge_base_rebuilds_the_diff_and_keeps_the_old_refs_until_then() {
+        let mut app = local_app();
+        let before = app.open.as_ref().unwrap().review.mr.refs.clone();
+        let moved = crate::forge::Refs { base: "cccc".into(), start: "cccc".into(), ..before.clone() };
+        app.apply(Incoming::Mr { key: local_key(), mr: Box::new(Mr { refs: moved, ..local_mr(0, "bbbb") }) });
+        assert_eq!(app.take_actions(), vec![Action::RefreshMr(local_key())]);
+        assert_eq!(app.open.as_ref().unwrap().review.mr.refs, before);
+    }
+
+    #[test]
+    fn a_forge_mr_whose_base_moved_only_takes_the_new_refs() {
+        let mut app = with_review();
+        let moved = crate::forge::Refs { base: "cccc".into(), ..mr().refs };
+        app.apply(Incoming::Mr { key: mr_key(), mr: Box::new(Mr { refs: moved.clone(), ..mr() }) });
+        assert_eq!(app.take_actions(), vec![]);
+        assert_eq!(app.open.as_ref().unwrap().review.mr.refs, moved);
+    }
+
+    #[test]
+    fn a_failed_look_says_its_reason_and_never_offline() {
+        let mut app = local_app();
+        app.apply(Incoming::Failed { what: Failure::Poll { key: local_key() }, message: "git broke".into() });
+        assert_eq!((app.offline, app.live_toast().map(|toast| toast.text.as_str())), (None, Some("git broke")));
+    }
+
+    #[test]
+    fn a_failed_open_says_its_reason_and_never_offline() {
+        let mut app = on_the_screen();
+        press(&mut app, "j");
+        let key = app.opening.clone().unwrap();
+        app.apply(Incoming::Failed { what: Failure::Open { key }, message: "git broke".into() });
+        assert_eq!((app.offline, app.opening.clone(), app.live_toast().map(|toast| toast.text.as_str())), (None, None, Some("git broke")));
+    }
+
+    #[test]
+    fn a_failure_looks_again_soon_and_leaves_the_queue_rescan_at_its_pace() {
+        let mut app = on_the_screen();
+        app.apply(Incoming::Failed { what: Failure::Poll { key: local_key() }, message: "git broke".into() });
+        assert_eq!(app.poll.mr_due, Some(app.now + Duration::from_secs(2)));
+        assert_eq!(app.poll.queue_due, Some(app.now + Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn a_queue_load_keeps_the_cursor_on_the_worktree_being_opened() {
+        let mut app = on_the_screen();
+        press(&mut app, "j");
+        let moved = app.opening.clone().unwrap();
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: worktrees(), opened: HashMap::new(), cached: false });
+        assert_eq!(app.selected_mr().map(QueueMr::key), Some(moved));
+    }
+
+    #[test]
+    fn typing_a_filter_shows_the_worktree_it_leaves_the_cursor_on() {
+        let mut app = on_the_screen();
+        let actions = press(&mut app, "/main");
+        assert_eq!(actions, vec![Action::Open(row_key(10))]);
+    }
+
+    #[test]
+    fn pasting_a_filter_shows_the_worktree_it_leaves_the_cursor_on() {
+        let mut app = on_the_screen();
+        press(&mut app, "/");
+        assert_eq!(app.handle_paste("main"), vec![Action::Open(row_key(10))]);
+    }
+
+    #[test]
+    fn sorting_the_screen_keeps_the_diff_on_the_row_under_the_cursor() {
+        let mut app = on_the_screen();
+        press(&mut app, "j");
+        let key = app.opening.clone().unwrap();
+        app.apply(Incoming::Review { key, review: Box::new(review()), cached: None });
+        for _ in 0..4 {
+            press(&mut app, "s");
+            assert_eq!(app.selected_mr().map(QueueMr::key).as_ref(), app.shown_worktree());
+        }
+    }
+
+    #[test]
+    fn the_first_question_mark_lists_b_and_i_on_the_screen_and_in_the_diff() {
+        let mut screen = on_the_screen();
+        press(&mut screen, "?");
+        assert!(render(&mut screen, 160, 60).contains("`revu local`: show uncommitted work"));
+        let mut diff = local_app();
+        press(&mut diff, "?");
+        assert!(render(&mut diff, 160, 60).contains("`revu local`: show uncommitted work"));
+    }
+
+    #[test]
+    fn the_diff_is_not_looked_at_while_the_terminal_is_away_and_focus_looks_at_once() {
+        let mut app = local_app();
+        app.terminal_focus(false);
+        app.now += Duration::from_secs(5);
+        assert_eq!(app.tick(), vec![]);
+        assert_eq!(app.focus_gained(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
     }
 
     fn first_rows(app: &mut App, rows: usize) -> String {

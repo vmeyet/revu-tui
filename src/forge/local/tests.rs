@@ -280,6 +280,17 @@ async fn the_real_file_is_the_worktrees_at_any_head_but_not_at_the_base() {
 }
 
 #[tokio::test]
+async fn with_uncommitted_work_shown_the_base_comes_from_git_even_when_it_is_the_head() {
+    let repo = Repo::new();
+    repo.write("a.txt", "edited\n");
+    let (client, key) = repo.open().await;
+    client.toggle_uncommitted();
+    let Refs { base, head, .. } = client.mr(&key).await.unwrap().refs;
+    assert_eq!(client.real_file(&key, "a.txt", &base).await.unwrap(), None, "the old side is not the edited file");
+    assert_eq!(client.real_file(&key, "a.txt", &head).await.unwrap(), Some(repo.path().join("a.txt")));
+}
+
+#[tokio::test]
 async fn the_key_finds_a_linked_worktree_on_a_detached_head() {
     let repo = Repo::new();
     let linked = repo.path().join("linked tree");
@@ -331,6 +342,57 @@ async fn a_worktree_with_no_merge_base_keeps_its_row_and_the_others_stay() {
     let [row] = queue.open.try_into().unwrap();
     assert_eq!(row.title, "alone");
     assert_eq!(row.worktree.unwrap().no_diff.as_deref(), Some("main shares no history with this branch"));
+}
+
+#[tokio::test]
+async fn a_locked_worktree_with_its_folder_gone_keeps_its_row_and_opens_saying_why() {
+    let repo = Repo::new();
+    let gone = repo.path().join("gone");
+    repo.git(&["worktree", "add", "-q", "-b", "gone", gone.to_str().unwrap(), "main"]);
+    repo.git(&["worktree", "lock", gone.to_str().unwrap()]);
+    std::fs::remove_dir_all(&gone).unwrap();
+    let (client, _) = repo.open().await;
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert_eq!(queue.authored[0].title, "work");
+    let [row] = queue.open.try_into().unwrap();
+    assert!(row.worktree.as_ref().unwrap().no_diff.is_some(), "{row:?}");
+    assert!(client.mr(&row.key()).await.unwrap().no_diff.is_some());
+}
+
+#[tokio::test]
+async fn an_unborn_worktree_keeps_its_row_and_revu_can_start_there() {
+    let repo = Repo::new();
+    let unborn = repo.path().join("unborn");
+    repo.git(&["worktree", "add", "-q", "--orphan", "-b", "unborn", unborn.to_str().unwrap()]);
+    let client = Client::open(&unborn, None).await.unwrap();
+    let key = client.here_key().await.unwrap();
+    assert!(client.mr(&key).await.unwrap().no_diff.is_some());
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert_eq!(queue.authored[0].title, "unborn");
+    assert_eq!(queue.open.len(), 1, "the other worktree stays");
+}
+
+#[test]
+fn a_worktree_list_keeps_an_unborn_entry_of_either_hash() {
+    let zeros = ["0".repeat(40), "0".repeat(64)];
+    let listing = git::parse_listing(&format!(
+        "worktree /w/a\0HEAD {}\0branch refs/heads/a\0\0worktree /w/b\0HEAD {}\0branch refs/heads/b\0\0",
+        zeros[0], zeros[1]
+    ));
+    assert_eq!(listing.worktrees.iter().map(Worktree::label).collect::<Vec<_>>(), ["a", "b"]);
+}
+
+#[tokio::test]
+async fn revu_can_start_in_a_submodule_and_reads_its_own_branch() {
+    let (inner, outer) = (Repo::new(), Repo::new());
+    outer.git(&["-c", "protocol.file.allow=always", "submodule", "add", "-q", inner.path().to_str().unwrap(), "sub"]);
+    let sub = outer.path().join("sub");
+    let client = Client::open(&sub, Some("HEAD")).await.unwrap();
+    let key = client.here_key().await.unwrap();
+    let mr = client.mr(&key).await.unwrap();
+    assert_eq!((key.project.as_str(), mr.no_diff), ("local/sub", None));
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert_eq!((queue.authored.len(), queue.review_requested.len(), queue.open.len()), (1, 0, 0), "only the submodule's own folder");
 }
 
 #[test]

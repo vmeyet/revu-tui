@@ -162,7 +162,7 @@ impl App {
             self.ask_deployments();
         }
         if cached.is_none() {
-            self.opening = None;
+            self.opening.take_if(|opening| *opening == key);
             self.offline = None;
             self.opened.insert(key, self.today);
             self.schedule_review();
@@ -183,6 +183,10 @@ impl App {
 
     /// A poll found the head unchanged: the MR's own fields change, the diff and the reader's place stay.
     fn apply_mr(&mut self, key: &super::MrKey, mr: crate::forge::Mr) {
+        if self.local_base_moved(key, &mr) {
+            self.composed.push(super::Action::RefreshMr(key.clone()));
+            return;
+        }
         let Some(open) = self.open.take_if(|o| o.key == *key) else { return };
         let same_head = open.review.mr.refs.head == mr.refs.head;
         self.open = Some(if same_head { Open { review: open.review.with_mr(mr), cached: None, ..open } } else { open });
@@ -198,6 +202,15 @@ impl App {
                 self.queue_loading = false;
                 self.queue_failed = true;
                 self.warn(format!("queue not refreshed: {message} · r to retry"));
+                self.back_off();
+            }
+            Failure::Open { .. } if self.is_local() && self.open.is_some() => {
+                self.opening = None;
+                self.warn(message);
+                self.back_off();
+            }
+            Failure::Poll { .. } if self.is_local() => {
+                self.warn(message);
                 self.back_off();
             }
             Failure::Open { .. } => {

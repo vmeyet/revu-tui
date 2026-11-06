@@ -389,8 +389,8 @@ pub(crate) const ROWS: &[Row] = &[
     command!(Act::QuitCommand, "quit", "leave"),
     listed(Act::Pin, "pin", &["b"]).panes(&[Pane::Queue]).report(Group::Queue).reach(Reach::Forge),
     listed(Act::ViewedNext, "viewed", &["m"]).panes(&[Pane::Diff]).report(Group::View),
-    listed(Act::ChangeTarget, "change_target", &["B"]).panes(&[Pane::Queue, Pane::Diff]).report(Group::View).reach(Reach::Local),
-    listed(Act::ToggleUncommitted, "toggle_uncommitted", &["I"]).panes(&[Pane::Queue, Pane::Diff]).report(Group::View).reach(Reach::Local),
+    listed(Act::ChangeTarget, "change_target", &["B"]).panes(&[Pane::Queue, Pane::Diff]).report(Group::App).reach(Reach::Local),
+    listed(Act::ToggleUncommitted, "toggle_uncommitted", &["I"]).panes(&[Pane::Queue, Pane::Diff]).report(Group::App).reach(Reach::Local),
     unnamed(Act::Search, &["/"]).panes(&[Pane::Diff]),
     unnamed(Act::Mine, &["m"]).panes(&[Pane::Threads]),
 ];
@@ -427,8 +427,6 @@ const HELP: &[Line] = &[
     line(Group::View, "w W", "wrap long lines, hide whitespace changes"),
     line(Group::View, "=", "more lines"),
     line(Group::View, "+", "react on a thread").reach(Reach::Forge),
-    line(Group::View, "B", "`revu local`: compare against another branch").reach(Reach::Local),
-    line(Group::View, "I", "`revu local`: show uncommitted work, or hide it").reach(Reach::Local),
     line(Group::View, "^v", "the file in your own program"),
     line(Group::View, "za zc zo", "toggle, close, open the fold"),
     line(Group::View, "zR zM", "in prose: show, fold the unchanged blocks"),
@@ -460,6 +458,8 @@ const HELP: &[Line] = &[
     line(Group::App, "o y", "open in the browser, copy the link").reach(Reach::Forge),
     line(Group::App, "a", "the agent session of the MR").reach(Reach::Forge),
     line(Group::App, "r", "refresh"),
+    line(Group::App, "B", "`revu local`: compare against another branch").reach(Reach::Local),
+    line(Group::App, "I", "`revu local`: show uncommitted work, or hide it").reach(Reach::Local),
     line(Group::App, "?", "this help"),
     line(Group::App, "q ^c", "quit: twice; q closes a pane first"),
 ];

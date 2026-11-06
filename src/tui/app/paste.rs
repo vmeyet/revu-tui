@@ -6,7 +6,7 @@ use vtui::field::Field;
 
 impl App {
     /// The box that would take the next key takes the paste; anywhere else it does nothing.
-    pub(crate) fn handle_paste(&mut self, text: &str) {
+    pub(crate) fn handle_paste(&mut self, text: &str) -> Vec<super::Action> {
         self.count_input();
         match self.receiver() {
             Receiver::Compose => self.buffer.paste(text),
@@ -30,6 +30,7 @@ impl App {
             | Receiver::NewsPage
             | Receiver::Panes => {}
         }
+        self.after_input(vec![])
     }
 }
 
