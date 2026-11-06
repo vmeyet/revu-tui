@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.13.0 - 2026-11-06
+
 ### New
 
 - **`revu local` reads your own branch's diff, with no forge and no token.**
