@@ -30,15 +30,15 @@ pub(super) fn show(run: &dyn Run, tmux: Option<Tmux>, ready: &Ready, reference: 
         return Ok(Outcome::Handoff(Handoff { call: ready.call.clone(), said }));
     };
     let mark = ready.kept.id.as_deref().unwrap_or(&ready.kept.name);
-    let panes = run.output(&Call::new(&["tmux", "list-panes", "-s", "-F", PANES]))?;
+    let panes = run.output(&tmux_call(&["list-panes", "-s", "-F", PANES]))?;
     if let Some((pane, window)) = pane_marked(&panes, mark) {
-        run.output(&Call::new(&["tmux", "select-window", "-t", window]))?;
-        run.output(&Call::new(&["tmux", "select-pane", "-t", pane]))?;
+        run.output(&tmux_call(&["select-window", "-t", window]))?;
+        run.output(&tmux_call(&["select-pane", "-t", pane]))?;
         return Ok(Outcome::Shown(format!("{said} · already open in tmux")));
     }
     let beside = is_beside(run, tmux);
     let pane = run.output(&opening(ready, beside))?;
-    run.output(&Call::new(&["tmux", "set-option", "-p", "-t", pane.trim(), MARK, mark]))?;
+    run.output(&tmux_call(&["set-option", "-p", "-t", pane.trim(), MARK, mark]))?;
     Ok(Outcome::Shown(format!("{said} · in a tmux {}", if beside { "pane beside revu" } else { "window" })))
 }
 
@@ -57,7 +57,7 @@ fn is_beside(run: &dyn Run, tmux: Tmux) -> bool {
         AgentShow::Split => true,
         AgentShow::Window => false,
         AgentShow::Auto => {
-            let width = run.output(&Call::new(&["tmux", "display-message", "-p", "#{pane_width}"]));
+            let width = run.output(&tmux_call(&["display-message", "-p", "#{pane_width}"]));
             width.ok().and_then(|width| width.trim().parse().ok()).is_some_and(|width| fits_beside(width, tmux.compact_width))
         }
     }
@@ -70,19 +70,32 @@ pub(super) fn fits_beside(width: u16, compact_width: u16) -> bool {
 
 /// The program's words go to tmux one by one, so tmux runs them as they are, with no shell between.
 fn opening(ready: &Ready, beside: bool) -> Call {
-    let place: &[&str] = if beside { &["split-window", "-h"] } else { &["new-window", "-n", ready.kept.name.as_str()] };
-    let folder = ready.call.dir.as_ref().map(|dir| dir.to_string_lossy().into_owned());
+    let name = as_format(&ready.kept.name);
+    let place: &[&str] = if beside { &["split-window", "-h"] } else { &["new-window", "-n", name.as_str()] };
+    let folder = ready.call.dir.as_ref().map(|dir| as_format(&dir.to_string_lossy()));
     let in_folder: Vec<&str> = folder.iter().flat_map(|dir| ["-c", dir.as_str()]).collect();
     let words = ready.call.words();
     let program: Vec<&str> = words.iter().map(String::as_str).collect();
-    Call::new(&[&["tmux"], place, &["-P", "-F", NEW_PANE], in_folder.as_slice(), program.as_slice()].concat())
+    tmux_call(&[place, &["-P", "-F", NEW_PANE], in_folder.as_slice(), program.as_slice()].concat())
+}
+
+/// A tmux command whose words tmux reads back as they are: it ends a command at a word's last `;`, unless a `\` comes before it.
+fn tmux_call(words: &[&str]) -> Call {
+    let kept = words.iter().map(|word| word.strip_suffix(';').map_or_else(|| (*word).to_owned(), |head| format!("{head}\\;")));
+    Call::new(&std::iter::once("tmux".to_owned()).chain(kept).collect::<Vec<_>>())
+}
+
+/// tmux expands `-n` and `-c` as formats, where `#(…)` runs a shell command: `##` keeps each `#` as it is written.
+fn as_format(text: &str) -> String {
+    text.replace('#', "##")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::Script;
-    use super::super::{Case, Kept};
+    use super::super::tests::{Script, branch, mr};
+    use super::super::{Branch, Case, Kept, Mr, Subject};
     use super::*;
+    use crate::share::Fields;
 
     const ID: &str = "ab12cd34-0000";
     const LISTING: &str = "tmux list-panes -s -F #{pane_id}\t#{window_id}\t#{@revu_session}";
@@ -200,5 +213,36 @@ mod tests {
         let open = wide(200).says("tmux list-panes", "%5\t@1\trevu: !42 charge cards\n");
         show(&open, Some(tmux(AgentShow::Split)), &nameless, "!42").unwrap();
         assert_eq!(open.lines()[1..], ["tmux select-window -t @1", "tmux select-pane -t %5"]);
+    }
+
+    /// The tmux line that opens the window of `subject`'s session in `folder`.
+    fn window_line(subject: &Subject, folder: &str) -> String {
+        let named = Ready { kept: Kept { name: subject.session_name(), ..ready(None).kept }, ..ready(Some(folder)) };
+        let script = wide(200);
+        show(&script, Some(tmux(AgentShow::Window)), &named, "!42").unwrap();
+        script.lines()[1].clone()
+    }
+
+    #[test]
+    fn an_mr_title_reaches_tmux_with_each_hash_doubled_so_it_runs_nothing() {
+        let hostile = Subject::Mr(Mr { fields: Fields { title: "#(id > x)".into(), ..mr().fields }, ..mr() });
+        let folder = "/code/widgets/.claude/worktrees/feat+checkout";
+        let line = format!("tmux new-window -n revu: !42 ##(id > x) -P -F #{{pane_id}} -c {folder} claude attach ab12cd34");
+        assert_eq!(window_line(&hostile, folder), line);
+        assert_eq!(hostile.session_name(), "revu: !42 #(id > x)", "the session keeps its name as written");
+    }
+
+    #[test]
+    fn a_branch_name_reaches_tmux_with_each_hash_doubled_in_the_window_name_and_the_folder() {
+        let hostile = Subject::Branch(Branch { name: "a#(b)".into(), ..branch() });
+        let line = "tmux new-window -n revu: a##(b) -P -F #{pane_id} -c /code/widgets/.claude/worktrees/a##(b) claude attach ab12cd34";
+        assert_eq!(window_line(&hostile, "/code/widgets/.claude/worktrees/a#(b)"), line);
+    }
+
+    #[test]
+    fn a_word_ending_in_a_semicolon_reaches_tmux_whole_instead_of_ending_its_command() {
+        let branch = Subject::Branch(Branch { name: "fix;".into(), ..branch() });
+        let line = r"tmux new-window -n revu: fix\; -P -F #{pane_id} -c /code/widgets/.claude/worktrees/fix\; claude attach ab12cd34";
+        assert_eq!(window_line(&branch, "/code/widgets/.claude/worktrees/fix;"), line);
     }
 }
