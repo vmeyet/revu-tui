@@ -13,6 +13,11 @@ Each entry says what changed, then where, then how to use it.
   On the worktree screen and in a worktree's diff, with `[agent] enabled = true`.
   Press `a` or type `:session`: the session started in that worktree opens, else a new one starts there.
 
+### Fixed
+
+- **An MR title or a branch name can no longer run a command when its agent session opens in tmux.**
+  With `[agent] enabled = true`, on `a` or `:session` inside tmux.
+
 ## 0.13.0 - 2026-11-06
 
 ### New
