@@ -73,12 +73,17 @@ impl Subject {
             Self::Mr(mr) => format!("revu: {} {}", mr.fields.reference, mr.fields.title),
             Self::Branch(branch) => format!("revu: {}", branch.name),
         };
-        if name.chars().count() <= NAME_CHARS {
-            return name;
-        }
-        let kept: String = name.chars().take(NAME_CHARS - 1).collect();
-        format!("{}…", kept.trim_end())
+        shortened(&name, NAME_CHARS)
     }
+}
+
+/// `text` as it is when it has at most `chars` characters, else cut to end in `…` at that length.
+pub(super) fn shortened(text: &str, chars: usize) -> String {
+    if text.chars().count() <= chars {
+        return text.to_owned();
+    }
+    let kept: String = text.chars().take(chars - 1).collect();
+    format!("{}…", kept.trim_end())
 }
 
 #[cfg(test)]
