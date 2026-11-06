@@ -138,7 +138,8 @@ impl App {
             return;
         }
         if cached.is_none() {
-            self.news = self.open.as_ref().filter(|o| o.key == key).and_then(|o| news(&o.review, &review)).or(self.news.take());
+            let told = self.open.as_ref().filter(|o| o.key == key && !key.is_local()).and_then(|o| news(&o.review, &review));
+            self.news = told.or(self.news.take());
             self.drafts_read(&key);
         }
         let current = self.open.take_if(|o| o.key == key);

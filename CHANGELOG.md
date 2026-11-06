@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **`revu local` reads your own branch's diff, with no forge and no token.**
+  In the current worktree, logged out too, in zen; it never fetches and never writes to the repo.
+  Run `revu local [target]`, press `B` to compare against another branch and `I` to show uncommitted work.
+
 ## 0.12.0 - 2026-11-04
 
 ### New

@@ -82,6 +82,8 @@ pub(crate) enum Command {
     Session,
     /// `:news`: what changed in revu, version by version.
     News,
+    /// `:target main`: a local diff compares against this.
+    Target(String),
     Quit,
 }
 
@@ -100,6 +102,7 @@ impl Command {
             Self::Share(_) => Act::ShareCommand,
             Self::Session => Act::SessionCommand,
             Self::News => Act::NewsCommand,
+            Self::Target(_) => Act::TargetCommand,
             Self::Quit => Act::QuitCommand,
         }
     }
@@ -132,6 +135,8 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "share" => Ok(Command::Share((!rest.is_empty()).then(|| rest.to_owned()))),
         "session" => Ok(Command::Session),
         "news" => Ok(Command::News),
+        "target" if rest.is_empty() => Err(":target needs a branch, like main".into()),
+        "target" => Ok(Command::Target(rest.to_owned())),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
     }

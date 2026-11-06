@@ -3,7 +3,7 @@ use super::saves::Saves;
 use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::cache::{Entry, keys};
 use crate::diff::fold::FoldState;
-use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Mr, MrKey, Sha};
+use crate::forge::{DiffFile, Discussion, Draft as HeldDraft, Forge, Mr, MrKey, Sha, local};
 use crate::log::OrWarn as _;
 use crate::review::{Draft, Review};
 use crate::tui::app::{self, Ahead, Incoming};
@@ -47,6 +47,9 @@ impl Reviews {
     }
 
     pub(in crate::tui) fn open_cached(&self, key: &MrKey) -> Option<Incoming> {
+        if key.is_local() {
+            return None;
+        }
         let cache = self.homes.cache_of(key);
         let mr: Entry<Mr> = cache.read_entry(&keys::mr(key))?;
         let diffs: Vec<DiffFile> = cache.read(&keys::diffs(key, &mr.value.refs.head))?;
@@ -68,6 +71,10 @@ impl Reviews {
         let forge = self.homes.forge_of(&key);
         let mr = forge.mr(&key).await?;
         if &mr.refs.head == head {
+            // Looked at every 2s, and read nowhere: no state.json write for a look that found nothing.
+            if key.is_local() {
+                return Ok(Incoming::Mr { key, mr: Box::new(mr) });
+            }
             let (wanted, kept) = (key.clone(), mr.clone());
             run_blocking(self, move |reviews| {
                 reviews.homes.cache_of(&wanted).write_entry(&keys::mr(&wanted), &kept).or_warn("caching the MR");
@@ -99,6 +106,13 @@ impl Reviews {
         .await
     }
 
+    /// `B` or `I`: the backend answers the new way, then the diff is read whole, since one head holds many diffs.
+    pub(in crate::tui) async fn change_local(&self, key: MrKey, change: local::Change) -> Result<Incoming> {
+        let Forge::Local(client) = self.homes.forge_of(&key) else { return local::forge_only() };
+        client.change(change).await?;
+        self.fetch_review(key).await
+    }
+
     pub(in crate::tui) async fn fetch_discussions(&self, key: MrKey) -> Result<Incoming> {
         let discussions = self.homes.forge_of(&key).discussions(&key).await?;
         let (wanted, saved) = (key.clone(), discussions.clone());
@@ -117,6 +131,9 @@ impl Reviews {
 
     /// The diffs of `head`, which never change once pushed: from the cache when it holds them.
     async fn diffs_at(&self, key: &MrKey, head: &Sha) -> Result<Vec<DiffFile>> {
+        if key.is_local() {
+            return self.homes.forge_of(key).diffs(key).await;
+        }
         let (wanted, at) = (key.clone(), head.clone());
         let cached = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read(&keys::diffs(&wanted, &at))).await;
         match cached {
@@ -147,6 +164,9 @@ impl Reviews {
 
     /// Writes what a fetch brought where opening reads it; a failed write only costs a later fetch.
     fn keep(&self, key: &MrKey, fetched: &Fetched) {
+        if key.is_local() {
+            return;
+        }
         self.homes.cache_of(key).write(&keys::diffs(key, &fetched.mr.refs.head), &fetched.diffs).or_warn("caching the diffs");
         self.keep_threads(key, &fetched.mr, &fetched.discussions, &fetched.drafts);
     }
@@ -285,6 +305,50 @@ mod tests {
             panic!("the head moved")
         };
         assert!(review.files.is_empty(), "the diffs came from the cache, not the forge");
+    }
+
+    async fn local_reviews(repo: &local::tests::Repo, cache: &std::path::Path) -> (Reviews, MrKey) {
+        let (client, key) = repo.open().await;
+        (reviews(Homes { forge: Forge::Local(client), cache: crate::cache::Cache::in_dir(cache), others: vec![] }), key)
+    }
+
+    #[tokio::test]
+    async fn a_local_diff_keeps_its_state_and_no_diff_and_never_paints_from_the_cache() {
+        let (repo, dir) = (local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        let (reviews, key) = local_reviews(&repo, dir.path()).await;
+        let Ok(Incoming::Review { cached: None, .. }) = reviews.fetch_review(key.clone()).await else { panic!("no review") };
+        let state = dir.path().join(keys::state(&key));
+        assert!(state.is_file());
+        let kept = std::fs::read_dir(state.parent().unwrap()).unwrap().count();
+        assert_eq!(kept, 1, "only state.json");
+        assert_eq!(reviews.open_cached(&key), None);
+    }
+
+    #[tokio::test]
+    async fn a_look_at_a_still_head_writes_nothing() {
+        let (repo, dir) = (local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        let (reviews, key) = local_reviews(&repo, dir.path()).await;
+        let head = reviews.homes.forge.mr(&key).await.unwrap().refs.head;
+        let Ok(Incoming::Mr { .. }) = reviews.poll_review(key, &head).await else { panic!("the head did not move") };
+        assert_eq!(std::fs::read_dir(dir.path()).map_or(0, Iterator::count), 0);
+    }
+
+    #[tokio::test]
+    async fn changing_i_brings_the_diff_back_whole_at_the_same_real_head() {
+        let (repo, dir) = (local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        repo.write("new.txt", "fresh\n");
+        let (reviews, key) = local_reviews(&repo, dir.path()).await;
+        let Ok(Incoming::Review { review, .. }) = reviews.change_local(key, local::Change::Uncommitted).await else { panic!("no review") };
+        assert_eq!(review.files[0].new_path, "new.txt");
+    }
+
+    #[tokio::test]
+    async fn a_bad_target_fails_and_the_next_read_keeps_the_old_one() {
+        let (repo, dir) = (local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        let (reviews, key) = local_reviews(&repo, dir.path()).await;
+        assert!(reviews.change_local(key.clone(), local::Change::Target("nope".into())).await.is_err());
+        let Ok(Incoming::Review { review, .. }) = reviews.fetch_review(key).await else { panic!("no review") };
+        assert_eq!(review.mr.target_branch, "main");
     }
 
     #[tokio::test]

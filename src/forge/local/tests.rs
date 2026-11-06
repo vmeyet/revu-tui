@@ -260,6 +260,26 @@ async fn a_file_comes_from_its_commit_or_from_the_disk_at_the_uncommitted_head()
 }
 
 #[tokio::test]
+async fn the_real_file_is_the_worktrees_at_any_head_but_not_at_the_base() {
+    let repo = Repo::new();
+    let linked = repo.path().join("linked");
+    repo.git(&["worktree", "add", "-q", "-b", "other", linked.to_str().unwrap()]);
+    std::fs::write(linked.join("b.txt"), "b\n").unwrap();
+    let (client, _) = repo.open().await;
+    let there = Client::open(&linked, None).await.unwrap().here_key().await.unwrap();
+    let Refs { base, head, .. } = client.mr(&there).await.unwrap().refs;
+    let parent = repo.git(&["rev-parse", "HEAD"]);
+    assert_eq!(head.as_str(), parent.trim());
+    repo.git(&["-C", linked.to_str().unwrap(), "commit", "-q", "--allow-empty", "-m", "ahead"]);
+    let moved = client.mr(&there).await.unwrap().refs.head;
+    assert_eq!(client.real_file(&there, "b.txt", &moved).await.unwrap(), Some(linked.join("b.txt")));
+    assert_eq!(client.real_file(&there, "a.txt", &base).await.unwrap(), None);
+    client.toggle_uncommitted();
+    let shown = client.mr(&there).await.unwrap().refs.head;
+    assert_eq!(client.real_file(&there, "b.txt", &shown).await.unwrap(), Some(linked.join("b.txt")));
+}
+
+#[tokio::test]
 async fn the_key_finds_a_linked_worktree_on_a_detached_head() {
     let repo = Repo::new();
     let linked = repo.path().join("linked tree");

@@ -229,6 +229,8 @@ impl App {
                 }
             }
             Act::Pin => return self.toggle_pin(),
+            Act::ChangeTarget => self.ask_target(),
+            Act::ToggleUncommitted => return self.change_local(crate::forge::local::Change::Uncommitted),
             Act::Description => self.open_brief_from_queue(),
             Act::Open => return self.open_selected(),
             Act::Refresh => return self.refresh_queue(),
@@ -309,6 +311,8 @@ impl App {
             Act::NextThread => return self.jump_to_thread(Toward::Next),
             Act::PrevThread => return self.jump_to_thread(Toward::Previous),
             Act::ViewedNext => return self.view_and_move_on(),
+            Act::ChangeTarget => self.ask_target(),
+            Act::ToggleUncommitted => return self.change_local(crate::forge::local::Change::Uncommitted),
             Act::PageDown => self.review_move(HALF_PAGE),
             Act::PageUp => self.review_move(-HALF_PAGE),
             Act::FullPageDown => self.review_move(full_page(self.areas.review)),

@@ -49,6 +49,8 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `w` `W` | wrap long lines, hide whitespace changes |
 | `=` | more lines |
 | `+` | react on a thread |
+| `B` | `revu local`: compare against another branch |
+| `I` | `revu local`: show uncommitted work, or hide it |
 | `^v` | the file in your own program |
 | `za` `zc` `zo` | toggle, close, open the fold |
 | `zR` `zM` | in prose: show, fold the unchanged blocks |

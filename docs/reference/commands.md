@@ -33,6 +33,14 @@ Forget a host: keychain entry, config and cache.
 |---|---|
 | `HOST` | Forge host, the configured one by default. |
 
+## `revu local`
+
+Read a local branch's diff, with no forge and no token.
+
+| Argument | Means |
+|---|---|
+| `TARGET` | What the diff compares against: `origin/HEAD`, else `main`, else `master` by default. |
+
 ## `revu whoami`
 
 Show who you are logged in as.

@@ -6,7 +6,6 @@ pub(crate) mod github;
 pub(crate) mod gitlab;
 mod http;
 pub(crate) mod image;
-#[expect(dead_code, reason = "`revu local` comes with the next change")]
 pub(crate) mod local;
 mod model;
 mod queue;
@@ -101,7 +100,6 @@ impl Hosts {
 pub(crate) enum Forge {
     GitLab(gitlab::Client),
     GitHub(github::Client),
-    #[expect(dead_code, reason = "`revu local` comes with the next change")]
     /// Its calls are boxed in each arm: they hold whole diffs, and every caller's future would carry them.
     Local(local::Client),
 }

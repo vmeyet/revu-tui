@@ -164,6 +164,7 @@ impl App {
                 self.open_whats_new();
                 vec![]
             }
+            Command::Target(target) => self.change_local(crate::forge::local::Change::Target(target)),
             Command::Quit => {
                 self.should_quit = true;
                 vec![]

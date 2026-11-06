@@ -49,6 +49,11 @@ impl MrKey {
     pub(crate) fn new(project: impl Into<ProjectPath>, number: u64) -> Self {
         Self { host: None, project: project.into(), number }
     }
+
+    /// A worktree on this machine, not an MR on a forge: its diff changes under one head, so nothing of it is cached.
+    pub(crate) fn is_local(&self) -> bool {
+        self.host.as_deref() == Some(crate::forge::local::HOST)
+    }
 }
 
 /// A project's path on its forge: `group/sub/project` on GitLab, `owner/repo` on GitHub.

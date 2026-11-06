@@ -2,7 +2,7 @@
 use super::{Homes, read_cache, run_blocking, warn_stopped, write_cache};
 use crate::blocking;
 use crate::cache::keys;
-use crate::forge::{MrKey, Sha};
+use crate::forge::{Forge, MrKey, Sha};
 use crate::log::OrWarn as _;
 use crate::tui::app::{Incoming, Sides, Versions};
 use crate::tui::images;
@@ -22,12 +22,18 @@ impl Files {
     /// else a private read-only copy of what the forge serves.
     pub(in crate::tui) async fn view(&self, key: MrKey, path: &str, sha: &Sha, line: u32, note: Option<String>) -> Result<Incoming> {
         crate::open::safe_path(path)?;
+        let real_file = match self.homes.forge_of(&key) {
+            Forge::Local(client) => client.real_file(&key, path, sha).await?,
+            _ => None,
+        };
         let checkout = match self.checkout.as_ref().filter(|_| key.host.is_none()) {
             Some(checkout) => checkout.head().await.map(|head| (checkout, head)),
             None => None,
         };
         let source = crate::open::Source::pick(&key.project, sha.as_str(), checkout.as_ref().map(|(c, head)| (&c.project, head.as_str())));
-        let (file, dir, note) = if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
+        let (file, dir, note) = if let Some(file) = real_file {
+            (file, None, Some("your worktree · edits are real".to_owned()))
+        } else if let (crate::open::Source::Checkout, Some((checkout, _))) = (source, checkout) {
             (checkout.root.join(path), None, Some("your checkout · edits are real".to_owned()))
         } else {
             let text = self.file_text(&key, path, sha).await?;
@@ -58,6 +64,15 @@ impl Files {
 
     /// A file at a commit never changes, so the cache serves it forever.
     async fn file_text(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
+        if key.is_local() {
+            let text = self.homes.forge_of(key).file(key, path, sha).await?;
+            anyhow::ensure!(
+                text.len() <= crate::open::MAX_BYTES,
+                "too large to open here ({} MB) · it is in your worktree",
+                megabytes(&text)
+            );
+            return Ok(text);
+        }
         let cache_key = keys::file(key, sha, path);
         let (wanted, reading) = (key.clone(), cache_key.clone());
         if let Some(text) = read_cache(&self.homes, move |homes| homes.cache_of(&wanted).read::<String>(&reading)).await {
@@ -68,7 +83,7 @@ impl Files {
         anyhow::ensure!(
             text.len() <= crate::open::MAX_BYTES,
             "too large to open here ({} MB) · o opens it in the browser",
-            text.len() / (1024 * 1024)
+            megabytes(&text)
         );
         let (wanted, saved) = (key.clone(), text.clone());
         write_cache("caching the file", &self.homes, move |homes| homes.cache_of(&wanted).write(&cache_key, &saved)).await;
@@ -101,6 +116,10 @@ impl Files {
     }
 }
 
+fn megabytes(text: &str) -> usize {
+    text.len() / (1024 * 1024)
+}
+
 fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
@@ -111,6 +130,32 @@ mod tests {
     use crate::forge::gitlab::fixture::key;
     use crate::tui::backend::test_support::homes_on;
     use std::collections::BTreeMap;
+
+    #[tokio::test]
+    async fn a_local_file_too_large_to_read_says_so_without_a_browser() {
+        let (repo, dir) = (crate::forge::local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        repo.write("big.txt", &"x".repeat(crate::open::MAX_BYTES + 1));
+        repo.commit("big");
+        let (client, key) = repo.open().await;
+        let head = client.mr(&key).await.unwrap().refs.head;
+        let homes = Homes { forge: Forge::Local(client), cache: crate::cache::Cache::in_dir(dir.path()), others: vec![] };
+        let files = Files { homes: homes.into(), open: crate::config::Open::default(), checkout: None };
+        let refused = files.file_text(&key, "big.txt", &head).await.unwrap_err().to_string();
+        assert_eq!(refused, "too large to open here (10 MB) · it is in your worktree");
+    }
+
+    #[tokio::test]
+    async fn a_local_file_opens_for_real_in_its_worktree() {
+        let (repo, dir) = (crate::forge::local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        let (client, key) = repo.open().await;
+        let head = client.mr(&key).await.unwrap().refs.head;
+        let homes = Homes { forge: Forge::Local(client), cache: crate::cache::Cache::in_dir(dir.path()), others: vec![] };
+        let open = crate::config::Open { default: Some("nvim".into()), files: BTreeMap::new() };
+        let files = Files { homes: homes.into(), open, checkout: None };
+        let Incoming::ViewReady { view, .. } = files.view(key, "a.txt", &head, 2, None).await.unwrap() else { panic!("not ready") };
+        assert_eq!(view.argv, ["nvim", "+2", repo.path().join("a.txt").to_str().unwrap()], "not read-only, not a copy");
+        assert_eq!(view.note.as_deref(), Some("your worktree · edits are real"));
+    }
 
     #[tokio::test]
     async fn a_viewed_file_is_fetched_once_copied_read_only_and_handed_to_the_program() {

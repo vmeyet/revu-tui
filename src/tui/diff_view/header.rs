@@ -1,5 +1,5 @@
 //! The review header: the MR's title link, its author, size, pipeline, approvals, progress and review app.
-use crate::forge::{Deployment, Kind, PipelineStatus};
+use crate::forge::{Deployment, Kind, Mr, PipelineStatus};
 use crate::review::{Review, Side};
 use crate::tui::app::{Open, progress_bar};
 use crate::tui::theme::Theme;
@@ -129,6 +129,59 @@ fn viewed_spans<'a>(open: &Open, theme: Theme) -> Vec<Span<'a>> {
         Span::styled(done, Style::default().fg(if progress.done() { theme.success } else { theme.accent })),
         Span::styled(left, Style::default().fg(theme.faded)),
     ]
+}
+
+/// A worktree's two rows: its branches and size, then the work it leaves out and how far the reading went.
+pub(super) fn local_header<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, width: usize) -> Vec<Line<'a>> {
+    let mr = &open.review.mr;
+    let muted = Style::default().fg(theme.muted);
+    let dot = || Span::styled(" · ", Style::default().fg(theme.faded));
+    let (adds, dels) = line_totals(open);
+    let age = short_age((today - mr.updated_at).to_std().unwrap_or_default());
+    let first = Line::from(vec![
+        Span::raw(" "),
+        Span::styled(truncate(&format!("{} → {}", mr.source_branch, mr.target_branch), width.saturating_sub(30)), muted),
+        dot(),
+        Span::styled(age, muted),
+        dot(),
+        Span::styled(format!("+{adds}"), Style::default().fg(theme.success)),
+        Span::raw(" "),
+        Span::styled(format!("−{dels}"), Style::default().fg(theme.danger)),
+        dot(),
+        Span::styled(format!("{} files", open.review.files.len()), muted),
+    ]);
+    let hidden = hidden_work(mr.uncommitted).map(|text| Span::styled(text, Style::default().fg(theme.warn)));
+    let progress = viewed_spans(open, theme);
+    let between = (hidden.is_some() && !progress.is_empty()).then(dot);
+    let second: Vec<Span<'a>> = hidden.into_iter().chain(between).chain(progress).collect();
+    if second.is_empty() {
+        return vec![first];
+    }
+    vec![first, Line::from([vec![Span::raw("  ")], second].concat())]
+}
+
+/// Zen's one line on a worktree: which, against what, its size and the work it leaves out.
+pub(super) fn local_zen_header<'a>(open: &Open, theme: Theme, width: usize) -> Line<'a> {
+    let mr = &open.review.mr;
+    let (adds, dels) = line_totals(open);
+    let hidden = hidden_work(mr.uncommitted).map(|text| format!(" · {text}"));
+    let hidden_w = hidden.as_ref().map_or(0, |text| text.width());
+    let text = format!("{} · {} → {} · +{adds} −{dels}", mr.title, mr.source_branch, mr.target_branch);
+    let shown = Span::styled(truncate(&text, width.saturating_sub(hidden_w)), Style::default().fg(theme.faded));
+    Line::from([vec![shown], hidden.map(|text| Span::styled(text, Style::default().fg(theme.warn))).into_iter().collect()].concat())
+}
+
+fn hidden_work(uncommitted: u32) -> Option<String> {
+    (uncommitted > 0).then(|| format!("● {uncommitted} uncommitted, not shown · I shows"))
+}
+
+/// What a worktree's empty diff says: why there can be none, or where the work is.
+pub(super) fn nothing_ahead(mr: &Mr) -> String {
+    match (&mr.no_diff, mr.uncommitted) {
+        (Some(reason), _) => format!("no diff: {reason}"),
+        (None, 0) => "no commits ahead".to_owned(),
+        (None, hidden) => format!("no commits ahead · {hidden} uncommitted · I shows them"),
+    }
 }
 
 /// The review app to try, `+n` for the others the pipeline pane lists, and a word when it runs an older push.

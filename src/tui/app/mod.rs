@@ -286,6 +286,11 @@ pub(crate) enum Action {
         mr: Box<crate::agent::Mr>,
         choice: crate::agent::Choice,
     },
+    /// `B` or `I` on a local diff: every worktree answers the new way, and `key`'s diff is read again whole.
+    ChangeLocal {
+        key: MrKey,
+        change: crate::forge::local::Change,
+    },
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
     Compose {
         input: Input,

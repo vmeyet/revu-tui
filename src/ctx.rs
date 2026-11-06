@@ -2,7 +2,7 @@
 use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::forge::{Forge, Kind, Mr, MrKey, ProjectPath};
+use crate::forge::{Forge, Kind, Mr, MrKey, ProjectPath, local};
 use crate::log::OrWarn as _;
 use anyhow::Result;
 use serde::Serialize;
@@ -28,6 +28,27 @@ impl Ctx {
         let ctx = Self::build(&Env::from_process(), &store, config, host, json)?;
         let project = std::env::current_dir().ok().and_then(|dir| crate::mrref::checkout_project(&dir, &ctx.credentials.host));
         Ok(Self { project, ..ctx })
+    }
+
+    /// `revu local`: no token, no other host, no Jev, no agent and nothing that only makes sense on a forge.
+    pub(crate) fn local(client: local::Client) -> Result<Self> {
+        let mut config = Config::load()?;
+        config.host = None;
+        config.hosts.clear();
+        config.ai.typesafe.enabled = false;
+        config.agent.enabled = false;
+        config.notify.enabled = false;
+        config.queue.prefetch = 0;
+        config.queue.ready.command = None;
+        Ok(Self {
+            forge: Forge::Local(client),
+            credentials: Credentials { host: local::HOST.to_owned(), token: String::new() },
+            source: Source::Env,
+            config,
+            cache: Cache::for_host(local::HOST)?,
+            json: false,
+            project: None,
+        })
     }
 
     /// `--all`: every project, wherever the command runs.
