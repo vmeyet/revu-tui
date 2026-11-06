@@ -77,6 +77,7 @@ impl Env {
         let token = match kind {
             Kind::GitLab => self.gitlab_token.as_ref(),
             Kind::GitHub => self.github_token.as_ref(),
+            Kind::Local => None,
         };
         let target = named.or(self.host.as_deref()).filter(|h| Kind::for_host(h, config) == kind).unwrap_or(default_host(kind));
         token.filter(|_| host.eq_ignore_ascii_case(target))
@@ -85,7 +86,7 @@ impl Env {
 
 fn default_host(kind: Kind) -> &'static str {
     match kind {
-        Kind::GitLab => DEFAULT_HOST,
+        Kind::GitLab | Kind::Local => DEFAULT_HOST,
         Kind::GitHub => GITHUB_HOST,
     }
 }
@@ -93,7 +94,7 @@ fn default_host(kind: Kind) -> &'static str {
 /// The token variable of each forge, for messages.
 pub(crate) fn token_variable(kind: Kind) -> &'static str {
     match kind {
-        Kind::GitLab => "GITLAB_TOKEN",
+        Kind::GitLab | Kind::Local => "GITLAB_TOKEN",
         Kind::GitHub => "GITHUB_TOKEN",
     }
 }
@@ -105,7 +106,7 @@ fn variable_hint(host: &str, kind: Kind) -> String {
         return format!(" or set {variable}");
     }
     match kind {
-        Kind::GitLab => format!(" or set {variable} and GITLAB_HOST={host}"),
+        Kind::GitLab | Kind::Local => format!(" or set {variable} and GITLAB_HOST={host}"),
         Kind::GitHub => format!(" or set {variable} with --host {host}"),
     }
 }

@@ -86,6 +86,8 @@ impl Mr {
                 remove_branch: self.should_remove_source_branch.or(self.force_remove_source_branch).unwrap_or(false),
             },
             mine: false,
+            uncommitted: 0,
+            no_diff: None,
         }
     }
 }

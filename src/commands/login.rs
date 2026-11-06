@@ -61,7 +61,7 @@ pub fn logout(host: Option<&str>) -> Result<()> {
 
 fn scope(kind: Kind) -> &'static str {
     match kind {
-        Kind::GitLab => "api",
+        Kind::GitLab | Kind::Local => "api",
         Kind::GitHub => "repo",
     }
 }
@@ -119,7 +119,7 @@ fn gh_token(host: &str) -> Result<String> {
 /// Where to make a token, and the flag that borrows the forge CLI's one instead.
 fn token_page(host: &str, kind: Kind) -> (String, &'static str) {
     match kind {
-        Kind::GitLab => (format!("https://{host}/-/user_settings/personal_access_tokens?scopes=api"), "--from-glab"),
+        Kind::GitLab | Kind::Local => (format!("https://{host}/-/user_settings/personal_access_tokens?scopes=api"), "--from-glab"),
         Kind::GitHub => (format!("https://{host}/settings/tokens"), "--from-gh"),
     }
 }

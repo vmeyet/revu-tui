@@ -128,6 +128,8 @@ impl Pr {
             },
             draft: self.is_draft,
             mine: author.username == me,
+            uncommitted: 0,
+            no_diff: None,
             author,
             source_branch: self.head_ref_name,
             target_branch: self.base_ref_name,
