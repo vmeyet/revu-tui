@@ -37,7 +37,7 @@ pub(super) fn last_row(app: &App, every_key: bool) -> usize {
 /// until every key is asked for, one group: the keys of the page's tap bar.
 fn shown(app: &App, every_key: bool) -> Vec<Section> {
     let keymap: &Keymap = &app.keymap;
-    if app.compact && !every_key {
+    if app.layout.is_compact() && !every_key {
         let page = app.page();
         let rows = app.taps_here().iter().map(|tap| Row { keys: keymap.label(tap.keys), does: tap.does }).collect();
         return vec![Section { title: page.name(), rows }];

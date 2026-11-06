@@ -8,14 +8,14 @@ use vtui::toward::Toward;
 impl App {
     /// `zz`: into zen on an open MR, or back out of it.
     pub(super) fn toggle_zen(&mut self) -> Vec<Action> {
-        if self.zen {
+        if self.layout.zen {
             return self.leave_zen();
         }
         if self.open.is_none() {
             self.toast("open an MR first");
             return vec![];
         }
-        self.zen = true;
+        self.layout.zen = true;
         self.focus = Focus::Review;
         self.fit_threads();
         vec![]
@@ -27,7 +27,7 @@ impl App {
         if let Some(key) = self.open.as_ref().map(|o| o.key.clone()) {
             self.select_in_queue(&key);
         }
-        self.zen = false;
+        self.layout.zen = false;
         self.zen_switch = None;
         self.fit_threads();
         std::mem::take(&mut self.quiet_notices)
@@ -35,7 +35,7 @@ impl App {
 
     /// A notification, sent now or kept until zen ends.
     pub(super) fn notice(&mut self, action: Option<Action>) {
-        match (action, self.zen) {
+        match (action, self.layout.zen) {
             (Some(action), true) => self.quiet_notices.push(action),
             (action, false) => self.composed.extend(action),
             (None, true) => {}
@@ -60,7 +60,7 @@ impl App {
             return vec![];
         };
         self.select_in_queue(&key);
-        if self.zen {
+        if self.layout.zen {
             self.zen_switch = Some((self.now, self.zen_banner_text(&key, next, order.len())));
         }
         let actions = self.open_key(key);
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn zen_gives_side_by_side_the_whole_screen_whatever_its_width_setting() {
         let mut app = with_sum_review();
-        app.zen_width = Some(90);
+        app.layout.zen_width = Some(90);
         press(&mut app, "zzD");
         let screen = render(&mut app, 138, 18);
         assert!(app.open.as_ref().unwrap().review.shows_side_by_side(), "{screen}");
@@ -144,14 +144,14 @@ mod tests {
     fn zz_reads_the_diff_alone_and_h_brings_the_queue_back() {
         let mut app = with_queue();
         press(&mut app, "zz");
-        assert!(!app.zen, "nothing to read before an MR is open");
+        assert!(!app.layout.zen, "nothing to read before an MR is open");
         let mut app = with_review();
         press(&mut app, "zz");
-        assert!(app.zen);
+        assert!(app.layout.zen);
         let screen = render(&mut app, 160, 20);
         assert!(!screen.contains("Queue"), "{screen}");
         press(&mut app, "h");
-        assert!(!app.zen);
+        assert!(!app.layout.zen);
         assert_eq!(app.focus, Focus::Queue);
     }
 
@@ -181,7 +181,7 @@ mod tests {
         assert!(order.len() > 1, "the fixture queue holds more than one MR");
         assert_eq!(order[0], mr_key());
         assert_eq!(press(&mut app, "]m"), vec![Action::Open(order[1].clone())]);
-        assert!(app.zen, "the MR changes, zen stays");
+        assert!(app.layout.zen, "the MR changes, zen stays");
         let banner = app.zen_banner(app.now).unwrap().to_owned();
         assert!(banner.contains(&format!("2/{}", order.len())), "{banner}");
         assert_eq!(app.selected_mr().map(QueueMr::key), Some(order[1].clone()), "leaving zen shows the queue on it");
@@ -197,7 +197,7 @@ mod tests {
         let mut app = with_review();
         let order = app.zen_order();
         assert_eq!(press(&mut app, "]m"), vec![Action::Open(order[1].clone())]);
-        assert!(!app.zen && app.zen_banner(app.now).is_none());
+        assert!(!app.layout.zen && app.zen_banner(app.now).is_none());
         assert_eq!(app.focus, Focus::Review);
         app.apply(Incoming::Review { key: order[1].clone(), review: Box::new(review()), cached: None });
         app.focus = Focus::Queue;
@@ -213,9 +213,9 @@ mod tests {
         assert_eq!(app.focus, Focus::Side);
         app.handle_key(code(KeyCode::Left));
         assert_eq!(app.focus, Focus::Review);
-        assert!(app.zen);
+        assert!(app.layout.zen);
         assert_eq!(app.handle_key(code(KeyCode::Left)), [] as [Action; 0]);
-        assert!(!app.zen, "← from the diff leaves zen, as h does");
+        assert!(!app.layout.zen, "← from the diff leaves zen, as h does");
         assert_eq!(app.focus, Focus::Queue);
     }
 
@@ -224,11 +224,11 @@ mod tests {
         let mut app = with_review();
         press(&mut app, "zz");
         app.handle_key(code(KeyCode::Esc));
-        assert!(!app.zen);
+        assert!(!app.layout.zen);
         assert_eq!(app.focus, Focus::Review, "esc leaves zen and stays on the diff");
         press(&mut app, "zz");
         press(&mut app, "h");
-        assert!(!app.zen);
+        assert!(!app.layout.zen);
         assert_eq!(app.focus, Focus::Queue);
     }
 
@@ -237,13 +237,13 @@ mod tests {
         let target = with_queue().zen_order()[1].clone();
         let mut app = app();
         assert_eq!(app.start_on(target.clone()), vec![Action::LoadQueue { scope: None, from_cache: true }, Action::Open(target.clone())]);
-        assert!(app.zen);
+        assert!(app.layout.zen);
         assert_eq!(app.focus, Focus::Review);
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
         app.apply(Incoming::Review { key: target.clone(), review: Box::new(review()), cached: None });
         assert_eq!(app.open.as_ref().map(|o| o.key.clone()), Some(target.clone()), "the queue arriving leaves the MR open");
         app.handle_key(code(KeyCode::Esc));
-        assert!(!app.zen);
+        assert!(!app.layout.zen);
         assert_eq!(app.focus, Focus::Review, "esc leaves zen onto the diff");
         assert_eq!(app.selected_mr().map(QueueMr::key), Some(target), "the queue shows it selected, as if opened from it");
     }
@@ -253,7 +253,7 @@ mod tests {
         let mut app = app();
         app.start_on(mr_key());
         app.apply(Incoming::Failed { what: Failure::Open { key: mr_key() }, message: "404 Not Found".into() });
-        assert!(!app.zen, "zen hides the queue, the only place left to go");
+        assert!(!app.layout.zen, "zen hides the queue, the only place left to go");
         assert_eq!(app.focus, Focus::Queue);
     }
 
@@ -276,7 +276,7 @@ mod tests {
         let mut app = zen_on_a_thread();
         render(&mut app, 138, 40);
         press(&mut app, "h");
-        assert_eq!((app.focus, app.zen), (Focus::Review, true), "h from the pane stays in zen");
+        assert_eq!((app.focus, app.layout.zen), (Focus::Review, true), "h from the pane stays in zen");
         assert!(render(&mut app, 138, 40).contains("─ on the MR · 1 thread"), "the pane stays under the diff");
         press(&mut app, "l");
         assert_eq!(app.focus, Focus::Side);

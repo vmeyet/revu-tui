@@ -32,8 +32,6 @@ const ZEN_SPLIT_FROM: u16 = 24;
 const ZEN_PANE_PCT: u16 = 25;
 const ZEN_COMPOSE_PCT: u16 = 50;
 const ZEN_PANE_MIN: u16 = 8;
-/// Under this many rows the compact layout is short: the status row and the MR header give their rows to the page.
-const SHORT_BELOW: u16 = 20;
 
 /// A `!42` on screen: the loop prints it again as a terminal hyperlink to `url`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,9 +45,7 @@ pub(crate) struct Link {
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
     app.drawn = Drawn::default();
     let screen = f.area();
-    app.compact = screen.width < app.widths.compact;
-    app.narrow = app.compact || screen.width < app.widths.narrow;
-    app.short = app.compact && screen.height < SHORT_BELOW;
+    app.layout.fit(screen.as_size());
     let input_rows = u16::from(app.filtering);
     let status_rows = status_rows(app, screen.width);
     let tap_rows = u16::from(app.shows_taps());
@@ -61,13 +57,13 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
         Some(open) if open.side_open() => Opened::MrWithPane,
         Some(_) => Opened::Mr,
     };
-    let shown = columns(main.width, app.widths, opened, app.focus, app.zen);
+    let shown = columns(main.width, app.layout.widths, opened, app.focus, app.layout.zen);
     let diff = if shown.diff { Constraint::Min(1) } else { Constraint::Length(0) };
     let side_width = if shown.diff { Constraint::Length(shown.side) } else { Constraint::Min(0) };
     let [queue, review, side] = Layout::horizontal([Constraint::Length(shown.queue), diff, side_width]).areas(main);
-    let (shown, review, side) = if app.zen { zen_areas(app, main, shown, [review, side]) } else { (shown, review, side) };
+    let (shown, review, side) = if app.layout.zen { zen_areas(app, main, shown, [review, side]) } else { (shown, review, side) };
     let side_open = opened == Opened::MrWithPane && shown.side > 0;
-    let split = app.zen && shown.diff && side_open;
+    let split = app.layout.zen && shown.diff && side_open;
     let hidden = Rect::default();
     app.areas = super::app::Areas {
         queue: if shown.queue > 0 { queue } else { hidden },
@@ -116,10 +112,10 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App) {
     if let Some(drag) = app.drag {
         drag.paint(&app.drawn.text_rows, f.buffer_mut());
     }
-    if app.zen {
+    if app.layout.zen {
         draw_zen_banner(f, app, main);
     }
-    if app.zen || app.short {
+    if app.layout.zen || app.layout.is_short() {
         draw_toast_over(f, app, main);
     }
     if let Some(publish) = app.publish.clone() {
@@ -148,13 +144,13 @@ fn status_rows(app: &App, width: u16) -> u16 {
     if let Some(prompt) = app.react_prompt() {
         return u16::try_from(picker_lines(app.theme, &prompt, width).len()).unwrap_or(u16::MAX);
     }
-    let dropped = app.zen || (app.short && app.offer.is_none());
+    let dropped = app.layout.zen || (app.layout.is_short() && app.offer.is_none());
     u16::from(app.asks() || !dropped)
 }
 
 /// The line numbers the diff shows: none in the compact layout, where the pane's title carries the cursor's.
 fn gutter(app: &App) -> diff_view::Gutter {
-    match (app.compact && !app.zen, app.narrow) {
+    match (app.layout.is_compact() && !app.layout.zen, app.layout.is_narrow()) {
         (true, _) => diff_view::Gutter::Sign,
         (false, true) => diff_view::Gutter::One,
         (false, false) => diff_view::Gutter::Both,
@@ -243,7 +239,7 @@ fn columns(width: u16, widths: Widths, opened: Opened, focus: Focus, zen: bool) 
 /// tall enough, else the one `shown` gives it.
 fn zen_areas(app: &App, main: Rect, shown: Columns, [review, side]: [Rect; 2]) -> (Columns, Rect, Rect) {
     let side_by_side = app.open.as_ref().is_some_and(|o| o.review.side_by_side);
-    let width = if side_by_side { main.width } else { zen_width(app.zen_width, main.width) };
+    let width = if side_by_side { main.width } else { zen_width(app.layout.zen_width, main.width) };
     let column = zen_column(main, width);
     let threads = app.open.as_ref().is_some_and(super::app::Open::shows_threads);
     let needs = threads.then(|| thread_view::rows_needed(app, column.width));

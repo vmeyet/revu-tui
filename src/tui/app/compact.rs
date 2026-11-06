@@ -5,32 +5,20 @@ use super::App;
 use crate::config::QueueLayout;
 use crate::review::Place;
 use std::time::Duration;
-use vtui::motion::Motion;
 
 impl App {
-    /// The screen moves on its own as little as a phone link likes in the compact layout, freely anywhere else.
-    pub(crate) fn motion(&self) -> Motion {
-        if self.compact { Motion::Calm } else { Motion::Lively }
-    }
-
     /// How long revu has run, which is what every spinner and pulse counts from.
     pub(crate) fn elapsed(&self) -> Duration {
         self.now.duration_since(self.started)
     }
 
     pub(crate) fn spinner(&self) -> &'static str {
-        self.motion().spinner(self.elapsed())
+        self.layout.motion().spinner(self.elapsed())
     }
 
-    /// Long diff lines wrap: what `w` chose, else on in the compact layout, where a cut line hides most of itself.
-    pub(crate) fn wraps(&self) -> bool {
-        self.wrap.unwrap_or(self.compact)
-    }
-
-    /// How a queue row reads: two lines in the compact layout whatever `[tui] queue` says, one line leaving a
-    /// title no room there.
+    /// How a queue row reads: two lines on `revu local`, else as the layout says.
     pub(crate) fn row_layout(&self) -> QueueLayout {
-        if self.compact || self.is_local() { QueueLayout::Comfortable } else { self.queue_layout }
+        if self.is_local() { QueueLayout::Comfortable } else { self.layout.row_layout() }
     }
 
     /// The number of the line under the diff's cursor, or of the line its thread row hangs under: the new side's,
@@ -62,23 +50,23 @@ mod tests {
     fn the_layout_follows_the_width_at_every_frame() {
         let mut app = with_review();
         render(&mut app, 69, 30);
-        assert!(app.compact && app.narrow, "compact is narrow too: threads and the box read in the diff");
+        assert!(app.layout.is_compact() && app.layout.is_narrow(), "compact is narrow too: threads and the box read in the diff");
         render(&mut app, 70, 30);
-        assert!(!app.compact && app.narrow);
+        assert!(!app.layout.is_compact() && app.layout.is_narrow());
         render(&mut app, 50, 30);
-        assert!(app.compact, "and back, with no restart");
+        assert!(app.layout.is_compact(), "and back, with no restart");
     }
 
     #[test]
     fn the_layout_setting_wins_over_the_width() {
         let mut forced = with_review();
-        forced.widths = Widths { compact: u16::MAX, ..Widths::default() };
+        forced.layout.widths = Widths { compact: u16::MAX, ..Widths::default() };
         render(&mut forced, 200, 40);
-        assert!(forced.compact && forced.narrow);
+        assert!(forced.layout.is_compact() && forced.layout.is_narrow());
         let mut never = with_review();
-        never.widths = Widths { compact: 0, ..Widths::default() };
+        never.layout.widths = Widths { compact: 0, ..Widths::default() };
         render(&mut never, 50, 30);
-        assert!(!never.compact);
+        assert!(!never.layout.is_compact());
     }
 
     #[test]
@@ -104,7 +92,7 @@ mod tests {
     #[test]
     fn a_queue_row_takes_two_lines_with_its_marks_under_the_title() {
         let mut app = with_queue();
-        app.queue_layout = QueueLayout::Compact;
+        app.layout.queue_layout = QueueLayout::Compact;
         let screen = phone(&mut app);
         let lines: Vec<&str> = screen.lines().collect();
         let title = lines.iter().position(|line| line.contains("charge cards at checkout")).expect("the fixture's first MR");
@@ -173,19 +161,19 @@ mod tests {
     #[test]
     fn long_lines_wrap_on_a_phone_until_w_says_otherwise() {
         let mut app = with_review();
-        assert!(!app.wraps(), "cut before any frame, as on a wide screen");
+        assert!(!app.layout.wraps(), "cut before any frame, as on a wide screen");
         phone(&mut app);
-        assert!(app.wraps());
+        assert!(app.layout.wraps());
         press(&mut app, "w");
-        assert!(!app.wraps() && app.toast.as_ref().is_some_and(|toast| toast.text == "long lines end in …"));
+        assert!(!app.layout.wraps() && app.toast.as_ref().is_some_and(|toast| toast.text == "long lines end in …"));
         press(&mut app, "w");
-        assert!(app.wraps());
+        assert!(app.layout.wraps());
         let mut wide = with_review();
         render(&mut wide, 120, 30);
-        assert!(!wide.wraps(), "off by default from 70 columns");
+        assert!(!wide.layout.wraps(), "off by default from 70 columns");
         press(&mut wide, "w");
         phone(&mut wide);
-        assert!(wide.wraps(), "what w chose holds in every layout");
+        assert!(wide.layout.wraps(), "what w chose holds in every layout");
     }
 
     #[test]
@@ -206,13 +194,13 @@ mod tests {
         let mut app = with_review();
         on_line(&mut app);
         let screen = render(&mut app, KEYBOARD_UP.0, KEYBOARD_UP.1);
-        assert!(app.short);
+        assert!(app.layout.is_short());
         assert!(!screen.contains("gitlab.com") && !screen.contains("approvals"), "{screen}");
         insta::assert_snapshot!("compact_diff_short", screen);
         render(&mut app, 50, 20);
-        assert!(!app.short, "20 rows keep them");
+        assert!(!app.layout.is_short(), "20 rows keep them");
         render(&mut app, 100, 14);
-        assert!(!app.short, "and so does a short window from 70 columns");
+        assert!(!app.layout.is_short(), "and so does a short window from 70 columns");
     }
 
     #[test]

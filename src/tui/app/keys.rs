@@ -330,8 +330,7 @@ impl App {
             }
             Act::MoreContext => return self.expand_context(),
             Act::Wrap => {
-                let wrap = !self.wraps();
-                self.wrap = Some(wrap);
+                let wrap = self.layout.toggle_wrap();
                 self.toast(if wrap { "long lines wrap" } else { "long lines end in …" });
             }
             Act::NextFile => self.review_jump(Toward::Next, |r| matches!(r, Row::File { .. })),
@@ -341,7 +340,7 @@ impl App {
                 self.key_did = Some(Act::ClosePane);
                 self.close_pane();
             }
-            Act::Back if self.zen => return self.leave_zen_on_a_screen(),
+            Act::Back if self.layout.zen => return self.leave_zen_on_a_screen(),
             Act::Back => self.focus = Focus::Queue,
             Act::Refresh => return self.refresh_open(),
             Act::Description => self.open_brief_from_review(),

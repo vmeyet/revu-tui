@@ -405,10 +405,10 @@ fn moves_within_three_seconds(app: &mut App, width: u16, height: u16) -> bool {
 fn a_compact_queue_at_rest_draws_the_same_frame_second_after_second() {
     let (width, height) = PHONE;
     let mut app = queue_with_marks(width, height);
-    assert_eq!(app.motion(), vtui::motion::Motion::Calm);
+    assert_eq!(app.layout.motion(), vtui::motion::Motion::Calm);
     assert!(!moves_within_three_seconds(&mut app, width, height));
     let mut forced = queue_with_marks(120, 40);
-    forced.widths = crate::config::Widths { compact: u16::MAX, ..crate::config::Widths::default() };
+    forced.layout.widths = crate::config::Widths { compact: u16::MAX, ..crate::config::Widths::default() };
     render(&mut forced, 120, 40);
     assert!(!moves_within_three_seconds(&mut forced, 120, 40), "forced at any width, it rests the same");
 }
@@ -417,7 +417,7 @@ fn a_compact_queue_at_rest_draws_the_same_frame_second_after_second() {
 fn a_wide_and_a_narrow_queue_pulse_their_marks_and_spin_the_running_badge() {
     for width in [160, 100] {
         let mut app = queue_with_marks(width, 40);
-        assert_eq!(app.motion(), vtui::motion::Motion::Lively, "{width} columns");
+        assert_eq!(app.layout.motion(), vtui::motion::Motion::Lively, "{width} columns");
         let lit = cell_of(&cells(&mut app, width, 40), "●").fg;
         app.now += Duration::from_secs(1);
         let screen = render(&mut app, width, 40);
@@ -432,17 +432,17 @@ fn a_window_that_crosses_the_compact_width_changes_how_it_moves() {
     let mut app = queue_with_marks(120, 40);
     assert!(moves_within_three_seconds(&mut app, 120, 40));
     render(&mut app, 50, 30);
-    assert_eq!((app.motion(), app.motion().tick()), (vtui::motion::Motion::Calm, Duration::from_millis(250)));
+    assert_eq!((app.layout.motion(), app.layout.motion().tick()), (vtui::motion::Motion::Calm, Duration::from_millis(250)));
     assert!(!moves_within_three_seconds(&mut app, 50, 30), "calm as soon as it is compact");
     render(&mut app, 120, 40);
-    assert_eq!(app.motion().tick(), Duration::from_millis(100));
+    assert_eq!(app.layout.motion().tick(), Duration::from_millis(100));
     assert!(moves_within_three_seconds(&mut app, 120, 40), "and lively again from 70 columns");
 }
 
 #[test]
 fn snapshot_queue_compact() {
     let mut app = with_queue();
-    app.queue_layout = crate::config::QueueLayout::Compact;
+    app.layout.queue_layout = crate::config::QueueLayout::Compact;
     app.now = app.started;
     insta::assert_snapshot!("queue_compact", render(&mut app, 100, 16));
 }
@@ -455,7 +455,7 @@ fn snapshot_queue_with_a_stack_at_120_and_170_columns() {
     app.queue_selected = stack_row(&app);
     app.handle_key(code(KeyCode::Enter));
     insta::assert_snapshot!("queue_stack_open_170", render(&mut app, 170, 30));
-    app.queue_layout = crate::config::QueueLayout::Compact;
+    app.layout.queue_layout = crate::config::QueueLayout::Compact;
     insta::assert_snapshot!("queue_stack_compact_120", render(&mut app, 120, 20));
     insta::assert_snapshot!("queue_stack_compact_170", render(&mut app, 170, 20));
 }
@@ -678,7 +678,7 @@ fn in_a_short_zen_column_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_t
     app.handle_key(code(KeyCode::Enter));
     let open = app.open.as_ref().unwrap();
     assert_eq!(open.row().and_then(|row| open.review.place_of(row)), Some(Place::Line { file: 0, new: None, old: Some(13) }));
-    assert_eq!((listed_place(&app), app.focus, app.zen), (Some(Place::All), Focus::Review, true), "the diff shows the line, in zen");
+    assert_eq!((listed_place(&app), app.focus, app.layout.zen), (Some(Place::All), Focus::Review, true), "the diff shows the line, in zen");
     assert!(render(&mut app, 138, 24).contains("▎✓   13      -    let client = Client::new();"));
     press(&mut app, "l");
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "l on the marked line goes back to the list");
@@ -687,7 +687,7 @@ fn in_a_short_zen_column_enter_in_every_thread_shows_the_diff_and_l_or_t_bring_t
     press(&mut app, "hT");
     assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "T from the diff shows the hidden list");
     press(&mut app, "T");
-    assert_eq!((listed_place(&app), app.focus, app.zen), (None, Focus::Review, true), "T on the list closes it");
+    assert_eq!((listed_place(&app), app.focus, app.layout.zen), (None, Focus::Review, true), "T on the list closes it");
 }
 
 #[test]
@@ -766,7 +766,7 @@ fn a_narrow_window_numbers_each_line_once_and_a_wide_one_on_both_sides() {
 #[test]
 fn a_set_narrow_width_moves_the_queue_and_the_gutter_with_it() {
     let mut app = with_review();
-    app.widths = crate::config::Widths { narrow: 100, ..crate::config::Widths::default() };
+    app.layout.widths = crate::config::Widths { narrow: 100, ..crate::config::Widths::default() };
     let roomy = render(&mut app, 110, 24);
     assert_eq!(app.areas.queue.width, 34, "110 columns are no longer narrow");
     assert!(roomy.contains("      14   15      let response"), "{roomy}");
