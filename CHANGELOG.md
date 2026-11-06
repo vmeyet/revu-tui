@@ -12,6 +12,9 @@ Each entry says what changed, then where, then how to use it.
 - **`a` opens the agent session of a branch in `revu local`.**
   On the worktree screen and in a worktree's diff, with `[agent] enabled = true`.
   Press `a` or type `:session`: the session started in that worktree opens, else a new one starts there.
+- **The queue shows where someone mentioned you, and takes you there.**
+  On GitLab: `@` ends a mentioned MR's row, and MENTIONS lists the mentioned MRs no other section shows.
+  `enter` opens the MR on the thread that mentions you; `x`, a reply or a resolve there marks it done.
 
 ### Fixed
 

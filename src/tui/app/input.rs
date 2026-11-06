@@ -119,6 +119,9 @@ impl App {
     pub(super) fn apply_posted(&mut self, key: &MrKey, to: &Post) {
         self.unsent.remove(&target_key(&to.input()));
         self.toast("posted");
+        if let Post::Reply(thread) = to {
+            self.answer_mentions(key, thread);
+        }
         let follow = self.reread(key);
         self.composed.extend(follow);
     }

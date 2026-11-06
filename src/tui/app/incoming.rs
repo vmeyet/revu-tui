@@ -176,6 +176,8 @@ impl App {
                 self.prefetch();
             }
         }
+        let landed = self.land_on_mention();
+        self.composed.extend(landed);
     }
 
     /// The painted review with the fresh MR, threads and drafts, arriving as a fresh review would: the files stay the

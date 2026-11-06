@@ -1,0 +1,22 @@
+---
+source: src/tui/app/mention.rs
+expression: "render(&mut app, 100, 18)"
+---
+╭ Queue · all ───────────────────╮╭ Review ────────────────────────────────────────────────────────╮
+│   ── TO REVIEW · 1 ─────────── ││                                                                │
+│ ▎ feat charge cards at … @     ││                                                                │
+│ ▎ omar · !42 · +412 −38     2h ││                                                                │
+│                                ││                                                                │
+│   ── MINE · 1 ──────────────── ││                                                                │
+│   fix flaky cache test       D ││                                                                │
+│   nina · !41 · +3 −1        4h ││                      open a merge request                      │
+│                                ││                      to read its diff here                     │
+│   ── MENTIONS · 1 ──────────── ││                                                                │
+│   fix round the totals   @     ││                                                                │
+│   nina · !77 · merged       4h ││                                                                │
+│                                ││                                                                │
+│   ── WATCHING · 1 ──────────── ││                                                                │
+│   infra: new runner          ⠋ ││                                                                │
+│   omar · !35                2d ││                                                                │
+╰────────────────────────────────╯╰────────────────────────────────────────────────────────────────╯
+ gitlab.com · nina                                                                           ? help

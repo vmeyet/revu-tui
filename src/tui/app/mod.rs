@@ -11,6 +11,7 @@ mod kept;
 mod keys;
 mod layout;
 mod local;
+mod mention;
 mod merge;
 mod mouse;
 mod notify;
@@ -111,6 +112,11 @@ pub(crate) enum Action {
         scope: Option<ProjectPath>,
         change: ViewChange,
         order: u64,
+    },
+    /// Mark these mentions of `key` done on its forge.
+    MarkMentionsDone {
+        key: MrKey,
+        ids: Vec<crate::forge::MentionId>,
     },
     /// Remember `key` pinned, or unpinned, in the queue of `scope`; `order` counts the changes made.
     ChangePin {
@@ -392,6 +398,8 @@ pub(crate) enum Failure {
     },
     /// The ready command failed; Ready keeps its last answer.
     Ready,
+    /// The forge kept the mentions pending; the next queue brings them back.
+    Mention,
 }
 
 #[derive(Clone, Debug, PartialEq)]

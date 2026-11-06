@@ -207,7 +207,7 @@ fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: us
     let theme = app.theme;
     let (kind, rest) = conventional(&mr.title);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
-    let marks = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
+    let marks = right_marks(app, Marks::of(app, mr));
     let Tails { title: tail, under } = Tails::for_layout(app, marks);
     let used = BAR_W + indent + chip.as_ref().map_or(0, Span::width) + tail_w(&tail) + 1;
     let title = truncate(rest, width.saturating_sub(used));
@@ -236,13 +236,14 @@ fn meta(app: &App, mr: &QueueMr, room: usize) -> (Vec<Span<'static>>, usize) {
     let number = number_of(app, mr);
     let age = short_age((app.today - mr.updated_at).to_std().unwrap_or_default());
     let host = app.host_tag(mr).map(|h| format!(" · {h}")).unwrap_or_default();
+    let finished = app.finished(mr).map(|state| format!(" · {}", state.word())).unwrap_or_default();
     let size = mr.size.map(|s| format!(" · +{} −{}", s.additions, s.deletions)).unwrap_or_default();
     let started = app
         .progress_of(&mr.key())
         .filter(|_| mr.size.is_some_and(|s| s.files > 0))
         .map(|p| format!(" · {}/{}", p.viewed, p.files))
         .unwrap_or_default();
-    let number = format!("{number}{started}");
+    let number = format!("{number}{finished}{started}");
     let base = number.width() + 3 + 1 + age.width();
     let who = truncate(who, room.saturating_sub(base).max(1));
     let left = |extra: &str| who.width() + 3 + number.width() + extra.width();
@@ -261,9 +262,10 @@ fn number_of(app: &App, mr: &QueueMr) -> String {
 /// One line per MR: `!iid title`, the host when mixed, Jev's mark, the approval mark and the badge.
 fn compact(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
-    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
+    let tail = right_marks(app, Marks::of(app, mr));
     let iid = format!("{} ", number_of(app, mr));
-    let tag = app.host_tag(mr).map(|t| format!("{t} "));
+    let words: Vec<String> = app.finished(mr).map(|state| state.word().to_owned()).into_iter().chain(app.host_tag(mr)).collect();
+    let tag = (!words.is_empty()).then(|| format!("{} ", words.join(" ")));
     let tag_w = tag.as_ref().map_or(0, |t| t.width());
     let room = width.saturating_sub(BAR_W + indent + iid.width() + tag_w + tail_w(&tail) + 1);
     let title = truncate(&mr.title, room);
@@ -291,7 +293,13 @@ fn stack_lines(app: &App, mrs: &[&QueueMr], open: bool, selected: bool, width: u
     let fold = Span::styled(if open { "▾ " } else { "▸ " }, Style::default().fg(theme.muted));
     let (kind, title) = stack_title(mrs);
     let chip = kind.map(|k| Span::styled(format!("{k} "), Style::default().fg(kind_colour(theme, k)).add_modifier(Modifier::BOLD)));
-    let tail = right_marks(app, None, app.stack_approved(mrs), app.stack_badge(mrs));
+    let marks = Marks {
+        mark: None,
+        mentioned: mrs.iter().any(|mr| app.mentioned(mr)),
+        approved: app.stack_approved(mrs),
+        badge: app.stack_badge(mrs),
+    };
+    let tail = right_marks(app, marks);
     let who = short_name(&base.author);
     let count = format!("{} MRs", mrs.len());
     let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
@@ -354,12 +362,34 @@ pub(crate) fn short_name(author: &str) -> &str {
     }
 }
 
-/// Jev's mark (two cells when Jev is on), the approval mark (two cells) then the badge, flush
-/// right, so titles keep one width.
-fn right_marks(app: &App, mark: Option<Mark>, approved: bool, badge: Option<Badge>) -> Vec<Span<'static>> {
+/// What a row says at its right edge.
+struct Marks {
+    mark: Option<Mark>,
+    mentioned: bool,
+    approved: bool,
+    badge: Option<Badge>,
+}
+
+impl Marks {
+    fn of(app: &App, mr: &QueueMr) -> Self {
+        Self {
+            mark: app.triaged().then(|| app.mark(mr)).flatten(),
+            mentioned: app.mentioned(mr),
+            approved: app.approved(mr),
+            badge: app.badge(mr),
+        }
+    }
+}
+
+/// Jev's mark (two cells when Jev is on), `@` for a pending mention (two cells while any is), the
+/// approval mark (two cells) then the badge, flush right, so titles keep one width.
+fn right_marks(app: &App, Marks { mark, mentioned, approved, badge }: Marks) -> Vec<Span<'static>> {
     let mut spans = vec![];
     if app.triaged() {
         spans.push(mark_span(app, mark));
+    }
+    if app.shows_mentions() {
+        spans.push(if mentioned { Span::styled("@ ", Style::default().fg(app.theme.mention)) } else { Span::raw("  ") });
     }
     spans.push(if approved { Span::styled("✓ ", Style::default().fg(app.theme.success)) } else { Span::raw("  ") });
     spans.push(badge.map_or_else(|| Span::raw(" "), |b| badge_span(app, b)));

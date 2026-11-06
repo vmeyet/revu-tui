@@ -2,7 +2,7 @@
 use super::saves::Saves;
 use super::{Homes, read_cache, run_blocking, write_cache};
 use crate::cache::keys;
-use crate::forge::{Fetched, MrKey, ProjectPath, Queue, QueueMr, Sections};
+use crate::forge::{Fetched, Forge, Mention, MrKey, ProjectPath, Queue, QueueMr, Sections};
 use crate::ready::Source as ReadySource;
 use crate::tui::app::{self, Incoming};
 use anyhow::Result;
@@ -24,7 +24,7 @@ impl Queues {
     /// Every project's queue also asks the other hosts I am logged in to; one that fails to
     /// answer shows the rows it last answered rather than failing the whole queue. The ready command
     /// runs alongside; when it fails the queue still paints, with its last answer, and the reason comes
-    /// back apart. What follows the answer: the project's open MRs when they did not load, the pins found
+    /// back apart. My mentions come alongside too, and without them when they do not. What follows the answer: the project's open MRs when they did not load, the pins found
     /// merged or closed, that reason, and the hosts that did not answer.
     pub(in crate::tui) async fn load(&self, scope: Option<ProjectPath>) -> Result<(Incoming, Vec<Incoming>)> {
         let others = async {
@@ -33,7 +33,8 @@ impl Queues {
             }
             self.other_queues().await
         };
-        let (fetched, (others, silent), said) = tokio::join!(self.homes.forge.queue(scope.as_ref()), others, self.ask_ready());
+        let (fetched, (others, silent), said, mentions) =
+            tokio::join!(self.homes.forge.queue(scope.as_ref()), others, self.ask_ready(), self.mentions(scope.as_ref()));
         let Fetched { queue, missing } = fetched?;
         if !self.is_local() {
             let (wanted, saved) = (scope.clone(), queue.clone());
@@ -54,7 +55,8 @@ impl Queues {
             failure.map(|message| Incoming::Failed { what: app::Failure::Ready, message }),
             (!silent.is_empty()).then(|| Incoming::Failed { what: app::Failure::Host, message: silent_note(&silent) }),
         ];
-        let answer = run_blocking(self, move |queues| queues.answer(scope, &queue, &others, ready.as_ref(), pinned, false)).await?;
+        let found = Found { pinned, mentions };
+        let answer = run_blocking(self, move |queues| queues.answer(scope, &queue, &others, ready.as_ref(), found, false)).await?;
         Ok((answer, follow.into_iter().flatten().collect()))
     }
 
@@ -93,7 +95,15 @@ impl Queues {
         let others: Vec<Queue> =
             if scope.is_none() { self.homes.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
         let ready = self.cached_ready(scope.as_ref());
-        Some(self.answer(scope, &queue, &others, ready.as_ref(), vec![], true))
+        Some(self.answer(scope, &queue, &others, ready.as_ref(), Found::default(), true))
+    }
+
+    /// My pending mentions in `scope`, from every host the queue asks; a host that cannot say is logged and gives none.
+    async fn mentions(&self, scope: Option<&ProjectPath>) -> Vec<Mention> {
+        let others = if scope.is_none() { self.homes.others.as_slice() } else { &[] };
+        let hosts = std::iter::once((None, &self.homes.forge)).chain(others.iter().map(|home| (Some(home.host.clone()), &home.forge)));
+        let answers = futures_util::future::join_all(hosts.map(|(host, forge)| mentions_of(host, forge))).await;
+        answers.into_iter().flatten().filter(|m| scope.is_none_or(|project| &m.mr.project == project)).collect()
     }
 
     /// The pins of `scope` the queue does not hold yet, each asked of its forge: the open ones come
@@ -136,14 +146,13 @@ impl Queues {
         source
     }
 
-    /// `pinned` are the pinned MRs no list holds.
     fn answer(
         &self,
         scope: Option<ProjectPath>,
         queue: &Queue,
         others: &[Queue],
         ready: Option<&ReadySource>,
-        pinned: Vec<QueueMr>,
+        found: Found,
         cached: bool,
     ) -> Incoming {
         let now = Utc::now();
@@ -153,10 +162,29 @@ impl Queues {
             Some(source) => source.apply(sections, self.homes.forge.host(), &self.homes.others, scope.as_ref(), &queue.me, &self.rules),
             None => sections,
         };
-        let sections = Sections { pinned, ..sections };
+        let sections = Sections { pinned: found.pinned, ..sections }.with_mentions(found.mentions, now);
         let opened = self.saves.opened_at(&sections);
         Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
     }
+}
+
+/// The mentions `forge` holds, each row tagged with `host`; none, logged, when it cannot say.
+async fn mentions_of(host: Option<String>, forge: &Forge) -> Vec<Mention> {
+    match forge.mentions().await {
+        Ok(found) => found.into_iter().map(|m| Mention { mr: QueueMr { host: host.clone(), ..m.mr }, ..m }).collect(),
+        Err(e) => {
+            tracing::warn!("the mentions of {} did not load: {e:#}", forge.host());
+            vec![]
+        }
+    }
+}
+
+/// What the queue's own lists do not hold, each asked on its own.
+#[derive(Default)]
+struct Found {
+    /// The pinned MRs no list holds.
+    pinned: Vec<QueueMr>,
+    mentions: Vec<Mention>,
 }
 
 fn silent_note(hosts: &[String]) -> String {
@@ -293,6 +321,47 @@ mod tests {
         assert_eq!(there, sections.all().count() / 2, "the silent host keeps the rows it last had");
         let [Incoming::Failed { what: app::Failure::Host, message }] = follow.as_slice() else { panic!("{follow:?}") };
         assert_eq!(message, "git.acme.test did not answer · showing its last rows");
+    }
+
+    /// A server answering the queue fixture to GraphQL, `todos` to the mentions, and none to what is written to me.
+    async fn queue_server(todos: wiremock::ResponseTemplate) -> wiremock::MockServer {
+        use wiremock::matchers::{method, path, query_param};
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(method("POST"))
+            .and(path("/api/graphql"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(include_str!("../../forge/gitlab/fixtures/queue.json")))
+            .mount(&server)
+            .await;
+        let todos_of = |action| wiremock::Mock::given(method("GET")).and(path("/api/v4/todos")).and(query_param("action", action));
+        todos_of("mentioned").respond_with(todos).mount(&server).await;
+        todos_of("directly_addressed").respond_with(wiremock::ResponseTemplate::new(200).set_body_json([0; 0])).mount(&server).await;
+        server
+    }
+
+    #[tokio::test]
+    async fn mentions_the_token_cannot_read_leave_the_queue_without_them_and_quiet() {
+        let forbidden = wiremock::ResponseTemplate::new(403).set_body_json(serde_json::json!({"message": "403 Forbidden"}));
+        let server = queue_server(forbidden).await;
+        let dir = tempfile::tempdir().unwrap();
+        let (Incoming::Queue { sections, .. }, follow) = queues(homes_on(&server, dir.path())).load(None).await.unwrap() else {
+            panic!("a queue")
+        };
+        assert!(sections.mentions.is_empty() && !sections.to_review.is_empty());
+        assert_eq!(follow, [], "no failure to show");
+    }
+
+    #[tokio::test]
+    async fn a_scoped_queue_keeps_the_mentions_of_its_project() {
+        use crate::forge::gitlab::fixture::todo;
+        let todos = serde_json::json!([todo(11, "acme/widgets", 42, "opened", "#note_502"), todo(12, "acme/billing", 7, "opened", "")]);
+        let server = queue_server(wiremock::ResponseTemplate::new(200).set_body_json(todos)).await;
+        let dir = tempfile::tempdir().unwrap();
+        let (Incoming::Queue { sections, .. }, _) = queues(homes_on(&server, dir.path())).load(Some("acme/widgets".into())).await.unwrap()
+        else {
+            panic!("a queue")
+        };
+        let kept: Vec<(u64, Option<u64>)> = sections.mentions.iter().map(|m| (m.id.0, m.note)).collect();
+        assert_eq!(kept, [(11, Some(502))], "acme/billing is out of scope");
     }
 
     #[tokio::test]

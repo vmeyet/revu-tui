@@ -13,11 +13,11 @@ When a boundary or a flow changes, change this page in the same MR.
 | `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit`; `prompt.rs` asks on the terminal |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends (GitLab, GitHub, local); every method takes and returns the neutral model |
-| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `reaction.rs` |
+| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `mention.rs` (`Mention`), `reaction.rs` |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and GraphQL (`graphql.rs` on GitLab, `graphql/` on GitHub), shared shapes and conversion in `wire.rs` |
 | `forge/local/` | The local backend, `revu local`: a worktree's branch read with `git`, in `git.rs`, cut into files by `split.rs`, with no host and no token |
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
-| `forge/gitlab/award.rs`, `upload.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, pictures in GitHub comments |
+| `forge/gitlab/award.rs`, `upload.rs`, `todo.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, mentions read from and marked done in the to-do list, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
@@ -67,6 +67,7 @@ Loading the queue:
 1. `Forge::queue` asks my own lists and, when scoped, the project's open MRs, in parallel; on GitLab, each MR's size comes from queries of its own.
 2. Only my own lists can fail it: open MRs that do not load come back as `Fetched::missing`, and sizes that take more than a few seconds are left out, so the row shows none.
 3. `Queues::load` adds the other hosts, the pins and the ready command; each part that fails follows the queue as an `Incoming::Failed`.
+   It asks `Forge::mentions` alongside, kept in `Sections::mentions`; a host that cannot answer is logged and gives none, and nothing of it is cached.
 4. A queue that fails as a whole keeps the one on screen, its title marked `not refreshed` until one lands.
 
 Handling a key:
@@ -170,4 +171,5 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | worktree | One entry of `git worktree list`: on `revu local`, it stands where an MR does |
 | target | What a local diff compares against, its merge base with `HEAD` being where the diff starts; `B` changes it |
 | pin | An MR kept on top of the queue, in `PINNED`, until it is merged or closed |
+| mention | Someone wrote my name, or to me, on an MR and I have not answered; a GitLab to-do item of kind `mentioned` or `directly_addressed`; `forge::Mention` |
 | sticky header | The file row, and the cursor's hunk row, kept on top of the diff once they scroll off; `tui/app/sticky.rs` |

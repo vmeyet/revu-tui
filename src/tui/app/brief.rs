@@ -266,7 +266,7 @@ impl App {
     }
 
     /// Puts the cursor on the thread's line, its file unfolded, and opens it in the pane.
-    fn show_thread(&mut self, id: &ThreadId) -> Vec<Action> {
+    pub(super) fn show_thread(&mut self, id: &ThreadId) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(thread) = open.review.thread(id) else { return vec![] };
         let Some(anchor) = thread.anchor.clone() else {

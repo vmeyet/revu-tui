@@ -49,22 +49,23 @@ impl App {
         if self.is_local() {
             return self.worktree_rows(sections);
         }
-        let groups: [(&'static str, &Vec<QueueMr>); 8] = [
-            ("TO REVIEW", &sections.to_review),
-            ("MINE", &sections.mine),
-            ("READY", &sections.ready),
-            ("WATCHING", &sections.watching),
-            ("OPEN", &sections.open),
-            ("DRAFTS", &sections.drafts),
-            ("DONE", &sections.done),
-            ("OTHER", &sections.other),
+        let groups: [(&'static str, Vec<&QueueMr>); 9] = [
+            ("TO REVIEW", sections.to_review.iter().collect()),
+            ("MINE", sections.mine.iter().collect()),
+            ("READY", sections.ready.iter().collect()),
+            ("MENTIONS", sections.mentioned_outside()),
+            ("WATCHING", sections.watching.iter().collect()),
+            ("OPEN", sections.open.iter().collect()),
+            ("DRAFTS", sections.drafts.iter().collect()),
+            ("DONE", sections.done.iter().collect()),
+            ("OTHER", sections.other.iter().collect()),
         ];
-        let unpinned = groups.map(|(name, mrs)| (name, mrs.iter().filter(|mr| !self.is_pinned(mr)).collect()));
+        let unpinned = groups.map(|(name, mrs)| (name, mrs.into_iter().filter(|mr| !self.is_pinned(mr)).collect()));
         let groups = std::iter::once(("PINNED", self.pinned(sections))).chain(unpinned);
         let mut rows = Vec::new();
         for (name, mrs) in groups {
             let open = !self.queue_view.closed_sections.contains(name);
-            let only_when_filled = matches!(name, "PINNED" | "READY" | "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
+            let only_when_filled = matches!(name, "PINNED" | "READY" | "MENTIONS" | "OPEN" | "DRAFTS" | "OTHER") && mrs.is_empty();
             let matching = self.in_order(name, mrs.into_iter().filter(|mr| self.matches_filter(mr)).collect());
             if only_when_filled || (name == "DONE" && matching.is_empty() && self.filter.is_empty()) {
                 continue;
@@ -309,7 +310,9 @@ impl App {
         }
         let Some(mr) = self.selected_mr() else { return vec![] };
         let key = mr.key();
-        self.open_key(key)
+        self.aim_at_mention(&key);
+        let opening = self.open_key(key);
+        [opening, self.land_on_mention()].concat()
     }
 
     /// Shows the MR `key` in the review, fetching it unless it is the one already open.
