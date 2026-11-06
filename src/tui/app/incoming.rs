@@ -34,13 +34,18 @@ impl App {
                 }
             }
             Incoming::Queue { sections, opened, .. } => {
+                let folded_header = self.folded_header_here();
                 self.sections = Some(sections);
                 self.opened = opened;
                 self.queue_loading = false;
                 self.queue_failed = false;
                 self.offline = None;
-                self.keep_cursor_on_the_shown_worktree();
+                self.keep_cursor(folded_header);
                 self.queue_settle();
+                if self.shown_worktree_left() {
+                    let follow = self.follow_the_row();
+                    self.composed.extend(follow);
+                }
                 self.schedule_queue();
                 self.ask_triage();
                 let notice = self.notify_new();
@@ -154,7 +159,7 @@ impl App {
             None => Open::new(key.clone(), review),
         };
         self.count_viewed(&key, &next.review);
-        self.open = Some(Open { cached: cached.map(|age| (self.now, age)), ..next });
+        self.open = Some(Open { cached: cached.map(|age| (self.now, age)), look_failed: None, ..next });
         if fresh_open {
             self.spot_saved = self.spot().map(|spot| (key.clone(), spot));
         }
@@ -189,7 +194,7 @@ impl App {
         }
         let Some(open) = self.open.take_if(|o| o.key == *key) else { return };
         let same_head = open.review.mr.refs.head == mr.refs.head;
-        self.open = Some(if same_head { Open { review: open.review.with_mr(mr), cached: None, ..open } } else { open });
+        self.open = Some(if same_head { Open { review: open.review.with_mr(mr), cached: None, look_failed: None, ..open } } else { open });
         self.offline = None;
         self.schedule_review();
     }
@@ -209,10 +214,7 @@ impl App {
                 self.warn(message);
                 self.back_off();
             }
-            Failure::Poll { .. } if self.is_local() => {
-                self.warn(message);
-                self.back_off();
-            }
+            Failure::Poll { .. } if self.is_local() => self.local_look_failed(message),
             Failure::Open { .. } => {
                 self.opening = None;
                 if self.open.is_some() {

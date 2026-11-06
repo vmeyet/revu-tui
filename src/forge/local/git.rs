@@ -26,6 +26,14 @@ impl Worktree {
         self.branch.clone().unwrap_or_else(|| crate::version::short(self.head.as_str()).to_owned())
     }
 
+    /// Why git has nothing to read here at all: its folder is gone, or it has no commit yet. Any other failure is a failure.
+    pub(super) async fn unreadable(&self) -> Option<&'static str> {
+        if tokio::fs::try_exists(&self.path).await.is_ok_and(|there| !there) {
+            return Some("its folder is gone");
+        }
+        self.head.as_str().bytes().all(|digit| digit == b'0').then_some("it has no commit yet")
+    }
+
     /// `local/<folder>`, its folder made safe for a project path.
     pub(super) fn project(&self) -> Result<ProjectPath> {
         let safe = |c: char| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '-' };
@@ -95,12 +103,15 @@ pub(super) async fn commit_of(dir: &Path, target: &Target) -> Result<String> {
     run(dir, &["rev-parse", "--verify", "--end-of-options", &commit]).await.with_context(|| format!("{target} is not a commit here"))
 }
 
-/// Where `target` and `HEAD` split; fails when they share no history.
-pub(super) async fn merge_base(dir: &Path, target: &Target) -> Result<Sha> {
+/// Where `target` and `HEAD` split; `None` when they share no history, which `merge-base` says by exiting 1.
+pub(super) async fn merge_base(dir: &Path, target: &Target) -> Result<Option<Sha>> {
     let tip = commit_of(dir, target).await?;
-    let base =
-        run(dir, &["merge-base", tip.trim(), "HEAD"]).await.with_context(|| format!("{target} shares no history with this branch"))?;
-    parse_sha(&base)
+    let output = git(dir).args(["merge-base", tip.trim(), "HEAD"]).output().await.context("running git")?;
+    match output.status.code() {
+        Some(0) => parse_sha(&String::from_utf8_lossy(&output.stdout)).map(Some),
+        Some(1) => Ok(None),
+        _ => bail!("{}", first_line(&output.stderr)),
+    }
 }
 
 fn parse_sha(text: &str) -> Result<Sha> {

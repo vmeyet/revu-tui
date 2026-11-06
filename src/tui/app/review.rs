@@ -30,6 +30,8 @@ pub(crate) struct Open {
     pub(crate) sticky_file: Option<usize>,
     /// Where the branch was deployed; `None` until the forge was asked.
     pub(crate) deployments: Option<Vec<crate::forge::Deployment>>,
+    /// Why the last look at a local diff failed: what shows may be stale, so the header says so until a look works.
+    pub(crate) look_failed: Option<String>,
 }
 
 impl Open {
@@ -50,6 +52,7 @@ impl Open {
             prose: None,
             sticky_file: None,
             deployments: None,
+            look_failed: None,
         }
     }
 

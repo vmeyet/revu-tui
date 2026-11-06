@@ -461,7 +461,7 @@ impl App {
     pub(super) fn back_off(&mut self) {
         if self.is_local() {
             self.poll.mr_due = Some(self.now + LOCAL_EVERY);
-            self.poll.queue_due = Some(self.now + QUEUE_EVERY);
+            self.poll.queue_due.get_or_insert(self.now + QUEUE_EVERY);
             return;
         }
         let wait = self.rate.wait.unwrap_or_default().max(BACKOFF);

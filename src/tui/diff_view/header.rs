@@ -150,7 +150,7 @@ pub(super) fn local_header<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, 
         dot(),
         Span::styled(format!("{} files", open.review.files.len()), muted),
     ]);
-    let hidden = hidden_work(mr.uncommitted).map(|text| Span::styled(text, Style::default().fg(theme.warn)));
+    let hidden = worktree_warning(open).map(|text| Span::styled(text, Style::default().fg(theme.warn)));
     let progress = viewed_spans(open, theme);
     let between = (hidden.is_some() && !progress.is_empty()).then(dot);
     let second: Vec<Span<'a>> = hidden.into_iter().chain(between).chain(progress).collect();
@@ -164,23 +164,30 @@ pub(super) fn local_header<'a>(open: &Open, theme: Theme, today: DateTime<Utc>, 
 pub(super) fn local_zen_header<'a>(open: &Open, theme: Theme, width: usize) -> Line<'a> {
     let mr = &open.review.mr;
     let (adds, dels) = line_totals(open);
-    let hidden = hidden_work(mr.uncommitted).map(|text| format!(" · {text}"));
+    let hidden = worktree_warning(open).map(|text| format!(" · {text}"));
     let hidden_w = hidden.as_ref().map_or(0, |text| text.width());
     let text = format!("{} · {} → {} · +{adds} −{dels}", mr.title, mr.source_branch, mr.target_branch);
     let shown = Span::styled(truncate(&text, width.saturating_sub(hidden_w)), Style::default().fg(theme.faded));
     Line::from([vec![shown], hidden.map(|text| Span::styled(text, Style::default().fg(theme.warn))).into_iter().collect()].concat())
 }
 
-fn hidden_work(uncommitted: u32) -> Option<String> {
-    (uncommitted > 0).then(|| format!("● {uncommitted} uncommitted, not shown · I shows"))
+/// What the reader must not miss on a worktree: a failing look, and uncommitted work left out.
+fn worktree_warning(open: &Open) -> Option<String> {
+    let failed = open.look_failed.as_ref().map(|reason| format!("✗ not refreshed: {reason}"));
+    let uncommitted = open.review.mr.uncommitted;
+    let hidden = (uncommitted > 0).then(|| format!("● {uncommitted} uncommitted, not shown · I shows"));
+    let both: Vec<String> = failed.into_iter().chain(hidden).collect();
+    (!both.is_empty()).then(|| both.join(" · "))
 }
 
-/// What a worktree's empty diff says: why there can be none, or where the work is.
+/// What a worktree's empty diff says: why there can be none, or where the work is; commits past the base that change
+/// no file are still commits.
 pub(super) fn nothing_ahead(mr: &Mr) -> String {
+    let ahead = if mr.refs.base == mr.refs.head { "no commits ahead" } else { "no changes ahead" };
     match (&mr.no_diff, mr.uncommitted) {
         (Some(reason), _) => format!("no diff: {reason}"),
-        (None, 0) => "no commits ahead".to_owned(),
-        (None, hidden) => format!("no commits ahead · {hidden} uncommitted · I shows them"),
+        (None, 0) => ahead.to_owned(),
+        (None, hidden) => format!("{ahead} · {hidden} uncommitted · I shows them"),
     }
 }
 

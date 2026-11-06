@@ -1,5 +1,5 @@
 //! What only `revu local` does: `B`, `I`, and the keys it has no use for.
-use super::{Action, App, Focus};
+use super::{Action, App, Focus, Open, QueueRow};
 use crate::act::{self, Pane};
 use crate::forge::Kind;
 use crate::forge::local::Change;
@@ -35,16 +35,26 @@ impl App {
         self.leave_zen()
     }
 
-    /// What every key, click and paste leaves through: rows may have moved under the cursor, by a key, a sort or a filter,
-    /// and the cursor's worktree shows beside them.
+    /// What every key, click and paste leaves through: the terminal is in front, rows may have moved under the cursor,
+    /// by a key, a sort or a filter, and the cursor's worktree shows beside them. With the keys elsewhere, the rows are
+    /// left alone: another way of opening may have moved the diff away from the cursor.
     pub(super) fn after_input(&mut self, actions: Vec<Action>) -> Vec<Action> {
+        self.terminal_focused = true;
         let sent = self.sending(actions);
-        [sent, self.show_selected_worktree()].concat()
+        [sent, self.follow_the_row()].concat()
+    }
+
+    /// The cursor's worktree, while the keys are on the rows.
+    pub(super) fn follow_the_row(&mut self) -> Vec<Action> {
+        if self.focus != Focus::Queue || self.zen {
+            return vec![];
+        }
+        self.show_selected_worktree()
     }
 
     /// The diff of the row under the cursor, asked for unless it is on its way or on screen.
-    fn show_selected_worktree(&mut self) -> Vec<Action> {
-        if !self.is_local() || self.focus != Focus::Queue || self.zen {
+    pub(super) fn show_selected_worktree(&mut self) -> Vec<Action> {
+        if !self.is_local() {
             return vec![];
         }
         let Some(key) = self.selected_mr().map(crate::forge::QueueMr::key) else { return vec![] };
@@ -55,16 +65,46 @@ impl App {
         vec![Action::Open(key)]
     }
 
+    /// A look failed: looks again soon, says why once and marks the header; the pane may be saying it already.
+    pub(super) fn local_look_failed(&mut self, reason: String) {
+        let said = self
+            .open
+            .as_ref()
+            .is_some_and(|open| open.look_failed.as_ref() == Some(&reason) || open.review.mr.no_diff.as_ref() == Some(&reason));
+        if !said {
+            self.warn(reason.clone());
+            self.update_open(|open| Open { look_failed: Some(reason), ..open });
+        }
+        self.back_off();
+    }
+
     /// The worktree being opened, else the open one.
     fn shown_worktree(&self) -> Option<&super::MrKey> {
         self.opening.as_ref().or(self.open.as_ref().map(|open| &open.key))
     }
 
-    /// New rows may sort another way: the cursor stays on the worktree that shows.
-    pub(super) fn keep_cursor_on_the_shown_worktree(&mut self) {
-        if let Some(key) = self.shown_worktree().filter(|key| key.is_local()).cloned() {
+    /// The folded section whose header the cursor sits on, on a local screen, before new rows move it.
+    pub(super) fn folded_header_here(&self) -> Option<&'static str> {
+        match self.queue_rows().get(self.queue_selected).filter(|_| self.is_local()) {
+            Some(QueueRow::Section { name, open: false, .. }) => Some(*name),
+            _ => None,
+        }
+    }
+
+    /// New rows may sort another way: the cursor stays on its folded header, else on the worktree that shows.
+    pub(super) fn keep_cursor(&mut self, folded_header: Option<&str>) {
+        let header = self.queue_rows().iter().position(|row| matches!(row, QueueRow::Section { name, .. } if Some(*name) == folded_header));
+        if let Some(header) = header {
+            self.queue_selected = header;
+        } else if let Some(key) = self.shown_worktree().filter(|key| key.is_local()).cloned() {
             self.select_in_queue(&key);
         }
+    }
+
+    /// The worktree that shows is in no list any more, a folded section being still a list.
+    pub(super) fn shown_worktree_left(&self) -> bool {
+        let listed = |key: &&super::MrKey| self.sections.iter().flat_map(crate::forge::Sections::all).any(|mr| mr.key() == **key);
+        self.shown_worktree().is_some_and(|key| !listed(&key))
     }
 
     /// A look found the head still there but the merge base gone elsewhere: the files on screen no longer match.
@@ -226,7 +266,7 @@ mod tests {
 
     #[test]
     fn snapshot_no_commits_ahead_says_where_the_work_is() {
-        let mut app = local_opened(local_mr(3, "bbbb"), &[]);
+        let mut app = local_opened(at_the_base(3), &[]);
         app.zen = true;
         insta::assert_snapshot!("local_empty", render(&mut app, 100, 12));
     }
@@ -241,7 +281,7 @@ mod tests {
 
     #[test]
     fn with_nothing_hidden_the_empty_diff_only_says_nothing_is_ahead() {
-        let mut app = local_opened(local_mr(0, "bbbb"), &[]);
+        let mut app = local_opened(at_the_base(0), &[]);
         let screen = render(&mut app, 120, 12);
         assert!(screen.contains("no commits ahead") && !screen.contains("uncommitted"), "{screen}");
     }
@@ -456,12 +496,172 @@ mod tests {
         assert_eq!((app.offline, app.opening.clone(), app.live_toast().map(|toast| toast.text.as_str())), (None, None, Some("git broke")));
     }
 
+    fn look_failed(app: &mut App, message: &str) {
+        app.apply(Incoming::Failed { what: Failure::Poll { key: local_key() }, message: message.into() });
+    }
+
     #[test]
     fn a_failure_looks_again_soon_and_leaves_the_queue_rescan_at_its_pace() {
         let mut app = on_the_screen();
-        app.apply(Incoming::Failed { what: Failure::Poll { key: local_key() }, message: "git broke".into() });
-        assert_eq!(app.poll.mr_due, Some(app.now + Duration::from_secs(2)));
-        assert_eq!(app.poll.queue_due, Some(app.now + Duration::from_secs(60)));
+        app.queue_loading = false;
+        let due = app.poll.queue_due;
+        for _ in 0..40 {
+            app.now += Duration::from_secs(1);
+            look_failed(&mut app, "git broke");
+            assert_eq!(app.poll.mr_due, Some(app.now + Duration::from_secs(2)));
+            assert_eq!(app.poll.queue_due, due, "many failures do not put it off");
+        }
+    }
+
+    #[test]
+    fn failed_looks_do_not_cancel_the_rescan_a_new_target_asked_for() {
+        let mut app = on_the_screen();
+        app.queue_loading = false;
+        press(&mut app, "B");
+        press(&mut app, "dev");
+        app.handle_key(code(KeyCode::Enter));
+        look_failed(&mut app, "git broke");
+        assert!(app.tick().contains(&Action::LoadQueue { scope: None, from_cache: false }));
+    }
+
+    #[test]
+    fn a_failing_look_says_why_once_and_marks_the_header_until_a_look_works() {
+        let mut app = local_app();
+        look_failed(&mut app, "git broke");
+        assert!(app.live_toast().is_some());
+        app.toast = None;
+        look_failed(&mut app, "git broke");
+        assert_eq!(app.live_toast(), None, "the same reason stays quiet");
+        assert!(first_rows(&mut app, 4).contains("git broke"), "the mark outlives the toast");
+        app.apply(Incoming::Mr { key: local_key(), mr: Box::new(local_mr(0, "bbbb")) });
+        assert!(!first_rows(&mut app, 4).contains("git broke"));
+    }
+
+    #[test]
+    fn zen_marks_a_failing_look_too() {
+        let mut app = local_app();
+        app.zen = true;
+        look_failed(&mut app, "git broke");
+        assert!(first_rows(&mut app, 3).contains("git broke"));
+    }
+
+    #[test]
+    fn an_r_the_reader_asked_for_always_answers() {
+        let mut app = local_app();
+        look_failed(&mut app, "git broke");
+        app.toast = None;
+        assert_eq!(press(&mut app, "r"), vec![Action::RefreshMr(local_key())]);
+        look_failed(&mut app, "git broke");
+        assert!(app.live_toast().is_some());
+    }
+
+    #[test]
+    fn an_r_on_the_screen_answers_too() {
+        let mut app = on_the_screen();
+        app.queue_loading = false;
+        look_failed(&mut app, "git broke");
+        app.toast = None;
+        press(&mut app, "r");
+        look_failed(&mut app, "git broke");
+        assert!(app.live_toast().is_some());
+    }
+
+    #[test]
+    fn a_look_failing_with_the_reason_the_pane_already_says_stays_quiet() {
+        let no_diff = Some("HEAD~1 is not a commit here".to_owned());
+        let mut app = local_opened(Mr { no_diff, ..local_mr(0, "bbbb") }, &[]);
+        look_failed(&mut app, "HEAD~1 is not a commit here");
+        assert_eq!(app.live_toast(), None);
+        assert_eq!(first_rows(&mut app, 4).matches("HEAD~1").count(), 0, "the pane says it, not the header");
+    }
+
+    #[test]
+    fn a_rescan_that_adds_a_row_leaves_the_cursor_on_its_folded_section_and_opens_nothing() {
+        let mut app = on_the_screen();
+        press(&mut app, "G");
+        let key = app.opening.clone().unwrap();
+        app.apply(Incoming::Review { key, review: Box::new(review()), cached: None });
+        press(&mut app, "zc");
+        let at_header =
+            |app: &App| matches!(app.queue_rows().get(app.queue_selected), Some(QueueRow::Section { name: "NOTHING AHEAD", .. }));
+        assert!(at_header(&app));
+        let mut more = worktrees();
+        more.to_review.push(QueueMr { number: 11, ..more.to_review[0].clone() });
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: more, opened: HashMap::new(), cached: false });
+        assert!(!app.take_actions().iter().any(|action| matches!(action, Action::Open(_))));
+        assert!(at_header(&app));
+    }
+
+    #[test]
+    fn a_shown_worktree_gone_from_the_rows_gives_way_to_the_row_under_the_cursor() {
+        let mut app = on_the_screen();
+        let without = Sections { mine: vec![], ..worktrees() };
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: without, opened: HashMap::new(), cached: false });
+        assert_eq!(app.take_actions(), vec![Action::Open(app.selected_mr().unwrap().key())]);
+    }
+
+    #[test]
+    fn a_failed_look_keeps_the_diff_and_the_viewed_marks() {
+        let mut app = local_app();
+        press(&mut app, "zv");
+        let before = app.open.as_ref().unwrap().review.clone();
+        assert!(!before.viewed.is_empty());
+        look_failed(&mut app, "dev is not a commit here");
+        assert_eq!(app.open.as_ref().unwrap().review, before);
+    }
+
+    #[test]
+    fn the_wheel_over_the_rows_shows_the_row_with_the_diff_focused() {
+        let mut app = on_the_screen();
+        app.focus = Focus::Review;
+        render(&mut app, 220, 30);
+        let at = app.drawn.list_rows.iter().find(|row| row.index == app.queue_selected).copied().unwrap().area;
+        let kind = crossterm::event::MouseEventKind::ScrollDown;
+        let actions = app.handle_mouse(crossterm::event::MouseEvent { kind, column: at.x + 1, row: at.y, modifiers: KeyModifiers::NONE });
+        let row = app.selected_mr().unwrap().key();
+        assert_ne!(row, local_key());
+        assert_eq!(actions, vec![Action::Open(row)]);
+    }
+
+    #[test]
+    fn a_key_with_the_diff_focused_does_not_open_the_row_under_the_cursor() {
+        let mut app = on_the_screen();
+        press(&mut app, "j");
+        app.focus = Focus::Review;
+        app.opening = None;
+        assert_eq!(press(&mut app, "w"), vec![]);
+    }
+
+    #[test]
+    fn a_key_says_the_terminal_is_in_front_after_a_lost_focus() {
+        let mut app = local_app();
+        app.terminal_focus(false);
+        press(&mut app, "w");
+        app.now += Duration::from_secs(10);
+        assert_eq!(app.tick(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+    }
+
+    #[test]
+    fn coming_back_from_a_program_says_the_terminal_is_in_front() {
+        let mut app = local_app();
+        app.terminal_focus(false);
+        let view = crate::open::View { argv: vec!["hx".into()], shown: "a.rs:1".into(), note: None, _copy: None };
+        app.apply(Incoming::Viewed { view, outcome: Ok(()) });
+        app.now += Duration::from_secs(10);
+        assert_eq!(app.tick(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+    }
+
+    #[test]
+    fn an_empty_commit_ahead_says_no_changes_and_not_no_commits() {
+        let mut app = local_opened(local_mr(0, "bbbb"), &[]);
+        let screen = render(&mut app, 120, 12);
+        assert!(screen.contains("no changes ahead") && !screen.contains("no commits ahead"), "{screen}");
+    }
+
+    /// A worktree at its merge base: no commit ahead of the target.
+    fn at_the_base(hidden: u32) -> Mr {
+        let at: Sha = "bbbb".into();
+        Mr { refs: crate::forge::Refs { base: at.clone(), start: at.clone(), head: at }, ..local_mr(hidden, "bbbb") }
     }
 
     #[test]

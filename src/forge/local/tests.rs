@@ -32,7 +32,7 @@ impl Repo {
             .unwrap()
     }
 
-    fn git(&self, args: &[&str]) -> String {
+    pub(crate) fn git(&self, args: &[&str]) -> String {
         let output = self.command(args);
         assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
         String::from_utf8(output.stdout).unwrap()
@@ -59,7 +59,7 @@ impl Repo {
         (client, key)
     }
 
-    async fn open_on(&self, target: &str) -> (Client, MrKey) {
+    pub(crate) async fn open_on(&self, target: &str) -> (Client, MrKey) {
         let client = Client::open(self.0.path(), Some(target)).await.unwrap();
         let key = client.here_key().await.unwrap();
         (client, key)
@@ -393,6 +393,50 @@ async fn revu_can_start_in_a_submodule_and_reads_its_own_branch() {
     assert_eq!((key.project.as_str(), mr.no_diff), ("local/sub", None));
     let Fetched { queue, .. } = client.queue().await.unwrap();
     assert_eq!((queue.authored.len(), queue.review_requested.len(), queue.open.len()), (1, 0, 0), "only the submodule's own folder");
+}
+
+#[tokio::test]
+async fn a_linked_worktree_of_a_submodule_lists_no_git_folder() {
+    let (inner, outer) = (Repo::new(), Repo::new());
+    outer.git(&["-c", "protocol.file.allow=always", "submodule", "add", "-q", inner.path().to_str().unwrap(), "sub"]);
+    let linked = outer.path().join("linked");
+    outer.git(&["-C", outer.path().join("sub").to_str().unwrap(), "worktree", "add", "-q", "-b", "lk", linked.to_str().unwrap()]);
+    let client = Client::open(&linked, Some("HEAD")).await.unwrap();
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    let titles: Vec<&str> = queue.authored.iter().chain(&queue.review_requested).chain(&queue.open).map(|row| row.title.as_str()).collect();
+    assert_eq!(titles, ["lk"]);
+}
+
+#[tokio::test]
+async fn a_broken_index_loses_only_the_uncommitted_count() {
+    let repo = Repo::new();
+    repo.write("b.txt", "new\n");
+    repo.commit("work");
+    let (client, key) = repo.open().await;
+    std::fs::write(repo.path().join(".git/index"), "garbage").unwrap();
+    let mr = client.mr(&key).await.unwrap();
+    assert_eq!((mr.uncommitted, mr.no_diff), (0, None));
+    assert_eq!(client.diffs(&key).await.unwrap().len(), 1);
+    client.toggle_uncommitted();
+    assert!(client.mr(&key).await.is_err(), "uncommitted work cannot be shown");
+}
+
+#[tokio::test]
+async fn a_target_gone_a_moment_is_a_failure_with_its_reason_and_the_diff_comes_back() {
+    let repo = Repo::new();
+    repo.write("mine.txt", "mine\n");
+    repo.commit("mine");
+    repo.git(&["branch", "dev", "main"]);
+    let (client, key) = repo.open_on("dev").await;
+    let before = client.mr(&key).await.unwrap();
+    repo.git(&["branch", "-m", "dev", "tmp"]);
+    assert_eq!(client.mr(&key).await.unwrap_err().to_string(), "dev is not a commit here");
+    assert!(client.diffs(&key).await.is_err());
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert_eq!(queue.authored[0].worktree.as_ref().unwrap().no_diff.as_deref(), Some("dev is not a commit here"));
+    repo.git(&["branch", "-m", "tmp", "dev"]);
+    assert_eq!(client.mr(&key).await.unwrap().refs, before.refs);
+    assert_eq!(client.diffs(&key).await.unwrap().len(), 1);
 }
 
 #[test]
