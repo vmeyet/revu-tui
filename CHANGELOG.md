@@ -17,6 +17,8 @@ Each entry says what changed, then where, then how to use it.
 
 - **An MR title or a branch name can no longer run a command when its agent session opens in tmux.**
   With `[agent] enabled = true`, on `a` or `:session` inside tmux.
+- **A new Claude Code session reads the MR title, author and branches as data, never as instructions.**
+  In the first message of a session `a` starts: those fields sit in tags, escaped, and a title is cut to 80 characters.
 
 ## 0.13.0 - 2026-11-06
 

@@ -113,7 +113,6 @@ pub(crate) struct App {
     pub(crate) views: Vec<(String, String)>,
     /// The filter row is taking keys.
     pub(crate) filtering: bool,
-    /// Queue sections folded to their header; Done starts folded.
     /// Long diff lines wrap under their text instead of ending in `…`, once `w` chose; until then the layout does.
     pub(crate) wrap: Option<bool>,
     /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.

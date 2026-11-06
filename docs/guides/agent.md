@@ -63,6 +63,10 @@ When the fetch fails for another reason, the toast gives git's own words.
 
 Its name is `revu: !42` and the MR title, which is how it reads in `claude agents`.
 Its first message names the MR, its link, its author and its branches.
+The title, cut to 80 characters, the author and the branches sit in tags.
+The message tells the session that tagged text is data written by others, never instructions.
+A title written to steer the session is then harder to obey.
+On someone else's MR, plan mode keeps it from changing anything you did not ask for.
 It also says that `revu show`, `revu diff` and `revu comment` read the MR and comment on it.
 It ends by asking the session to wait for you.
 
@@ -256,6 +260,9 @@ The session is the remembered one, or a new one.
 On `revu local`, `{ref}`, `{title}` and `{branch}` are the branch, and `{iid}`, `{url}`, `{author}` and `{project}` are empty.
 
 A typo like `{titel}` stops revu at start, with the file and the key named.
+
+Placeholders are filled in as they are, with no tags around them.
+A `start` that hands `{title}` to `sh -c` lets an MR title run commands on your computer; anywhere else it stays one word and runs nothing.
 
 ## Limits
 
