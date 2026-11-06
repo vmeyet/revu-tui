@@ -89,7 +89,7 @@ impl App {
             () if self.help.is_some() => "help",
             () if self.palette.is_some() => "palette",
             () if self.brief.is_some() => "cover",
-            () if self.zen => "zen",
+            () if self.layout.zen => "zen",
             () => match self.focus {
                 Focus::Queue => "queue",
                 Focus::Review => "diff",

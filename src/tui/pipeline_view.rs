@@ -20,7 +20,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
         Run::Ready(checks) => format!("Pipeline · {}", word(checks.state())),
         _ => "Pipeline".to_owned(),
     };
-    let block = side_pane(theme, &title, app.focus == Focus::Side, app.zen);
+    let block = side_pane(theme, &title, app.focus == Focus::Side, app.layout.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let checks = match &pipeline.run {

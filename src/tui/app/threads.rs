@@ -161,7 +161,7 @@ impl App {
     /// Threads read under their lines in zen and in a window too narrow for the pane beside the diff, in the pane
     /// otherwise; a pane on a line closes once the diff shows its threads.
     pub(crate) fn fit_threads(&mut self) {
-        let in_diff = self.zen || self.narrow;
+        let in_diff = self.layout.threads_in_diff();
         if let Some(open) = self.open.take_if(|o| o.review.threads_in_diff != in_diff) {
             self.open = Some(open.relaid(|review| review.with_threads_in_diff(in_diff)));
         }
@@ -556,7 +556,7 @@ mod tests {
     #[test]
     fn a_set_narrow_width_moves_where_threads_read_in_the_diff() {
         let mut app = with_review();
-        app.widths = crate::config::Widths { narrow: 100, ..crate::config::Widths::default() };
+        app.layout.widths = crate::config::Widths { narrow: 100, ..crate::config::Widths::default() };
         render(&mut app, 110, 30);
         assert_eq!(thread_rows(&app), 0, "110 columns are no longer narrow");
         render(&mut app, 99, 30);

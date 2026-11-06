@@ -46,7 +46,7 @@ impl App {
 
     /// The cursor's worktree, while the keys are on the rows.
     pub(super) fn follow_the_row(&mut self) -> Vec<Action> {
-        if self.focus != Focus::Queue || self.zen {
+        if self.focus != Focus::Queue || self.layout.zen {
             return vec![];
         }
         self.show_selected_worktree()
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn snapshot_the_zen_header_says_what_is_hidden() {
         let mut app = local_opened(local_mr(3, "bbbb"), &diffs());
-        app.zen = true;
+        app.layout.zen = true;
         insta::assert_snapshot!("local_zen_header", first_rows(&mut app, 3));
     }
 
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn snapshot_no_commits_ahead_says_where_the_work_is() {
         let mut app = local_opened(at_the_base(3), &[]);
-        app.zen = true;
+        app.layout.zen = true;
         insta::assert_snapshot!("local_empty", render(&mut app, 100, 12));
     }
 
@@ -327,10 +327,10 @@ mod tests {
     #[test]
     fn esc_in_zen_lands_on_the_worktree_screen() {
         let mut app = on_the_screen();
-        app.zen = true;
+        app.layout.zen = true;
         app.focus = Focus::Review;
         app.handle_key(code(KeyCode::Esc));
-        assert_eq!((app.zen, app.focus), (false, Focus::Queue));
+        assert_eq!((app.layout.zen, app.focus), (false, Focus::Queue));
     }
 
     #[test]
@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn zen_marks_a_failing_look_too() {
         let mut app = local_app();
-        app.zen = true;
+        app.layout.zen = true;
         look_failed(&mut app, "git broke");
         assert!(first_rows(&mut app, 3).contains("git broke"));
     }

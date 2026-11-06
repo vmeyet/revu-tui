@@ -246,7 +246,7 @@ mod tests {
 
     fn in_zen() -> App {
         let mut app = on_the_line();
-        app.zen = true;
+        app.layout.zen = true;
         app
     }
 

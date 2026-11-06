@@ -120,7 +120,7 @@ fn fresh_layout(app: &App, width: usize) -> Option<PaneLayout> {
 /// Under zen's diff it hangs from a rule carrying its title.
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: bool) -> Vec<Placement> {
     let theme = app.theme;
-    let (focused, zen) = (app.focus == Focus::Side, app.zen);
+    let (focused, zen) = (app.focus == Focus::Side, app.layout.zen);
     let block = |title: &str| if under_diff { rule_pane(theme, title) } else { side_pane(theme, title, focused, zen) };
     let inner = block("").inner(area);
     let width = inner.width.saturating_sub(1) as usize;

@@ -19,7 +19,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let Some(tree) = &open.tree else { return };
     let progress = open.review.progress();
     let title = format!("Files · {}/{} viewed", progress.viewed, progress.files);
-    let block = side_pane(theme, &title, app.focus == Focus::Side, app.zen);
+    let block = side_pane(theme, &title, app.focus == Focus::Side, app.layout.zen);
     let inner = block.inner(area);
     f.render_widget(block, area);
     let height = inner.height as usize;

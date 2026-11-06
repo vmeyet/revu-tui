@@ -174,7 +174,7 @@ mod tests {
         assert_eq!((mr.key.clone(), mr.fields.title.as_str(), mr.mine), (mr_key(), open.title.as_str(), true));
         assert_eq!((mr.fields.branch.as_str(), mr.target.as_str()), (open.source_branch.as_str(), open.target_branch.as_str()));
         press(&mut app, "zz");
-        assert!(app.zen);
+        assert!(app.layout.zen);
         assert_eq!(asked(&press(&mut app, "a")).0.key(), &mr_key());
         press(&mut app, ":session");
         assert_eq!(asked(&app.handle_key(code(KeyCode::Enter))).0.key(), &mr_key());
@@ -184,7 +184,7 @@ mod tests {
     fn the_compact_layout_reads_the_same_keys() {
         let mut app = with_agent(with_review());
         phone(&mut app);
-        assert!(app.compact);
+        assert!(app.layout.is_compact());
         assert_eq!(asked(&press(&mut app, "a")).0.key(), &mr_key());
     }
 

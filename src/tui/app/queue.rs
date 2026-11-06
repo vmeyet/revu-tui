@@ -514,7 +514,7 @@ mod tests {
         app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: merged, opened: HashMap::new(), cached: false });
         let screen = render(&mut app, 120, 40);
         assert!(screen.contains("#42") && screen.contains("!42"), "the sigil tells the forges apart:\n{screen}");
-        app.queue_layout = crate::config::QueueLayout::Compact;
+        app.layout.queue_layout = crate::config::QueueLayout::Compact;
         let screen = render(&mut app, 120, 20);
         assert!(screen.contains("github") && screen.contains("gitlab"), "{screen}");
         let github_row = app.queue_rows().iter().position(|r| matches!(r, QueueRow::Mr(mr) if mr.host.is_some())).unwrap();

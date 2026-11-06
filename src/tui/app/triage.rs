@@ -159,7 +159,7 @@ mod tests {
         let meta = screen.lines().position(|l| l.contains(&format!("!{} ·", last.number))).unwrap();
         let ends_with_mark = |line: &str| line.split("││").next().unwrap_or("").trim_end_matches([' ', '│']).ends_with('!');
         assert!(ends_with_mark(screen.lines().nth(meta - 1).unwrap()), "the mark sits at the end of the title line:\n{screen}");
-        app.queue_layout = crate::config::QueueLayout::Compact;
+        app.layout.queue_layout = crate::config::QueueLayout::Compact;
         let screen = render(&mut app, 100, 16);
         let row = screen.lines().find(|l| l.contains(&format!("!{} ", last.number))).unwrap();
         assert!(ends_with_mark(row), "{screen}");

@@ -140,7 +140,7 @@ async fn event_loop(
         if changed {
             print_links(&hyperlinks(frame.buffer, &app.drawn.links));
         }
-        let next_tick = ticked + if changed { app.motion().tick() } else { IDLE_TICK };
+        let next_tick = ticked + if changed { app.layout.motion().tick() } else { IDLE_TICK };
         let actions = tokio::select! {
             Some(event) = keys.next() => match event? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => { wake(app); app.handle_key(key) }

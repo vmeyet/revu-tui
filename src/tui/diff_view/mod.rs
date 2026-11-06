@@ -114,7 +114,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
         }
         None => "Review".to_owned(),
     };
-    let zen = app.zen;
+    let zen = app.layout.zen;
     let block =
         if zen { Block::default().padding(Padding::horizontal(1)) } else { pane::framed(&theme, &title, app.focus == Focus::Review) };
     let block = match gutter.cursor_title(app.cursor_line(), theme) {
@@ -135,8 +135,8 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     }
     let today = app.today;
     let sigil = app.open.as_ref().map_or('!', |o| app.hosts.kind_of(&o.key).sigil());
-    let wrap = app.wraps();
-    let short = app.short;
+    let wrap = app.layout.wraps();
+    let short = app.layout.is_short();
     let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let compose_row = app.compose_row();

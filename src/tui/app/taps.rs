@@ -114,7 +114,7 @@ impl App {
     pub(crate) fn shows_taps(&self) -> bool {
         let typing = self.filtering || self.input.is_some();
         let taken = self.asks() || self.offer.is_some() || typing || self.modal();
-        self.compact && self.tap_bar && !taken
+        self.layout.has_tap_bar() && !taken
     }
 
     /// A click on a label presses its keys, one after the other; a label drawn before the bar lost its row answers
@@ -307,7 +307,7 @@ mod tests {
         let wide = render(&mut app, 70, 30);
         assert!(wide.lines().last().unwrap().contains("gitlab.com") && app.drawn.taps.is_empty(), "never from 70 columns:\n{wide}");
         let mut hidden = with_review();
-        hidden.tap_bar = false;
+        hidden.layout.tap_bar = false;
         let screen = phone(&mut hidden);
         assert!(screen.lines().last().unwrap().contains("gitlab.com") && hidden.drawn.taps.is_empty(), "{screen}");
     }
@@ -354,7 +354,7 @@ mod tests {
         press(&mut app, "]c");
         assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Hunk { .. })));
         press(&mut app, "zz");
-        assert!(app.zen);
+        assert!(app.layout.zen);
         press(&mut app, "zzT");
         assert_eq!(app.focus, Focus::Side);
     }

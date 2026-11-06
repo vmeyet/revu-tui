@@ -176,7 +176,10 @@ impl App {
 
     /// The list of every conversation is open, but zen shows the diff in its place.
     fn every_thread_hidden(&self) -> bool {
-        self.zen && self.focus == Focus::Review && !self.areas.both_shown() && self.open.as_ref().is_some_and(Open::lists_every_thread)
+        self.layout.zen
+            && self.focus == Focus::Review
+            && !self.areas.both_shown()
+            && self.open.as_ref().is_some_and(Open::lists_every_thread)
     }
 
     /// `m` in the list of every conversation: only those I take part in, or every one again.
@@ -226,7 +229,7 @@ impl App {
             return vec![];
         };
         let actions = self.jump_to_row(&target);
-        if self.zen && !self.areas.both_shown() {
+        if self.layout.zen && !self.areas.both_shown() {
             self.focus = Focus::Review;
         }
         actions
@@ -765,7 +768,11 @@ mod tests {
         assert_eq!((listed_place(&app), app.focus), (Some(Place::All), Focus::Side), "the list keeps the keys");
         assert!(render(&mut app, 138, 40).contains("▎✓   13      -    let client = Client::new();"));
         press(&mut app, "hT");
-        assert_eq!((listed_place(&app), app.focus, app.zen), (None, Focus::Review, true), "T from the diff closes the list it shows");
+        assert_eq!(
+            (listed_place(&app), app.focus, app.layout.zen),
+            (None, Focus::Review, true),
+            "T from the diff closes the list it shows"
+        );
     }
 
     #[test]

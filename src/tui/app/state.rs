@@ -113,22 +113,8 @@ pub(crate) struct App {
     pub(crate) views: Vec<(String, String)>,
     /// The filter row is taking keys.
     pub(crate) filtering: bool,
-    /// Long diff lines wrap under their text instead of ending in `…`, once `w` chose; until then the layout does.
-    pub(crate) wrap: Option<bool>,
-    /// Zen, `zz`: the diff alone in a centred column, no frames, no status line, nothing pulsing.
-    pub(crate) zen: bool,
-    /// The last frame was too narrow for the right pane beside the diff.
-    pub(crate) narrow: bool,
-    /// The last frame showed the compact layout: one page at a time, full screen.
-    pub(crate) compact: bool,
-    /// The last frame was compact and too short for the rows around the page.
-    pub(crate) short: bool,
-    /// `[tui] tap_bar`: the compact layout ends on a row of labels to tap.
-    pub(crate) tap_bar: bool,
-    /// How wide the diff reads in zen, `[tui] zen_width`; `None` grows it with the screen.
-    pub(crate) zen_width: Option<u16>,
-    /// The terminal widths the layout turns on, `[tui] narrow_width` and `wide_width`.
-    pub(crate) widths: crate::config::Widths,
+    /// How the screen is laid out: zen, the size the last frame fit, the line wrap.
+    pub(crate) layout: super::Layout,
     /// The MR zen just switched to, shown on top for a moment: when, and what it says.
     pub(crate) zen_switch: Option<(Instant, String)>,
     /// Notifications that arrived in zen, sent when it ends.
@@ -154,7 +140,6 @@ pub(crate) struct App {
     pub(crate) queue_view: super::QueueView,
     /// The MRs pinned in this scope: PINNED shows them above every section.
     pub(crate) pins: BTreeSet<MrKey>,
-    pub(crate) queue_layout: crate::config::QueueLayout,
     pub(crate) queue_loading: bool,
     /// The last load failed: with nothing to show, the pane says so until one succeeds or `r` asks again.
     pub(crate) queue_failed: bool,
@@ -274,6 +259,7 @@ impl App {
     pub(crate) fn new(settings: Settings) -> Self {
         let now = Instant::now();
         let toast = first_toast(&settings, now);
+        let layout = super::Layout::new(&settings);
         Self {
             theme: settings.theme,
             host: settings.host,
@@ -292,14 +278,7 @@ impl App {
             sharing: None,
             views: settings.views,
             filtering: false,
-            wrap: None,
-            zen: false,
-            narrow: false,
-            compact: false,
-            short: false,
-            tap_bar: settings.tap_bar,
-            zen_width: settings.zen_width,
-            widths: settings.widths,
+            layout,
             zen_switch: None,
             quiet_notices: vec![],
             rate: crate::forge::RateLimit::default(),
@@ -314,7 +293,6 @@ impl App {
             seen: None,
             queue_view: super::QueueView::default(),
             pins: BTreeSet::new(),
-            queue_layout: settings.queue_layout,
             prefetch_limit: settings.prefetch,
             prefetch_due: false,
             offer: None,
@@ -385,7 +363,7 @@ impl App {
     /// `revu 42`: the MR opens in zen at once, and the queue loads behind it.
     pub(crate) fn start_on(&mut self, key: MrKey) -> Vec<Action> {
         let opening = self.open_key(key);
-        self.zen = true;
+        self.layout.zen = true;
         [self.start(), opening].concat()
     }
 
