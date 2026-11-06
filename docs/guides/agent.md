@@ -83,6 +83,22 @@ A new session starts in the branch's own folder, in your default mode: revu fetc
 Its name is `revu: feat/checkout`.
 revu remembers one session per branch, so a worktree that checks out another branch finds that branch's session.
 
+## In the queue
+
+A `✻` before a row's age, or among its marks in the one-line layout, says the MR or the branch has a session.
+
+| The mark | The session |
+|---|---|
+| `✻`, lit | Runs, or waits for you |
+| `✻`, faded | Stopped: `a` starts it again |
+| None | revu knows no session that is surely this one |
+
+It marks the session `a` opens without asking: the remembered one, the one that opened the MR, or one started in the branch's worktree.
+Sessions only started in the project's checkout mark nothing, since `a` would ask you to pick.
+revu asks Claude Code once per queue refresh, and again after a session opens or you come back from one.
+When Claude Code does not answer, no row is marked.
+Another agent marks nothing: revu cannot ask it which sessions it has.
+
 ## Where the checkout is
 
 revu uses the checkout it was started in when the MR is of that project.
@@ -266,7 +282,7 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 - An agent that is not on revu's `PATH` opens no pane: the toast names the program.
 - revu finds a session's pane by a mark it sets on it, so only a pane revu opened is found again.
 - In Ghostty, switch to another tab right after `a` and the split may open there: revu cannot ask Ghostty which terminal it runs in.
-- revu does not send the line or the thread under the cursor to the session, and shows no session state in the queue.
+- revu does not send the line or the thread under the cursor to the session.
 - revu remembers one session per MR or branch, in its cache, for as long as it keeps the MR or the worktree there.
 - revu never removes a worktree it added: `git worktree remove` does.
 

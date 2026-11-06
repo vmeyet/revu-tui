@@ -286,6 +286,8 @@ pub(crate) enum Action {
         subject: Box<crate::agent::Subject>,
         choice: crate::agent::Choice,
     },
+    /// After a fresh queue, or a session shown: which of `subjects` have a session, from one listing.
+    SessionMarks(Vec<crate::agent::Subject>),
     /// `B` or `I` on a local diff: every worktree answers the new way, and `key`'s diff is read again whole.
     ChangeLocal {
         key: MrKey,
@@ -535,6 +537,10 @@ pub(crate) enum Incoming {
         subject: Box<crate::agent::Subject>,
         sessions: Vec<crate::agent::Session>,
     },
+    /// The session is on show beside revu; the text says which and where.
+    SessionShown(String),
+    /// The rows of the queue that have a session.
+    SessionMarks(crate::agent::Marks),
     /// The session's program, ready for the terminal; the loop lends it.
     SessionReady(crate::agent::Handoff),
     /// Back from the session `said` names, with what went wrong if anything did.

@@ -325,6 +325,18 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_a_branch_with_a_session_is_marked_before_its_age_and_apart_from_uncommitted_work() {
+        let mut app = on_the_screen();
+        app.agent = true;
+        let marks = [
+            (local_key(), crate::agent::SessionMark::Running),
+            (app.sections.as_ref().unwrap().open[0].key(), crate::agent::SessionMark::Stopped),
+        ];
+        app.apply(Incoming::SessionMarks(marks.into_iter().collect()));
+        insta::assert_snapshot!("worktree_screen_sessions", render(&mut app, 110, 18));
+    }
+
+    #[test]
     fn esc_in_zen_lands_on_the_worktree_screen() {
         let mut app = on_the_screen();
         app.zen = true;

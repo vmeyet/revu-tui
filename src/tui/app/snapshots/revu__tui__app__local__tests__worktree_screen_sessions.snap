@@ -1,0 +1,22 @@
+---
+source: src/tui/app/local.rs
+expression: "render(&mut app, 110, 18)"
+---
+╭ Worktrees · widgets ───────────╮╭ widgets ~ feat/checkout ─────────────────────────────────────────────────╮
+│   ── HERE ──────────────────── ││  feat/checkout → main · 2h · +5 −3 · 2 files                             │
+│ ▎ feat/local-diff              ││                                                                          │
+│ ▎ 3 commits · +182 −31 ✻ 2m  ● ││                                                                          │
+│                                ││ ▎▾ src/pay/charge.rs                                               +4 −2 │
+│   ── AHEAD · 2 ─────────────── ││     ▾ @@ -12,4 +12,5 @@ pub async fn charge                              │
+│   fix/header-width             ││      12  pub async fn charge(card: &Card, amount: Money) -> Result<Rece… │
+│   1 commit · +12 −4      1h    ││      13 -    let client = Client::new();                                 │
+│   fix/old                      ││      13 +    let client = Client::with_key(idempotency_key(card));       │
+│   2 commits · +40 −2    10h    ││      14 +    let attempt = Attempt::first();                             │
+│                                ││      15      let response = client.charge(amount).await?;                │
+│   ── NOTHING AHEAD · 1 ─────── ││      16      audit::record(&response);                                   │
+│   main                         ││     ▾ @@ -40,3 +41,4 @@ fn idempotency_key                               │
+│   no commits          ✻ now  ● ││      41  fn idempotency_key(card: &Card) -> Key {                        │
+│                                ││      42 ~    Key::from((card.number(), card.expiry()))                   │
+│                                ││      43 +    // hunk two, line 43 is new                                 │
+╰────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────╯
+ local · widgets                                                                                       ? help

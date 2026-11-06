@@ -224,6 +224,8 @@ pub(crate) struct App {
     pub(crate) viewing: Option<crate::open::View>,
     /// `[agent] enabled`: `a` opens an agent session on an MR.
     pub(crate) agent: bool,
+    /// The queue rows that have an agent session, as the last listing said.
+    pub(crate) session_marks: crate::agent::Marks,
     /// The sessions `a` found for an MR, which the search box lists.
     pub(crate) session_pick: Option<super::SessionPick>,
     /// An agent session ready for the terminal; the loop takes it and hands the terminal over.
@@ -355,6 +357,7 @@ impl App {
             thumbs: settings.pictures.map_or_else(crate::tui::images::Thumbs::disabled, crate::tui::images::Thumbs::with_picker),
             viewing: None,
             agent: settings.agent,
+            session_marks: crate::agent::Marks::new(),
             session_pick: None,
             handoff: None,
             composed: vec![],

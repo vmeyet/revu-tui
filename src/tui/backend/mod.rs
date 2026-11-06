@@ -111,11 +111,19 @@ impl Backend {
         blocking::run(move || {
             Ok(match agent.open(&subject, &cache, choice)? {
                 Outcome::Pick(sessions) => Incoming::SessionPick { subject: Box::new(subject), sessions },
-                Outcome::Shown(shown) => Incoming::Done(shown),
+                Outcome::Shown(shown) => Incoming::SessionShown(shown),
                 Outcome::Handoff(handoff) => Incoming::SessionReady(handoff),
             })
         })
         .await
+    }
+
+    /// Which of `subjects` have an agent session: one listing on the blocking pool, and no mark when it cannot run.
+    pub(super) async fn session_marks(&self, subjects: Vec<crate::agent::Subject>) -> Incoming {
+        let Some(agent) = self.agent.clone() else { return Incoming::SessionMarks(crate::agent::Marks::new()) };
+        let homes = Arc::clone(&self.homes);
+        let marks = blocking::run(move || Ok(agent.marks(&subjects, |key| homes.cache_of(key)))).await;
+        Incoming::SessionMarks(marks.inspect_err(warn_stopped).unwrap_or_default())
     }
 }
 

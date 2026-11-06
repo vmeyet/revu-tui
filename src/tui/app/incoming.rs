@@ -48,6 +48,7 @@ impl App {
                 }
                 self.schedule_queue();
                 self.ask_triage();
+                self.ask_session_marks();
                 let notice = self.notify_new();
                 self.notice(notice);
                 self.prefetch();
@@ -115,6 +116,11 @@ impl App {
             Incoming::Viewed { view, outcome } => self.apply_viewed(&view, outcome),
             Incoming::SessionPick { subject, sessions } => self.offer_sessions(*subject, sessions),
             Incoming::SessionReady(handoff) => self.handoff = Some(handoff),
+            Incoming::SessionShown(said) => {
+                self.toast(said);
+                self.ask_session_marks();
+            }
+            Incoming::SessionMarks(marks) => self.session_marks = marks,
             Incoming::SessionLeft { said, outcome } => self.apply_session_left(&said, outcome),
             Incoming::Triaged { key, verdict } => self.apply_triaged(key, verdict),
             Incoming::Read { key, head, reading } => self.apply_read(key, head, reading),

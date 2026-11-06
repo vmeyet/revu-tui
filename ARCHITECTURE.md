@@ -68,6 +68,8 @@ Loading the queue:
 2. Only my own lists can fail it: open MRs that do not load come back as `Fetched::missing`, and sizes that take more than a few seconds are left out, so the row shows none.
 3. `Queues::load` adds the other hosts, the pins and the ready command; each part that fails follows the queue as an `Incoming::Failed`.
 4. A queue that fails as a whole keeps the one on screen, its title marked `not refreshed` until one lands.
+5. With `[agent]` on, a fresh queue, and a session shown or left, sends `Action::SessionMarks` with every row's `agent::Subject`.
+   `Agent::marks` lists the sessions once on the blocking pool and matches them as `a` would; `Incoming::SessionMarks` brings the marks back, and a listing that fails brings none.
 
 Handling a key:
 

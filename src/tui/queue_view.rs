@@ -3,6 +3,7 @@
 use super::app::{App, Badge, Focus, HERE, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
 use super::ui::{Link, draw_empty, short_age};
+use crate::agent::SessionMark;
 use crate::config::QueueLayout;
 use crate::forge::{QueueMr, WorktreeRow};
 use ratatui::Frame;
@@ -128,7 +129,7 @@ fn mr_lines(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize
     }
 }
 
-/// `feat/local-diff`, then `3 commits · +182 −31`, its age and a `●` for uncommitted work at the right edge.
+/// `feat/local-diff`, then `3 commits · +182 −31`, its session, its age and a `●` for uncommitted work at the right edge.
 fn worktree_lines(app: &App, mr: &QueueMr, worktree: &WorktreeRow, selected: bool, width: usize) -> Vec<Line<'static>> {
     let theme = app.theme;
     let dim = Style::default().fg(theme.faded);
@@ -147,14 +148,13 @@ fn worktree_lines(app: &App, mr: &QueueMr, worktree: &WorktreeRow, selected: boo
         () => short_age(since),
     };
     let dot = if worktree.uncommitted > 0 { "●" } else { " " };
-    let room = width.saturating_sub(BAR_W + age.width() + 4);
+    let session = session_span(app, mr);
+    let room = width.saturating_sub(BAR_W + tail_w(session.as_slice()) + age.width() + 4);
     let text = truncate(worktree.no_diff.as_deref().unwrap_or(&format!("{commits}{size}")), room);
     let pad = " ".repeat(room.saturating_sub(text.width()) + 1);
-    let second = vec![
-        bar(theme, selected),
-        Span::styled(format!("{text}{pad}{age} "), dim),
-        Span::styled(format!(" {dot}"), Style::default().fg(theme.warn)),
-    ];
+    let mut second = vec![bar(theme, selected), Span::styled(format!("{text}{pad}"), dim)];
+    second.extend(session);
+    second.extend([Span::styled(format!("{age} "), dim), Span::styled(format!(" {dot}"), Style::default().fg(theme.warn))]);
     vec![Line::from(first), Line::from(second)]
 }
 
@@ -227,7 +227,7 @@ fn comfortable(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: us
     (vec![Line::from(first), Line::from(second)], Some(link))
 }
 
-/// `romain · !1797 · +7 −5` then the age flush right, one faded colour so the eye goes from
+/// `romain · !1797 · +7 −5` then its session and the age flush right, one faded colour so the eye goes from
 /// title to title. The size, then the host, drop first when the pane is narrow. Also where the
 /// number starts, for its link.
 fn meta(app: &App, mr: &QueueMr, room: usize) -> (Vec<Span<'static>>, usize) {
@@ -243,25 +243,33 @@ fn meta(app: &App, mr: &QueueMr, room: usize) -> (Vec<Span<'static>>, usize) {
         .map(|p| format!(" · {}/{}", p.viewed, p.files))
         .unwrap_or_default();
     let number = format!("{number}{started}");
-    let base = number.width() + 3 + 1 + age.width();
+    let session = session_span(app, mr);
+    let right = tail_w(session.as_slice()) + age.width();
+    let base = number.width() + 3 + 1 + right;
     let who = truncate(who, room.saturating_sub(base).max(1));
     let left = |extra: &str| who.width() + 3 + number.width() + extra.width();
-    let host = if left(&host) + 1 + age.width() <= room { host } else { String::new() };
-    let size = if left(&(host.clone() + &size)) + 1 + age.width() <= room { size } else { String::new() };
+    let host = if left(&host) + 1 + right <= room { host } else { String::new() };
+    let size = if left(&(host.clone() + &size)) + 1 + right <= room { size } else { String::new() };
     let text = format!("{who} · {number}{host}{size}");
-    let pad = room.saturating_sub(text.width() + age.width());
+    let pad = room.saturating_sub(text.width() + right);
     let number_at = who.width() + 3;
-    (vec![Span::styled(text, dim), Span::styled(format!("{}{age}", " ".repeat(pad)), dim)], number_at)
+    let mut spans = vec![Span::styled(text, dim), Span::raw(" ".repeat(pad))];
+    spans.extend(session);
+    spans.push(Span::styled(age, dim));
+    (spans, number_at)
 }
 
 fn number_of(app: &App, mr: &QueueMr) -> String {
     format!("{}{}", app.hosts.kind_of(&mr.key()).sigil(), mr.number)
 }
 
-/// One line per MR: `!iid title`, the host when mixed, Jev's mark, the approval mark and the badge.
+/// One line per MR: `!iid title`, the host when mixed, its session (two cells when the agent is on), Jev's mark, the
+/// approval mark and the badge.
 fn compact(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
     let theme = app.theme;
-    let tail = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
+    let session = app.agent.then(|| session_span(app, mr).unwrap_or_else(|| Span::raw("  ")));
+    let marks = right_marks(app, app.triaged().then(|| app.mark(mr)).flatten(), app.approved(mr), app.badge(mr));
+    let tail: Vec<Span<'static>> = session.into_iter().chain(marks).collect();
     let iid = format!("{} ", number_of(app, mr));
     let tag = app.host_tag(mr).map(|t| format!("{t} "));
     let tag_w = tag.as_ref().map_or(0, |t| t.width());
@@ -364,6 +372,16 @@ fn right_marks(app: &App, mark: Option<Mark>, approved: bool, badge: Option<Badg
     spans.push(if approved { Span::styled("✓ ", Style::default().fg(app.theme.success)) } else { Span::raw("  ") });
     spans.push(badge.map_or_else(|| Span::raw(" "), |b| badge_span(app, b)));
     spans
+}
+
+/// `✻ ` where the row has an agent session: lit while it runs, faded once it stopped. Apart from the marks that ask for
+/// attention, in a glyph none of them uses.
+fn session_span(app: &App, mr: &QueueMr) -> Option<Span<'static>> {
+    let colour = match app.session_mark(mr)? {
+        SessionMark::Running => app.theme.link,
+        SessionMark::Stopped => app.theme.faded,
+    };
+    Some(Span::styled("✻ ", Style::default().fg(colour)))
 }
 
 fn tail_w(tail: &[Span<'_>]) -> usize {

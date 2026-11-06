@@ -13,10 +13,11 @@ mod worktree;
 
 use crate::cache::Cache;
 use crate::config;
+use crate::forge::MrKey;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -193,6 +194,22 @@ pub(crate) struct Kept {
     pub(crate) pane: Option<String>,
 }
 
+/// Whether the session the queue marks a row with runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SessionMark {
+    Running,
+    Stopped,
+}
+
+impl SessionMark {
+    fn of(live: bool) -> Self {
+        if live { Self::Running } else { Self::Stopped }
+    }
+}
+
+/// The rows of the queue that have a session.
+pub(crate) type Marks = HashMap<MrKey, SessionMark>;
+
 /// Which session `a` is after.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Choice {
@@ -336,6 +353,15 @@ impl Agent {
             cache.write(&key, &Kept { pane: placed.pane, ..ready.kept })?;
         }
         Ok(placed.outcome)
+    }
+
+    /// Which of `subjects` have a session, and whether it runs, as `open` would find it, from one listing. Another agent
+    /// than Claude Code cannot be asked, and a listing that fails or cannot be read marks nothing.
+    pub(crate) fn marks<'c>(&self, subjects: &[Subject], cache_of: impl Fn(&MrKey) -> &'c Cache) -> Marks {
+        match &self.harness {
+            Harness::Claude { jobs } => claude::marks(self, jobs, subjects, |subject| cache_of(subject.key()).read(&subject.cache_key())),
+            Harness::Custom { .. } => Marks::new(),
+        }
     }
 
     /// Where a new session of `subject` works: a worktree on the MR's branch, or the branch's own worktree.

@@ -13,6 +13,10 @@ Each entry says what changed, then where, then how to use it.
   On the worktree screen and in a worktree's diff, with `[agent] enabled = true`.
   Press `a` or type `:session`: the session started in that worktree opens, else a new one starts there.
 
+- **A `✻` marks the MRs and branches that have an agent session.**
+  In the queue and on the worktree screen, with `[agent] enabled = true`.
+  Lit while the session runs, faded once it stopped; `a` opens it.
+
 ## 0.13.0 - 2026-11-06
 
 ### New

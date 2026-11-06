@@ -169,4 +169,13 @@ mod tests {
         assert_eq!((call.dir, said.as_str()), (Some(PathBuf::from(WORKTREE)), "a new session for feat/checkout · revu: feat/checkout"));
         assert_eq!(script.lines(), [] as [String; 0], "no worktree is looked for");
     }
+
+    #[test]
+    fn another_agent_marks_no_row_since_it_cannot_say_what_runs() {
+        let (agent, script) = agent(custom(Some("aider --restore {dir}")), Script::default(), false);
+        let (_dir, cache) = cache();
+        agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap();
+        assert_eq!(agent.marks(&[Subject::Mr(mr())], |_| &cache), super::super::Marks::new());
+        assert!(script.lines().iter().all(|line| line.starts_with("git ")), "{:?}", script.lines());
+    }
 }

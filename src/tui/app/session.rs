@@ -1,7 +1,7 @@
 //! `a` and `:session`: the agent session of the MR, or on `revu local` the branch, under the cursor. The runner finds
 //! or starts it; when several could be the one, the search box lists them, a new one first.
 use super::{Action, App, Focus};
-use crate::agent::{Branch, Choice, Mr, Session, Subject};
+use crate::agent::{Branch, Choice, Mr, Session, SessionMark, Subject};
 use crate::forge::QueueMr;
 use crate::share::Fields;
 use crate::tui::palette::{Candidate, Mode, Target};
@@ -61,6 +61,18 @@ impl App {
         }
     }
 
+    /// Which rows have a session, asked of the agent once for every row of the queue.
+    pub(super) fn ask_session_marks(&mut self) {
+        let Some(sections) = self.sections.as_ref().filter(|_| self.agent) else { return };
+        let subjects = sections.all().map(|row| self.subject_of(row)).collect();
+        self.composed.push(Action::SessionMarks(subjects));
+    }
+
+    /// The row's session, as the last listing said.
+    pub(crate) fn session_mark(&self, row: &QueueMr) -> Option<SessionMark> {
+        self.session_marks.get(&row.key()).copied()
+    }
+
     pub(super) fn offer_sessions(&mut self, subject: Subject, sessions: Vec<Session>) {
         self.session_pick = Some(SessionPick { subject, sessions });
         self.open_palette(Mode::Sessions);
@@ -106,12 +118,14 @@ impl App {
             Ok(()) => self.toast(format!("back from {said}")),
             Err(message) => self.warn(message),
         }
+        self.ask_session_marks();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::agent::{Call, Choice, Handoff, Session, Subject};
+    use crate::agent::{Call, Choice, Handoff, Session, SessionMark, Subject};
+    use crate::forge::QueueMr;
     use crate::tui::app::test_support::*;
     use std::sync::Arc;
 
@@ -293,5 +307,78 @@ mod tests {
         let mut app = with_agent(with_queue());
         press(&mut app, "?");
         assert!(render(&mut app, 120, 40).contains("the agent session of the MR"));
+    }
+
+    fn queue(app: &mut App) {
+        let sections = sections();
+        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections, opened: HashMap::new(), cached: false });
+    }
+
+    fn marks_asked(actions: &[Action]) -> Vec<&Subject> {
+        actions
+            .iter()
+            .filter_map(|action| if let Action::SessionMarks(subjects) = action { Some(subjects) } else { None })
+            .flatten()
+            .collect()
+    }
+
+    #[test]
+    fn a_fresh_queue_asks_once_which_of_its_rows_have_a_session_and_only_with_the_agent_on() {
+        let mut on = with_agent(app());
+        queue(&mut on);
+        let actions = on.take_actions();
+        let keys: Vec<&MrKey> = marks_asked(&actions).into_iter().map(Subject::key).collect();
+        let rows: Vec<MrKey> = on.sections.as_ref().unwrap().all().map(QueueMr::key).collect();
+        assert_eq!(keys, rows.iter().collect::<Vec<_>>());
+        assert_eq!(actions.iter().filter(|action| matches!(action, Action::SessionMarks(_))).count(), 1);
+        let mut off = app();
+        queue(&mut off);
+        assert_eq!(marks_asked(&off.take_actions()), [] as [&Subject; 0]);
+    }
+
+    #[test]
+    fn a_session_shown_or_left_asks_the_marks_again() {
+        let mut app = with_agent(with_queue());
+        app.take_actions();
+        app.apply(Incoming::SessionShown("a new session for !42 · in a tmux window".into()));
+        assert_eq!(app.live_toast().unwrap().text, "a new session for !42 · in a tmux window");
+        assert_ne!(marks_asked(&app.take_actions()), [] as [&Subject; 0]);
+        app.apply(Incoming::SessionLeft { said: "a new session for !42".into(), outcome: Ok(()) });
+        assert_ne!(marks_asked(&app.take_actions()), [] as [&Subject; 0]);
+    }
+
+    /// The queue with the agent on, the first row's session running and the second's stopped.
+    fn marked(app: App) -> App {
+        let mut app = with_agent(app);
+        let keys: Vec<MrKey> = app.sections.as_ref().unwrap().all().map(QueueMr::key).collect();
+        let marks = [(keys[0].clone(), SessionMark::Running), (keys[1].clone(), SessionMark::Stopped)];
+        app.apply(Incoming::SessionMarks(marks.into_iter().collect()));
+        app.opened.insert(keys[1].clone(), "2026-09-01T00:00:00Z".parse().unwrap());
+        app.now = app.started;
+        app
+    }
+
+    #[test]
+    fn a_running_session_is_lit_and_a_stopped_one_faded() {
+        let mut app = marked(with_queue());
+        let screen = cells(&mut app, 100, 16);
+        assert_eq!((cell_of(&screen, "✻ 2h").fg, cell_of(&screen, "✻ 4h").fg), (app.theme.link, app.theme.faded));
+    }
+
+    #[test]
+    fn snapshot_a_session_marks_its_row_before_the_age_away_from_the_badges() {
+        insta::assert_snapshot!("queue_sessions", render(&mut marked(with_queue()), 100, 16));
+    }
+
+    #[test]
+    fn snapshot_in_the_compact_queue_a_session_takes_a_column_of_its_own() {
+        let mut app = with_queue();
+        app.queue_layout = crate::config::QueueLayout::Compact;
+        insta::assert_snapshot!("queue_compact_sessions", render(&mut marked(app), 100, 16));
+    }
+
+    #[test]
+    fn snapshot_on_a_phone_the_session_stays_before_the_age_and_the_marks_follow() {
+        insta::assert_snapshot!("queue_phone_sessions", phone(&mut marked(with_queue())));
     }
 }

@@ -1,7 +1,7 @@
 //! Claude Code as the agent. `claude agents --json` lists its sessions; the MR a background session
 //! opened is read from that session's `state.json`, a file Claude Code keeps for itself and documents
 //! nowhere, so whatever cannot be read there means "not found" and never an error.
-use super::{Agent, Branch, Call, Case, Choice, Kept, Mr, Ready, Session, Step, Subject};
+use super::{Agent, Branch, Call, Case, Choice, Kept, Marks, Mr, Ready, Session, SessionMark, Step, Subject};
 use anyhow::{Context, Result};
 use chrono::DateTime;
 use serde::Deserialize;
@@ -82,7 +82,7 @@ fn find(agent: &Agent, jobs: &Path, known: &[Session], kept: Option<&Kept>, subj
     }
     match subject {
         Subject::Mr(mr) => {
-            if let Some(session) = opened_by(known, &openers(jobs, &mr.fields.url)) {
+            if let Some(session) = opened_by(known, &openers(&read_jobs(jobs), &mr.fields.url)) {
                 return Found::Session(session.clone(), Case::Opener);
             }
             let checkout = agent.checkouts.get(&mr.fields.project);
@@ -121,22 +121,50 @@ fn pick<'a>(candidates: impl Iterator<Item = &'a Session>) -> Found {
     Found::Pick(candidates)
 }
 
-/// The ids of the background sessions whose `state.json` lists the page `url` among the links they produced.
-fn openers(jobs: &Path, url: &str) -> Vec<String> {
-    let Ok(folders) = std::fs::read_dir(jobs) else { return vec![] };
-    folders.filter_map(Result::ok).filter_map(|folder| opener(&folder.path(), url)).flatten().collect()
+/// The mark of each subject `find` would open a session of without asking, from one listing: the remembered one, then
+/// the MR's opener or the sessions of the branch's worktree; a checkout's sessions belong to no MR in particular.
+pub(super) fn marks(agent: &Agent, jobs: &Path, subjects: &[Subject], kept_of: impl Fn(&Subject) -> Option<Kept>) -> Marks {
+    let listed = agent.run.output(&Call::new(&[PROGRAM, "agents", "--json", "--all"]));
+    let known = listed.map(|printed| sessions(&printed)).inspect_err(|e| tracing::warn!("no session marks: {e:#}")).unwrap_or_default();
+    if known.is_empty() {
+        return Marks::new();
+    }
+    let jobs = read_jobs(jobs);
+    let marked = subjects.iter().filter_map(|subject| {
+        let live = match (remembered(&known, kept_of(subject).as_ref()), subject) {
+            (Some(session), _) => Some(session.live),
+            (None, Subject::Mr(mr)) => opened_by(&known, &openers(&jobs, &mr.fields.url)).map(|session| session.live),
+            (None, Subject::Branch(branch)) => in_worktree(&known, branch).map(|session| session.live).reduce(|one, other| one || other),
+        };
+        Some((subject.key().clone(), SessionMark::of(live?)))
+    });
+    marked.collect()
 }
 
-/// Both ids of the session kept in the folder `job`, when it opened `url`.
-fn opener(job: &Path, url: &str) -> Option<Vec<String>> {
-    let state: Value = serde_json::from_slice(&std::fs::read(job.join("state.json")).ok()?).ok()?;
-    let mut links = state.get("children")?.as_array()?.iter().filter_map(|child| child.get("href")?.as_str());
-    if !links.any(|link| same_page(link, url)) {
-        return None;
-    }
-    let folder = job.file_name().and_then(|name| name.to_str()).map(str::to_owned);
+/// What one background session's `state.json` says: both its ids, and the links it produced.
+struct Job {
+    ids: Vec<String>,
+    links: Vec<String>,
+}
+
+/// Every job of the folder `jobs` revu can read.
+fn read_jobs(jobs: &Path) -> Vec<Job> {
+    let Ok(folders) = std::fs::read_dir(jobs) else { return vec![] };
+    folders.filter_map(Result::ok).filter_map(|folder| job(&folder.path())).collect()
+}
+
+fn job(folder: &Path) -> Option<Job> {
+    let state: Value = serde_json::from_slice(&std::fs::read(folder.join("state.json")).ok()?).ok()?;
+    let links = state.get("children")?.as_array()?.iter().filter_map(|child| child.get("href")?.as_str()).map(str::to_owned).collect();
+    let name = folder.file_name().and_then(|name| name.to_str()).map(str::to_owned);
     let session = state.get("sessionId").and_then(Value::as_str).map(str::to_owned);
-    Some(folder.into_iter().chain(session).collect())
+    Some(Job { ids: name.into_iter().chain(session).collect(), links })
+}
+
+/// The ids of the `jobs` that list the page `url` among the links they produced.
+fn openers(jobs: &[Job], url: &str) -> Vec<String> {
+    let opened = jobs.iter().filter(|job| job.links.iter().any(|link| same_page(link, url)));
+    opened.flat_map(|job| job.ids.iter().cloned()).collect()
 }
 
 /// Two links to one MR: the scheme, a trailing slash, GitLab's `/-/`, a query and letter case do not count.
@@ -330,10 +358,10 @@ mod tests {
 
     #[test]
     fn a_missing_jobs_folder_or_a_page_nobody_opened_finds_no_opener() {
-        assert_eq!(openers(Path::new("/revu-no-such-folder/jobs"), &mr().fields.url), [] as [String; 0]);
+        assert_eq!(openers(&read_jobs(Path::new("/revu-no-such-folder/jobs")), &mr().fields.url), [] as [String; 0]);
         let jobs = tempfile::tempdir().unwrap();
         job(jobs.path(), "0ther000", &["https://gitlab.com/acme/widgets/-/merge_requests/420"]);
-        assert_eq!(openers(jobs.path(), &mr().fields.url), [] as [String; 0]);
+        assert_eq!(openers(&read_jobs(jobs.path()), &mr().fields.url), [] as [String; 0]);
         assert!(same_page("https://github.com/acme/widgets/pull/42/", "https://github.com/Acme/widgets/pull/42"));
         assert!(!same_page("https://github.com/acme/widgets/pull/42", "https://github.com/acme/widgets/pull/4"));
     }
@@ -532,5 +560,50 @@ mod tests {
         assert_eq!(started.argv, ["claude", "--bg", "--name", "revu: feat/checkout", prompt]);
         assert_eq!(started.dir.as_deref(), Some(Path::new(WORKTREE)));
         assert!(script.lines().iter().all(|line| line.starts_with("claude ")), "{:?}", script.lines());
+    }
+
+    fn other_mr(number: u64) -> Subject {
+        let url = format!("https://gitlab.com/acme/widgets/-/merge_requests/{number}");
+        let fields = crate::share::Fields { url, ..mr().fields };
+        Subject::Mr(Mr { key: crate::forge::MrKey::new("acme/widgets", number), fields, ..mr() })
+    }
+
+    #[test]
+    fn one_listing_marks_the_remembered_session_the_opener_and_a_branchs_worktree_and_not_a_checkouts() {
+        let jobs = tempfile::tempdir().unwrap();
+        job(jobs.path(), "0pener00", &["https://gitlab.com/acme/widgets/-/merge_requests/41"]);
+        let listed = list(&[
+            item("ab12cd34", "remembered", WORKTREE, true, 3),
+            item("0pener00", "opened !41", REPO, false, 2),
+            item("01d00000", "old", REPO, false, 1),
+            item("11ve0000", "live", REPO, true, 4),
+        ]);
+        let (agent, script) = claude(Script::default().says(LIST, &listed), jobs.path(), false);
+        let kept = Kept { name: "remembered".into(), dir: WORKTREE.into(), id: Some(resume_id("ab12cd34")), pane: None };
+        let subjects = [
+            Subject::Mr(mr()),
+            other_mr(41),
+            other_mr(40),
+            on_main("main"),
+            Subject::Branch(Branch { key: crate::forge::MrKey::new("local/other", 8), dir: "/code/other".into(), ..branch() }),
+        ];
+        let marks = marks(&agent, jobs.path(), &subjects, |subject| (subject.key() == &mr().key).then(|| kept.clone()));
+        let expected = [
+            (mr().key, SessionMark::Running),
+            (crate::forge::MrKey::new("acme/widgets", 41), SessionMark::Stopped),
+            (branch().key, SessionMark::Running),
+        ];
+        assert_eq!(marks, expected.into_iter().collect(), "!40 only has the checkout's sessions; a branch with any live one runs");
+        assert_eq!(script.lines(), [LIST]);
+    }
+
+    #[test]
+    fn a_listing_that_fails_or_cannot_be_read_marks_nothing() {
+        let jobs = tempfile::tempdir().unwrap();
+        let subjects = [Subject::Branch(branch())];
+        for script in [Script::default().fails(LIST, "cannot run `claude`"), Script::default().says(LIST, "claude: not logged in")] {
+            let (agent, _script) = claude(script, jobs.path(), false);
+            assert_eq!(marks(&agent, jobs.path(), &subjects, |_| None), Marks::new());
+        }
     }
 }
