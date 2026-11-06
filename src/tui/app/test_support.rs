@@ -262,7 +262,7 @@ pub(super) fn with_sum_review() -> App {
     with_opened(sum_review())
 }
 
-fn with_opened(review: Review) -> App {
+pub(super) fn with_opened(review: Review) -> App {
     let mut app = with_queue();
     app.queue_move(0);
     app.handle_key(code(KeyCode::Enter));
@@ -513,6 +513,44 @@ pub(super) fn with_mr(change: impl FnOnce(Mr) -> Mr) -> App {
     let review = Review::new(change(mr()), &diffs(), discussions(), &["*.lock".into()]);
     app.apply(Incoming::Review { key: mr_key(), review: Box::new(review), cached: None });
     app
+}
+
+pub(super) fn local_key() -> MrKey {
+    MrKey { host: Some(crate::forge::local::HOST.to_owned()), ..MrKey::new("local/widgets", 7) }
+}
+
+/// A worktree's MR, as the local backend answers it: `hidden` files left out, at commit `head`.
+pub(super) fn local_mr(hidden: u32, head: &str) -> Mr {
+    Mr {
+        project: "local/widgets".into(),
+        number: 7,
+        title: "widgets ~ feat/checkout".into(),
+        author: crate::forge::User { id: 0, username: String::new(), name: String::new() },
+        pipeline: None,
+        web_url: String::new(),
+        refs: crate::forge::Refs { head: head.into(), ..mr().refs },
+        uncommitted: hidden,
+        ..mr()
+    }
+}
+
+/// `revu local` as it starts, a worktree's diff open, out of zen.
+pub(super) fn local_opened(mr: Mr, files: &[DiffFile]) -> App {
+    let mut app = App::new(Settings {
+        hosts: crate::forge::Hosts::one("local", Kind::Local),
+        host: "local".into(),
+        me: "widgets".into(),
+        ..settings()
+    });
+    app.today = today();
+    app.open_key(local_key());
+    app.apply(Incoming::Review { key: local_key(), review: Box::new(Review::new(mr, files, vec![], &[])), cached: None });
+    app.take_actions();
+    app
+}
+
+pub(super) fn local_app() -> App {
+    local_opened(local_mr(0, "bbbb"), &diffs())
 }
 
 pub(super) fn approved_and_mine(mr: Mr) -> Mr {

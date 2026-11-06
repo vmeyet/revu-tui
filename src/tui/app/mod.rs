@@ -9,6 +9,7 @@ mod incoming;
 mod input;
 mod kept;
 mod keys;
+mod local;
 mod merge;
 mod mouse;
 mod notify;

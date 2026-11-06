@@ -61,6 +61,21 @@ impl Row {
         }
     }
 
+    /// The same row in the file now at `moved`; a row of no file stays as it is.
+    pub(crate) fn in_file(&self, moved: usize) -> Self {
+        let mut row = self.clone();
+        if let Row::File { index: file, .. }
+        | Row::Hunk { file, .. }
+        | Row::Line { file, .. }
+        | Row::Pair { file, .. }
+        | Row::Context { file, .. }
+        | Row::Thread { file, .. } = &mut row
+        {
+            *file = moved;
+        }
+        row
+    }
+
     /// The file and hunk a row sits in, a hunk row its own.
     pub(crate) fn hunk(&self) -> Option<(usize, usize)> {
         match self {

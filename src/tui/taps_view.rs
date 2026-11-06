@@ -16,15 +16,15 @@ fn cell_width(tap: &Tap) -> usize {
 
 /// The labels that fit `width`: the last one, which opens every command, and as many of those before it as go in
 /// front of it.
-fn fitting(taps: &'static [Tap], width: usize) -> Vec<&'static Tap> {
+fn fitting(taps: &[&'static Tap], width: usize) -> Vec<&'static Tap> {
     let Some((last, rest)) = taps.split_last() else { return vec![] };
     let room = width.saturating_sub(cell_width(last));
     let mut used = 0;
-    let kept = rest.iter().take_while(|tap| {
+    let kept = rest.iter().copied().take_while(|tap| {
         used += cell_width(tap);
         used <= room
     });
-    kept.chain([last]).collect()
+    kept.chain([*last]).collect()
 }
 
 /// A cell per label, left to right from the start of `area`, each sharing what the row has to spare.
@@ -41,7 +41,7 @@ fn spots(taps: &[&'static Tap], area: Rect) -> Vec<TapSpot> {
 }
 
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
-    let taps = fitting(app.page().taps(), usize::from(area.width));
+    let taps = fitting(&app.taps_here(), usize::from(area.width));
     let spots = spots(&taps, area);
     let style = Style::default().fg(app.theme.muted).bg(app.theme.surface);
     let cells =
@@ -61,7 +61,7 @@ mod tests {
     ];
 
     fn labels(width: usize) -> Vec<&'static str> {
-        fitting(&TAPS, width).into_iter().map(|tap| tap.label).collect()
+        fitting(&TAPS.iter().collect::<Vec<_>>(), width).into_iter().map(|tap| tap.label).collect()
     }
 
     #[test]
@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn the_cells_touch_and_share_the_spare_columns() {
-        let cells = spots(&fitting(&TAPS, 30), Rect::new(2, 9, 30, 1));
+        let cells = spots(&fitting(&TAPS.iter().collect::<Vec<_>>(), 30), Rect::new(2, 9, 30, 1));
         let places: Vec<(u16, u16)> = cells.iter().map(|spot| (spot.area.x, spot.area.width)).collect();
         assert_eq!(places, [(2, 9), (11, 11), (22, 9)], "ten spare columns, three each");
         assert!(cells.iter().all(|spot| (spot.area.y, spot.area.height) == (9, 1)));

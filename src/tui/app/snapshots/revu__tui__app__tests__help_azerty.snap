@@ -39,10 +39,10 @@ expression: "render(&mut app, 160, 45)"
 │             │          v  prose: the Markdown file rendered, its blocks marked              r  refresh                                        │              │
 │             │         zz  zen: the diff alone, quiet                                        ?  this help                                      │              │
 │             │        w W  wrap long lines, hide whitespace changes                       q ^c  quit: twice; q closes a pane first             │              │
-│             │        = +  more lines, react on a thread                                                                                       │              │
-│             │         ^v  the file in your own program                                                                                        │              │
+│             │          =  more lines                                                                                                          │              │
+│             │          +  react on a thread                                                                                                   │              │
 │             │                                                                                                                                 │              │
-│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 39 · j k scroll · esc close ╯              │
+│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 40 · j k scroll · esc close ╯              │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

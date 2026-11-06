@@ -93,6 +93,12 @@ impl App {
         }
     }
 
+    /// The labels of the page that do something on this diff.
+    pub(crate) fn taps_here(&self) -> Vec<&'static Tap> {
+        let usable = |tap: &&Tap| !crate::keymap::parse(tap.keys).unwrap_or_default().iter().any(|key| self.out_of_reach(key.event()));
+        self.page().taps().iter().filter(usable).collect()
+    }
+
     /// Something asks the reader for an answer on the bottom rows: a confirmation, the quit prompt, the reaction
     /// picker, the `'` views or the diff's search.
     pub(crate) fn asks(&self) -> bool {

@@ -41,7 +41,7 @@ impl App {
     /// the options of the argument as tab does; → takes the ghost; ^p ^n walk the history from any line, as in a shell.
     fn command_key(&self, palette: &mut Palette, code: KeyCode) {
         let candidates = self.completions_for(&palette.input);
-        let listed = palette::verbs_for(&palette.input).len();
+        let listed = palette::verbs_for(&palette.input, self.kind()).len();
         match code {
             KeyCode::Up | KeyCode::Down if palette.naming_command() || palette.walking_history() => {
                 palette.arrow(Toward::next_if(code == KeyCode::Down), listed);
@@ -55,7 +55,7 @@ impl App {
 
     fn palette_enter(&mut self, mut palette: Palette) -> Vec<Action> {
         if palette.naming_command() {
-            let picked = palette::verbs_for(&palette.input).get(palette.selected).map(|verb| verb.word.to_owned());
+            let picked = palette::verbs_for(&palette.input, self.kind()).get(palette.selected).map(|verb| verb.word.to_owned());
             if let Some(verb) = picked {
                 palette.input.clone_from(&verb);
                 if palette::parse(&verb).is_err() {
@@ -69,6 +69,10 @@ impl App {
             let line = palette.submit();
             self.palette_history.clone_from(&palette.history);
             return match palette::parse(&line) {
+                Ok(command) if !command.act().row().reach.serves(self.kind()) => {
+                    self.warn(format!("`{line}` does nothing here"));
+                    vec![]
+                }
                 Ok(command) => {
                     self.count_command(&command);
                     self.run_command(command)
@@ -116,7 +120,7 @@ impl App {
     /// What the token under the cursor completes to, for tab and the ghost text.
     pub(crate) fn completions_for(&self, line: &str) -> Vec<String> {
         match palette::slot(line) {
-            Slot::Verb => crate::act::verbs().map(|verb| verb.word.to_owned()).collect(),
+            Slot::Verb => crate::act::verbs_on(self.kind()).map(|verb| verb.word.to_owned()).collect(),
             Slot::Mr => self.queue_mrs().iter().map(|mr| format!("{}{}", self.hosts.kind_of(&mr.key()).sigil(), mr.number)).collect(),
             Slot::Setting => vec!["theme=".to_owned()],
             Slot::Theme => Theme::NAMES.iter().map(|name| format!("theme={name}")).collect(),
