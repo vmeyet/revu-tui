@@ -229,6 +229,7 @@ impl App {
                 }
             }
             Act::Pin => return self.toggle_pin(),
+            Act::MentionDone => return self.mention_done(),
             Act::ChangeTarget => self.ask_target(),
             Act::ToggleUncommitted => return self.change_local(crate::forge::local::Change::Uncommitted),
             Act::Description => self.open_brief_from_queue(),

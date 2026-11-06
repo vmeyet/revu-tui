@@ -390,6 +390,9 @@ impl App {
             return;
         }
         self.update_open(|open| open.relaid(|review| review.with_resolved(thread, resolved)));
+        if resolved {
+            self.answer_mentions(key, thread);
+        }
         let follow = self.reread(key);
         self.composed.extend(follow);
     }
@@ -428,6 +431,7 @@ impl App {
             Failure::Prose => self.settle_prose(super::Texts::Failed(message)),
             Failure::Apply => self.warn(format!("not applied: {message}")),
             Failure::Merge => self.warn(format!("not merged: {message}")),
+            Failure::Mention => self.warn(format!("mention not marked done: {message}")),
             Failure::SetReadiness => self.warn(format!("not changed: {message}")),
             Failure::React { thread, index, emoji, change } => self.react_failed(&thread, index, emoji, change, &message),
             Failure::Queue

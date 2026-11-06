@@ -26,9 +26,9 @@ expression: "render(&mut app, 100, 30)"
 │              │          s  next sort order                                       │               │
 │              │          b  pin on top of the queue, or unpin                     │               │
 │              │      zo zc  open, fold the section or stack                       │               │
+│              │          x  mark the mentions of the MR done                      │               │
 │              │                                                                   │               │
-│              │                                                                   │               │
-│              ╰────────────────────────────── 1–22 of 74 · j k scroll · esc close ╯               │
+│              ╰────────────────────────────── 1–22 of 75 · j k scroll · esc close ╯               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

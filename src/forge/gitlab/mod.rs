@@ -3,6 +3,7 @@
 mod award;
 mod graphql;
 mod rest;
+mod todo;
 mod upload;
 mod wire;
 

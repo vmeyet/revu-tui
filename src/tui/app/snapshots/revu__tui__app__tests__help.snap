@@ -27,22 +27,22 @@ expression: "render(&mut app, 160, 45)"
 │             │          s  next sort order                                                   R  resolve, unresolve                             │              │
 │             │          b  pin on top of the queue, or unpin                                 T  every thread; enter goes to it                 │              │
 │             │      zo zc  open, fold the section or stack                                   m  every thread: only mine, or all                │              │
-│             │                                                                             e d  edit, delete my draft                          │              │
-│             │  VIEW                                                                       S +  apply the suggestion, react                    │              │
-│             │      / n N  find text in the MR, next, previous                             u U  open, copy the first link                      │              │
-│             │          i  the MR cover page                                                                                                   │              │
-│             │          D  inline or side by side, diff and prose                    SEARCH & APP                                              │              │
-│             │        > <  the code after, before, alone                                  ^k ,  MRs · > commands                               │              │
-│             │          t  file tree                                                         :  commands: :go !42, :set theme=nord             │              │
-│             │          T  every thread of the MR                                          o y  open in the browser, copy the link             │              │
-│             │          p  pipeline                                                          a  the agent session of the MR or branch          │              │
-│             │          v  prose: the Markdown file rendered, its blocks marked              r  refresh                                        │              │
-│             │         zz  zen: the diff alone, quiet                                        ?  this help                                      │              │
-│             │        w W  wrap long lines, hide whitespace changes                       q ^c  quit: twice; q closes a pane first             │              │
+│             │          x  mark the mentions of the MR done                                e d  edit, delete my draft                          │              │
+│             │                                                                             S +  apply the suggestion, react                    │              │
+│             │  VIEW                                                                       u U  open, copy the first link                      │              │
+│             │      / n N  find text in the MR, next, previous                                                                                 │              │
+│             │          i  the MR cover page                                         SEARCH & APP                                              │              │
+│             │          D  inline or side by side, diff and prose                         ^k ,  MRs · > commands                               │              │
+│             │        > <  the code after, before, alone                                     :  commands: :go !42, :set theme=nord             │              │
+│             │          t  file tree                                                       o y  open in the browser, copy the link             │              │
+│             │          T  every thread of the MR                                            a  the agent session of the MR or branch          │              │
+│             │          p  pipeline                                                          r  refresh                                        │              │
+│             │          v  prose: the Markdown file rendered, its blocks marked              ?  this help                                      │              │
+│             │         zz  zen: the diff alone, quiet                                     q ^c  quit: twice; q closes a pane first             │              │
+│             │        w W  wrap long lines, hide whitespace changes                                                                            │              │
 │             │          =  more lines                                                                                                          │              │
-│             │          +  react on a thread                                                                                                   │              │
 │             │                                                                                                                                 │              │
-│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 40 · j k scroll · esc close ╯              │
+│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 41 · j k scroll · esc close ╯              │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

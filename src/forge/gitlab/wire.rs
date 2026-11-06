@@ -63,11 +63,7 @@ impl Mr {
             number: self.iid,
             title: self.title,
             description: self.description.unwrap_or_default(),
-            state: match self.state.as_str() {
-                "merged" => forge::MrState::Merged,
-                "closed" => forge::MrState::Closed,
-                _ => forge::MrState::Open,
-            },
+            state: mr_state(&self.state),
             draft: self.draft,
             author: self.author.into(),
             source_branch: self.source_branch,
@@ -89,6 +85,15 @@ impl Mr {
             uncommitted: 0,
             no_diff: None,
         }
+    }
+}
+
+/// GitLab's `state` of an MR; `opened`, `locked` and anything newer read as open.
+pub(super) fn mr_state(state: &str) -> forge::MrState {
+    match state {
+        "merged" => forge::MrState::Merged,
+        "closed" => forge::MrState::Closed,
+        _ => forge::MrState::Open,
     }
 }
 
@@ -429,6 +434,21 @@ pub(crate) mod fixture {
     /// The same, scoped to `project`: one body carries both answers, `currentUser` and `project`.
     pub(crate) fn queue_in(body: &str, project: &str) -> Queue {
         graphql::queue_from_json(body, Some(project)).expect("queue fixture parses")
+    }
+
+    /// One to-do item as `GET /todos` lists it: a mention of me on MR `iid` of `project`, its link ending in `url_tail`.
+    pub(crate) fn todo(id: u64, project: &str, iid: u64, state: &str, url_tail: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id, "action_name": "mentioned", "target_type": "MergeRequest", "state": "pending",
+            "project": {"id": 7, "path_with_namespace": project},
+            "target_url": format!("https://gitlab.com/{project}/-/merge_requests/{iid}{url_tail}"),
+            "target": {
+                "id": 1000 + iid, "iid": iid, "title": "feat: count the widgets", "description": "", "state": state, "draft": false,
+                "author": {"id": 5, "username": "omar", "name": "Omar"}, "source_branch": "feat/count", "target_branch": "main",
+                "web_url": format!("https://gitlab.com/{project}/-/merge_requests/{iid}"),
+                "created_at": "2026-09-20T10:00:00Z", "updated_at": "2026-09-22T10:00:00Z", "labels": ["backend"]
+            }
+        })
     }
 
     /// The MR every fixture talks about.

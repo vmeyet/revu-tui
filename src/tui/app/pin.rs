@@ -68,18 +68,6 @@ mod tests {
             .collect()
     }
 
-    /// The queue as section names and MR numbers, top to bottom.
-    fn shown(app: &App) -> Vec<String> {
-        app.queue_rows()
-            .iter()
-            .filter_map(|row| match row {
-                QueueRow::Section { name, .. } => Some((*name).to_owned()),
-                QueueRow::Mr(mr) => Some(mr.number.to_string()),
-                _ => None,
-            })
-            .collect()
-    }
-
     #[test]
     fn b_pins_the_mr_under_the_cursor_on_top_and_b_again_puts_it_back() {
         let mut app = with_queue();

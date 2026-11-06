@@ -675,3 +675,15 @@ pub(super) fn walk_to_any_thread(app: &mut App, toward: Toward) {
         }
     }
 }
+
+/// The queue as section names and MR numbers, top to bottom.
+pub(super) fn shown(app: &App) -> Vec<String> {
+    app.queue_rows()
+        .iter()
+        .filter_map(|row| match row {
+            QueueRow::Section { name, .. } => Some((*name).to_owned()),
+            QueueRow::Mr(mr) => Some(mr.number.to_string()),
+            _ => None,
+        })
+        .collect()
+}

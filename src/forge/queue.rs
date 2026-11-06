@@ -1,6 +1,6 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
 use super::rules::{self, Reason, Rules};
-use super::{MrKey, MrState, PipelineStatus, ProjectPath};
+use super::{Mention, MrKey, MrState, PipelineStatus, ProjectPath};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -149,7 +149,13 @@ pub(crate) struct Sections {
     pub(crate) done: Vec<QueueMr>,
     /// What the "needs me" rules moved out of To review, Watching and Open, each with its reason.
     pub(crate) other: Vec<QueueMr>,
+    /// My pending mentions, newest first: they mark their MR's row, and give MENTIONS the MRs no other section lists.
+    #[serde(skip)]
+    pub(crate) mentions: Vec<Mention>,
 }
+
+/// How long a mention on a merged or closed MR still shows: GitLab keeps it pending after the merge.
+const FINISHED_MENTION_DAYS: i64 = 14;
 
 impl Sections {
     /// Several hosts' sections as one sidebar: each section holds every host's rows, newest first.
@@ -220,6 +226,24 @@ impl Sections {
         ready.extend(judged.filter(|mr| mr.reason.as_ref().is_none_or(|r| !r.moves_out())));
         ready.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
         Sections { to_review, ready, watching, open, ..self }
+    }
+
+    /// `mentions` as the queue shows them: those on an MR merged or closed more than two weeks ago are dropped.
+    pub(crate) fn with_mentions(self, mentions: Vec<Mention>, now: DateTime<Utc>) -> Sections {
+        let recent = |m: &Mention| m.state == MrState::Open || now - m.mr.updated_at <= chrono::Duration::days(FINISHED_MENTION_DAYS);
+        Sections { mentions: mentions.into_iter().filter(recent).collect(), ..self }
+    }
+
+    /// The MRs of MENTIONS: mentioned, and in no other section; each once, newest first.
+    pub(crate) fn mentioned_outside(&self) -> Vec<&QueueMr> {
+        let mut rows: Vec<&QueueMr> = vec![];
+        for mention in &self.mentions {
+            if !self.all().chain(rows.iter().copied()).any(|mr| mention.is_on(mr)) {
+                rows.push(&mention.mr);
+            }
+        }
+        rows.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
+        rows
     }
 
     /// Rows from more than one host share the queue: only then does a row need its host's tag.
@@ -497,6 +521,33 @@ mod tests {
         assert_eq!(merged.to_review.len(), here.to_review.len() * 2);
         assert!(merged.mine.windows(2).all(|w| w[0].updated_at >= w[1].updated_at));
         assert_eq!(merged.to_review.iter().filter(|mr| mr.host.is_some()).count(), here.to_review.len());
+    }
+
+    fn mention(id: u64, mr: QueueMr, state: MrState) -> Mention {
+        Mention { id: crate::forge::MentionId(id), mr, state, note: None }
+    }
+
+    #[test]
+    fn mentions_on_mrs_finished_two_weeks_ago_are_dropped() {
+        let row = |updated: u32| QueueMr { number: u64::from(updated), updated_at: day(updated), ..queue().authored[0].clone() };
+        let mentions = vec![mention(1, row(1), MrState::Open), mention(2, row(10), MrState::Merged), mention(3, row(2), MrState::Closed)];
+        let kept = Sections::default().with_mentions(mentions, day(23));
+        assert_eq!(kept.mentions.iter().map(|m| m.id.0).collect::<Vec<_>>(), [1, 2], "an open one stays however old");
+    }
+
+    #[test]
+    fn mentions_list_once_each_mr_no_section_holds() {
+        let sections = queue().sections(&[]);
+        let listed = sections.to_review[0].clone();
+        let outside = |number, updated| QueueMr { number, updated_at: day(updated), ..listed.clone() };
+        let mentions = vec![
+            mention(1, listed.clone(), MrState::Open),
+            mention(2, outside(90, 1), MrState::Merged),
+            mention(3, outside(91, 5), MrState::Open),
+            mention(4, outside(90, 1), MrState::Merged),
+        ];
+        let sections = sections.with_mentions(mentions, day(6));
+        assert_eq!(numbers(&sections.mentioned_outside().into_iter().cloned().collect::<Vec<_>>()), [91, 90], "newest first, never twice");
     }
 
     #[test]

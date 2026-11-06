@@ -140,6 +140,8 @@ pub(crate) struct App {
     pub(crate) queue_view: super::QueueView,
     /// The MRs pinned in this scope: PINNED shows them above every section.
     pub(crate) pins: BTreeSet<MrKey>,
+    /// The note of a mention `enter` opened an MR on: the cursor goes to its thread once the MR is painted.
+    pub(crate) mention_note: Option<super::mention::MentionAim>,
     pub(crate) queue_loading: bool,
     /// The last load failed: with nothing to show, the pane says so until one succeeds or `r` asks again.
     pub(crate) queue_failed: bool,
@@ -293,6 +295,7 @@ impl App {
             seen: None,
             queue_view: super::QueueView::default(),
             pins: BTreeSet::new(),
+            mention_note: None,
             prefetch_limit: settings.prefetch,
             prefetch_due: false,
             offer: None,

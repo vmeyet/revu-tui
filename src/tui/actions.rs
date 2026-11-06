@@ -59,6 +59,11 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     send(failed(Failure::Local, &e));
                 }
             }
+            Action::MarkMentionsDone { key, ids } => {
+                if let Err(e) = backend.homes.forge_of(&key).mark_done(&ids).await {
+                    send(failed(Failure::Mention, &e));
+                }
+            }
             Action::ChangePin { scope, key, change, order } => {
                 let saved = run_blocking(&backend.saves, move |saves| saves.change_pin(scope.as_ref(), &key, change, order)).await;
                 if let Err(e) = saved.and_then(|written| written) {

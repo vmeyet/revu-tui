@@ -13,9 +13,9 @@ pub(crate) mod rules;
 
 pub(crate) use budget::RateLimit;
 pub(crate) use model::{
-    Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, MergeMethod,
-    MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange, Readiness,
-    Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
+    Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, Mention, MentionId,
+    MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange,
+    Readiness, Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
 pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size, WorktreeRow};
 
@@ -145,6 +145,22 @@ impl Forge {
             Forge::GitLab(client) => client.queue(project).await,
             Forge::GitHub(client) => client.queue(project).await,
             Forge::Local(client) => Box::pin(client.queue()).await,
+        }
+    }
+
+    /// Where someone mentioned me or wrote to me on an MR, still pending; GitHub has none yet.
+    pub(crate) async fn mentions(&self) -> Result<Vec<Mention>> {
+        match self {
+            Forge::GitLab(client) => client.mentions().await,
+            Forge::GitHub(_) | Forge::Local(_) => Ok(vec![]),
+        }
+    }
+
+    /// Marks each mention done; one already done, or gone, is no error.
+    pub(crate) async fn mark_done(&self, ids: &[MentionId]) -> Result<()> {
+        match self {
+            Forge::GitLab(client) => client.mark_done(ids).await,
+            Forge::GitHub(_) | Forge::Local(_) => Ok(()),
         }
     }
 
