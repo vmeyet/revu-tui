@@ -293,7 +293,7 @@ const SETTINGS: &[Setting] = &[
         key: "enabled",
         kind: "true or false",
         default: "`false`",
-        meaning: "`a` opens a coding-agent session that belongs to the MR: Claude Code, unless `start` is set.",
+        meaning: "`a` opens a coding-agent session that belongs to the MR, or to the branch on `revu local`: Claude Code, unless `start` is set.",
         example: "true",
     },
     Setting {

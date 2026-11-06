@@ -102,15 +102,15 @@ impl Backend {
         }
     }
 
-    /// The agent session of `mr`, found or started, then on show in tmux or ready for the terminal.
-    pub(super) async fn session(&self, mr: crate::agent::Mr, choice: crate::agent::Choice) -> Result<Incoming> {
+    /// The agent session of `subject`, found or started, then on show in tmux or ready for the terminal.
+    pub(super) async fn session(&self, subject: crate::agent::Subject, choice: crate::agent::Choice) -> Result<Incoming> {
         use crate::agent::Outcome;
         let agent = self.agent.clone().context("agent sessions are off")?;
-        let cache = self.homes.cache_of(&mr.key).clone();
-        let _lane = self.session_lanes.enter(&mr.key).await;
+        let cache = self.homes.cache_of(subject.key()).clone();
+        let _lane = self.session_lanes.enter(subject.key()).await;
         blocking::run(move || {
-            Ok(match agent.open(&mr, &cache, choice)? {
-                Outcome::Pick(sessions) => Incoming::SessionPick { mr: Box::new(mr), sessions },
+            Ok(match agent.open(&subject, &cache, choice)? {
+                Outcome::Pick(sessions) => Incoming::SessionPick { subject: Box::new(subject), sessions },
                 Outcome::Shown(shown) => Incoming::Done(shown),
                 Outcome::Handoff(handoff) => Incoming::SessionReady(handoff),
             })

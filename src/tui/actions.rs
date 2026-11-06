@@ -212,10 +212,10 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                         .unwrap_or_else(|e| Incoming::Failed { what: Failure::Triage, message: e.notice() }),
                 );
             }
-            Action::Session { mr, choice } => {
+            Action::Session { subject, choice } => {
                 send(
                     backend
-                        .session(*mr, choice)
+                        .session(*subject, choice)
                         .await
                         .unwrap_or_else(|e| Incoming::Failed { what: Failure::Local, message: format!("{e:#}") }),
                 );

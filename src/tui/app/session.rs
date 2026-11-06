@@ -1,16 +1,17 @@
-//! `a` and `:session`: the agent session of the MR under the cursor. The runner finds or starts it;
-//! when several could be the one, the search box lists them, a new one first.
+//! `a` and `:session`: the agent session of the MR, or on `revu local` the branch, under the cursor. The runner finds
+//! or starts it; when several could be the one, the search box lists them, a new one first.
 use super::{Action, App, Focus};
-use crate::agent::{Choice, Mr, Session};
+use crate::agent::{Branch, Choice, Mr, Session, Subject};
+use crate::forge::QueueMr;
 use crate::share::Fields;
 use crate::tui::palette::{Candidate, Mode, Target};
 use vtui::fuzzy;
 use vtui::palette::MAX_SHOWN;
 
-/// The sessions the reader picks among, and the MR they are for.
+/// The sessions the reader picks among, and what they are for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SessionPick {
-    pub(crate) mr: Mr,
+    pub(crate) subject: Subject,
     pub(crate) sessions: Vec<Session>,
 }
 
@@ -20,33 +21,48 @@ impl App {
             self.toast("agent sessions are off: set `[agent] enabled = true` in the config (docs/guides/agent.md)");
             return vec![];
         }
-        let Some(mr) = self.session_mr() else {
+        let Some(subject) = self.session_subject() else {
             self.toast("select an MR first");
             return vec![];
         };
-        self.toast(format!("looking for the session of {}…", mr.fields.reference));
-        vec![Action::Session { mr: Box::new(mr), choice: Choice::Find }]
+        self.toast(format!("looking for the session of {}…", subject.reference()));
+        vec![Action::Session { subject: Box::new(subject), choice: Choice::Find }]
     }
 
-    /// The MR under the cursor: the queue's row, or the open MR.
-    fn session_mr(&self) -> Option<Mr> {
+    /// What is under the cursor: the queue's row, or the open MR or worktree.
+    fn session_subject(&self) -> Option<Subject> {
         match (self.focus, &self.open) {
-            (Focus::Queue, _) | (_, None) => self.selected_mr().map(|mr| Mr {
-                key: mr.key(),
-                fields: Fields::from_queue(mr, self.hosts.kind_of(&mr.key())),
-                target: mr.target_branch.clone(),
-                mine: mr.author == self.me,
-            }),
+            (Focus::Queue, _) | (_, None) => self.selected_mr().map(|row| self.subject_of(row)),
+            (_, Some(open)) if open.key.is_local() => self.queue_mr(&open.key).map(|row| self.subject_of(row)),
             (_, Some(open)) => {
                 let mr = &open.review.mr;
                 let fields = Fields::from_mr(mr, self.hosts.kind_of(&open.key));
-                Some(Mr { key: open.key.clone(), fields, target: mr.target_branch.clone(), mine: mr.mine })
+                Some(Subject::Mr(Mr { key: open.key.clone(), fields, target: mr.target_branch.clone(), mine: mr.mine }))
             }
         }
     }
 
-    pub(super) fn offer_sessions(&mut self, mr: Mr, sessions: Vec<Session>) {
-        self.session_pick = Some(SessionPick { mr, sessions });
+    /// A queue row's subject: a worktree's branch, else the MR.
+    fn subject_of(&self, row: &QueueMr) -> Subject {
+        let key = row.key();
+        match &row.worktree {
+            Some(worktree) => Subject::Branch(Branch {
+                key,
+                name: row.source_branch.clone(),
+                dir: worktree.dir.clone(),
+                target: row.target_branch.clone(),
+            }),
+            None => Subject::Mr(Mr {
+                fields: Fields::from_queue(row, self.hosts.kind_of(&key)),
+                key,
+                target: row.target_branch.clone(),
+                mine: row.author == self.me,
+            }),
+        }
+    }
+
+    pub(super) fn offer_sessions(&mut self, subject: Subject, sessions: Vec<Session>) {
+        self.session_pick = Some(SessionPick { subject, sessions });
         self.open_palette(Mode::Sessions);
     }
 
@@ -54,7 +70,7 @@ impl App {
     pub(super) fn session_candidates(&self, typed: &str) -> Vec<Candidate> {
         let Some(pick) = &self.session_pick else { return vec![] };
         let new = Candidate {
-            label: format!("new session for {}", pick.mr.fields.reference),
+            label: format!("new session for {}", pick.subject.reference()),
             detail: String::new(),
             target: Target::Session(None),
         };
@@ -77,7 +93,7 @@ impl App {
         let Some(pick) = self.session_pick.take() else { return vec![] };
         let picked = index.and_then(|index| pick.sessions.get(index));
         let choice = picked.map_or(Choice::New, |session| Choice::Session(Box::new(session.clone())));
-        vec![Action::Session { mr: Box::new(pick.mr), choice }]
+        vec![Action::Session { subject: Box::new(pick.subject), choice }]
     }
 
     /// Taken by the loop, which lends the terminal to the session.
@@ -95,7 +111,7 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use crate::agent::{Call, Choice, Handoff, Session};
+    use crate::agent::{Call, Choice, Handoff, Session, Subject};
     use crate::tui::app::test_support::*;
     use std::sync::Arc;
 
@@ -115,8 +131,13 @@ mod tests {
         }
     }
 
-    fn asked(actions: &[Action]) -> (&crate::agent::Mr, &Choice) {
-        let [Action::Session { mr, choice }] = actions else { panic!("no session asked: {actions:?}") };
+    fn asked(actions: &[Action]) -> (&Subject, &Choice) {
+        let [Action::Session { subject, choice }] = actions else { panic!("no session asked: {actions:?}") };
+        (subject, choice)
+    }
+
+    fn asked_mr(actions: &[Action]) -> (&crate::agent::Mr, &Choice) {
+        let (Subject::Mr(mr), choice) = asked(actions) else { panic!("not an MR: {actions:?}") };
         (mr, choice)
     }
 
@@ -136,7 +157,7 @@ mod tests {
         app.queue_move(0);
         let selected = app.selected_mr().unwrap().clone();
         let actions = press(&mut app, "a");
-        let (mr, choice) = asked(&actions);
+        let (mr, choice) = asked_mr(&actions);
         assert_eq!(*choice, Choice::Find);
         assert_eq!((mr.key.clone(), mr.fields.url.as_str()), (selected.key(), selected.web_url.as_str()));
         assert_eq!((mr.fields.branch.as_str(), mr.target.as_str()), (selected.source_branch.as_str(), selected.target_branch.as_str()));
@@ -149,14 +170,14 @@ mod tests {
         let mut app = with_agent(with_mr(|mr| Mr { mine: true, ..mr }));
         let open = Arc::clone(&app.open.as_ref().unwrap().review.mr);
         let actions = press(&mut app, "a");
-        let (mr, _) = asked(&actions);
+        let (mr, _) = asked_mr(&actions);
         assert_eq!((mr.key.clone(), mr.fields.title.as_str(), mr.mine), (mr_key(), open.title.as_str(), true));
         assert_eq!((mr.fields.branch.as_str(), mr.target.as_str()), (open.source_branch.as_str(), open.target_branch.as_str()));
         press(&mut app, "zz");
         assert!(app.zen);
-        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key());
+        assert_eq!(asked(&press(&mut app, "a")).0.key(), &mr_key());
         press(&mut app, ":session");
-        assert_eq!(asked(&app.handle_key(code(KeyCode::Enter))).0.key, mr_key());
+        assert_eq!(asked(&app.handle_key(code(KeyCode::Enter))).0.key(), &mr_key());
     }
 
     #[test]
@@ -164,7 +185,7 @@ mod tests {
         let mut app = with_agent(with_review());
         phone(&mut app);
         assert!(app.compact);
-        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key());
+        assert_eq!(asked(&press(&mut app, "a")).0.key(), &mr_key());
     }
 
     #[test]
@@ -179,9 +200,9 @@ mod tests {
         let mut app = with_agent(with_queue());
         app.queue_move(0);
         let actions = press(&mut app, "a");
-        let mr = asked(&actions).0.clone();
+        let subject = asked(&actions).0.clone();
         let sessions = vec![session("11ve0000", "revu: nxt", true), session("01d00000", "widgets: cache", false)];
-        app.apply(Incoming::SessionPick { mr: Box::new(mr), sessions });
+        app.apply(Incoming::SessionPick { subject: Box::new(subject), sessions });
         app
     }
 
@@ -191,7 +212,7 @@ mod tests {
         let palette = app.palette.clone().unwrap();
         assert_eq!(palette.mode, crate::tui::palette::Mode::Sessions);
         let rows: Vec<(String, String)> = app.palette_candidates(&palette).into_iter().map(|c| (c.label, c.detail)).collect();
-        let reference = app.session_pick.as_ref().unwrap().mr.fields.reference.clone();
+        let reference = app.session_pick.as_ref().unwrap().subject.reference().to_owned();
         assert_eq!(
             rows,
             [
@@ -257,13 +278,13 @@ mod tests {
         let mut app = with_agent(with_review());
         assert_eq!(press(&mut app, "aaa").len(), 1);
         app.now += Duration::from_secs(1);
-        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key(), "a press after the key was let go asks again");
+        assert_eq!(asked(&press(&mut app, "a")).0.key(), &mr_key(), "a press after the key was let go asks again");
     }
 
     #[test]
     fn a_alone_asks_and_waits_for_no_second_key() {
         let mut app = with_agent(with_review());
-        assert_eq!(asked(&press(&mut app, "a")).0.key, mr_key());
+        assert_eq!(asked(&press(&mut app, "a")).0.key(), &mr_key());
         assert_eq!(app.pending, None);
     }
 

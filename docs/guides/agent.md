@@ -1,6 +1,6 @@
 # Open an agent session on an MR
 
-`a` opens the coding-agent session that belongs to the MR under the cursor.
+`a` opens the coding-agent session that belongs to the MR under the cursor, or on `revu local` to the branch.
 The agent is Claude Code, the real one: your login, your skills, your permissions.
 On someone else's MR you ask it about the diff; on your own you ask it for a change.
 
@@ -17,7 +17,7 @@ You need the `claude` command, logged in, and a checkout of the project that Cla
 
 ## Use it
 
-1. Put the cursor on an MR in the queue, or open one.
+1. Put the cursor on an MR in the queue, or open one; on `revu local`, on a worktree.
 2. Press `a`, or type `:session`.
 3. Talk to the session.
 
@@ -65,6 +65,23 @@ Its name is `revu: !42` and the MR title, which is how it reads in `claude agent
 Its first message names the MR, its link, its author and its branches.
 It also says that `revu show`, `revu diff` and `revu comment` read the MR and comment on it.
 It ends by asking the session to wait for you.
+
+## On `revu local`
+
+`a` opens the session of the branch under the cursor, or of the worktree whose diff is open.
+The same `[agent]` settings apply.
+
+| Case | When | The toast says |
+|---|---|---|
+| Remembered | revu opened a session for this branch before, and Claude Code still knows it | `the session revu remembered for feat/checkout` |
+| The one in its worktree | One session was started in the branch's folder | `the session working in feat/checkout` |
+| Your pick | Several sessions were started there | `the session picked for feat/checkout` |
+| New | None of the above | `a new session for feat/checkout` |
+
+A session started in a worktree under the main checkout belongs to that worktree, not to the main checkout.
+A new session starts in the branch's own folder, in your default mode: revu fetches nothing and adds no worktree.
+Its name is `revu: feat/checkout`.
+revu remembers one session per branch, so a worktree that checks out another branch finds that branch's session.
 
 ## Where the checkout is
 
@@ -236,6 +253,8 @@ The session is the remembered one, or a new one.
 | `{dir}` | The folder the session works in |
 | `{name}` | `revu: !42` and the title |
 
+On `revu local`, `{ref}`, `{title}` and `{branch}` are the branch, and `{iid}`, `{url}`, `{author}` and `{project}` are empty.
+
 A typo like `{titel}` stops revu at start, with the file and the key named.
 
 ## Limits
@@ -248,7 +267,7 @@ A typo like `{titel}` stops revu at start, with the file and the key named.
 - revu finds a session's pane by a mark it sets on it, so only a pane revu opened is found again.
 - In Ghostty, switch to another tab right after `a` and the split may open there: revu cannot ask Ghostty which terminal it runs in.
 - revu does not send the line or the thread under the cursor to the session, and shows no session state in the queue.
-- revu remembers one session per MR, in its cache, for as long as it keeps the MR there.
+- revu remembers one session per MR or branch, in its cache, for as long as it keeps the MR or the worktree there.
 - revu never removes a worktree it added: `git worktree remove` does.
 
 ## See also

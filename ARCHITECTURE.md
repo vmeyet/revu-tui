@@ -44,7 +44,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `config/` | `config.toml`: one file per section group (`queue`, `tui`, `programs`), load, and `save` that rewrites only the changed keys; keys this revu does not read are warned, secrets refused (`ignored`) |
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
 | `ai/` | Jev (`typesafe.rs`, `triage.rs`, marks on the queue) and where its key comes from |
-| `agent/` | Coding-agent sessions per MR (`a`): find or start one, show it in tmux or a terminal split |
+| `agent/` | Coding-agent sessions per MR, or per branch on `revu local` (`a`, `subject.rs`): find or start one, show it in tmux or a terminal split |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
 | `docs.rs`, `sources.rs` | Tests only: `docs/reference/` checked against the code, written with `UPDATE_DOCS=1`; the crate's own source files for checks that read them |
@@ -82,7 +82,7 @@ A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/ap
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
-`revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host, no Jev and no agent, and `tui::run` takes it like any other.
+`revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host and no Jev, and `tui::run` takes it like any other; `a` opens the session of a worktree's branch, `agent::Subject::Branch`, where a forge opens an MR's.
 Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is looked at every 2s while the terminal has focus, and when it comes back.
 
 ## Boundaries

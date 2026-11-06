@@ -380,6 +380,12 @@ pub(crate) mod keys {
         format!("{}/session.json", dir(key))
     }
 
+    /// The agent session revu last opened for one branch of a local worktree, named by a hash of the branch so no
+    /// branch name becomes a path.
+    pub(crate) fn branch_session(key: &MrKey, branch: &str) -> String {
+        format!("{}/session.{}.json", dir(key), sha1_smol::Sha1::from(branch.as_bytes()).digest())
+    }
+
     /// What Jev said about an MR as a queue row.
     pub(crate) fn verdict(key: &MrKey) -> String {
         format!("{}/ai/verdict.json", dir(key))

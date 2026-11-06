@@ -281,9 +281,9 @@ pub(crate) enum Action {
         waits: Option<serde_json::Value>,
         files: Vec<(String, serde_json::Value)>,
     },
-    /// `a`: find or start the agent session of `mr`, then show it.
+    /// `a`: find or start the agent session of `subject`, then show it.
     Session {
-        mr: Box<crate::agent::Mr>,
+        subject: Box<crate::agent::Subject>,
         choice: crate::agent::Choice,
     },
     /// `B` or `I` on a local diff: every worktree answers the new way, and `key`'s diff is read again whole.
@@ -530,9 +530,9 @@ pub(crate) enum Incoming {
         view: crate::open::View,
         outcome: Result<(), String>,
     },
-    /// Several agent sessions could be the MR's: the reader picks one, or a new one.
+    /// Several agent sessions could be the subject's: the reader picks one, or a new one.
     SessionPick {
-        mr: Box<crate::agent::Mr>,
+        subject: Box<crate::agent::Subject>,
         sessions: Vec<crate::agent::Session>,
     },
     /// The session's program, ready for the terminal; the loop lends it.

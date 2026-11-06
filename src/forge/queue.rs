@@ -71,6 +71,8 @@ pub(crate) struct WorktreeRow {
     pub(crate) uncommitted: u32,
     /// Why it has nothing to compare: it shares no history with the target.
     pub(crate) no_diff: Option<String>,
+    /// Its folder, where its agent sessions run.
+    pub(crate) dir: std::path::PathBuf,
 }
 
 /// `revu list --json` has spelled a row's pipeline in upper case since before it had a type.

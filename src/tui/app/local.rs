@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn every_forge_key_does_nothing_in_the_diff() {
-        for key in ["c", "C", "V", "s", "E", "R", "P", "A", "M", "H", "Y", "a", "+", "o", "y", "p", "i"] {
+        for key in ["c", "C", "V", "s", "E", "R", "P", "A", "M", "H", "Y", "+", "o", "y", "p", "i"] {
             let mut app = local_app();
             let before = app.open.clone();
             assert_eq!(press(&mut app, key), vec![], "{key}");
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn every_forge_key_does_nothing_in_the_queue() {
-        for key in ["Y", "a", "o", "y", "i", "*"] {
+        for key in ["Y", "o", "y", "i", "*"] {
             let mut app = local_app();
             app.focus = Focus::Queue;
             assert_eq!(press(&mut app, key), vec![], "{key}");
@@ -302,7 +302,12 @@ mod tests {
             number,
             updated_at: today() - chrono::Duration::minutes(minutes),
             size: Some(crate::forge::Size { additions, deletions, files: 1 }),
-            worktree: Some(crate::forge::WorktreeRow { commits, uncommitted, no_diff: None }),
+            worktree: Some(crate::forge::WorktreeRow {
+                commits,
+                uncommitted,
+                no_diff: None,
+                dir: format!("/code/widgets/{number}").into(),
+            }),
             ..QueueMr::from_mr(&local_mr(0, "bbbb"), local_key().host).unwrap()
         };
         Sections {
@@ -716,6 +721,29 @@ mod tests {
         app.now += Duration::from_secs(5);
         assert_eq!(app.tick(), vec![]);
         assert_eq!(app.focus_gained(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+    }
+
+    fn asked_branch(actions: &[Action]) -> crate::agent::Branch {
+        let [Action::Session { subject, .. }] = actions else { panic!("no session asked: {actions:?}") };
+        let crate::agent::Subject::Branch(branch) = subject.as_ref() else { panic!("not a branch: {subject:?}") };
+        branch.clone()
+    }
+
+    #[test]
+    fn a_asks_for_the_session_of_the_branch_under_the_cursor_in_its_worktree_and_of_the_open_one_in_the_diff() {
+        let mut app = on_the_screen();
+        app.agent = true;
+        press(&mut app, "j");
+        let row = app.selected_mr().unwrap().clone();
+        let branch = asked_branch(&press(&mut app, "a"));
+        let crate::agent::Branch { key, name, dir, target } = branch;
+        assert_eq!((key, name, target), (row.key(), row.source_branch, row.target_branch));
+        assert_eq!(dir, row.worktree.unwrap().dir);
+        assert_eq!(app.live_toast().unwrap().text, "looking for the session of fix/header-width…");
+        let mut app = on_the_screen();
+        app.agent = true;
+        app.focus = Focus::Review;
+        assert_eq!(asked_branch(&press(&mut app, "a")).name, "feat/local-diff");
     }
 
     fn first_rows(app: &mut App, rows: usize) -> String {

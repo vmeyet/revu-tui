@@ -128,7 +128,8 @@ flowchart LR
 
 The cache keeps each MR's diff and threads.
 Once a day revu drops what it keeps for merged or closed MRs, and for MRs you have not opened in 30 days.
-`revu local` keeps only what you read of each worktree: its viewed files, folds and cursor; `revu logout` wipes it too.
+`revu local` keeps only what you read of each worktree, its viewed files, folds and cursor, and the agent session of each branch.
+`revu logout` wipes it too.
 A cache file revu cannot read moves aside to `<file>.unreadable`; revu drops it after 30 days.
 
 ## See also

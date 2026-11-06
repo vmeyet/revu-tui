@@ -51,7 +51,7 @@ impl Share {
     }
 }
 
-/// `[agent]`: `a` opens a coding-agent session that belongs to the MR, in a worktree on its branch.
+/// `[agent]`: `a` opens a coding-agent session that belongs to the MR, in a worktree on its branch, or to a branch on `revu local`.
 /// Claude Code is the agent unless `start` names another program.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Agent {

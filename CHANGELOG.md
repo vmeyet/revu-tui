@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **`a` opens the agent session of a branch in `revu local`.**
+  On the worktree screen and in a worktree's diff, with `[agent] enabled = true`.
+  Press `a` or type `:session`: the session started in that worktree opens, else a new one starts there.
+
 ## 0.13.0 - 2026-11-06
 
 ### New

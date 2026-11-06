@@ -35,7 +35,7 @@ expression: "render(&mut app, 160, 45)"
 │             │        > <  the code after, before, alone                                  ^k ,  MRs · > commands                               │              │
 │             │          t  file tree                                                         :  commands: :go !42, :set theme=nord             │              │
 │             │          T  every thread of the MR                                          o y  open in the browser, copy the link             │              │
-│             │          p  pipeline                                                          a  the agent session of the MR                    │              │
+│             │          p  pipeline                                                          a  the agent session of the MR or branch          │              │
 │             │          v  prose: the Markdown file rendered, its blocks marked              r  refresh                                        │              │
 │             │         zz  zen: the diff alone, quiet                                        ?  this help                                      │              │
 │             │        w W  wrap long lines, hide whitespace changes                       q ^c  quit: twice; q closes a pane first             │              │

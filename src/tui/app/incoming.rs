@@ -113,7 +113,7 @@ impl App {
             Incoming::Composed { input, edited } => self.apply_composed(input, edited),
             Incoming::ViewReady { key, view } => self.apply_view_ready(&key, view),
             Incoming::Viewed { view, outcome } => self.apply_viewed(&view, outcome),
-            Incoming::SessionPick { mr, sessions } => self.offer_sessions(*mr, sessions),
+            Incoming::SessionPick { subject, sessions } => self.offer_sessions(*subject, sessions),
             Incoming::SessionReady(handoff) => self.handoff = Some(handoff),
             Incoming::SessionLeft { said, outcome } => self.apply_session_left(&said, outcome),
             Incoming::Triaged { key, verdict } => self.apply_triaged(key, verdict),

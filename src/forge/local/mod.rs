@@ -272,7 +272,7 @@ async fn row(repo: &str, worktree: &Worktree, committed: &Choice) -> Result<Queu
     Ok(QueueMr {
         title: mr.source_branch.clone(),
         size: Some(size),
-        worktree: Some(WorktreeRow { commits, uncommitted: mr.uncommitted, no_diff: mr.no_diff.clone() }),
+        worktree: Some(WorktreeRow { commits, uncommitted: mr.uncommitted, no_diff: mr.no_diff.clone(), dir: worktree.path.clone() }),
         ..row
     })
 }

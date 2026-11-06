@@ -118,7 +118,7 @@ impl App {
         if key.is_local() { mr.title.clone() } else { format!("{}{} {}", self.hosts.kind_of(&key).sigil(), mr.number, mr.title) }
     }
 
-    fn queue_mr(&self, key: &MrKey) -> Option<&crate::forge::QueueMr> {
+    pub(super) fn queue_mr(&self, key: &MrKey) -> Option<&crate::forge::QueueMr> {
         self.sections.as_ref()?.all().find(|mr| mr.key() == *key)
     }
 }
