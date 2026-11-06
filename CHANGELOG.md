@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.14.0 - 2026-11-06
+
 ### New
 
 - **`a` opens the agent session of a branch in `revu local`.**
