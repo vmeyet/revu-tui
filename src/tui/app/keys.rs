@@ -243,7 +243,7 @@ impl App {
             }
             _ => self.did_nothing(),
         }
-        vec![]
+        self.show_selected_worktree()
     }
 
     pub(super) fn refresh_queue(&mut self) -> Vec<Action> {
@@ -340,7 +340,7 @@ impl App {
                 self.key_did = Some(Act::ClosePane);
                 self.close_pane();
             }
-            Act::Back if self.zen => return self.leave_zen(),
+            Act::Back if self.zen => return self.leave_zen_on_a_screen(),
             Act::Back => self.focus = Focus::Queue,
             Act::Refresh => return self.refresh_open(),
             Act::Description => self.open_brief_from_review(),

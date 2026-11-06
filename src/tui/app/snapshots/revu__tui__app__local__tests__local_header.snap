@@ -2,7 +2,7 @@
 source: src/tui/app/local.rs
 expression: "first_rows(&mut app, 4)"
 ---
-╭ Queue · all ───────────────────╮╭ widgets ~ feat/checkout ───────────────────────────────────────────────────────────╮
+╭ Worktrees · widgets ───────────╮╭ widgets ~ feat/checkout ───────────────────────────────────────────────────────────╮
 │   TO REVIEW                    ││  feat/checkout → main · 2h · +5 −3 · 2 files                                       │
 │    ▁▁▁ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁         ││   ● 3 uncommitted, not shown · I shows                                             │
 │    ▁▁▁ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁         ││                                                                                    │

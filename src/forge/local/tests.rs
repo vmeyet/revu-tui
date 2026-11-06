@@ -295,6 +295,44 @@ async fn the_key_finds_a_linked_worktree_on_a_detached_head() {
     assert_eq!(client.here_key().await.unwrap(), key, "the same number every time");
 }
 
+#[tokio::test]
+async fn the_queue_sorts_worktrees_here_ahead_and_the_rest_with_their_counts() {
+    let repo = Repo::new();
+    repo.write("mine.txt", "one\ntwo\n");
+    repo.commit("mine");
+    repo.write("dirty.txt", "x\n");
+    let (behind, ahead) = (repo.path().join("behind"), repo.path().join("ahead"));
+    repo.git(&["worktree", "add", "-q", "-b", "same", behind.to_str().unwrap(), "main"]);
+    repo.git(&["worktree", "add", "-q", "-b", "further", ahead.to_str().unwrap(), "main"]);
+    repo.git(&["-C", ahead.to_str().unwrap(), "commit", "-q", "--allow-empty", "-m", "ahead"]);
+    let (client, _) = repo.open().await;
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    let branches = |rows: &[QueueMr]| rows.iter().map(|row| row.title.clone()).collect::<Vec<_>>();
+    assert_eq!(
+        (branches(&queue.authored), branches(&queue.review_requested), branches(&queue.open)),
+        (vec!["work".to_owned()], vec!["further".to_owned()], vec!["same".to_owned()])
+    );
+    assert_eq!(queue.me, repo.path().file_name().unwrap().to_str().unwrap());
+    let here = &queue.authored[0];
+    assert_eq!(here.worktree, Some(WorktreeRow { commits: 1, uncommitted: 3, no_diff: None }), "the two worktree folders and dirty.txt");
+    assert_eq!(here.size.map(|size| (size.additions, size.files)), Some((2, 1)));
+}
+
+#[tokio::test]
+async fn a_worktree_with_no_merge_base_keeps_its_row_and_the_others_stay() {
+    let repo = Repo::new();
+    let island = repo.path().join("island");
+    repo.git(&["worktree", "add", "-q", "-b", "island", island.to_str().unwrap(), "main"]);
+    repo.git(&["-C", island.to_str().unwrap(), "switch", "-q", "--orphan", "alone"]);
+    repo.git(&["-C", island.to_str().unwrap(), "commit", "-q", "--allow-empty", "-m", "alone"]);
+    let (client, _) = repo.open().await;
+    let Fetched { queue, .. } = client.queue().await.unwrap();
+    assert_eq!(queue.authored[0].title, "work");
+    let [row] = queue.open.try_into().unwrap();
+    assert_eq!(row.title, "alone");
+    assert_eq!(row.worktree.unwrap().no_diff.as_deref(), Some("main shares no history with this branch"));
+}
+
 #[test]
 fn a_huge_file_withholds_its_body() {
     let body = "+x\n".repeat(20_001);

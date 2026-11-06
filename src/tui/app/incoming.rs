@@ -39,6 +39,7 @@ impl App {
                 self.queue_loading = false;
                 self.queue_failed = false;
                 self.offline = None;
+                self.keep_cursor_on_the_shown_worktree();
                 self.queue_settle();
                 self.schedule_queue();
                 self.ask_triage();

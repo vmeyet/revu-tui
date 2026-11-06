@@ -17,7 +17,7 @@ pub(crate) use model::{
     MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange, Readiness,
     Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
-pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size};
+pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size, WorktreeRow};
 
 use crate::auth::Credentials;
 use crate::config::Config;
@@ -144,7 +144,7 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.queue(project).await,
             Forge::GitHub(client) => client.queue(project).await,
-            Forge::Local(_) => Ok(local::queue()),
+            Forge::Local(client) => Box::pin(client.queue()).await,
         }
     }
 

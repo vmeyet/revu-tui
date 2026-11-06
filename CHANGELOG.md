@@ -13,6 +13,10 @@ Each entry says what changed, then where, then how to use it.
   In the current worktree, logged out too, in zen; it never fetches and never writes to the repo.
   Run `revu local [target]`, press `B` to compare against another branch and `I` to show uncommitted work.
 
+- **The worktree screen lists every worktree of the repo beside the diff of the selected one.**
+  In `revu local`, after `esc`: `HERE`, `AHEAD` and `NOTHING AHEAD`, newest first, with `●` on uncommitted work.
+  Move with `j` `k`; the diff follows the cursor, looks again every 2 seconds and on terminal focus, and rebuilds only when its head moved.
+
 ## 0.12.0 - 2026-11-04
 
 ### New

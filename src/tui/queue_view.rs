@@ -1,10 +1,10 @@
 //! The queue pane: sections under faded rules, two lines per MR by default (one with
 //! `[tui] queue = "compact"`, outside the compact layout), and one author's chained MRs folded into a stack.
-use super::app::{App, Badge, Focus, List, ListRow, Mark, QueueRow};
+use super::app::{App, Badge, Focus, HERE, List, ListRow, Mark, QueueRow};
 use super::theme::Theme;
 use super::ui::{Link, draw_empty, short_age};
 use crate::config::QueueLayout;
-use crate::forge::QueueMr;
+use crate::forge::{QueueMr, WorktreeRow};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -26,9 +26,10 @@ const KINDS: [&str; 12] = ["feat", "fix", "docs", "refactor", "test", "chore", "
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let scope = app.scope().map_or_else(|| "all".to_owned(), |project| project.to_string());
+    let head = if app.is_local() { format!("Worktrees · {}", app.me) } else { format!("Queue · {scope}") };
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
     let stale = if app.queue_failed && app.sections.is_some() { " · not refreshed" } else { "" };
-    let title = truncate(&format!("Queue · {scope}{view}{stale}"), area.width.saturating_sub(4) as usize);
+    let title = truncate(&format!("{head}{view}{stale}"), area.width.saturating_sub(4) as usize);
     let block = pane::framed(&theme, &title, app.focus == Focus::Queue);
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -118,10 +119,39 @@ fn row_lines(app: &App, row: &QueueRow<'_>, selected: bool, first: bool, width: 
 }
 
 fn mr_lines(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize) -> (Vec<Line<'static>>, Option<RowLink>) {
+    if let Some(worktree) = &mr.worktree {
+        return (worktree_lines(app, mr, worktree, selected, width), None);
+    }
     match app.row_layout() {
         QueueLayout::Comfortable => comfortable(app, mr, selected, indent, width),
         QueueLayout::Compact => compact(app, mr, selected, indent, width),
     }
+}
+
+/// `feat/local-diff`, then `3 commits · +182 −31`, its age and a `●` for uncommitted work at the right edge.
+fn worktree_lines(app: &App, mr: &QueueMr, worktree: &WorktreeRow, selected: bool, width: usize) -> Vec<Line<'static>> {
+    let theme = app.theme;
+    let dim = Style::default().fg(theme.faded);
+    let title_style = if selected { Style::default().add_modifier(Modifier::BOLD) } else { Style::default() };
+    let first = vec![bar(theme, selected), Span::styled(truncate(&mr.title, width.saturating_sub(BAR_W)), title_style)];
+    let commits = match worktree.commits {
+        0 => "no commits".to_owned(),
+        1 => "1 commit".to_owned(),
+        many => format!("{many} commits"),
+    };
+    let size = mr.size.filter(|_| worktree.commits > 0).map(|s| format!(" · +{} −{}", s.additions, s.deletions)).unwrap_or_default();
+    let since = (app.today - mr.updated_at).to_std().unwrap_or_default();
+    let age = if since.as_secs() < 60 { "now".to_owned() } else { short_age(since) };
+    let dot = if worktree.uncommitted > 0 { "●" } else { " " };
+    let room = width.saturating_sub(BAR_W + age.width() + 4);
+    let text = truncate(worktree.no_diff.as_deref().unwrap_or(&format!("{commits}{size}")), room);
+    let pad = " ".repeat(room.saturating_sub(text.width()) + 1);
+    let second = vec![
+        bar(theme, selected),
+        Span::styled(format!("{text}{pad}{age} "), dim),
+        Span::styled(format!(" {dot}"), Style::default().fg(theme.warn)),
+    ];
+    vec![Line::from(first), Line::from(second)]
 }
 
 /// `── OPEN · 28 ─────────`: a faded rule, so a section reads as a break, not as one more row.
@@ -129,7 +159,7 @@ fn mr_lines(app: &App, mr: &QueueMr, selected: bool, indent: usize, width: usize
 fn rule(theme: Theme, name: &str, count: usize, open: bool, selected: bool, width: usize) -> Line<'static> {
     let faded = Style::default().fg(theme.faded);
     let fold = if open { "" } else { "▸ " };
-    let label = format!(" {fold}{name} · {count} ");
+    let label = if name == HERE { format!(" {fold}{name} ") } else { format!(" {fold}{name} · {count} ") };
     let lead = "──";
     let tail = width.saturating_sub(BAR_W + lead.width() + label.width());
     let label_style = if selected { Style::default().fg(theme.muted).add_modifier(Modifier::BOLD) } else { faded };

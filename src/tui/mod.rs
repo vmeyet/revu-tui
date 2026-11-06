@@ -145,7 +145,7 @@ async fn event_loop(
             Some(event) = keys.next() => match event? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => { wake(app); app.handle_key(key) }
                 Event::Mouse(mouse) => { wake(app); app.handle_mouse(mouse) }
-                Event::FocusGained => { wake(app); app.terminal_focus(true); vec![] }
+                Event::FocusGained => { wake(app); app.focus_gained() }
                 Event::FocusLost => { wake(app); app.terminal_focus(false); vec![] }
                 Event::Paste(text) => { wake(app); app.handle_paste(&text); vec![] }
                 _ => vec![],

@@ -5,7 +5,7 @@ mod split;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use super::{Approvals, DiffFile, Fetched, MergePlan, Mr, MrKey, MrState, Queue, Refs, Sha, User};
+use super::{Approvals, DiffFile, Fetched, MergePlan, Mr, MrKey, MrState, Queue, QueueMr, Refs, Sha, Size, User, WorktreeRow};
 use crate::open::safe_path;
 use anyhow::{Context, Result, bail};
 use git::Worktree;
@@ -112,6 +112,18 @@ impl Client {
         mr_of(&repo, find(&worktrees, key)?, &self.choice()).await
     }
 
+    /// One row per worktree, in three lists: the one revu ran in, those ahead of the target, the rest.
+    pub(crate) async fn queue(&self) -> Result<Fetched> {
+        let git::Listing { repo, worktrees } = git::listing(&self.here).await?;
+        let committed = Choice { uncommitted: false, ..self.choice() };
+        let rows = futures_util::future::try_join_all(worktrees.iter().map(|worktree| row(&repo, worktree, &committed))).await?;
+        let here_number = worktrees.iter().find(|worktree| worktree.path == self.here).map(Worktree::number);
+        let (here, others): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| Some(row.number) == here_number);
+        let (ahead, rest): (Vec<_>, Vec<_>) = others.into_iter().partition(|row| row.worktree.as_ref().is_some_and(|w| w.commits > 0));
+        let queue = Queue { me: repo, project: None, review_requested: ahead, authored: here, assigned: vec![], open: rest };
+        Ok(Fetched { queue, missing: None })
+    }
+
     pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
         let worktree = self.worktree(key).await?;
         let Choice { target, uncommitted } = self.choice();
@@ -149,12 +161,6 @@ impl Client {
     }
 }
 
-/// No rows yet: the worktree screen fills them.
-pub(super) fn queue() -> Fetched {
-    let queue = Queue { me: String::new(), project: None, review_requested: vec![], authored: vec![], assigned: vec![], open: vec![] };
-    Fetched { queue, missing: None }
-}
-
 /// What fails on a local diff: the keys that reach it are hidden, so only a stray call gets here.
 pub(crate) fn forge_only<T>() -> Result<T> {
     bail!("a local diff has no forge behind it")
@@ -179,7 +185,8 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
         _ => worktree.head.clone(),
     };
     let base = base.unwrap_or_else(|_| worktree.head.clone());
-    let (updated_at, files) = tokio::try_join!(git::commit_time(&worktree.path), git::uncommitted_files(&worktree.path))?;
+    let (committed, files) = tokio::try_join!(git::commit_time(&worktree.path), git::uncommitted_files(&worktree.path))?;
+    let saved = git::last_saved(&worktree.path, &files).await;
     let label = worktree.label();
     Ok(Mr {
         project: key.project,
@@ -192,7 +199,7 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
         source_branch: label,
         target_branch: target.to_string(),
         web_url: String::new(),
-        updated_at,
+        updated_at: saved.map_or(committed, |saved| saved.max(committed)),
         refs: Refs { start: base.clone(), base, head },
         pipeline: None,
         changes_count: None,
@@ -202,8 +209,27 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
         approvals: Approvals::default(),
         merge: MergePlan::default(),
         mine: false,
-        uncommitted: if *uncommitted { 0 } else { files },
+        uncommitted: if *uncommitted { 0 } else { u32::try_from(files.len()).unwrap_or(u32::MAX) },
         no_diff,
+    })
+}
+
+/// The worktree as the screen lists it: its commits against the target, whatever `I` shows; one with no merge base
+/// keeps its row and says why.
+async fn row(repo: &str, worktree: &Worktree, committed: &Choice) -> Result<QueueMr> {
+    let mr = mr_of(repo, worktree, committed).await?;
+    let Refs { base, head, .. } = &mr.refs;
+    let (commits, size) = if mr.no_diff.is_some() {
+        (0, Size { additions: 0, deletions: 0, files: 0 })
+    } else {
+        tokio::try_join!(git::commits_between(&worktree.path, base, head), git::size_between(&worktree.path, base, head))?
+    };
+    let row = QueueMr::from_mr(&mr, Some(HOST.to_owned())).context("a worktree is always open")?;
+    Ok(QueueMr {
+        title: mr.source_branch.clone(),
+        size: Some(size),
+        worktree: Some(WorktreeRow { commits, uncommitted: mr.uncommitted, no_diff: mr.no_diff.clone() }),
+        ..row
     })
 }
 

@@ -108,9 +108,14 @@ impl App {
 
     /// `‹  !42 title  ·  3/12  ›`: where zen just went, with `at` counted from 0.
     fn zen_banner_text(&self, key: &MrKey, at: usize, of: usize) -> String {
-        let label =
-            self.queue_mr(key).map_or_else(String::new, |mr| format!("{}{} {}", self.hosts.kind_of(key).sigil(), mr.number, mr.title));
+        let label = self.queue_mr(key).map_or_else(String::new, |mr| self.row_label(mr));
         format!("‹  {label}  ·  {}/{of}  ›", at + 1)
+    }
+
+    /// `!42 title`; a worktree has no number to read.
+    pub(super) fn row_label(&self, mr: &crate::forge::QueueMr) -> String {
+        let key = mr.key();
+        if key.is_local() { mr.title.clone() } else { format!("{}{} {}", self.hosts.kind_of(&key).sigil(), mr.number, mr.title) }
     }
 
     fn queue_mr(&self, key: &MrKey) -> Option<&crate::forge::QueueMr> {

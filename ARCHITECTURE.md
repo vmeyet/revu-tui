@@ -83,6 +83,7 @@ A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/ap
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
 `revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host, no Jev and no agent, and `tui::run` takes it like any other.
+Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is polled every 2s and on terminal focus.
 
 ## Boundaries
 
@@ -166,5 +167,7 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | draft | A note not yet published, written locally or held by the forge |
 | review | The set of drafts, published together with `P` |
 | viewed | A file the reviewer marked as read; it folds |
+| worktree | One entry of `git worktree list`: on `revu local`, it stands where an MR does |
+| target | What a local diff compares against, its merge base with `HEAD` being where the diff starts; `B` changes it |
 | pin | An MR kept on top of the queue, in `PINNED`, until it is merged or closed |
 | sticky header | The file row, and the cursor's hunk row, kept on top of the diff once they scroll off; `tui/app/sticky.rs` |

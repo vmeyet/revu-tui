@@ -262,6 +262,7 @@ impl From<QueuePr> for QueueMr {
             notes: pr.comments.total + pr.review_threads.nodes.len() as u32,
             commenters: pr.participants.nodes.into_iter().map(|a| a.login).collect(),
             reason: None,
+            worktree: None,
         }
     }
 }

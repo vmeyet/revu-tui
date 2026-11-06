@@ -35,8 +35,11 @@ impl Queues {
         };
         let (fetched, (others, silent), said) = tokio::join!(self.homes.forge.queue(scope.as_ref()), others, self.ask_ready());
         let Fetched { queue, missing } = fetched?;
-        let (wanted, saved) = (scope.clone(), queue.clone());
-        write_cache("caching the queue", &self.homes, move |homes| homes.cache.write_entry(&keys::queue(wanted.as_ref()), &saved)).await;
+        if !self.is_local() {
+            let (wanted, saved) = (scope.clone(), queue.clone());
+            write_cache("caching the queue", &self.homes, move |homes| homes.cache.write_entry(&keys::queue(wanted.as_ref()), &saved))
+                .await;
+        }
         let (ready, failure) = match said {
             Ok(Some(output)) => (Some(self.fresh_ready(scope.as_ref(), output, &queue, &others).await), None),
             Ok(None) => (None, None),
@@ -77,7 +80,15 @@ impl Queues {
         (queues.into_iter().chain(kept.await).collect(), silent)
     }
 
+    /// A worktree's rows hold what no cached queue keeps, and change under one target.
+    fn is_local(&self) -> bool {
+        self.homes.forge.kind() == crate::forge::Kind::Local
+    }
+
     pub(in crate::tui) fn cached(&self, scope: Option<ProjectPath>) -> Option<Incoming> {
+        if self.is_local() {
+            return None;
+        }
         let queue: Queue = self.homes.cache.read_entry(&keys::queue(scope.as_ref()))?.value;
         let others: Vec<Queue> =
             if scope.is_none() { self.homes.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
@@ -215,6 +226,17 @@ mod tests {
         let without = Queues { ready_command: None, ..queues };
         let Some(Incoming::Queue { sections, .. }) = without.cached(Some("acme/widgets".into())) else { panic!("the cache answers") };
         assert!(sections.ready.is_empty(), "no command, no Ready, whatever the cache kept");
+    }
+
+    #[tokio::test]
+    async fn a_worktree_queue_is_never_cached_and_paints_nothing_before_it_lands() {
+        let (repo, dir) = (crate::forge::local::tests::Repo::new(), tempfile::tempdir().unwrap());
+        let (client, _) = repo.open().await;
+        let queues = queues(Homes { forge: Forge::Local(client), cache: Cache::in_dir(dir.path()), others: vec![] });
+        let (Incoming::Queue { sections, .. }, _) = queues.load(None).await.unwrap() else { panic!("no queue") };
+        assert_eq!(sections.mine.len(), 1);
+        assert!(!dir.path().join(keys::queue(None)).exists());
+        assert_eq!(queues.cached(None), None);
     }
 
     #[tokio::test]

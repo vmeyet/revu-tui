@@ -9,6 +9,8 @@ use vtui::field::Field;
 const QUEUE_EVERY: Duration = Duration::from_secs(60);
 const MR_EVERY: Duration = Duration::from_secs(60);
 const DISCUSSIONS_EVERY: Duration = Duration::from_secs(30);
+/// How often a local diff looks at its head: asking `git` costs no request, and the reader works beside it.
+const LOCAL_EVERY: Duration = Duration::from_secs(2);
 const BACKOFF: Duration = Duration::from_secs(300);
 const SLOW_DOWN: u32 = 5;
 
@@ -434,6 +436,10 @@ impl App {
     }
 
     pub(super) fn schedule_review(&mut self) {
+        if self.is_local() {
+            self.poll.mr_due = Some(self.now + LOCAL_EVERY);
+            return;
+        }
         self.poll.mr_due = Some(self.now + self.paced(MR_EVERY));
         self.poll.discussions_due = Some(self.now + self.paced(DISCUSSIONS_EVERY));
     }
@@ -449,9 +455,9 @@ impl App {
 
     /// Five minutes, or as long as the forge asked to wait when that is longer.
     pub(super) fn back_off(&mut self) {
-        let wait = self.rate.wait.unwrap_or_default().max(BACKOFF);
+        let wait = if self.is_local() { LOCAL_EVERY } else { self.rate.wait.unwrap_or_default().max(BACKOFF) };
         let later = Some(self.now + wait);
-        self.poll = Poll { queue_due: later, mr_due: later, discussions_due: later };
+        self.poll = Poll { queue_due: later, mr_due: later, discussions_due: later.filter(|_| !self.is_local()) };
     }
 
     pub(crate) fn loading(&self) -> bool {

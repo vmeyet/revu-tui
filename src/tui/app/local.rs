@@ -27,6 +27,44 @@ impl App {
         act.is_some_and(|act| !act.row().reach.serves(self.kind()))
     }
 
+    /// Out of zen; on a local diff, on to the worktree screen, the keys on its rows.
+    pub(super) fn leave_zen_on_a_screen(&mut self) -> Vec<Action> {
+        if self.is_local() {
+            self.focus = Focus::Queue;
+        }
+        self.leave_zen()
+    }
+
+    /// The cursor's worktree shows beside the rows: its diff is asked for as the cursor lands on it.
+    pub(super) fn show_selected_worktree(&mut self) -> Vec<Action> {
+        if !self.is_local() {
+            return vec![];
+        }
+        let Some(key) = self.selected_mr().map(crate::forge::QueueMr::key) else { return vec![] };
+        let shown = self.opening.as_ref().or(self.open.as_ref().map(|open| &open.key));
+        if shown == Some(&key) {
+            return vec![];
+        }
+        self.opening = Some(key.clone());
+        vec![Action::Open(key)]
+    }
+
+    /// New rows may sort another way: the cursor stays on the worktree whose diff shows.
+    pub(super) fn keep_cursor_on_the_shown_worktree(&mut self) {
+        if let Some(key) = self.open.as_ref().filter(|open| open.key.is_local()).map(|open| open.key.clone()) {
+            self.select_in_queue(&key);
+        }
+    }
+
+    /// The terminal came back into focus: a local diff looks at once for what changed behind it, unless a look is on its way.
+    pub(crate) fn focus_gained(&mut self) -> Vec<Action> {
+        self.terminal_focus(true);
+        let Some(open) = self.open.as_ref().filter(|open| open.key.is_local() && self.poll.mr_due.is_some()) else { return vec![] };
+        let action = Action::PollMr { key: open.key.clone(), head: open.review.mr.refs.head.clone() };
+        self.poll.mr_due = None;
+        vec![action]
+    }
+
     /// `B`: the palette, on `:target ` for the branch to come.
     pub(super) fn ask_target(&mut self) {
         let mut palette = Palette::new(Mode::Commands, self.palette_history.clone());
@@ -40,12 +78,16 @@ impl App {
             self.toast("open a worktree first");
             return vec![];
         };
+        if matches!(change, Change::Target(_)) {
+            self.poll.queue_due = Some(self.now);
+        }
         vec![Action::ChangeLocal { key, change }]
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::forge::QueueMr;
     use crate::forge::local::Change;
     use crate::tui::app::test_support::*;
 
@@ -186,6 +228,168 @@ mod tests {
         let mut app = local_opened(local_mr(0, "bbbb"), &[]);
         let screen = render(&mut app, 120, 12);
         assert!(screen.contains("no commits ahead") && !screen.contains("uncommitted"), "{screen}");
+    }
+
+    /// The worktree screen as the backend sorts it, the cursor on `here`.
+    fn on_the_screen() -> App {
+        let mut app = local_app();
+        app.focus = Focus::Queue;
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: worktrees(), opened: HashMap::new(), cached: false });
+        app.take_actions();
+        app
+    }
+
+    fn worktrees() -> Sections {
+        let row = |number: u64, branch: &str, minutes: i64, commits: u32, uncommitted: u32, (additions, deletions): (u32, u32)| QueueMr {
+            title: branch.into(),
+            source_branch: branch.into(),
+            number,
+            updated_at: today() - chrono::Duration::minutes(minutes),
+            size: Some(crate::forge::Size { additions, deletions, files: 1 }),
+            worktree: Some(crate::forge::WorktreeRow { commits, uncommitted, no_diff: None }),
+            ..QueueMr::from_mr(&local_mr(0, "bbbb"), local_key().host).unwrap()
+        };
+        Sections {
+            mine: vec![row(7, "feat/local-diff", 2, 3, 2, (182, 31))],
+            to_review: vec![row(9, "fix/header-width", 60, 1, 0, (12, 4)), row(8, "fix/old", 600, 2, 0, (40, 2))],
+            open: vec![row(10, "main", 0, 0, 1, (0, 0))],
+            ..Sections::default()
+        }
+    }
+
+    #[test]
+    fn snapshot_the_worktree_screen() {
+        let mut app = on_the_screen();
+        insta::assert_snapshot!("worktree_screen", render(&mut app, 110, 18));
+    }
+
+    #[test]
+    fn esc_in_zen_lands_on_the_worktree_screen() {
+        let mut app = on_the_screen();
+        app.zen = true;
+        app.focus = Focus::Review;
+        app.handle_key(code(KeyCode::Esc));
+        assert_eq!((app.zen, app.focus), (false, Focus::Queue));
+    }
+
+    #[test]
+    fn moving_on_the_screen_asks_for_the_diff_of_the_row_and_keeps_the_keys_there() {
+        let mut app = on_the_screen();
+        let actions = press(&mut app, "j");
+        let key = app.selected_mr().unwrap().key();
+        assert_ne!(key, local_key());
+        assert_eq!(actions, vec![Action::Open(key.clone())]);
+        assert_eq!((app.focus, app.opening.as_ref()), (Focus::Queue, Some(&key)));
+        assert_eq!(press(&mut app, "/"), vec![], "not asked twice for the same row");
+    }
+
+    #[test]
+    fn a_diff_is_looked_at_every_2s_and_not_for_threads() {
+        let mut app = local_app();
+        assert_eq!(app.poll.discussions_due, None);
+        assert_eq!(app.tick(), vec![]);
+        app.now += Duration::from_secs(2);
+        assert_eq!(app.tick(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+        assert_eq!(app.tick(), vec![], "one look at a time");
+    }
+
+    #[test]
+    fn terminal_focus_looks_at_once_unless_a_look_is_on_its_way() {
+        let mut app = local_app();
+        assert_eq!(app.focus_gained(), vec![Action::PollMr { key: local_key(), head: "bbbb".into() }]);
+        assert_eq!(app.focus_gained(), vec![]);
+        let mut forge = with_review();
+        assert_eq!(forge.focus_gained(), vec![]);
+    }
+
+    #[test]
+    fn a_look_that_finds_the_head_still_there_keeps_the_diff_and_the_cursor() {
+        let mut app = local_app();
+        press(&mut app, "]cj");
+        let before = app.open.clone().unwrap();
+        app.apply(Incoming::Mr { key: local_key(), mr: Box::new(local_mr(4, "bbbb")) });
+        let open = app.open.as_ref().unwrap();
+        assert!(Arc::ptr_eq(&open.review.files, &before.review.files), "nothing built again");
+        assert_eq!((open.selected, open.review.mr.uncommitted), (before.selected, 4));
+    }
+
+    #[test]
+    fn rows_that_sort_another_way_leave_the_cursor_on_the_shown_worktree() {
+        let mut app = on_the_screen();
+        let before = worktrees();
+        let moved = Sections { mine: before.to_review.clone(), to_review: before.mine, ..before };
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections: moved, opened: HashMap::new(), cached: false });
+        assert_eq!(app.selected_mr().map(QueueMr::key), Some(local_key()));
+    }
+
+    #[test]
+    fn a_click_on_a_row_shows_its_worktree_too() {
+        let mut app = on_the_screen();
+        render(&mut app, 110, 18);
+        let at = app.drawn.list_rows.iter().find(|row| row.index != app.queue_selected).copied().unwrap().area;
+        let click = |kind| crossterm::event::MouseEvent { kind, column: at.x + 1, row: at.y, modifiers: KeyModifiers::NONE };
+        let left = crossterm::event::MouseButton::Left;
+        app.handle_mouse(click(crossterm::event::MouseEventKind::Down(left)));
+        let actions = app.handle_mouse(click(crossterm::event::MouseEventKind::Up(left)));
+        assert_eq!(actions, vec![Action::Open(app.selected_mr().unwrap().key())]);
+    }
+
+    #[test]
+    fn a_worktree_with_no_merge_base_keeps_its_row_with_the_reason() {
+        let mut app = on_the_screen();
+        let mut sections = worktrees();
+        let island =
+            sections.open[0].worktree.take().map(|row| crate::forge::WorktreeRow { no_diff: Some("no shared history".into()), ..row });
+        sections.open[0].worktree = island;
+        app.apply(Incoming::Queue { scope: None, me: "widgets".into(), sections, opened: HashMap::new(), cached: false });
+        let screen = render(&mut app, 110, 18);
+        assert!(screen.contains("no shared history") && screen.contains("feat/local-diff"), "{screen}");
+    }
+
+    #[test]
+    fn a_new_target_also_refreshes_the_rows_soon() {
+        let mut app = on_the_screen();
+        app.queue_loading = false;
+        press(&mut app, "B");
+        press(&mut app, "dev");
+        app.handle_key(code(KeyCode::Enter));
+        assert!(app.tick().contains(&Action::LoadQueue { scope: None, from_cache: false }));
+    }
+
+    fn one_line_file(path: &str, line: &str) -> DiffFile {
+        DiffFile { diff: format!("@@ -1 +1 @@\n-old\n+{line}\n"), old_path: path.into(), new_path: path.into(), ..DiffFile::default() }
+    }
+
+    /// `files` arriving at a new head, as a look at the worktree brings them.
+    fn head_moved(app: &mut App, head: &str, files: &[DiffFile]) {
+        app.apply(Incoming::Review {
+            key: local_key(),
+            review: Box::new(Review::new(local_mr(0, head), files, vec![], &[])),
+            cached: None,
+        });
+    }
+
+    #[test]
+    fn a_viewed_file_stays_viewed_across_a_head_move_until_its_diff_changes() {
+        let files = [one_line_file("a.rs", "a"), one_line_file("b.rs", "b")];
+        let mut app = local_opened(local_mr(0, "aaaa"), &files);
+        app.review_jump_to(|row| matches!(row, Row::File { index: 1, .. }));
+        press(&mut app, "zv");
+        let viewed = |app: &App| app.open.as_ref().unwrap().review.viewed.contains("b.rs");
+        head_moved(&mut app, "bbbb", &files);
+        assert!(viewed(&app));
+        head_moved(&mut app, "cccc", &[files[0].clone(), one_line_file("b.rs", "edited")]);
+        assert!(!viewed(&app));
+    }
+
+    #[test]
+    fn a_head_move_over_the_same_files_keeps_the_cursor() {
+        let files = [one_line_file("a.rs", "a"), one_line_file("b.rs", "b")];
+        let mut app = local_opened(local_mr(0, "aaaa"), &files);
+        app.review_jump_to(|row| matches!(row, Row::Line { file: 1, .. }));
+        let before = app.open.as_ref().unwrap().row().cloned();
+        head_moved(&mut app, "bbbb", &files);
+        assert_eq!(app.open.as_ref().unwrap().row().cloned(), before);
     }
 
     fn first_rows(app: &mut App, rows: usize) -> String {
