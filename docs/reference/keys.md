@@ -93,7 +93,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `^k` `,` | MRs · > commands |
 | `:` | commands: :go !42, :set theme=nord |
 | `o` `y` | open in the browser, copy the link |
-| `a` | the agent session of the MR |
+| `a` | the agent session of the MR or branch |
 | `r` | refresh |
 | `B` | `revu local`: compare against another branch |
 | `I` | `revu local`: show uncommitted work, or hide it |

@@ -1,6 +1,6 @@
-//! Another agent than Claude Code: two commands of the reader's, with the MR filled in.
+//! Another agent than Claude Code: two commands of the reader's, with the MR or the branch filled in.
 //! revu cannot ask such an agent what it runs, so a session is either the one revu remembers or a new one.
-use super::{Agent, Call, Case, Kept, Mr, Ready, Step, worktree};
+use super::{Agent, Call, Case, Kept, Ready, Step, Subject};
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
@@ -17,34 +17,55 @@ pub(crate) fn check(command: &str, key: &str) -> Result<()> {
     crate::share::check_placeholders(command, key, &PLACEHOLDERS)
 }
 
-pub(super) fn session(agent: &Agent, start: &str, open: Option<&str>, mr: &Mr, kept: Option<&Kept>) -> Result<Step> {
+pub(super) fn session(agent: &Agent, start: &str, open: Option<&str>, subject: &Subject, kept: Option<&Kept>) -> Result<Step> {
     if let (Some(kept), Some(open)) = (kept, open) {
-        let call = call(open, mr, &kept.name, &kept.dir)?;
+        let call = call(open, subject, &kept.name, &kept.dir)?;
         return Ok(Step::Ready(Ready { kept: kept.clone(), call, case: Case::Remembered, notice: None }));
     }
-    let folder = worktree::on_branch(agent.run.as_ref(), agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
-    let name = mr.session_name();
-    let call = call(start, mr, &name, &folder.dir)?;
+    let folder = agent.folder(subject)?;
+    let name = subject.session_name();
+    let call = call(start, subject, &name, &folder.dir)?;
     let kept = Kept { name, dir: folder.dir, id: None, pane: None };
     Ok(Step::Ready(Ready { kept, call, case: Case::New, notice: folder.notice }))
 }
 
-/// The command's words with the MR filled in, word by word after the split, so a title with a quote stays one word.
-fn call(command: &str, mr: &Mr, name: &str, dir: &Path) -> Result<Call> {
+/// The command's words with the subject filled in, word by word after the split, so a title with a quote stays one word.
+/// A branch has no number, link, author or project: those are left empty, and its name is its `{ref}` and `{title}`.
+fn call(command: &str, subject: &Subject, name: &str, dir: &Path) -> Result<Call> {
     let words = shell_words::split(command).with_context(|| format!("`{command}` does not split into words"))?;
-    let fields = &mr.fields;
-    let values = [
-        fields.reference.clone(),
-        fields.number.to_string(),
-        fields.url.clone(),
-        fields.author.clone(),
-        fields.project.clone(),
-        fields.branch.clone(),
-        mr.target.clone(),
-        dir.to_string_lossy().into_owned(),
-        name.to_owned(),
-        fields.title.clone(),
-    ];
+    let (folder, name) = (dir.to_string_lossy().into_owned(), name.to_owned());
+    let values = match subject {
+        Subject::Mr(mr) => {
+            let fields = &mr.fields;
+            [
+                fields.reference.clone(),
+                fields.number.to_string(),
+                fields.url.clone(),
+                fields.author.clone(),
+                fields.project.clone(),
+                fields.branch.clone(),
+                mr.target.clone(),
+                folder,
+                name,
+                fields.title.clone(),
+            ]
+        }
+        Subject::Branch(branch) => {
+            let none = String::new;
+            [
+                branch.name.clone(),
+                none(),
+                none(),
+                none(),
+                none(),
+                branch.name.clone(),
+                branch.target.clone(),
+                folder,
+                name,
+                branch.name.clone(),
+            ]
+        }
+    };
     let fill = |word: &String| {
         PLACEHOLDERS.iter().zip(&values).fold(word.clone(), |word, (name, value)| word.replace(&format!("{{{name}}}"), value))
     };
@@ -53,13 +74,12 @@ fn call(command: &str, mr: &Mr, name: &str, dir: &Path) -> Result<Call> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{Script, agent, cache, mr};
+    use super::super::tests::{Script, WORKTREE, agent, branch, cache, mr};
     use super::super::{Choice, Handoff, Harness, Outcome};
     use super::*;
     use std::path::PathBuf;
 
     const START: &str = "aider --message 'Review {ref} \"{title}\" by {author}: {url} ({branch} into {target})' --name {name}";
-    const WORKTREE: &str = "/code/widgets/.claude/worktrees/feat+checkout";
 
     fn custom(open: Option<&str>) -> Harness {
         Harness::Custom { start: START.into(), open: open.map(str::to_owned) }
@@ -81,7 +101,9 @@ mod tests {
     fn the_first_time_the_start_command_runs_in_the_worktree_with_the_mr_filled_in() {
         let (agent, script) = agent(custom(Some("aider --restore {dir}")), Script::default(), false);
         let (_dir, cache) = cache();
-        let Outcome::Handoff(Handoff { call, said }) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
+        let Outcome::Handoff(Handoff { call, said }) = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap() else {
+            panic!("no hand-off")
+        };
         assert_eq!(
             call.argv,
             [
@@ -101,9 +123,11 @@ mod tests {
     fn the_next_time_the_open_command_runs_in_the_folder_revu_remembered() {
         let (agent, script) = agent(custom(Some("aider --restore {dir}")), Script::default(), false);
         let (_dir, cache) = cache();
-        agent.open(&mr(), &cache, Choice::Find).unwrap();
+        agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap();
         let before = script.calls().len();
-        let Outcome::Handoff(Handoff { call, said }) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
+        let Outcome::Handoff(Handoff { call, said }) = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap() else {
+            panic!("no hand-off")
+        };
         assert_eq!(call, Call::new(&["aider", "--restore", WORKTREE]).in_dir(Path::new(WORKTREE)));
         assert!(said.starts_with("the session revu remembered for !42"), "{said}");
         assert_eq!(script.calls().len(), before, "nothing is looked for: no git, no list");
@@ -113,8 +137,10 @@ mod tests {
     fn without_an_open_command_start_runs_again() {
         let (agent, _script) = agent(custom(None), Script::default(), false);
         let (_dir, cache) = cache();
-        agent.open(&mr(), &cache, Choice::Find).unwrap();
-        let Outcome::Handoff(Handoff { call, said }) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
+        agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap();
+        let Outcome::Handoff(Handoff { call, said }) = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap() else {
+            panic!("no hand-off")
+        };
         assert_eq!(call.argv[0], "aider");
         assert!(said.starts_with("a new session for !42"), "{said}");
     }
@@ -124,10 +150,23 @@ mod tests {
         let wide = Script::default().says("tmux display-message", "200\n").says("tmux split-window", "%5\n");
         let (agent, script) = agent(custom(None), wide, true);
         let (_dir, cache) = cache();
-        assert!(matches!(agent.open(&mr(), &cache, Choice::Find).unwrap(), Outcome::Shown(_)));
+        assert!(matches!(agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap(), Outcome::Shown(_)));
         let lines = script.lines();
         let pane = lines.iter().find(|line| line.starts_with("tmux split-window")).unwrap();
         assert!(pane.starts_with(&format!("tmux split-window -h -P -F #{{pane_id}} -c {WORKTREE} aider --message")), "{pane}");
         assert_eq!(lines.last().unwrap(), "tmux set-option -p -t %5 @revu_session revu: !42 charge cards at checkout");
+    }
+
+    #[test]
+    fn a_branch_starts_in_its_own_worktree_with_its_name_as_ref_and_title_and_no_mr_fields() {
+        let (agent, script) = agent(custom(None), Script::default(), false);
+        let (_dir, cache) = cache();
+        let Outcome::Handoff(Handoff { call, said }) = agent.open(&Subject::Branch(branch()), &cache, Choice::Find).unwrap() else {
+            panic!("no hand-off")
+        };
+        let message = "Review feat/checkout \"feat/checkout\" by :  (feat/checkout into main)";
+        assert_eq!(call.argv, ["aider", "--message", message, "--name", "revu: feat/checkout"]);
+        assert_eq!((call.dir, said.as_str()), (Some(PathBuf::from(WORKTREE)), "a new session for feat/checkout · revu: feat/checkout"));
+        assert_eq!(script.lines(), [] as [String; 0], "no worktree is looked for");
     }
 }

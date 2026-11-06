@@ -1,7 +1,7 @@
 //! Claude Code as the agent. `claude agents --json` lists its sessions; the MR a background session
 //! opened is read from that session's `state.json`, a file Claude Code keeps for itself and documents
 //! nowhere, so whatever cannot be read there means "not found" and never an error.
-use super::{Agent, Call, Case, Choice, Kept, Mr, Ready, Session, Step, worktree};
+use super::{Agent, Branch, Call, Case, Choice, Kept, Mr, Ready, Session, Step, Subject};
 use anyhow::{Context, Result};
 use chrono::DateTime;
 use serde::Deserialize;
@@ -47,17 +47,17 @@ fn session_of(item: Listed) -> Session {
     }
 }
 
-pub(super) fn session(agent: &Agent, jobs: &Path, mr: &Mr, kept: Option<&Kept>, choice: Choice) -> Result<Step> {
+pub(super) fn session(agent: &Agent, jobs: &Path, subject: &Subject, kept: Option<&Kept>, choice: Choice) -> Result<Step> {
     let run = agent.run.as_ref();
     let (session, case) = match choice {
-        Choice::New => return start(agent, mr).map(Step::Ready),
+        Choice::New => return start(agent, subject).map(Step::Ready),
         Choice::Session(session) => (*session, Case::Picked),
         Choice::Find => {
             let known = sessions(&run.output(&Call::new(&[PROGRAM, "agents", "--json", "--all"]))?);
-            match find(&known, kept, || openers(jobs, &mr.fields.url), agent.checkouts.get(&mr.fields.project)) {
+            match find(agent, jobs, &known, kept, subject) {
                 Found::Session(session, case) => (session, case),
                 Found::Pick(sessions) => return Ok(Step::Pick(sessions)),
-                Found::New => return start(agent, mr).map(Step::Ready),
+                Found::New => return start(agent, subject).map(Step::Ready),
             }
         }
     };
@@ -73,26 +73,52 @@ enum Found {
     New,
 }
 
-/// The session of an MR among the `known` ones: the one revu remembers, then the one that opened the
-/// MR, then a pick among those started in the project's checkout, then a new one. `openers` reads
-/// every session's state file, so it is asked only once nothing is remembered.
-fn find(known: &[Session], kept: Option<&Kept>, openers: impl FnOnce() -> Vec<String>, checkout: Option<&PathBuf>) -> Found {
-    let remembered = kept.and_then(|kept| known.iter().find(|session| kept.id.as_deref() == Some(session.resume_id.as_str())));
-    if let Some(session) = remembered {
+/// The session of `subject` among the `known` ones: the one revu remembers, then for an MR the one that opened it,
+/// then a pick among those started in the project's checkout; for a branch, the ones started in its worktree, picked
+/// among when several; then a new one. The openers are read only once nothing is remembered.
+fn find(agent: &Agent, jobs: &Path, known: &[Session], kept: Option<&Kept>, subject: &Subject) -> Found {
+    if let Some(session) = remembered(known, kept) {
         return Found::Session(session.clone(), Case::Remembered);
     }
-    let openers = openers();
-    let opened = known.iter().filter(|session| openers.contains(&session.id) || openers.contains(&session.resume_id));
-    if let Some(session) = opened.max_by_key(|session| (session.live, session.started)) {
-        return Found::Session(session.clone(), Case::Opener);
+    match subject {
+        Subject::Mr(mr) => {
+            if let Some(session) = opened_by(known, &openers(jobs, &mr.fields.url)) {
+                return Found::Session(session.clone(), Case::Opener);
+            }
+            let checkout = agent.checkouts.get(&mr.fields.project);
+            pick(known.iter().filter(|session| checkout.is_some_and(|root| session.dir.starts_with(root))))
+        }
+        Subject::Branch(branch) => match pick(in_worktree(known, branch)) {
+            Found::Pick(mut one) if one.len() == 1 => Found::Session(one.remove(0), Case::Worktree),
+            found => found,
+        },
     }
-    let mut here: Vec<Session> =
-        known.iter().filter(|session| checkout.is_some_and(|root| session.dir.starts_with(root))).cloned().collect();
-    if here.is_empty() {
+}
+
+fn remembered<'a>(known: &'a [Session], kept: Option<&Kept>) -> Option<&'a Session> {
+    let id = kept?.id.as_deref()?;
+    known.iter().find(|session| session.resume_id == id)
+}
+
+/// Of the sessions whose ids `openers` holds, the live one, then the newest.
+fn opened_by<'a>(known: &'a [Session], openers: &[String]) -> Option<&'a Session> {
+    let opened = known.iter().filter(|session| openers.contains(&session.id) || openers.contains(&session.resume_id));
+    opened.max_by_key(|session| (session.live, session.started))
+}
+
+/// The sessions started in the branch's worktree itself, not in another one nested under it.
+fn in_worktree<'a>(known: &'a [Session], branch: &Branch) -> impl Iterator<Item = &'a Session> {
+    known.iter().filter(|session| session.dir == branch.dir)
+}
+
+/// The `candidates` to pick among, live then newest first; none is a new session.
+fn pick<'a>(candidates: impl Iterator<Item = &'a Session>) -> Found {
+    let mut candidates: Vec<Session> = candidates.cloned().collect();
+    if candidates.is_empty() {
         return Found::New;
     }
-    here.sort_by_key(|session| std::cmp::Reverse((session.live, session.started)));
-    Found::Pick(here)
+    candidates.sort_by_key(|session| std::cmp::Reverse((session.live, session.started)));
+    Found::Pick(candidates)
 }
 
 /// The ids of the background sessions whose `state.json` lists the page `url` among the links they produced.
@@ -124,26 +150,29 @@ fn page(url: &str) -> String {
     path.trim_end_matches('/').replace("/-/", "/").to_ascii_lowercase()
 }
 
-/// A new background session in a worktree on the MR's branch: a plan only on someone else's MR.
-fn start(agent: &Agent, mr: &Mr) -> Result<Ready> {
+/// A new background session in a worktree on the branch: a plan only on someone else's MR.
+fn start(agent: &Agent, subject: &Subject) -> Result<Ready> {
     let run = agent.run.as_ref();
-    let folder = worktree::on_branch(run, agent.checkout(&mr.fields.project)?, &mr.fields.branch)?;
-    let name = mr.session_name();
-    let printed = run.output(&start_call(mr, &name).in_dir(&folder.dir).slow())?;
+    let folder = agent.folder(subject)?;
+    let name = subject.session_name();
+    let printed = run.output(&start_call(subject, &name).in_dir(&folder.dir).slow())?;
     let active = sessions(&run.output(&Call::new(&[PROGRAM, "agents", "--json"]))?);
     let session =
         started(&active, &printed, &name).with_context(|| format!("claude started a session it does not list: {}", printed.trim()))?;
     Ok(Ready { notice: folder.notice, ..ready(session, Case::New) })
 }
 
-fn start_call(mr: &Mr, name: &str) -> Call {
-    let mode: &[&str] = if mr.mine { &[] } else { &["--permission-mode", "plan"] };
-    let prompt = prompt(mr);
+fn start_call(subject: &Subject, name: &str) -> Call {
+    let mode: &[&str] = if subject.is_mine() { &[] } else { &["--permission-mode", "plan"] };
+    let prompt = match subject {
+        Subject::Mr(mr) => mr_prompt(mr),
+        Subject::Branch(branch) => branch_prompt(branch),
+    };
     Call::new(&[&[PROGRAM, "--bg", "--name", name], mode, &[prompt.as_str()]].concat())
 }
 
 /// Sets the scene and asks for nothing, so the first turn costs one short answer.
-fn prompt(mr: &Mr) -> String {
+fn mr_prompt(mr: &Mr) -> String {
     let Mr { fields, target, .. } = mr;
     format!(
         "This session belongs to {} \"{}\" by {}: {} (branch {} into {target}). \
@@ -155,6 +184,14 @@ fn prompt(mr: &Mr) -> String {
         fields.url,
         fields.branch,
         number = fields.number,
+    )
+}
+
+fn branch_prompt(branch: &Branch) -> String {
+    format!(
+        "This session belongs to the branch {}, checked out in this folder, which `revu local` compares against {}. \
+         Do nothing yet: wait for my instructions.",
+        branch.name, branch.target
     )
 }
 
@@ -171,11 +208,9 @@ fn ready(session: Session, case: Case) -> Ready {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{REPO, Script, cache, claude, mr};
+    use super::super::tests::{REPO, Script, WORKTREE, branch, cache, claude, mr};
     use super::super::{Handoff, Outcome};
     use super::*;
-
-    const WORKTREE: &str = "/code/widgets/.claude/worktrees/feat+checkout";
     const LIST: &str = "claude agents --json --all";
 
     fn item(id: &str, name: &str, cwd: &str, live: bool, started_at: u64) -> String {
@@ -236,7 +271,7 @@ mod tests {
                 &Kept { name: "revu: !42 charge cards".into(), dir: WORKTREE.into(), id: Some(resume_id("ab12cd34")), pane: None },
             )
             .unwrap();
-        let handoff = handed(agent.open(&mr(), &cache, Choice::Find).unwrap());
+        let handoff = handed(agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap());
         assert_eq!(handoff.call, attach("ab12cd34"));
         assert_eq!(handoff.said, "the session revu remembered for !42 · revu: !42 charge cards");
         assert_eq!(script.lines(), [LIST], "a live session needs no resume");
@@ -256,7 +291,7 @@ mod tests {
         cache
             .write(&keys_session(), &Kept { name: "gone".into(), dir: WORKTREE.into(), id: Some(resume_id("90900000")), pane: None })
             .unwrap();
-        let handoff = handed(agent.open(&mr(), &cache, Choice::Find).unwrap());
+        let handoff = handed(agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap());
         assert_eq!((handoff.call, handoff.said.as_str()), (attach("0pener00"), "the session that opened !42 · opened it"));
         assert_eq!(cache.read::<Kept>(&keys_session()).unwrap().id, Some(resume_id("0pener00")), "the session found is remembered instead");
     }
@@ -274,7 +309,7 @@ mod tests {
         let listed = list(&[item("0ther000", "other", REPO, true, 3), item("0pener00", "revu: nxt", REPO, false, 1)]);
         let (agent, script) = claude(Script::default().says(LIST, &listed), jobs.path(), false);
         let (_dir, cache) = cache();
-        let handoff = handed(agent.open(&mr(), &cache, Choice::Find).unwrap());
+        let handoff = handed(agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap());
         assert_eq!(handoff.call, attach("0pener00"));
         assert_eq!(handoff.said, "the session that opened !42 · revu: nxt");
         assert_eq!(script.lines(), [LIST.to_owned(), format!("claude --bg --resume {}", resume_id("0pener00"))]);
@@ -287,8 +322,7 @@ mod tests {
             sessions(&list(&[item("aa", "old", REPO, false, 9), item("bb", "live", REPO, true, 1), item("cc", "new", REPO, false, 5)]));
         let pick = |openers: &[&str]| {
             let openers: Vec<String> = openers.iter().map(|id| (*id).to_owned()).collect();
-            let Found::Session(session, Case::Opener) = find(&known, None, || openers, None) else { panic!("not found") };
-            session.id
+            opened_by(&known, &openers).unwrap().id.clone()
         };
         assert_eq!(pick(&["aa", "bb", "cc"]), "bb");
         assert_eq!(pick(&["cc", &resume_id("aa")]), "aa", "the full id counts too");
@@ -315,7 +349,7 @@ mod tests {
         ]);
         let (agent, script) = claude(Script::default().says(LIST, &listed), jobs.path(), true);
         let (_dir, cache) = cache();
-        let Outcome::Pick(offered) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no pick") };
+        let Outcome::Pick(offered) = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap() else { panic!("no pick") };
         assert_eq!(offered.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["11ve0000", "new00000", "01d00000"]);
         assert_eq!(script.lines(), [LIST], "nothing starts, nothing shows, until the reader picks");
         assert!(cache.read::<Kept>(&keys_session()).is_none());
@@ -327,7 +361,7 @@ mod tests {
         let picked = sessions(&list(&[item("01d00000", "old", REPO, false, 1)])).remove(0);
         let (agent, script) = claude(Script::default(), jobs.path(), false);
         let (_dir, cache) = cache();
-        let handoff = handed(agent.open(&mr(), &cache, Choice::Session(Box::new(picked))).unwrap());
+        let handoff = handed(agent.open(&Subject::Mr(mr()), &cache, Choice::Session(Box::new(picked))).unwrap());
         assert_eq!((handoff.call, handoff.said.as_str()), (attach("01d00000"), "the session picked for !42 · old"));
         assert_eq!(script.lines(), [format!("claude --bg --resume {}", resume_id("01d00000"))]);
         assert_eq!(cache.read::<Kept>(&keys_session()).unwrap().id, Some(resume_id("01d00000")));
@@ -347,7 +381,7 @@ mod tests {
         let jobs = tempfile::tempdir().unwrap();
         let (agent, script) = claude(starting(&list(&[item("e1sewher", "another repo", "/code/api", true, 9)])), jobs.path(), false);
         let (_dir, cache) = cache();
-        let handoff = handed(agent.open(&mr(), &cache, Choice::Find).unwrap());
+        let handoff = handed(agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap());
         assert_eq!(handoff.call, attach("5e5510n0"));
         assert_eq!(handoff.said, "a new session for !42 · revu: !42 charge cards at checkout");
         let calls = script.calls();
@@ -381,7 +415,7 @@ mod tests {
         let (agent, script) = claude(starting("[]"), jobs.path(), false);
         let (_dir, cache) = cache();
         let mine = Mr { mine: true, ..mr() };
-        agent.open(&mine, &cache, Choice::New).unwrap();
+        agent.open(&Subject::Mr(mine), &cache, Choice::New).unwrap();
         let lines = script.lines();
         assert!(!lines.iter().any(|line| line == LIST), "{lines:?}");
         let started = lines.iter().find(|line| line.starts_with("claude --bg")).unwrap();
@@ -395,7 +429,7 @@ mod tests {
         let behind = starting("[]").says("git worktree list", &worktrees).says("git rev-list", "0\t2\n");
         let (agent, script) = claude(behind, jobs.path(), false);
         let (_dir, cache) = cache();
-        let handoff = handed(agent.open(&mr(), &cache, Choice::New).unwrap());
+        let handoff = handed(agent.open(&Subject::Mr(mr()), &cache, Choice::New).unwrap());
         let said =
             "a new session for !42 · revu: !42 charge cards at checkout · its branch is 2 commits behind origin: pull before you trust it";
         assert_eq!(handoff.said, said, "the branch is used as it is, and the toast says where it stands");
@@ -413,10 +447,10 @@ mod tests {
             false,
         );
         let (_dir, cache) = cache();
-        let fork = format!("{:#}", agent.open(&mr(), &cache, Choice::Find).unwrap_err());
+        let fork = format!("{:#}", agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap_err());
         assert!(fork.contains("fork") && fork.contains("feat/checkout"), "{fork}");
         let elsewhere = Mr { fields: crate::share::Fields { project: "acme/api".into(), ..mr().fields }, ..mr() };
-        let unknown = format!("{:#}", agent.open(&elsewhere, &cache, Choice::Find).unwrap_err());
+        let unknown = format!("{:#}", agent.open(&Subject::Mr(elsewhere), &cache, Choice::Find).unwrap_err());
         assert!(unknown.contains("[agent.checkouts]") && unknown.contains("acme/api"), "{unknown}");
         assert!(!script.lines().iter().any(|line| line.starts_with("claude --bg")), "{:?}", script.lines());
         assert!(cache.read::<Kept>(&keys_session()).is_none());
@@ -435,16 +469,68 @@ mod tests {
         let jobs = tempfile::tempdir().unwrap();
         let (dir, cache) = cache();
         let (first, _script) = claude(starting("[]"), jobs.path(), true);
-        assert!(matches!(first.open(&mr(), &cache, Choice::Find).unwrap(), Outcome::Shown(_)));
+        assert!(matches!(first.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap(), Outcome::Shown(_)));
         drop((first, cache));
         let listed = list(&[item("5e5510n0", "revu: !42 charge cards at checkout", WORKTREE, false, 5)]);
         let panes = format!("%0\t@1\t\n%9\t@4\t{}\n", resume_id("5e5510n0"));
         let (again, script) = claude(Script::default().says(LIST, &listed).says("tmux list-panes", &panes), jobs.path(), true);
-        let shown = again.open(&mr(), &crate::cache::Cache::in_dir(dir.path()), Choice::Find).unwrap();
+        let shown = again.open(&Subject::Mr(mr()), &crate::cache::Cache::in_dir(dir.path()), Choice::Find).unwrap();
         let text = "the session revu remembered for !42 · revu: !42 charge cards at checkout · already open in tmux";
         assert_eq!(shown, Outcome::Shown(text.into()));
         let resume = format!("claude --bg --resume {}", resume_id("5e5510n0"));
         let listing = "tmux list-panes -s -F #{pane_id}\t#{window_id}\t#{@revu_session}";
         assert_eq!(script.lines(), [LIST, resume.as_str(), listing, "tmux select-window -t @4", "tmux select-pane -t %9"]);
+    }
+
+    fn on_main(name: &str) -> Subject {
+        Subject::Branch(Branch { name: name.into(), dir: REPO.into(), ..branch() })
+    }
+
+    #[test]
+    fn the_one_session_started_in_a_branchs_worktree_opens_and_is_remembered_for_that_branch() {
+        let jobs = tempfile::tempdir().unwrap();
+        let listed = list(&[item("e1sewher", "nested", WORKTREE, true, 9), item("ma1n0000", "on main", REPO, true, 1)]);
+        let (agent, script) = claude(Script::default().says(LIST, &listed), jobs.path(), false);
+        let (_dir, cache) = cache();
+        let handoff = handed(agent.open(&on_main("main"), &cache, Choice::Find).unwrap());
+        assert_eq!((handoff.call, handoff.said.as_str()), (attach("ma1n0000"), "the session working in main · on main"));
+        assert_eq!(script.lines(), [LIST], "a session in a worktree nested in the main checkout is not the main checkout's");
+        let kept = cache.read::<Kept>(&crate::cache::keys::branch_session(&branch().key, "main")).unwrap();
+        assert_eq!(kept.id, Some(resume_id("ma1n0000")));
+    }
+
+    #[test]
+    fn several_sessions_in_a_branchs_worktree_are_offered_and_the_remembered_one_skips_the_pick() {
+        let jobs = tempfile::tempdir().unwrap();
+        let listed = list(&[item("01d00000", "old", WORKTREE, false, 1), item("11ve0000", "live", WORKTREE, true, 2)]);
+        let (agent, _script) = claude(Script::default().says(LIST, &listed), jobs.path(), false);
+        let (_dir, cache) = cache();
+        let subject = Subject::Branch(branch());
+        let Outcome::Pick(offered) = agent.open(&subject, &cache, Choice::Find).unwrap() else { panic!("no pick") };
+        assert_eq!(offered.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["11ve0000", "01d00000"]);
+        let kept = Kept { name: "old".into(), dir: WORKTREE.into(), id: Some(resume_id("01d00000")), pane: None };
+        cache.write(&crate::cache::keys::branch_session(&branch().key, "feat/checkout"), &kept).unwrap();
+        let handoff = handed(agent.open(&subject, &cache, Choice::Find).unwrap());
+        assert_eq!(handoff.said, "the session revu remembered for feat/checkout · old");
+    }
+
+    #[test]
+    fn with_no_session_in_its_worktree_a_branch_starts_one_there_in_my_default_mode_and_touches_no_branch() {
+        let jobs = tempfile::tempdir().unwrap();
+        let after = list(&[item("5e5510n0", "revu: feat/checkout", WORKTREE, true, 5)]);
+        let script = Script::default()
+            .says(LIST, &list(&[item("e1sewher", "on main", REPO, true, 9)]))
+            .says("claude --bg", "backgrounded · 5e5510n0\n")
+            .says("claude agents --json", &after);
+        let (agent, script) = claude(script, jobs.path(), false);
+        let (_dir, cache) = cache();
+        let handoff = handed(agent.open(&Subject::Branch(branch()), &cache, Choice::Find).unwrap());
+        assert_eq!((handoff.call, handoff.said.as_str()), (attach("5e5510n0"), "a new session for feat/checkout · revu: feat/checkout"));
+        let started = script.calls().into_iter().find(|call| call.argv.get(1).is_some_and(|word| word == "--bg")).unwrap();
+        let prompt = "This session belongs to the branch feat/checkout, checked out in this folder, which `revu local` compares against main. \
+                      Do nothing yet: wait for my instructions.";
+        assert_eq!(started.argv, ["claude", "--bg", "--name", "revu: feat/checkout", prompt]);
+        assert_eq!(started.dir.as_deref(), Some(Path::new(WORKTREE)));
+        assert!(script.lines().iter().all(|line| line.starts_with("claude ")), "{:?}", script.lines());
     }
 }

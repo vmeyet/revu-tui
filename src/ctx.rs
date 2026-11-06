@@ -30,13 +30,12 @@ impl Ctx {
         Ok(Self { project, ..ctx })
     }
 
-    /// `revu local`: no token, no other host, no Jev, no agent and nothing that only makes sense on a forge.
+    /// `revu local`: no token, no other host, no Jev and nothing that only makes sense on a forge.
     pub(crate) fn local(client: local::Client) -> Result<Self> {
         let mut config = Config::load()?;
         config.host = None;
         config.hosts.clear();
         config.ai.typesafe.enabled = false;
-        config.agent.enabled = false;
         config.notify.enabled = false;
         config.queue.prefetch = 0;
         config.queue.rules.enabled = false;

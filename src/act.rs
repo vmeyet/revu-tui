@@ -331,7 +331,7 @@ pub(crate) const ROWS: &[Row] = &[
     bound(Act::Merge, "merge", &["M"]).panes(&[Pane::Diff]).report(Group::Comment),
     bound(Act::Ready, "ready", &["H"]).panes(&[Pane::Diff]).report(Group::Comment),
     bound(Act::Share, "share", &["Y"]).panes(&[Pane::Anywhere]).report(Group::Comment),
-    bound(Act::Session, "session", &["a"]).panes(&[Pane::Anywhere]).report(Group::App).reach(Reach::Forge),
+    bound(Act::Session, "session", &["a"]).panes(&[Pane::Anywhere]).report(Group::App),
     bound(Act::React, "react", &["+"]).panes(&[Pane::Diff, Pane::ThreadRow]).report(Group::Thread),
     bound(Act::OpenBrowser, "open_browser", &["o"])
         .panes(&[Pane::Queue, Pane::Diff, Pane::ThreadRow, Pane::Pipeline, Pane::Cover])
@@ -383,7 +383,7 @@ pub(crate) const ROWS: &[Row] = &[
     command!(Act::ViewCommand, "view", "the file in your program: :view · :view old · :view src/a.rs:42"),
     command!(Act::AiCommand, "ai", "switch AI off or back on for this session: :ai off, :ai on"),
     command!(Act::ShareCommand, "share", "post the MR through a [share] command: :share · :share review").reach(Reach::Forge),
-    command!(Act::SessionCommand, "session", "open the agent session of the MR, or start one").reach(Reach::Forge),
+    command!(Act::SessionCommand, "session", "open the agent session of the MR or branch, or start one"),
     command!(Act::NewsCommand, "news", "what changed in revu, the newest version first"),
     command!(Act::TargetCommand, "target", "compare a local diff against this branch: :target main").reach(Reach::Local),
     command!(Act::QuitCommand, "quit", "leave"),
@@ -456,7 +456,7 @@ const HELP: &[Line] = &[
     line(Group::App, "^k ,", "MRs · > commands"),
     line(Group::App, ":", "commands: :go !42, :set theme=nord"),
     line(Group::App, "o y", "open in the browser, copy the link").reach(Reach::Forge),
-    line(Group::App, "a", "the agent session of the MR").reach(Reach::Forge),
+    line(Group::App, "a", "the agent session of the MR or branch"),
     line(Group::App, "r", "refresh"),
     line(Group::App, "B", "`revu local`: compare against another branch").reach(Reach::Local),
     line(Group::App, "I", "`revu local`: show uncommitted work, or hide it").reach(Reach::Local),

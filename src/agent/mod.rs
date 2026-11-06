@@ -1,18 +1,18 @@
-//! `a` and `:session`: the coding-agent session that belongs to an MR, found or started, then shown.
+//! `a` and `:session`: the coding-agent session that belongs to an MR, or to a branch on `revu local`, found or
+//! started, then shown.
 //! Claude Code is the built-in agent (`claude.rs`); `[agent] start` names another one (`custom.rs`).
 //! Every program runs through [`Run`], so a test never starts a session, a tmux window or a git command.
 mod claude;
 mod custom;
 mod place;
 mod show;
+mod subject;
 mod terminal;
 mod timed;
 mod worktree;
 
-use crate::cache::{Cache, keys};
+use crate::cache::Cache;
 use crate::config;
-use crate::forge::MrKey;
-use crate::share::Fields;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,36 +24,13 @@ use std::time::Duration;
 
 pub(crate) use custom::check;
 pub(crate) use place::check_split;
+pub(crate) use subject::{Branch, Mr, Subject};
 pub(crate) use terminal::Terminal;
 
-/// A session name longer than this is cut: it is a tmux window's name too.
-const NAME_CHARS: usize = 60;
 /// A listing, or a terminal asked for a pane, answers well within this; past it the program is stuck.
 const QUICK_TIMEOUT: Duration = Duration::from_secs(15);
 /// Fetching a branch, adding a worktree or starting a session waits on the network or a big checkout.
 const SLOW_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// What a session is told about its MR.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Mr {
-    pub(crate) key: MrKey,
-    pub(crate) fields: Fields,
-    pub(crate) target: String,
-    /// I wrote it: the session may change it, where someone else's only gets a plan.
-    pub(crate) mine: bool,
-}
-
-impl Mr {
-    /// `revu: !42 charge cards at checkout`, as the reader names sessions: a scope, then a title.
-    fn session_name(&self) -> String {
-        let name = format!("revu: {} {}", self.fields.reference, self.fields.title);
-        if name.chars().count() <= NAME_CHARS {
-            return name;
-        }
-        let kept: String = name.chars().take(NAME_CHARS - 1).collect();
-        format!("{}…", kept.trim_end())
-    }
-}
 
 /// One program to run: its words, and the folder it runs in.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,7 +196,7 @@ pub(crate) struct Kept {
 /// Which session `a` is after.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Choice {
-    /// The one that belongs to the MR, wherever it is found.
+    /// The one that belongs to the MR or the branch, wherever it is found.
     Find,
     /// The one the reader picked in the list.
     Session(Box<Session>),
@@ -231,6 +208,8 @@ pub(crate) enum Choice {
 enum Case {
     Remembered,
     Opener,
+    /// The one session started in the branch's worktree.
+    Worktree,
     Picked,
     New,
 }
@@ -240,6 +219,7 @@ impl Case {
         match self {
             Case::Remembered => format!("the session revu remembered for {reference}"),
             Case::Opener => format!("the session that opened {reference}"),
+            Case::Worktree => format!("the session working in {reference}"),
             Case::Picked => format!("the session picked for {reference}"),
             Case::New => format!("a new session for {reference}"),
         }
@@ -333,16 +313,16 @@ impl Agent {
         Self { harness, checkouts, place, run }
     }
 
-    /// Finds or starts the session of `mr`, remembers it in `cache`, and shows it beside revu where
+    /// Finds or starts the session of `subject`, remembers it in `cache`, and shows it beside revu where
     /// something can split. Where nothing can, the caller owns the terminal, so the program comes back.
-    pub(crate) fn open(&self, mr: &Mr, cache: &Cache, choice: Choice) -> Result<Outcome> {
+    pub(crate) fn open(&self, subject: &Subject, cache: &Cache, choice: Choice) -> Result<Outcome> {
         let run = self.run.as_ref();
-        let key = keys::session(&mr.key);
+        let key = subject.cache_key();
         let before = cache.read::<Kept>(&key);
         let origin = self.place.origin(run);
         let step = match &self.harness {
-            Harness::Claude { jobs } => claude::session(self, jobs, mr, before.as_ref(), choice)?,
-            Harness::Custom { start, open } => custom::session(self, start, open.as_deref(), mr, before.as_ref())?,
+            Harness::Claude { jobs } => claude::session(self, jobs, subject, before.as_ref(), choice)?,
+            Harness::Custom { start, open } => custom::session(self, start, open.as_deref(), subject, before.as_ref())?,
         };
         let ready = match step {
             Step::Pick(sessions) => return Ok(Outcome::Pick(sessions)),
@@ -351,11 +331,19 @@ impl Agent {
         let is_same = |kept: &Kept| kept.id == ready.kept.id && kept.name == ready.kept.name;
         let shown_in = before.filter(is_same).and_then(|kept| kept.pane);
         cache.write(&key, &Kept { pane: shown_in.clone(), ..ready.kept.clone() })?;
-        let placed = self.place.put(run, origin.as_deref(), &ready, shown_in.as_deref(), &mr.fields.reference)?;
+        let placed = self.place.put(run, origin.as_deref(), &ready, shown_in.as_deref(), subject.reference())?;
         if placed.pane != shown_in {
             cache.write(&key, &Kept { pane: placed.pane, ..ready.kept })?;
         }
         Ok(placed.outcome)
+    }
+
+    /// Where a new session of `subject` works: a worktree on the MR's branch, or the branch's own worktree.
+    fn folder(&self, subject: &Subject) -> Result<worktree::Folder> {
+        match subject {
+            Subject::Mr(mr) => worktree::on_branch(self.run.as_ref(), self.checkout(&mr.fields.project)?, &mr.fields.branch),
+            Subject::Branch(branch) => Ok(worktree::Folder { dir: branch.dir.clone(), notice: None }),
+        }
     }
 
     fn checkout(&self, project: &str) -> Result<&Path> {
@@ -369,6 +357,9 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache::keys;
+    use crate::forge::MrKey;
+    use crate::share::Fields;
     use std::sync::Mutex;
 
     /// Programs that answer from a list instead of running: the first entry whose words start the call's.
@@ -472,6 +463,16 @@ mod tests {
     }
 
     pub(super) const REPO: &str = "/code/widgets";
+    pub(super) const WORKTREE: &str = "/code/widgets/.claude/worktrees/feat+checkout";
+
+    pub(super) fn branch() -> Branch {
+        Branch {
+            key: MrKey { host: Some("local".into()), ..MrKey::new("local/feat-checkout", 7) },
+            name: "feat/checkout".into(),
+            dir: WORKTREE.into(),
+            target: "main".into(),
+        }
+    }
 
     pub(super) fn claude(script: Script, jobs: &Path, tmux: bool) -> (Agent, Arc<Script>) {
         let harness = Harness::Claude { jobs: jobs.to_owned() };
@@ -494,15 +495,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
         (dir, cache)
-    }
-
-    #[test]
-    fn a_session_is_named_after_the_mr_and_a_long_title_is_cut() {
-        assert_eq!(mr().session_name(), "revu: !42 charge cards at checkout");
-        let long = Mr { fields: Fields { title: "é".repeat(80), ..mr().fields }, ..mr() };
-        let name = long.session_name();
-        assert_eq!(name.chars().count(), NAME_CHARS);
-        assert!(name.starts_with("revu: !42 é") && name.ends_with('…'), "{name}");
     }
 
     #[test]
@@ -572,13 +564,13 @@ mod tests {
             .unwrap();
 
         let (agent, script) = ghostty(Script::default().says("claude agents", &listed).says(front, "A1\n").says("osascript", "B2\n"));
-        let shown = agent.open(&mr(), &cache, Choice::Find).unwrap();
+        let shown = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap();
         assert_eq!(shown, Outcome::Shown("the session revu remembered for !42 · revu: nxt · in a pane beside revu".into()));
         assert!(script.lines()[0].starts_with(front), "revu's own terminal is asked before anything slow: {:?}", script.lines());
         assert_eq!(kept().pane.as_deref(), Some("B2"));
 
         let (agent, script) = ghostty(Script::default().says("claude agents", &listed).says(front, "A1\n").says("osascript", "focused\n"));
-        let shown = agent.open(&mr(), &cache, Choice::Find).unwrap();
+        let shown = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap();
         assert_eq!(shown, Outcome::Shown("the session revu remembered for !42 · revu: nxt · already open beside revu".into()));
         assert_eq!(script.calls().last().unwrap().argv[3..], ["B2"], "the remembered pane gets the keys");
         assert_eq!(kept().pane.as_deref(), Some("B2"));
@@ -588,11 +580,11 @@ mod tests {
             .says(front, "A1\n")
             .says("osascript -e on run argv\n  tell application \"Ghostty\"\n    set found", "gone\n");
         let (agent, _script) = ghostty(gone.says("osascript", "C3\n"));
-        agent.open(&mr(), &cache, Choice::Find).unwrap();
+        agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap();
         assert_eq!(kept().pane.as_deref(), Some("C3"), "a pane that is gone is forgotten for the new one");
 
         let (agent, _script) = ghostty(Script::default().says("claude agents", &listed).fails("osascript", "not authorized"));
-        let Outcome::Handoff(handoff) = agent.open(&mr(), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
+        let Outcome::Handoff(handoff) = agent.open(&Subject::Mr(mr()), &cache, Choice::Find).unwrap() else { panic!("no hand-off") };
         assert!(handoff.said.contains("Ghostty did not split"), "{}", handoff.said);
         assert_eq!(kept().pane, None, "a session lent the terminal is in no pane");
     }

@@ -130,7 +130,7 @@ Tokens never go here: they live in the macOS keychain.
 
 | Key | Type | Default | Does |
 |---|---|---|---|
-| `enabled` | true or false | `false` | `a` opens a coding-agent session that belongs to the MR: Claude Code, unless `start` is set. |
+| `enabled` | true or false | `false` | `a` opens a coding-agent session that belongs to the MR, or to the branch on `revu local`: Claude Code, unless `start` is set. |
 | `start` | command line with placeholders | none: Claude Code | Another agent: the command that starts its session, run in a worktree on the MR's branch. |
 | `open` | command line with placeholders | `start` runs again | With `start`: the command that opens the session of an MR again. |
 | `show` | `auto`, `split` or `window` | `auto` | `auto` opens the session in a pane beside revu when half of revu's width is `compact_width` or more; `split` always does; `window` never does. Not beside means a tmux window, or the terminal itself outside tmux. |

@@ -325,7 +325,14 @@ async fn the_queue_sorts_worktrees_here_ahead_and_the_rest_with_their_counts() {
     );
     assert_eq!(queue.me, repo.path().file_name().unwrap().to_str().unwrap());
     let here = &queue.authored[0];
-    assert_eq!(here.worktree, Some(WorktreeRow { commits: 1, uncommitted: 3, no_diff: None }), "the two worktree folders and dirty.txt");
+    let dir = queue.open[0].worktree.as_ref().unwrap().dir.clone();
+    assert!(dir.ends_with("behind"), "{}", dir.display());
+    let main = dir.parent().unwrap().to_owned();
+    assert_eq!(
+        here.worktree,
+        Some(WorktreeRow { commits: 1, uncommitted: 3, no_diff: None, dir: main }),
+        "the two worktree folders and dirty.txt"
+    );
     assert_eq!(here.size.map(|size| (size.additions, size.files)), Some((2, 1)));
 }
 
