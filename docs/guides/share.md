@@ -25,6 +25,7 @@ Without `template`, revu uses the one above.
 4. Press `y` to send it, `e` to change the note, `esc` to cancel.
 
 Nothing leaves before that `y`.
+The note box edits like the comment box: `⌥enter` starts a new line, `⌥←` and `⌥→` move by word, `⌥⌫` deletes a word.
 `revu share !42 --note "needs a second look"` does the same from the shell; `--dry-run` only prints.
 
 ## Placeholders

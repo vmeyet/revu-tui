@@ -80,6 +80,7 @@ Handling a key:
 5. The answer comes back as an `Incoming`, applied like any other.
 
 A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/app/paste.rs`) types it whole into the box `App::receiver` (`tui/app/receiver.rs`) says takes the next key, and drops it where no box is open.
+The editing keys of a box of several lines live in `tui/app/edit_keys.rs`: the compose box and the share note keep only their own keys and hand every other one to it.
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.

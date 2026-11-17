@@ -13,6 +13,11 @@ Each entry says what changed, then where, then how to use it.
   In the diff, as in vim; the sticky file and hunk headers stay above the line.
   Press `zt` or `zb`, or bind `line_to_top` and `line_to_bottom` under `[keys.bind]`.
 
+### Fixed
+
+- **The share note takes the editing keys of the comment box: `⌥←` `⌥→` by word, `⌥⌫` deletes a word, `↑` `↓` between lines.**
+  In the note box of `Y` and `:share`.
+
 ## 0.14.0 - 2026-11-06
 
 ### New

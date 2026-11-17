@@ -1,8 +1,9 @@
 //! `Y` and `:share`: pick where to post, add an optional note, read the message, then `y` sends it.
 //! Nothing leaves before that `y`; `esc` at any step drops it all.
+use super::edit_keys::{adds_a_line, field_after_key};
 use super::{Action, App, Focus};
 use crate::share::{Fields, Target, render};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use vtui::field::Field;
 
 /// A post being prepared for one MR, on the host it lives on.
@@ -129,30 +130,13 @@ fn pick_key(targets: Vec<Target>, selected: usize, key: KeyEvent) -> Stage {
 }
 
 /// The note box reads like the compose box: `enter` goes on to the preview, even with no note.
-fn note_key(fields: &Fields, target: Target, mut note: Field, key: KeyEvent) -> Stage {
-    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-    let newline = key.modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SHIFT);
-    match key.code {
-        KeyCode::Enter if newline => note.insert('\n'),
-        KeyCode::Enter => {
-            let note = note.take().trim().to_owned();
-            let message = render(&target.template, fields, &note);
-            return Stage::Preview { target, note, message };
-        }
-        KeyCode::Char('j') if ctrl => note.insert('\n'),
-        KeyCode::Left => note.left(),
-        KeyCode::Right => note.right(),
-        KeyCode::Home => note.start(),
-        KeyCode::End => note.end(),
-        KeyCode::Char('a') if ctrl => note.start(),
-        KeyCode::Char('e') if ctrl => note.end(),
-        KeyCode::Char('w') if ctrl => note.delete_word(),
-        KeyCode::Backspace => note.backspace(),
-        KeyCode::Delete => note.delete(),
-        KeyCode::Char(c) if !ctrl => note.insert(c),
-        _ => {}
+fn note_key(fields: &Fields, target: Target, note: Field, key: KeyEvent) -> Stage {
+    if key.code == KeyCode::Enter && !adds_a_line(key) {
+        let note = note.text().trim().to_owned();
+        let message = render(&target.template, fields, &note);
+        return Stage::Preview { target, note, message };
     }
-    Stage::Note { target, note }
+    Stage::Note { target, note: field_after_key(note, key) }
 }
 
 fn target_names(targets: &[Target]) -> String {
@@ -265,6 +249,39 @@ mod tests {
         press(&mut app, "e");
         let Some(ShareStage::Note { note, .. }) = app.sharing.as_ref().map(|s| &s.stage) else { panic!("not back to the note") };
         assert_eq!(note.text(), "wip");
+    }
+
+    fn note_after(app: &mut App, keys: &[KeyEvent]) -> String {
+        for key in keys {
+            app.handle_key(*key);
+        }
+        let Some(ShareStage::Note { note, .. }) = app.sharing.as_ref().map(|s| &s.stage) else { panic!("no note") };
+        note.text().to_owned()
+    }
+
+    fn noting(text: &str) -> App {
+        let mut app = sharing_queue(vec![share_target(None)]);
+        press(&mut app, "Y");
+        press(&mut app, text);
+        app
+    }
+
+    #[test]
+    fn alt_left_in_the_share_note_jumps_a_word_back() {
+        let mut app = noting("needs eyes");
+        assert_eq!(note_after(&mut app, &[alt(KeyCode::Left), key('x')]), "needs xeyes");
+    }
+
+    #[test]
+    fn alt_right_in_the_share_note_jumps_a_word_on() {
+        let mut app = noting("needs eyes");
+        assert_eq!(note_after(&mut app, &[code(KeyCode::Home), alt(KeyCode::Right), key('x')]), "needsx eyes");
+    }
+
+    #[test]
+    fn alt_backspace_in_the_share_note_deletes_the_word_before() {
+        let mut app = noting("needs eyes");
+        assert_eq!(note_after(&mut app, &[alt(KeyCode::Backspace)]), "needs ");
     }
 
     #[test]

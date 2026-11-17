@@ -31,6 +31,10 @@ pub(super) fn ctrl(c: char) -> KeyEvent {
     KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
 }
 
+pub(super) fn alt(code: KeyCode) -> KeyEvent {
+    KeyEvent::new(code, KeyModifiers::ALT)
+}
+
 pub(super) fn press(app: &mut App, keys: &str) -> Vec<Action> {
     keys.chars().flat_map(|c| app.handle_key(key(c))).collect()
 }

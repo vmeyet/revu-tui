@@ -1,4 +1,5 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
+use super::edit_keys::{adds_a_line, field_after_key};
 use super::{Action, App, Input, MrKey, Open, Post};
 use crate::forge::{Position, ThreadId};
 use crate::review::{Draft, DraftId, Place, Review};
@@ -47,33 +48,14 @@ impl App {
 
     pub(super) fn handle_input_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        let alt = key.modifiers.contains(KeyModifiers::ALT);
-        let newline = key.modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SHIFT);
         let post = key.modifiers.contains(KeyModifiers::SUPER);
         match key.code {
             KeyCode::Esc => self.leave_input(),
             KeyCode::Enter if post => return self.post_input(),
             KeyCode::Char('s') if ctrl => return self.post_input(),
-            KeyCode::Enter if newline => self.buffer.insert('\n'),
-            KeyCode::Char('j') if ctrl => self.buffer.insert('\n'),
-            KeyCode::Enter => return self.submit_input(),
+            KeyCode::Enter if !adds_a_line(key) => return self.submit_input(),
             KeyCode::Char('o') if ctrl => return self.move_to_editor(),
-            KeyCode::Left | KeyCode::Char('b') if alt => self.buffer.word_left(),
-            KeyCode::Right | KeyCode::Char('f') if alt => self.buffer.word_right(),
-            KeyCode::Backspace if alt => self.buffer.delete_word(),
-            KeyCode::Left => self.buffer.left(),
-            KeyCode::Right => self.buffer.right(),
-            KeyCode::Up => self.buffer.up(),
-            KeyCode::Down => self.buffer.down(),
-            KeyCode::Home => self.buffer.start(),
-            KeyCode::End => self.buffer.end(),
-            KeyCode::Char('a') if ctrl => self.buffer.start(),
-            KeyCode::Char('e') if ctrl => self.buffer.end(),
-            KeyCode::Char('w') if ctrl => self.buffer.delete_word(),
-            KeyCode::Backspace => self.buffer.backspace(),
-            KeyCode::Delete => self.buffer.delete(),
-            KeyCode::Char(c) if !ctrl => self.buffer.insert(c),
-            _ => {}
+            _ => self.buffer = field_after_key(std::mem::take(&mut self.buffer), key),
         }
         vec![]
     }
@@ -331,7 +313,6 @@ mod tests {
         on_line(&mut app);
         press(&mut app, "c");
         press(&mut app, "fix the bug");
-        let alt = |code| KeyEvent::new(code, KeyModifiers::ALT);
         app.handle_key(alt(KeyCode::Left));
         app.handle_key(alt(KeyCode::Char('b')));
         press(&mut app, "x");
@@ -359,7 +340,7 @@ mod tests {
         app.handle_key(code(KeyCode::Delete));
         assert_eq!(app.buffer.text(), "xb");
         app.handle_key(ctrl('e'));
-        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+        app.handle_key(alt(KeyCode::Enter));
         press(&mut app, "y");
         assert_eq!(app.buffer.text(), "xb\ny", "alt-enter is a newline, not a send");
         app.handle_key(code(KeyCode::Esc));
@@ -473,7 +454,7 @@ mod tests {
         let mut app = with_review();
         on_line(&mut app);
         press(&mut app, "cab");
-        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT));
+        app.handle_key(alt(KeyCode::Enter));
         press(&mut app, "cd");
         app.handle_key(code(KeyCode::Up));
         press(&mut app, "x");
