@@ -6,6 +6,7 @@ version = 2
 ignore = [
   { id = "RUSTSEC-2025-0141", reason = "bincode via mrk's syntect only decodes the syntax dumps embedded in the binary, never input" },
   { id = "RUSTSEC-2026-0192", reason = "ttf-parser via mrk's fontdb and Mermaid renderer only parses installed system fonts; no maintained drop-in yet" },
+  { id = "RUSTSEC-2026-0543", reason = "chrono is flagged unmaintained, not vulnerable; revu, vtui and mrk all carry timestamps in its types, so leaving it is a migration of its own" },
 ]
 
 [licenses]
