@@ -7,8 +7,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vtui::editor::Edited;
 
 impl App {
-    /// Opens the compose box on `input`, in the pane at its line, or in the diff under the row it will land after
-    /// where threads read there; `text` prefills it, else the text left unsent for that target earlier comes back.
+    /// Opens the compose box on `input`, in the diff under the row it will land after where the diff holds it, else
+    /// in the pane at its line; `text` prefills it, else the text left unsent for that target earlier comes back.
     pub(super) fn open_input(&mut self, input: Input, text: &str) {
         let kept = self.unsent.remove(&target_key(&input));
         let text = if text.is_empty() { kept.unwrap_or_default() } else { text.to_owned() };
@@ -19,7 +19,7 @@ impl App {
     }
 
     /// The pane shows where the text goes: the line of a new thread, the thread of a reply. Written from the diff
-    /// where threads read in it, the diff shows it instead.
+    /// where it holds the box, the diff shows it instead and the pane stays as it is.
     fn show_target(&mut self, input: &Input) {
         if self.compose_in_diff(input) {
             return;
@@ -156,10 +156,12 @@ impl App {
         }
     }
 
-    /// With the keys back on the diff, a new thread written there closes the pane showing its line, so reading goes on
-    /// in the code; a failed post opens the box again, and the pane with it.
+    /// With the keys back on the diff, a new thread written from it in the pane closes the pane showing its line, so
+    /// reading goes on in the code; a failed post opens the box again, and the pane with it. Written in the diff,
+    /// it leaves the pane as it is.
     fn close_pane_of_new_thread(&mut self, position: &Position) {
-        let Some(open) = self.open.as_ref().filter(|_| self.focus == super::Focus::Review) else { return };
+        let written_in_pane = |open: &&Open| self.focus == super::Focus::Review && open.comment_row(position).is_none();
+        let Some(open) = self.open.as_ref().filter(written_in_pane) else { return };
         let line = place_of_position(&open.review, position);
         if open.pane.as_ref().is_some_and(|pane| Some(&pane.place) == line.as_ref()) {
             self.close_pane();
@@ -328,11 +330,7 @@ mod tests {
         let mut app = with_review();
         on_line(&mut app);
         press(&mut app, "cab");
-        assert_eq!(app.focus, Focus::Side, "the box lives in the pane");
-        assert_eq!(
-            app.open.as_ref().unwrap().pane.as_ref().map(|p| &p.place),
-            Some(&Place::Line { file: 0, new: Some(12), old: Some(12) })
-        );
+        assert_eq!((app.focus, listed_place(&app)), (Focus::Review, None), "the box lives in the diff, under its line");
         app.handle_key(code(KeyCode::Left));
         press(&mut app, "x");
         assert_eq!(app.buffer.text(), "axb");
@@ -407,13 +405,15 @@ mod tests {
         app.apply(Incoming::Failed { what: Failure::Post { key: key.clone(), to: to.clone() }, message: "HTTP 403".into() });
         assert!(app.live_toast().unwrap().danger);
         assert_eq!((app.input_label().as_str(), app.buffer.text()), ("new thread · charge.rs:12", "nit"));
-        assert_eq!(listed_place(&app), Some(Place::Line { file: 0, new: Some(12), old: Some(12) }), "the pane shows the line again");
+        assert_eq!((app.compose_row().is_some(), listed_place(&app)), (true, None), "under its line again");
     }
 
     #[test]
-    fn a_new_thread_written_from_the_diff_closes_the_pane_and_gives_the_keys_back_to_the_code() {
+    fn a_new_thread_written_side_by_side_closes_the_pane_and_gives_the_keys_back_to_the_code() {
         let mut app = with_review();
-        on_line(&mut app);
+        press(&mut app, "D");
+        render(&mut app, 200, 40);
+        app.review_jump_to(|row| matches!(row, Row::Pair { .. }));
         press(&mut app, "c");
         assert_eq!(app.focus, Focus::Side, "the box lives in the pane");
         type_text(&mut app, "nit");

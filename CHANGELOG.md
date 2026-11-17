@@ -12,6 +12,9 @@ Each entry says what changed, then where, then how to use it.
 - **`zt` and `zb` scroll the diff so the cursor line sits at the top or the bottom.**
   In the diff, as in vim; the sticky file and hunk headers stay above the line.
   Press `zt` or `zb`, or bind `line_to_top` and `line_to_bottom` under `[keys.bind]`.
+- **A new comment is written in the diff, under its line, beside the right pane too.**
+  In the diff of an MR at any width, as zen and a narrow window already did; side by side still writes in the pane.
+  Press `c`, `C` or `s` on a line: the box opens under it, and the pane stays as it was.
 
 ### Fixed
 

@@ -57,7 +57,7 @@ Under 70 columns revu shows one page at a time, see [Review from a phone](guides
 
 1. Put the cursor on a line of the diff.
 2. Press `c`.
-3. Type your comment in the box at the bottom of the right pane, or under the line in a narrow window.
+3. Type your comment in the box that opens under the line.
 4. Press `enter`.
 
 Your comment is now a [draft](concepts.md#draft): only you see it.

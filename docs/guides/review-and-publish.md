@@ -26,11 +26,14 @@ The file tree, `t`, lists the files, with `◆n` for the unresolved threads in e
 | `s` | Suggest a change: the box starts with the lines to edit |
 | `E` | Write the comment in `$EDITOR` |
 
-The comment box sits at the bottom of the right pane.
-In a narrow window and in zen it sits in the diff, under the line or the thread you write on.
+The box of a new comment opens in the diff, under the line you comment, so the code around it stays in view.
+The right pane does not open for it, and one already open stays as it is.
+A reply or an edited draft is written in the right pane, under its thread.
+In a narrow window and in zen those sit in the diff too, under the thread you write on.
+Side by side, `D`, writes every comment in the right pane.
 `enter` saves the draft.
 `⌘enter` posts a new comment or a reply at once, with no draft; `ctrl-s` does the same where the terminal keeps `⌘enter` for itself.
-A new comment written from the diff closes the pane once saved or posted; a reply keeps it open.
+Side by side, a new comment written from the diff closes the pane once saved or posted; a reply keeps it open.
 `⌥enter` adds a new line, `↑` and `↓` move between lines.
 `⌥←` and `⌥→` jump a word, `⌥⌫` deletes the word before the cursor.
 `ctrl-o` moves the text to `$EDITOR`.

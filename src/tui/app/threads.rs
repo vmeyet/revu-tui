@@ -1,9 +1,10 @@
 //! Threads in the diff: in zen and in a window too narrow for the pane beside it, the conversations of a line hang
 //! under it. A thread is one row until `enter` unfolds it into a row per note, and the thread keys act on the row
 //! under the cursor as they do in the pane. A comment written from the diff is written there too, in a box under
-//! the row it will land after.
+//! the row it will land after. A new thread gets that box under its line in every layout but side by side, beside
+//! the pane as well.
 use super::{App, ConversationList, Focus, Input, Open};
-use crate::forge::ThreadId;
+use crate::forge::{Position, ThreadId};
 use crate::review::{Anchor, Conversation, Entry, EntryKind, Place, Row, anchor_of};
 use std::collections::BTreeSet;
 
@@ -65,21 +66,36 @@ impl Open {
         Some(line + 1 + stop)
     }
 
-    /// The row the text of `input` will land after, where threads read in the diff: the last row of the thread
-    /// a reply answers, the last row under the line of a new thread, the row of an edited draft.
-    pub(super) fn compose_row(&self, input: &Input) -> Option<usize> {
-        let review = self.review.reads_threads_in_diff().then_some(&self.review)?;
+    /// The row a new thread at `position` is written under: its line, or the last thread row hung under it. None
+    /// side by side, where the pane holds the box, or when the diff shows no row for that line.
+    pub(super) fn comment_row(&self, position: &Position) -> Option<usize> {
+        let anchor = anchor_of(position).filter(|_| !self.review.shows_side_by_side())?;
+        let line = self.rows.iter().position(|row| self.review.row_holds(row, &anchor))?;
+        let hung = self.rows[line + 1..].iter().take_while(|row| matches!(row, Row::Thread { .. })).count();
+        Some(line + hung)
+    }
+
+    /// Whether the diff holds the box of `input`: a new thread wherever its line has a row to hang it under, a
+    /// reply or an edited draft only where threads read in the diff, the pane showing their thread otherwise.
+    fn writes_in_diff(&self, input: &Input) -> bool {
         match input {
-            Input::Comment { position } => {
-                let (line, _, entries) = self.hung_at(&anchor_of(position)?)?;
-                Some(line + entries.len())
-            }
+            Input::Comment { position } => self.comment_row(position).is_some(),
+            Input::Reply { .. } | Input::EditDraft { .. } => self.review.reads_threads_in_diff(),
+        }
+    }
+
+    /// The row the text of `input` will land after in the diff: the last row under the line of a new thread and,
+    /// where threads read in the diff, the last row of the thread a reply answers or the row of an edited draft.
+    pub(super) fn compose_row(&self, input: &Input) -> Option<usize> {
+        match input {
+            Input::Comment { position } => self.comment_row(position),
             Input::Reply { thread } => {
+                let review = self.review.reads_threads_in_diff().then_some(&self.review)?;
                 let (line, conversations, entries) = self.hung_at(review.thread(thread)?.anchor.as_ref()?)?;
                 let last = entries.iter().rposition(|entry| conversations[entry.conversation].thread.as_ref() == Some(thread))?;
                 Some(line + 1 + last)
             }
-            Input::EditDraft { draft } => self.draft_row(review.drafts.iter().position(|d| d.is(*draft))?),
+            Input::EditDraft { draft } => self.draft_row(self.review.drafts.iter().position(|d| d.is(*draft))?),
         }
     }
 
@@ -123,10 +139,10 @@ impl App {
         self.input.is_some() && self.compose_row().is_none()
     }
 
-    /// Written from the diff where threads read in it, `input` gets its box under the row it will land after:
+    /// Written from the diff, `input` gets its box under the row it will land after where the diff holds that box:
     /// its thread unfolds and the cursor goes to that row, to come back once the box closes.
     pub(super) fn compose_in_diff(&mut self, input: &Input) -> bool {
-        let Some(open) = self.open.take_if(|open| self.focus == Focus::Review && open.review.reads_threads_in_diff()) else {
+        let Some(open) = self.open.take_if(|open| self.focus == Focus::Review && open.writes_in_diff(input)) else {
             return false;
         };
         let left = open.row().cloned();
@@ -535,6 +551,95 @@ mod tests {
         press(&mut beside, "c");
         assert_eq!((beside.compose_row(), beside.focus), (None, Focus::Side));
         assert!(matches!(listed_place(&beside), Some(Place::Line { .. })), "side by side writes in the pane of the line");
+    }
+
+    #[test]
+    fn beside_the_pane_a_new_comment_is_written_under_its_line_and_no_pane_opens() {
+        let mut app = with_review();
+        on_line(&mut app);
+        let line = row_of(&app);
+        press(&mut app, "cnit");
+        assert_eq!((listed_place(&app), app.focus, app.input_label().as_str()), (None, Focus::Review, "new thread · charge.rs:12"));
+        let (above, below) = around_the_box(&render(&mut app, 180, 40), "new thread · charge.rs:12");
+        assert!(above.contains("pub async fn charge(card") && below.contains("-    let client = Client::new();"), "{above}\n{below}");
+        app.handle_key(code(KeyCode::Enter));
+        assert_eq!((row_of(&app), listed_place(&app), app.draft_count()), (line, None, 1), "saved, the cursor is back on the line");
+    }
+
+    #[test]
+    fn beside_the_pane_the_box_hangs_right_under_a_line_whose_threads_read_in_the_pane() {
+        let mut app = with_review();
+        walk_to_any_thread(&mut app, Toward::Next);
+        press(&mut app, "c");
+        let (above, below) = around_the_box(&render(&mut app, 180, 40), "new thread · charge.rs:-13");
+        assert!(
+            above.contains("-    let client = Client::new();") && below.contains("+    let client = Client::with_key"),
+            "{above}\n{below}"
+        );
+    }
+
+    #[test]
+    fn beside_the_pane_the_box_hangs_under_the_last_row_of_a_wrapped_line() {
+        let mut app = with_review();
+        walk_to_any_thread(&mut app, Toward::Next);
+        enter(&mut app);
+        press(&mut app, "hkwc");
+        let (above, below) = around_the_box(&render(&mut app, 180, 40), "new thread · charge.rs:12");
+        assert!(
+            above.contains("Result<Receipt> {") && !above.contains("pub async fn") && below.contains("-    let client = Client::new();"),
+            "{above}\n{below}"
+        );
+    }
+
+    #[test]
+    fn beside_the_pane_the_diff_scrolls_so_the_box_of_its_last_line_shows_whole() {
+        let mut app = with_review();
+        app.review_jump_to(|row| matches!(row, Row::Line { hunk: 1, index: 4, .. }));
+        press(&mut app, "cnit");
+        let screen = render(&mut app, 180, 12);
+        assert!(screen.contains("╭ new thread · charge.rs:44") && screen.contains("╰ enter save"), "{screen}");
+    }
+
+    #[test]
+    fn esc_takes_the_cursor_back_from_the_last_line_of_a_range_commented_beside_the_pane() {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "jjjVkc");
+        assert_eq!(row_of(&app), Row::Line { file: 0, hunk: 0, index: 3 }, "the box hangs under the range's last line");
+        app.handle_key(code(KeyCode::Esc));
+        assert_eq!(row_of(&app), ADDED_LINE_13);
+    }
+
+    #[test]
+    fn a_pane_already_open_stays_as_it_is_while_a_new_comment_is_written_in_the_diff() {
+        let mut app = with_review();
+        walk_to_any_thread(&mut app, Toward::Next);
+        enter(&mut app);
+        let shown = listed_place(&app);
+        press(&mut app, "hc");
+        assert_eq!((listed_place(&app), app.focus, app.compose_row().is_some()), (shown.clone(), Focus::Review, true));
+        type_text(&mut app, "nit");
+        assert_eq!((listed_place(&app), app.focus), (shown, Focus::Review), "saving leaves it open too");
+    }
+
+    #[test]
+    fn beside_the_pane_a_reply_is_still_written_in_the_pane_under_its_thread() {
+        let mut app = with_review();
+        walk_to_any_thread(&mut app, Toward::Next);
+        enter(&mut app);
+        press(&mut app, "r");
+        assert_eq!((app.compose_row(), app.focus), (None, Focus::Side));
+        assert!(matches!(listed_place(&app), Some(Place::Line { .. })));
+    }
+
+    #[test]
+    fn snapshot_a_new_comment_in_the_diff_beside_the_open_pane() {
+        let mut app = with_review();
+        walk_to_any_thread(&mut app, Toward::Next);
+        enter(&mut app);
+        press(&mut app, "hjc");
+        press(&mut app, "one more thing");
+        insta::assert_snapshot!("wide_compose_in_diff", render(&mut app, 180, 30));
     }
 
     #[test]
