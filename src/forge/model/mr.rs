@@ -51,21 +51,55 @@ pub(crate) struct Mr {
 }
 
 impl Mr {
-    /// Why I may not merge this MR from revu, or `None` when I may: it is mine, open, not a draft,
-    /// green, without conflicts, and approved by someone with no approval left to give.
+    /// Why I may not merge this MR from revu, or `None` when I may: it is mine, open, and the forge says it is mergeable.
+    /// Only "mine" is revu's own rule. The forge decides the rest, with its project's rules: what revu
+    /// sees of the MR names a reason only when the forge gave no verdict, and never refuses a mergeable MR.
     pub(crate) fn merge_refusal(&self) -> Option<String> {
-        let approvals = &self.approvals;
-        let reason = match () {
-            () if !self.mine => "only your own MRs merge from revu".to_owned(),
-            () if self.state != MrState::Open => format!("this MR is {}", self.state.word()),
-            () if self.draft => "a draft cannot merge: mark it ready first".to_owned(),
-            () if self.conflicts => "it has conflicts with its target branch".to_owned(),
-            () if self.pipeline.as_ref().is_some_and(|p| p.status == PipelineStatus::Failed) => "its pipeline failed".to_owned(),
-            () if approvals.approved_by.is_empty() => "nobody approved it yet".to_owned(),
-            () if approvals.approvals_left > 0 => {
-                format!("it needs {} more approval{}", approvals.approvals_left, if approvals.approvals_left == 1 { "" } else { "s" })
-            }
-            () => return None,
+        if !self.mine {
+            return Some("only your own MRs merge from revu".to_owned());
+        }
+        if self.state != MrState::Open {
+            return Some(format!("this MR is {}", self.state.word()));
+        }
+        let verdict = match self.merge_verdict {
+            MergeVerdict::Unknown => self.guessed_verdict().unwrap_or(MergeVerdict::Unknown),
+            said => said,
+        };
+        self.refusal_for(verdict)
+    }
+
+    /// What stands in the way as far as revu's own fields show, for an MR the forge gave no verdict on.
+    fn guessed_verdict(&self) -> Option<MergeVerdict> {
+        let pipeline = self.pipeline.as_ref().map(|p| p.status);
+        match () {
+            () if self.draft => Some(MergeVerdict::Draft),
+            () if self.conflicts => Some(MergeVerdict::Conflicts),
+            () if pipeline == Some(PipelineStatus::Failed) => Some(MergeVerdict::PipelineNotPassed),
+            () if pipeline.is_some_and(PipelineStatus::is_running) => Some(MergeVerdict::PipelineRunning),
+            () if self.approvals.approvals_left > 0 => Some(MergeVerdict::NotApproved),
+            () => None,
+        }
+    }
+
+    /// `verdict` in words the reader can act on, the end of `cannot merge: …`; `None` when it is mergeable.
+    fn refusal_for(&self, verdict: MergeVerdict) -> Option<String> {
+        let left = self.approvals.approvals_left;
+        let reason = match verdict {
+            MergeVerdict::Mergeable => return None,
+            MergeVerdict::Checking => "the forge is still checking whether it can merge: try again in a moment".to_owned(),
+            MergeVerdict::Conflicts => "it has conflicts with its target branch".to_owned(),
+            MergeVerdict::Behind => "its branch is behind its target branch: rebase it first".to_owned(),
+            MergeVerdict::PipelineNotPassed => "its pipeline must pass first".to_owned(),
+            MergeVerdict::PipelineRunning => "its pipeline is still running".to_owned(),
+            MergeVerdict::NotApproved if left > 0 => format!("it needs {left} more approval{}", if left == 1 { "" } else { "s" }),
+            MergeVerdict::NotApproved => "it is not approved yet".to_owned(),
+            MergeVerdict::ChangesRequested => "a reviewer requested changes".to_owned(),
+            MergeVerdict::UnresolvedThreads => "its threads must be resolved first".to_owned(),
+            MergeVerdict::Draft => "a draft cannot merge: mark it ready first".to_owned(),
+            MergeVerdict::NotOpen => "this MR is not open".to_owned(),
+            MergeVerdict::NotAllowed => "you are not allowed to merge into this branch".to_owned(),
+            MergeVerdict::Blocked => "a rule of its project blocks it: its page on the forge says which".to_owned(),
+            MergeVerdict::Unknown => "the forge did not say whether it can merge: merge it from its page".to_owned(),
         };
         Some(reason)
     }
@@ -381,23 +415,90 @@ mod tests {
         }
     }
 
+    fn told(merge_verdict: MergeVerdict) -> Mr {
+        Mr { merge_verdict, ..mergeable() }
+    }
+
+    fn pipeline(status: PipelineStatus) -> Pipeline {
+        Pipeline { status, web_url: None }
+    }
+
     #[test]
-    fn only_my_open_green_approved_mrs_may_merge_and_each_refusal_says_why() {
-        assert_eq!(mergeable().merge_refusal(), None);
-        let cases: [(Mr, &str); 7] = [
-            (Mr { mine: false, ..mergeable() }, "only your own MRs merge from revu"),
-            (Mr { state: MrState::Merged, ..mergeable() }, "this MR is merged"),
-            (Mr { draft: true, ..mergeable() }, "a draft cannot merge: mark it ready first"),
-            (Mr { conflicts: true, ..mergeable() }, "it has conflicts with its target branch"),
-            (Mr { pipeline: Some(Pipeline { status: PipelineStatus::Failed, web_url: None }), ..mergeable() }, "its pipeline failed"),
-            (Mr { approvals: Approvals { approved: true, ..Approvals::default() }, ..mergeable() }, "nobody approved it yet"),
-            (Mr { approvals: Approvals { approvals_left: 2, ..mergeable().approvals }, ..mergeable() }, "it needs 2 more approvals"),
+    fn each_verdict_of_the_forge_refuses_in_its_own_words() {
+        let cases: [(MergeVerdict, &str); 11] = [
+            (MergeVerdict::Conflicts, "it has conflicts with its target branch"),
+            (MergeVerdict::Behind, "its branch is behind its target branch: rebase it first"),
+            (MergeVerdict::PipelineNotPassed, "its pipeline must pass first"),
+            (MergeVerdict::PipelineRunning, "its pipeline is still running"),
+            (MergeVerdict::NotApproved, "it is not approved yet"),
+            (MergeVerdict::ChangesRequested, "a reviewer requested changes"),
+            (MergeVerdict::UnresolvedThreads, "its threads must be resolved first"),
+            (MergeVerdict::Draft, "a draft cannot merge: mark it ready first"),
+            (MergeVerdict::NotOpen, "this MR is not open"),
+            (MergeVerdict::NotAllowed, "you are not allowed to merge into this branch"),
+            (MergeVerdict::Blocked, "a rule of its project blocks it: its page on the forge says which"),
+        ];
+        for (verdict, reason) in cases {
+            assert_eq!(told(verdict).merge_refusal().as_deref(), Some(reason));
+        }
+    }
+
+    #[test]
+    fn an_mr_the_forge_calls_mergeable_merges_whatever_revu_would_have_guessed() {
+        let unapproved =
+            Mr { approvals: Approvals::default(), pipeline: Some(pipeline(PipelineStatus::Failed)), ..told(MergeVerdict::Mergeable) };
+        assert_eq!(unapproved.merge_refusal(), None, "the project asks for no approval and no green pipeline");
+    }
+
+    #[test]
+    fn an_mr_that_is_not_mine_is_refused_even_when_the_forge_calls_it_mergeable() {
+        let theirs = Mr { mine: false, ..told(MergeVerdict::Mergeable) };
+        assert_eq!(theirs.merge_refusal().as_deref(), Some("only your own MRs merge from revu"));
+    }
+
+    #[test]
+    fn a_forge_still_checking_says_to_try_again_in_a_moment() {
+        let reason = told(MergeVerdict::Checking).merge_refusal();
+        assert_eq!(reason.as_deref(), Some("the forge is still checking whether it can merge: try again in a moment"));
+    }
+
+    #[test]
+    fn a_missing_approval_says_how_many_are_left() {
+        let two_left = Mr { approvals: Approvals { approvals_left: 2, ..Approvals::default() }, ..told(MergeVerdict::NotApproved) };
+        assert_eq!(two_left.merge_refusal().as_deref(), Some("it needs 2 more approvals"));
+    }
+
+    #[test]
+    fn an_mr_no_longer_open_says_what_became_of_it_whatever_the_verdict() {
+        let merged = Mr { state: MrState::Merged, ..told(MergeVerdict::Mergeable) };
+        assert_eq!(merged.merge_refusal().as_deref(), Some("this MR is merged"));
+    }
+
+    #[test]
+    fn an_unknown_verdict_is_never_ready() {
+        let reason = told(MergeVerdict::Unknown).merge_refusal();
+        assert_eq!(reason.as_deref(), Some("the forge did not say whether it can merge: merge it from its page"));
+    }
+
+    #[test]
+    fn an_unknown_verdict_takes_its_reason_from_what_revu_sees() {
+        let unknown = || told(MergeVerdict::Unknown);
+        let cases: [(Mr, &str); 5] = [
+            (Mr { draft: true, ..unknown() }, "a draft cannot merge: mark it ready first"),
+            (Mr { conflicts: true, ..unknown() }, "it has conflicts with its target branch"),
+            (Mr { pipeline: Some(pipeline(PipelineStatus::Failed)), ..unknown() }, "its pipeline must pass first"),
+            (Mr { pipeline: Some(pipeline(PipelineStatus::Running)), ..unknown() }, "its pipeline is still running"),
+            (Mr { approvals: Approvals { approvals_left: 1, ..Approvals::default() }, ..unknown() }, "it needs 1 more approval"),
         ];
         for (mr, reason) in cases {
             assert_eq!(mr.merge_refusal().as_deref(), Some(reason));
         }
-        let running = Mr { pipeline: Some(Pipeline { status: PipelineStatus::Running, web_url: None }), ..mergeable() };
-        assert_eq!(running.merge_refusal(), None, "a running pipeline is the forge's call: it may merge when it passes");
+    }
+
+    #[test]
+    fn a_blocked_verdict_keeps_the_forges_word_over_what_revu_sees() {
+        let blocked = Mr { pipeline: Some(pipeline(PipelineStatus::Failed)), ..told(MergeVerdict::Blocked) };
+        assert_eq!(blocked.merge_refusal().as_deref(), Some("a rule of its project blocks it: its page on the forge says which"));
     }
 
     #[test]

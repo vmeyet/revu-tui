@@ -565,7 +565,13 @@ pub(super) fn local_app() -> App {
 
 pub(super) fn approved_and_mine(mr: Mr) -> Mr {
     let approvals = crate::forge::Approvals { approved: true, approvals_left: 0, ..mr.approvals.clone() };
-    Mr { mine: true, approvals, merge: crate::forge::MergePlan { method: crate::forge::MergeMethod::Squash, remove_branch: true }, ..mr }
+    Mr {
+        mine: true,
+        merge_verdict: crate::forge::MergeVerdict::Mergeable,
+        approvals,
+        merge: crate::forge::MergePlan { method: crate::forge::MergeMethod::Squash, remove_branch: true },
+        ..mr
+    }
 }
 
 /// The review of `with_long_review`, counting.
