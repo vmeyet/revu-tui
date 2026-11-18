@@ -1,17 +1,23 @@
-//! `S` in the thread pane and `M` in the review: a commit that waits for the reader's `y`.
+//! `S` and `d` in the thread pane, `M` in the review: a change others see, which waits for the reader's `y`.
 use super::pane::Stop;
 use super::{Action, App, EntryKind, Open};
-use crate::forge::{MergePlan, MrKey, Note, Side, Suggestion};
+use crate::forge::{MergePlan, MrKey, Note, Side, Suggestion, ThreadId};
+use crate::render::truncate;
 use crate::review::suggestion;
 use crossterm::event::{KeyCode, KeyEvent};
 
-/// A commit waiting for the reader's yes: nothing reaches the branch before it.
+/// How much of a comment its question quotes, so the reader sees which one goes.
+const QUOTED: usize = 28;
+
+/// A change waiting for the reader's yes: nothing reaches the forge before it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Confirm {
     /// The suggestion of a note, on the MR's branch.
     Apply { suggestion: Suggestion, branch: String },
     /// The MR `name` (`!42`) into `into`, only while its head is still `head`.
     Merge { key: MrKey, name: String, head: crate::forge::Sha, into: String, plan: MergePlan },
+    /// My published `note` of `thread`, off the forge for everyone who reads the MR.
+    DeleteNote { key: MrKey, thread: ThreadId, note: Box<Note> },
 }
 
 impl Confirm {
@@ -24,6 +30,18 @@ impl Confirm {
                 let branch = if plan.remove_branch { ", delete the branch" } else { "" };
                 format!("merge {name} into {into} ({}{branch})? y merges · any other key cancels", plan.method.word())
             }
+            Confirm::DeleteNote { note, .. } => {
+                format!("delete your published comment \"{}\"? y deletes · any other key cancels", truncate(&note.body, QUOTED))
+            }
+        }
+    }
+
+    /// What the toast says when the reader answers anything but `y`.
+    fn cancelled(&self) -> &'static str {
+        match self {
+            Confirm::Apply { .. } => "not applied",
+            Confirm::Merge { .. } => "not merged",
+            Confirm::DeleteNote { .. } => "not deleted",
         }
     }
 }
@@ -41,16 +59,16 @@ impl App {
     pub(super) fn handle_confirm_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(confirm) = self.confirm.take() else { return vec![] };
         let Some(open) = &self.open else { return vec![] };
-        let yes = key.code == KeyCode::Char('y');
+        if key.code != KeyCode::Char('y') {
+            self.toast(confirm.cancelled());
+            return vec![];
+        }
         match confirm {
-            Confirm::Apply { .. } | Confirm::Merge { .. } if !yes => {
-                self.toast(if matches!(confirm, Confirm::Apply { .. }) { "not applied" } else { "not merged" });
-                vec![]
-            }
             Confirm::Apply { suggestion, branch } => {
                 vec![Action::Apply { key: open.key.clone(), branch, suggestion: Box::new(suggestion) }]
             }
             Confirm::Merge { key, head, plan, .. } => vec![Action::Merge { key, head, plan }],
+            Confirm::DeleteNote { key, thread, note } => vec![Action::DeleteNote { key, thread, note }],
         }
     }
 

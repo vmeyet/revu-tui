@@ -54,6 +54,16 @@ pub(crate) fn status(err: &anyhow::Error) -> Option<StatusCode> {
     err.downcast_ref::<HttpError>().map(|e| e.status)
 }
 
+/// What deleting a comment came to: one the forge no longer has is deleted, and a refusal reads as one.
+pub(super) fn deleted_or_gone(outcome: Result<()>) -> Result<()> {
+    let Err(err) = outcome else { return Ok(()) };
+    match err.downcast_ref::<HttpError>() {
+        Some(gone) if gone.status == StatusCode::NOT_FOUND => Ok(()),
+        Some(refused) if refused.status == StatusCode::FORBIDDEN => bail!("the forge does not allow it: {}", refused.message),
+        _ => Err(err),
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct Transport {
     client: reqwest::Client,

@@ -239,6 +239,11 @@ impl Client {
         self.http.delete(&format!("{}/draft_notes/{id}", mr_path(key))).await
     }
 
+    /// Deletes one published note, replies after it staying in their thread; one already gone is no error.
+    pub(crate) async fn delete_note(&self, key: &MrKey, id: u64) -> Result<()> {
+        http::deleted_or_gone(self.http.delete(&format!("{}/notes/{id}", mr_path(key))).await)
+    }
+
     /// Every draft of mine on the MR becomes public at once, as one review; then the approval, when asked.
     pub(crate) async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
         self.http.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(key)), None).await?;
@@ -544,6 +549,33 @@ mod tests {
         client.delete_draft(&key(), 2).await.unwrap();
         client.publish(&key(), forge::ReviewKind::Comment).await.unwrap();
         assert_eq!(server.received_requests().await.unwrap().len(), 5);
+    }
+
+    async fn answering_a_note_delete(status: u16) -> Result<()> {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/notes/503"))
+            .respond_with(ResponseTemplate::new(status).set_body_json(json!({"message": format!("{status} answered")})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        client(&server).delete_note(&key(), 503).await
+    }
+
+    #[tokio::test]
+    async fn a_published_note_is_deleted_by_its_id() {
+        answering_a_note_delete(204).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn deleting_a_note_already_gone_is_no_error() {
+        answering_a_note_delete(404).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_note_delete_the_forge_forbids_says_so_in_its_words() {
+        let refused = answering_a_note_delete(403).await.unwrap_err().to_string();
+        assert_eq!(refused, "the forge does not allow it: 403 answered");
     }
 
     #[tokio::test]

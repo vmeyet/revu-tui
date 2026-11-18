@@ -46,7 +46,8 @@
             "mine": true
           }
         ],
-        "node": "gid://gitlab/DiffNote/101"
+        "node": "gid://gitlab/DiffNote/101",
+        "kind": "inline"
       },
       {
         "id": 102,
@@ -76,7 +77,8 @@
             "mine": true
           }
         ],
-        "node": "gid://gitlab/DiffNote/102"
+        "node": "gid://gitlab/DiffNote/102",
+        "kind": "inline"
       }
     ]
   }

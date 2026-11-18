@@ -84,7 +84,8 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `R` | resolve, unresolve |
 | `T` | every thread; enter goes to it |
 | `m` | every thread: only mine, or all |
-| `e` `d` | edit, delete my draft |
+| `e` | edit my draft |
+| `d` | delete my draft; my comment, after a y |
 | `S` `+` | apply the suggestion, react |
 | `u` `U` | open, copy the first link |
 

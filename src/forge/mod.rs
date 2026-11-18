@@ -14,8 +14,8 @@ pub(crate) mod rules;
 pub(crate) use budget::RateLimit;
 pub(crate) use model::{
     Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, Mention, MentionId,
-    MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft, Note, Pipeline, PipelineStatus, Position, ProjectPath, Reaction, ReactionChange,
-    Readiness, Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
+    MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft, Note, NoteKind, Pipeline, PipelineStatus, Position, ProjectPath, Reaction,
+    ReactionChange, Readiness, Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
 pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size, WorktreeRow};
 
@@ -303,6 +303,15 @@ impl Forge {
         match self {
             Forge::GitLab(client) => client.delete_draft(key, id).await,
             Forge::GitHub(client) => client.delete_draft(key, id).await,
+            Forge::Local(_) => local::forge_only(),
+        }
+    }
+
+    /// Deletes `note`, a published one of mine; one already gone is no error.
+    pub(crate) async fn delete_note(&self, key: &MrKey, note: &Note) -> Result<()> {
+        match self {
+            Forge::GitLab(client) => client.delete_note(key, note.id).await,
+            Forge::GitHub(client) => client.delete_note(key, note).await,
             Forge::Local(_) => local::forge_only(),
         }
     }

@@ -10,7 +10,7 @@ pub(crate) struct Discussion {
     pub(crate) notes: Vec<Note>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Note {
     pub(crate) id: u64,
     pub(crate) body: String,
@@ -31,6 +31,28 @@ pub(crate) struct Note {
     /// The forge's GraphQL id for the note, which reacting needs: `gid://gitlab/DiffNote/…`, GitHub's node id.
     #[serde(default)]
     pub(crate) node: Option<String>,
+    /// None on a note cached by a revu that did not read it yet: the next refresh brings it.
+    #[serde(default)]
+    pub(crate) kind: Option<NoteKind>,
+}
+
+impl Note {
+    /// Whether `username` wrote it: only its author edits or deletes a note.
+    pub(crate) fn written_by(&self, username: &str) -> bool {
+        self.author.username == username
+    }
+}
+
+/// What a published note is on its forge, which decides how its author changes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum NoteKind {
+    /// A comment of a thread on a line.
+    Inline,
+    /// A comment on the MR itself.
+    General,
+    /// The text of a whole review, on GitHub: the forge keeps it, so it is never deleted.
+    Summary,
 }
 
 /// A suggestion to commit on the MR's branch: GitLab applies it by `id`; elsewhere the lines around

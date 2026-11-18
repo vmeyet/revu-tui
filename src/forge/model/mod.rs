@@ -9,7 +9,7 @@ mod mr;
 mod reaction;
 
 pub(crate) use diff::{DiffFile, FileKind, LineRef, Position, Side};
-pub(crate) use discussion::{Applicable, Discussion, Draft, NewDraft, Note, Suggestion};
+pub(crate) use discussion::{Applicable, Discussion, Draft, NewDraft, Note, NoteKind, Suggestion};
 pub(crate) use ids::{MrKey, ProjectPath, Sha, ThreadId};
 pub(crate) use mention::{Mention, MentionId};
 pub(crate) use mr::{

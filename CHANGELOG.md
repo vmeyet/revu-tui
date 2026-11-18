@@ -9,6 +9,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **`d` deletes a comment you published, after a `y`.**
+  In the thread pane and on a thread row of the diff; a first comment with replies and a GitHub review summary stay.
+  Press `d` on your comment: the question quotes it, `y` deletes it for everyone and any other key cancels.
 - **`zt` and `zb` scroll the diff so the cursor line sits at the top or the bottom.**
   In the diff, as in vim; the sticky file and hunk headers stay above the line.
   Press `zt` or `zb`, or bind `line_to_top` and `line_to_bottom` under `[keys.bind]`.

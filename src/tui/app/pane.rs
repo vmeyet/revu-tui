@@ -297,7 +297,7 @@ impl App {
             Act::CopyLink => self.thread_url().map(|u| vec![Action::copy_link(u)]).unwrap_or_default(),
             Act::ViewFile => self.view_thread(),
             Act::Resolve => self.toggle_resolved(),
-            Act::DeleteDraft => self.delete_draft_here(),
+            Act::DeleteDraft => self.delete_here(),
             Act::Editor => self.compose_draft_here(),
             Act::Reply => {
                 self.reply_here();

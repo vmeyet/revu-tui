@@ -198,6 +198,9 @@ impl From<Discussion> for forge::Discussion {
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub(crate) struct Note {
     pub(crate) id: u64,
+    /// `DiffNote` on a line of the diff.
+    #[serde(default, rename = "type")]
+    pub(crate) kind: Option<String>,
     pub(crate) body: String,
     pub(crate) author: User,
     pub(crate) created_at: DateTime<Utc>,
@@ -242,6 +245,7 @@ impl From<Note> for forge::Note {
                 .collect(),
             reactions: vec![],
             node: None,
+            kind: Some(if n.kind.as_deref() == Some("DiffNote") { forge::NoteKind::Inline } else { forge::NoteKind::General }),
         }
     }
 }
@@ -587,6 +591,13 @@ mod tests {
         let diff = discussion(include_str!("fixtures/diff_note.json"));
         let position = diff.notes[0].position.as_ref().unwrap();
         assert_eq!((position.new_path.as_str(), position.line), ("src/pay/charge.rs", LineRef { old: None, new: Some(57) }));
+    }
+
+    #[test]
+    fn a_note_on_a_line_is_inline_and_any_other_is_general() {
+        let kind = |json: &str| discussion(json).notes[0].kind;
+        assert_eq!(kind(include_str!("fixtures/diff_note.json")), Some(forge::NoteKind::Inline));
+        assert_eq!(kind(include_str!("fixtures/discussions.json")), Some(forge::NoteKind::General));
     }
 
     #[test]

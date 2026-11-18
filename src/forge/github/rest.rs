@@ -3,7 +3,7 @@
 use super::Client;
 use super::wire::{self, RestUser};
 use crate::forge::checks::{Checks, Found, Job, JobState};
-use crate::forge::http::HttpError;
+use crate::forge::http::{self, HttpError};
 use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, ProjectPath, ThreadId};
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
@@ -95,6 +95,7 @@ impl PostedComment {
             suggestions: vec![],
             reactions: vec![],
             node: None,
+            kind: Some(if resolvable { forge::NoteKind::Inline } else { forge::NoteKind::General }),
         };
         Discussion { id: self.node_id, notes: vec![note] }
     }
@@ -324,6 +325,17 @@ impl Client {
         self.http.post_json::<PostedComment>(&path, &payload).await.map(|c| c.into_discussion(Some(position.clone())))
     }
 
+    /// Deletes one published comment; one already gone is no error.
+    pub(crate) async fn delete_note(&self, key: &MrKey, note: &Note) -> Result<()> {
+        let comments = match note.kind {
+            Some(forge::NoteKind::Inline) => "pulls/comments",
+            Some(forge::NoteKind::General) => "issues/comments",
+            Some(forge::NoteKind::Summary) => bail!("GitHub keeps the summary of a review: it cannot be deleted"),
+            None => bail!("this comment was read by an older revu: refresh with r first"),
+        };
+        http::deleted_or_gone(self.http.delete(&format!("{}/{comments}/{}", repo_path(&key.project), note.id)).await)
+    }
+
     /// An approval is a review of its own. GitHub has no taking it back for the one who gave it.
     /// GitHub deletes the branch itself when the repo says so; `sha` refuses a push made after the reader looked.
     pub(crate) async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
@@ -386,6 +398,30 @@ mod tests {
 
     fn posted(id: u64) -> serde_json::Value {
         json!({"id": id, "node_id": format!("N_{id}"), "body": "hi", "user": {"id": 2, "login": "nina"}, "created_at": "2026-09-22T10:00:00Z", "updated_at": "2026-09-22T10:00:00Z"})
+    }
+
+    fn note(id: u64, kind: forge::NoteKind) -> Note {
+        let posted: PostedComment = serde_json::from_value(posted(id)).unwrap();
+        Note { kind: Some(kind), ..posted.into_discussion(None).notes.remove(0) }
+    }
+
+    #[tokio::test]
+    async fn a_line_comment_and_a_pr_comment_are_each_deleted_where_github_holds_them() {
+        let server = MockServer::start().await;
+        for held in ["/repos/acme/widgets/pulls/comments/7", "/repos/acme/widgets/issues/comments/8"] {
+            Mock::given(method("DELETE")).and(path(held)).respond_with(ResponseTemplate::new(204)).expect(1).mount(&server).await;
+        }
+        let client = client(&server);
+        client.delete_note(&key(), &note(7, forge::NoteKind::Inline)).await.unwrap();
+        client.delete_note(&key(), &note(8, forge::NoteKind::General)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_summary_of_a_review_is_refused_before_any_request() {
+        let server = MockServer::start().await;
+        let refused = client(&server).delete_note(&key(), &note(9, forge::NoteKind::Summary)).await.unwrap_err().to_string();
+        assert_eq!(refused, "GitHub keeps the summary of a review: it cannot be deleted");
+        assert_eq!(server.received_requests().await.unwrap().len(), 0);
     }
 
     #[tokio::test]

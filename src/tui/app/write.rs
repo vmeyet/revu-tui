@@ -132,12 +132,7 @@ impl App {
         }
     }
 
-    pub(super) fn delete_draft_here(&mut self) -> Vec<Action> {
-        let Some(index) = self.draft_here() else { return vec![] };
-        self.delete_draft(index)
-    }
-
-    fn delete_draft(&mut self, index: usize) -> Vec<Action> {
+    pub(super) fn delete_draft(&mut self, index: usize) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let Some(draft) = open.review.drafts.get(index) else { return vec![] };
         let delete = draft.id.map(|id| Action::DeleteDraft { key: open.key.clone(), id, held: Box::new(draft.clone()) });
@@ -425,6 +420,7 @@ impl App {
                 self.update_open(|open| open.relaid(|review| review.with_resolved(&thread, !resolved)));
                 self.warn(message);
             }
+            Failure::DeleteNote => self.warn(format!("comment not deleted: {message}")),
             Failure::Post { key, to } => self.post_failed(&key, &to, &message),
             Failure::Approve => self.warn(message),
             Failure::Checks => self.checks_failed(message),

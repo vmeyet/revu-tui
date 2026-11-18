@@ -13,7 +13,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit`; `prompt.rs` asks on the terminal |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends (GitLab, GitHub, local); every method takes and returns the neutral model |
-| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note`, `Draft`), `mention.rs` (`Mention`), `reaction.rs` |
+| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note` and its `NoteKind`, `Draft`), `mention.rs` (`Mention`), `reaction.rs` |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and GraphQL (`graphql.rs` on GitLab, `graphql/` on GitHub), shared shapes and conversion in `wire.rs` |
 | `forge/local/` | The local backend, `revu local`: a worktree's branch read with `git`, in `git.rs`, cut into files by `split.rs`, with no host and no token |
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
@@ -143,6 +143,7 @@ The internals:
 
 - **A key**: an `Act` variant, its row in `act.rs` `ROWS` and its line in `HELP`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `UPDATE_DOCS=1 cargo test docs`.
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
+- **A change to a published note**: `Forge` takes the `Note`, whose `NoteKind` tells the backend where the forge holds it; `tui/app/notes.rs` decides whether it is mine to change and asks through `Confirm`, and the screen changes only once the forge answered.
 - **A forge field**: the field in `forge/model/`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `UPDATE_DOCS=1 cargo test docs`.
 - **A config key**: the field in `config/` and a row in `docs::SETTINGS`; a test fails without it.

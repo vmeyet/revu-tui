@@ -206,7 +206,7 @@ fn draft_lines(draft: &crate::review::Draft, replaced: &Replaced, look: Look<'_>
 
 /// Who wrote a note, `you` for me.
 fn author_of(note: &Note, me: &str) -> String {
-    if note.author.username == me { "you".to_owned() } else { note.author.username.clone() }
+    if note.written_by(me) { "you".to_owned() } else { note.author.username.clone() }
 }
 
 fn note_age(note: &Note, today: DateTime<Utc>) -> String {

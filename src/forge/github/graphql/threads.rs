@@ -1,7 +1,7 @@
 //! A PR's threads, reviews and comments, read page after page, as discussions and drafts.
 use crate::forge::github::wire::{Actor, Anchor, user_of};
 use crate::forge::github::{Client, owner_and_name};
-use crate::forge::{self, Discussion, Draft, MrKey, Note, Refs, Sha, ThreadId};
+use crate::forge::{self, Discussion, Draft, MrKey, Note, NoteKind, Refs, Sha, ThreadId};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -170,11 +170,15 @@ impl Comment {
 
     /// A note in a review thread, `position` on its first one.
     fn thread_note(&self, resolved: bool, position: Option<forge::Position>) -> Note {
-        Note { resolvable: true, resolved, position, ..self.loose_note() }
+        Note { resolvable: true, resolved, position, ..self.note(NoteKind::Inline) }
     }
 
-    /// A note outside any review thread: a review summary or a PR comment.
-    fn loose_note(&self) -> Note {
+    /// A thread of its own for a note outside any review thread: a review summary or a PR comment.
+    fn loose(&self, kind: NoteKind) -> Discussion {
+        Discussion { id: self.id.as_str().into(), notes: vec![self.note(kind)] }
+    }
+
+    fn note(&self, kind: NoteKind) -> Note {
         Note {
             id: self.number(),
             body: self.body.clone(),
@@ -196,6 +200,7 @@ impl Comment {
                 })
                 .collect(),
             node: Some(self.id.clone()),
+            kind: Some(kind),
         }
     }
 }
@@ -244,8 +249,9 @@ impl PrThreads {
             (!notes.is_empty()).then(|| Discussion { id: thread.id.clone(), notes })
         });
         let summaries = self.reviews.nodes.iter().filter(|r| !r.pending() && !r.body.trim().is_empty());
-        let loose = summaries.chain(&self.comments.nodes).map(|c| Discussion { id: c.id.as_str().into(), notes: vec![c.loose_note()] });
-        let mut all: Vec<Discussion> = threads.chain(loose).collect();
+        let summaries = summaries.map(|review| review.loose(NoteKind::Summary));
+        let comments = self.comments.nodes.iter().map(|comment| comment.loose(NoteKind::General));
+        let mut all: Vec<Discussion> = threads.chain(summaries).chain(comments).collect();
         all.sort_by_key(|d| d.notes.first().map(|n| n.created_at));
         all
     }
@@ -363,7 +369,7 @@ mod tests {
             ]
         }))
         .unwrap();
-        let note = comment.loose_note();
+        let note = comment.note(NoteKind::General);
         assert_eq!((note.id, note.node.as_deref()), (77, Some("PRRC_kw1")));
         assert_eq!(note.reactions, [forge::Reaction { emoji: forge::Emoji::ThumbsUp, count: 2, mine: true }], "empty groups are left out");
     }
@@ -386,6 +392,12 @@ mod tests {
         let range = resolved.notes[0].position.as_ref().unwrap();
         assert_eq!((range.line, range.start), (LineRef { old: Some(13), new: None }, Some(LineRef { old: Some(11), new: None })));
         assert!(!discussions[0].notes[0].resolvable);
+    }
+
+    #[test]
+    fn each_note_says_whether_it_is_a_pr_comment_a_line_comment_or_a_review_summary() {
+        let kinds: Vec<Option<NoteKind>> = threads().discussions().iter().map(|d| d.notes[0].kind).collect();
+        assert_eq!(kinds, [NoteKind::General, NoteKind::Inline, NoteKind::Summary, NoteKind::Inline].map(Some));
     }
 
     #[test]

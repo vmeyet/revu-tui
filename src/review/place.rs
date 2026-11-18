@@ -192,7 +192,7 @@ impl Review {
     /// Whether `user` wrote a note of the conversation; a draft counts too, since every draft is mine.
     pub(crate) fn takes_part(&self, conversation: &Conversation, user: &str) -> bool {
         let thread = conversation.thread.as_ref().and_then(|id| self.thread(id));
-        !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.author.username == user))
+        !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.written_by(user)))
     }
 
     /// Where a conversation hangs: its thread's anchor, or its new draft's.

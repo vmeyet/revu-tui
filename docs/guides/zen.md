@@ -43,6 +43,7 @@ Your own draft of a new thread shows whole.
 | `j` `k` | Walk the notes of an unfolded thread, one by one, then the code again |
 | `r` or `c`, `R` `+` `S` on a thread | Reply, resolve, react, apply the suggestion, as in the thread pane |
 | `e` `d` on your draft | Edit it, delete it |
+| `d` on your published comment | Delete it on the forge, after a `y` |
 | `u` `o` `y` on a thread | Open its first link, open it in the browser, copy its link |
 | `U` on a thread | Copy its first link, or its first picture when it has no link |
 

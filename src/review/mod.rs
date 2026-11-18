@@ -194,6 +194,13 @@ impl Review {
         self.threads.iter().map(|t| t.notes.len()).sum()
     }
 
+    /// Note `note` of thread `id` gone, as the forge just said, and the thread with its last note.
+    pub(crate) fn without_note(self, id: &ThreadId, note: u64) -> Self {
+        let left = |t: &Thread| Thread { notes: t.notes.iter().filter(|n| t.id != *id || n.id != note).cloned().collect(), ..t.clone() };
+        let threads = self.threads.iter().map(left).filter(|t| !t.notes.is_empty()).collect();
+        Self { threads, ..self }
+    }
+
     /// The thread flipped locally, ahead of the forge's answer.
     pub(crate) fn with_resolved(self, id: &ThreadId, resolved: bool) -> Self {
         let threads = self.threads.iter().map(|t| if t.id == *id { Thread { resolved, ..t.clone() } } else { t.clone() }).collect();

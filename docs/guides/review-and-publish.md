@@ -61,8 +61,23 @@ A line with a conversation has a mark left of its numbers.
 | `R` | Resolve or unresolve |
 | `q`, `x` or `esc` | Close the pane |
 | `e` `d` | Edit, delete your draft |
+| `d` on your published comment | Delete it on the forge, after a `y` |
 | `S` | Apply the suggestion under the cursor, after a `y` |
 | `+` | React to the note under the cursor; in the diff, to the first note of the line's thread |
+
+## Delete a published comment
+
+`d` on a comment you published asks first, quoting how it starts: everyone who reads the MR loses it.
+`y` deletes it, any other key cancels.
+The comment leaves the thread once the forge has deleted it, and a thread with no comment left goes with it.
+`d` leaves these alone and says why:
+
+- A comment someone else wrote.
+- The first comment of a thread that has replies: they would answer nothing.
+- The summary of a review on GitHub, which GitHub keeps.
+
+When the forge refuses, for example while you are offline, the comment stays and the warning says why.
+A comment someone already deleted counts as deleted.
 
 ## In a narrow window
 

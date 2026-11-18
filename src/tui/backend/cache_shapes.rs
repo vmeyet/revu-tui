@@ -25,6 +25,14 @@ fn cached_threads_read_back_unchanged() {
 }
 
 #[test]
+fn threads_cached_before_a_note_said_its_kind_still_read() {
+    let mut older: serde_json::Value = serde_json::from_str(include_str!("fixtures/discussions.json")).unwrap();
+    older[0]["notes"][0].as_object_mut().unwrap().remove("kind");
+    let read: Vec<Discussion> = serde_json::from_value(older).unwrap();
+    assert_eq!(read[0].notes[0].kind, None);
+}
+
+#[test]
 fn cached_drafts_read_back_unchanged() {
     reads_back::<Vec<HeldDraft>>(include_str!("fixtures/drafts.json"));
 }

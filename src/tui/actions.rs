@@ -150,6 +150,10 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     Err(e) => failed(Failure::Post { key, to }, &e),
                 });
             }
+            Action::DeleteNote { key, thread, note } => {
+                let outcome = backend.homes.forge_of(&key).delete_note(&key, &note).await;
+                send(outcome.map_or_else(|e| failed(Failure::DeleteNote, &e), |()| Incoming::NoteDeleted { key, thread, note: note.id }));
+            }
             Action::Resolve { key, thread, resolved } => {
                 send(backend.homes.forge_of(&key).resolve(&key, &thread, resolved).await.map_or_else(
                     |e| failed(Failure::Resolve { thread: thread.clone(), resolved }, &e),

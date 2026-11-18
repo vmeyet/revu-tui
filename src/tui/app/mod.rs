@@ -15,6 +15,7 @@ mod local;
 mod mention;
 mod merge;
 mod mouse;
+mod notes;
 mod notify;
 mod order;
 mod pane;
@@ -184,6 +185,12 @@ pub(crate) enum Action {
         key: MrKey,
         id: u64,
         held: Box<Draft>,
+    },
+    /// Take my published `note` of `thread` off the forge; asked only after the reader said yes.
+    DeleteNote {
+        key: MrKey,
+        thread: ThreadId,
+        note: Box<crate::forge::Note>,
     },
     /// `⌘enter`: the text goes public at once, no draft.
     Post {
@@ -368,6 +375,8 @@ pub(crate) enum Failure {
         held: Box<Draft>,
     },
     Publish,
+    /// The forge kept the published comment.
+    DeleteNote,
     /// The comment stayed off the forge; its text waits in the box.
     Post {
         key: MrKey,
@@ -486,6 +495,12 @@ pub(crate) enum Incoming {
     Posted {
         key: MrKey,
         to: Post,
+    },
+    /// The forge deleted my published comment `note` of `thread`.
+    NoteDeleted {
+        key: MrKey,
+        thread: ThreadId,
+        note: u64,
     },
     Resolved {
         key: MrKey,
