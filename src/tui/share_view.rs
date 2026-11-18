@@ -1,5 +1,5 @@
 //! The share modal: the target picker, the note box, then the exact message `y` will send.
-use super::app::{App, ShareStage, Sharing};
+use super::app::{App, Legend, SAVE_KEYS, ShareStage, Sharing};
 use super::theme::Theme;
 use super::thread_view::draw_compose;
 use super::ui::centred;
@@ -31,7 +31,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &App, sharing: &Sharing, area: Rect) 
     f.render_widget(Paragraph::new(body).wrap(Wrap { trim: false }), text);
     if let ShareStage::Note { note, .. } = &sharing.stage {
         let area = Rect { y: text.y + text.height, height: note_rows.min(inner.height), ..inner };
-        draw_compose(f, theme, "note, optional", note, area);
+        draw_compose(f, theme, &Legend { label: "note, optional".into(), keys: SAVE_KEYS }, note, area);
     }
 }
 

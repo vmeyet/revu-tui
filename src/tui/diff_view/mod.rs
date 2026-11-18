@@ -9,7 +9,7 @@ mod side_by_side;
 mod test_support;
 mod wrap;
 
-use super::app::{App, Focus, Open, STICKY_MIN_HEIGHT, StickyRows, settle_with_sticky, sticky_rows};
+use super::app::{App, Focus, Legend, Open, STICKY_MIN_HEIGHT, StickyRows, settle_with_sticky, sticky_rows};
 use super::theme::Theme;
 use super::thread_view;
 use super::ui::{draw_empty, settle_scroll};
@@ -140,7 +140,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     let sought = app.search.as_ref().map(|s| s.query.clone()).filter(|q| !q.is_empty());
     app.fit_diff(inner.width as usize >= SIDE_BY_SIDE_MIN_W);
     let compose_row = app.compose_row();
-    let compose_label = app.input_label();
+    let compose_legend = app.input_legend();
     let composes_at_foot = app.composes_outside_the_diff() && app.areas.side.is_empty();
     let Some(open) = app.open.as_mut() else { return };
     let local = open.key.is_local();
@@ -162,7 +162,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     if local && open.review.files.is_empty() {
         return draw_empty(f, theme, body, &[&nothing_ahead(&open.review.mr)]);
     }
-    let body = if composes_at_foot { above_compose(f, theme, &compose_label, &app.buffer, body) } else { body };
+    let body = if composes_at_foot { above_compose(f, theme, &compose_legend, &app.buffer, body) } else { body };
     let compose_box = gutter.thread_box(body);
     let compose = compose_row.map(|row| (row, usize::from(thread_view::box_height(&app.buffer, compose_box))));
     let look = thread_view::Look { theme, today, me: &app.me, ascii: app.ascii, width: gutter.thread_width(usize::from(body.width)) };
@@ -243,17 +243,17 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     selectable.retain(|row| row.at.y < body.bottom());
     f.render_widget(Paragraph::new(lines), body);
     if let Some(area) = compose_area.filter(|area| !area.is_empty()) {
-        thread_view::draw_compose(f, theme, &compose_label, &app.buffer, area);
+        thread_view::draw_compose(f, theme, &compose_legend, &app.buffer, area);
     }
     app.drawn.text_rows.extend(selectable);
 }
 
 /// The diff's `body` over the compose box, drawn at its foot while what is written has no row on screen to hang
 /// under and no pane shows the box.
-fn above_compose(f: &mut Frame<'_>, theme: Theme, label: &str, text: &vtui::field::Field, body: Rect) -> Rect {
+fn above_compose(f: &mut Frame<'_>, theme: Theme, legend: &Legend, text: &vtui::field::Field, body: Rect) -> Rect {
     let rows = thread_view::box_height(text, body);
     let [body, compose] = Layout::vertical([Constraint::Min(0), Constraint::Length(rows)]).areas(body);
-    thread_view::draw_compose(f, theme, label, text, compose);
+    thread_view::draw_compose(f, theme, legend, text, compose);
     body
 }
 

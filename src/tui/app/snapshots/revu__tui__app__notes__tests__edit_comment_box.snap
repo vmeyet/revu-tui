@@ -6,9 +6,9 @@ expression: "render(&mut app, 120, 14)"
 │  omar · feat/checkout → main · 2h · +5 −3 · 2 files · ✓ success      ││ ▎◆ unresolved                                │
 │   1 of 2 approvals · 1 threads, 1 unresolved                         ││ ▎you · 1h                                    │
 │                                                                      ││ ▎note 0 of aaa                               │
-│                                                                      ││ ╭ edit comment · public on enter ──────────╮ │
+│                                                                      ││ ╭ edit comment ────────────────────────────╮ │
 │ ▎▾ src/pay/charge.rs                                       +4 −2  ◆1 ││ │note 0 of aaa, fixed                      │ │
-│     ▾ @@ -12,4 +12,5 @@ pub async fn charge                          ││ ╰ enter save · ⌘enter post · ⌥enter newline╯ │
+│     ▾ @@ -12,4 +12,5 @@ pub async fn charge                          ││ ╰ enter publish · esc cancel ──────────────╯ │
 │      12   12  pub async fn charge(card: &Card, amount: Money) -> Re… ││                                              │
 │      13      -    let client = Client::new();                        ││                                              │
 │  ◆        13 +    let client = Client::with_key(idempotency_key(car… ││                                              │

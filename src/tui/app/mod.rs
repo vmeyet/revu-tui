@@ -58,6 +58,7 @@ pub(crate) use apply::Confirm;
 pub(crate) use brief::{Brief, ThreadRow};
 pub(crate) use feedback::Toast;
 pub(crate) use inbox::{Spot, progress_bar};
+pub(crate) use input::{Legend, SAVE_KEYS};
 pub(crate) use kept::{Kept, ReviewInputs};
 pub(crate) use layout::Layout;
 pub(crate) use mouse::{Areas, List, ListRow};

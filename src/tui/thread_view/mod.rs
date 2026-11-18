@@ -2,7 +2,7 @@
 mod body;
 mod conversation;
 
-use super::app::{App, ConversationList, Entry, Focus, List, ListRow, Open, Pane, ReviewInputs};
+use super::app::{App, ConversationList, Entry, Focus, Legend, List, ListRow, Open, Pane, ReviewInputs};
 use super::drag::{self, TextRow};
 use super::images::Thumbs;
 use super::theme::Theme;
@@ -132,7 +132,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
     let compose = app
         .composes_outside_the_diff()
         .then(|| if under_diff { box_rows(&app.buffer, inner.width, COMPOSE_ROWS) } else { box_height(&app.buffer, inner) });
-    let label = compose.map(|_| app.input_label()).unwrap_or_default();
+    let legend = compose.map(|_| app.input_legend()).unwrap_or_default();
     let thread = compose.and(app.input.as_ref()).and_then(|input| app.open.as_ref()?.thread_written_in(input));
     let view = app.open.as_ref().and_then(|open| app.kept.pane_view(open));
     let (entries, current) = view.map(|view| (view.entries.as_slice(), view.focused)).unwrap_or_default();
@@ -142,7 +142,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
         (Some(height), Some(last)) => (inner, Some(Gap { at: last + 1, height: usize::from(height) })),
         (Some(height), None) => {
             let [list, box_area] = Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(inner);
-            draw_compose(f, theme, &label, &app.buffer, box_area);
+            draw_compose(f, theme, &legend, &app.buffer, box_area);
             (list, None)
         }
         (None, _) => (inner, None),
@@ -167,7 +167,7 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, under_diff: boo
     if let Some(gap) = gap {
         let top = inner.y + gap.at.saturating_sub(scroll) as u16;
         let box_area = Rect { y: top, height: gap.height as u16, ..inner }.intersection(inner);
-        draw_compose(f, theme, &label, &app.buffer, box_area);
+        draw_compose(f, theme, &legend, &app.buffer, box_area);
     }
     let list_rows: Vec<ListRow> = visible
         .iter()
@@ -334,12 +334,12 @@ fn box_rows(field: &Field, width: u16, most: usize) -> u16 {
 }
 
 /// The compose box: its target in the top border, the keys in the bottom one, the caret reversed.
-pub(super) fn draw_compose(f: &mut Frame<'_>, theme: Theme, label: &str, field: &Field, area: Rect) {
+pub(super) fn draw_compose(f: &mut Frame<'_>, theme: Theme, legend: &Legend, field: &Field, area: Rect) {
     let block = ratatui::widgets::Block::bordered()
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.border_focus))
-        .title(Span::styled(format!(" {label} "), Style::default().fg(theme.accent)))
-        .title_bottom(Span::styled(" enter save · ⌘enter post · ⌥enter newline ", Style::default().fg(theme.faded)));
+        .title(Span::styled(format!(" {} ", legend.label), Style::default().fg(theme.accent)))
+        .title_bottom(Span::styled(format!(" {} ", legend.keys), Style::default().fg(theme.faded)));
     let inner = block.inner(area);
     f.render_widget(block, area);
     let width = inner.width.max(1) as usize;

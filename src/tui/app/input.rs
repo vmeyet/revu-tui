@@ -6,6 +6,26 @@ use crate::review::{Draft, DraftId, Place, Review};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vtui::editor::Edited;
 
+/// The keys of a box whose `enter` saves: a comment or a reply as a draft, a draft changed, the share note.
+pub(crate) const SAVE_KEYS: &str = "enter save · ⌘enter post · ⌥enter newline";
+
+/// What frames a compose box: what it writes in the top border, its keys in the bottom one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Legend {
+    pub(crate) label: String,
+    pub(crate) keys: &'static str,
+}
+
+impl Input {
+    /// The keys its box names: what `enter` does to this kind of text.
+    fn keys(&self) -> &'static str {
+        match self {
+            Input::Comment { .. } | Input::Reply { .. } | Input::EditDraft { .. } => SAVE_KEYS,
+            Input::EditNote { .. } => "enter publish · esc cancel",
+        }
+    }
+}
+
 impl App {
     /// Opens the compose box on `input`, in the diff under the row it will land after where the diff holds it, else
     /// in the pane at its line; `text` prefills it, else the text left unsent for that target earlier comes back.
@@ -210,8 +230,13 @@ impl App {
         update.into_iter().collect()
     }
 
+    /// The frame of the compose box: its title, and the keys of what is being written.
+    pub(crate) fn input_legend(&self) -> Legend {
+        Legend { label: self.input_label(), keys: self.input.as_ref().map_or(SAVE_KEYS, Input::keys) }
+    }
+
     /// The compose box's title: `new thread · charge.rs:57`, `new thread · charge.rs:55–57`,
-    /// `reply to nina`, `edit draft`, `edit comment · public on enter`.
+    /// `reply to nina`, `edit draft`, `edit comment`.
     pub(crate) fn input_label(&self) -> String {
         match &self.input {
             Some(Input::Comment { position }) => {
@@ -232,7 +257,7 @@ impl App {
                 format!("reply to {}", author.unwrap_or_else(|| "the thread".into()))
             }
             Some(Input::EditDraft { .. }) => "edit draft".to_owned(),
-            Some(Input::EditNote { .. }) => "edit comment · public on enter".to_owned(),
+            Some(Input::EditNote { .. }) => "edit comment".to_owned(),
             None => String::new(),
         }
     }

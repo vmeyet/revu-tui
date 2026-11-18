@@ -159,13 +159,23 @@ mod tests {
     fn e_on_my_published_comment_opens_the_box_with_its_text_and_enter_publishes_the_edit() {
         let mut app = on_my_only_note();
         assert_eq!(press(&mut app, "e"), vec![]);
-        assert_eq!((app.input_label().as_str(), app.buffer.text()), ("edit comment · public on enter", "note 0 of aaa"));
+        assert_eq!((app.input_label().as_str(), app.buffer.text()), ("edit comment", "note 0 of aaa"));
         press(&mut app, ", fixed");
         insta::assert_snapshot!("edit_comment_box", render(&mut app, 120, 14));
         let actions = app.handle_key(code(KeyCode::Enter));
         let [Action::EditNote { thread, note, body, .. }] = actions.as_slice() else { panic!("{actions:?}") };
         assert_eq!((thread.as_str(), note.id, body.as_str()), ("aaa", 7000, "note 0 of aaa, fixed"));
         assert_eq!((body_of_the_note(&app).as_str(), app.draft_count()), ("note 0 of aaa", 0), "no draft, and no guess on screen");
+    }
+
+    #[test]
+    fn the_box_of_a_published_comment_says_enter_publishes_and_a_reply_box_that_it_saves() {
+        let mut app = on_my_only_note();
+        press(&mut app, "e");
+        assert_eq!(app.input_legend().keys, "enter publish · esc cancel");
+        app.handle_key(code(KeyCode::Esc));
+        press(&mut app, "r");
+        assert_eq!(app.input_legend().keys, "enter save · ⌘enter post · ⌥enter newline");
     }
 
     #[test]
