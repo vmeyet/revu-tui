@@ -5,6 +5,7 @@ pub(crate) mod checks;
 pub(crate) mod github;
 pub(crate) mod gitlab;
 mod http;
+mod identity;
 pub(crate) mod image;
 pub(crate) mod local;
 mod model;
@@ -12,6 +13,7 @@ mod queue;
 pub(crate) mod rules;
 
 pub(crate) use budget::RateLimit;
+pub(crate) use identity::{Identities, Me, Renamed};
 pub(crate) use model::{
     Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, Mention, MentionId,
     MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft, Note, NoteKind, Pipeline, PipelineStatus, Position, ProjectPath, Reaction,

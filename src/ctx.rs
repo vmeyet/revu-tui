@@ -2,7 +2,7 @@
 use crate::auth::{self, Credentials, Env, HostOrigin, Login, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::forge::{Forge, Kind, Mr, MrKey, NotFound, ProjectPath, local};
+use crate::forge::{Forge, Identities, Kind, Me, Mr, MrKey, NotFound, ProjectPath, local};
 use crate::log::OrWarn as _;
 use anyhow::Result;
 use serde::Serialize;
@@ -128,6 +128,12 @@ impl Ctx {
             main: (self.credentials.host.clone(), self.forge.kind()),
             others: others.iter().map(|h| (h.host.clone(), h.forge.kind())).collect(),
         }
+    }
+
+    /// Who the config says I am on each host: the hint held until a forge answers.
+    pub(crate) fn identities(&self, others: &[Home]) -> Identities {
+        let hint = |host: &str| Me::from(self.config.username_for(host).unwrap_or_default());
+        others.iter().fold(Identities::on_main(hint(&self.credentials.host)), |all, home| all.with_host(&home.host, hint(&home.host)))
     }
 
     /// The other hosts the config remembers a login for, each with a token found for it.

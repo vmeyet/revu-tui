@@ -1,13 +1,16 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
 use super::rules::{self, Reason, Rules};
-use super::{Mention, MrKey, MrState, PipelineStatus, ProjectPath};
+use super::{Identities, Me, Mention, MrKey, MrState, PipelineStatus, ProjectPath};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Queue {
-    pub(crate) me: String,
+    /// The host that answered it, when it is not the one `revu` started with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) host: Option<String>,
+    pub(crate) me: Me,
     /// The project the queue is scoped to; `None` for every project.
     #[serde(default)]
     pub(crate) project: Option<ProjectPath>,
@@ -198,7 +201,7 @@ impl Sections {
     /// The MRs the ready command named move to Ready, when they still need me: someone else's,
     /// open, not already reviewed by me, and not moved out by a rule. `extra` are named MRs the
     /// queue did not list (outside my lists, fetched one by one), judged by the same rules.
-    pub(crate) fn with_ready(self, named: &[MrKey], extra: Vec<QueueMr>, me: &str, rules: &Rules, now: DateTime<Utc>) -> Sections {
+    pub(crate) fn with_ready(self, named: &[MrKey], extra: Vec<QueueMr>, me: &Identities, rules: &Rules, now: DateTime<Utc>) -> Sections {
         let wanted = |mr: &QueueMr| named.contains(&mr.key());
         let mut ready = Vec::new();
         let mut take = |rows: Vec<QueueMr>| -> Vec<QueueMr> {
@@ -221,8 +224,9 @@ impl Sections {
             .chain(&self.other)
             .map(QueueMr::key)
             .collect();
-        let fresh = extra.into_iter().filter(|mr| wanted(mr) && !listed.contains(&mr.key()) && mr.author != me && !mr.reviewed_by(me));
-        let judged = fresh.map(|mr| QueueMr { reason: rules::judge(&mr, me, now, rules), ..mr });
+        let done_by_me = |mr: &QueueMr| me.on_row(mr).is(&mr.author) || mr.reviewed_by(me.on_row(mr));
+        let fresh = extra.into_iter().filter(|mr| wanted(mr) && !listed.contains(&mr.key()) && !done_by_me(mr));
+        let judged = fresh.map(|mr| QueueMr { reason: rules::judge(&mr, me.on_row(&mr), now, rules), ..mr });
         ready.extend(judged.filter(|mr| mr.reason.as_ref().is_none_or(|r| !r.moves_out())));
         ready.sort_by_key(|mr| std::cmp::Reverse(mr.updated_at));
         Sections { to_review, ready, watching, open, ..self }
@@ -291,11 +295,15 @@ impl QueueMr {
         })
     }
 
-    pub(super) fn my_state(&self, me: &str) -> Option<ReviewState> {
-        self.reviewers.iter().find(|r| r.username == me).map(|r| r.state)
+    pub(crate) fn approved_by_me(&self, me: &Me) -> bool {
+        self.approved_by.iter().any(|who| me.is(who))
     }
 
-    fn reviewed_by(&self, me: &str) -> bool {
+    pub(super) fn my_state(&self, me: &Me) -> Option<ReviewState> {
+        self.reviewers.iter().find(|r| me.is(&r.username)).map(|r| r.state)
+    }
+
+    fn reviewed_by(&self, me: &Me) -> bool {
         matches!(self.my_state(me), Some(ReviewState::Approved | ReviewState::Reviewed))
     }
 
@@ -310,9 +318,10 @@ impl Queue {
         self.review_requested.iter().chain(&self.authored).chain(&self.assigned).chain(&self.open).map(QueueMr::key)
     }
 
-    /// Every row marked as coming from `host`, so opening it reaches the right forge.
+    /// The queue and every row marked as coming from `host`, so opening one reaches the right forge.
     pub(crate) fn on_host(self, host: &str) -> Self {
-        self.map_rows(|mr| QueueMr { host: Some(host.to_owned()), ..mr })
+        let rows = self.map_rows(|mr| QueueMr { host: Some(host.to_owned()), ..mr });
+        Self { host: Some(host.to_owned()), ..rows }
     }
 
     /// Every row of every list through `change`.
@@ -361,7 +370,7 @@ impl Queue {
     }
 
     fn forge_sections(&self, watch_labels: &[String]) -> Sections {
-        let me = self.me.as_str();
+        let me = &self.me;
         let in_scope = |mr: &&QueueMr| self.project.as_ref().is_none_or(|p| &mr.project == p);
         let (done, to_review): (Vec<_>, Vec<_>) = self.review_requested.iter().filter(in_scope).cloned().partition(|mr| mr.reviewed_by(me));
         let mine: Vec<QueueMr> = self.authored.iter().filter(in_scope).cloned().collect();
@@ -466,7 +475,7 @@ mod tests {
     fn named_mrs_move_to_ready_when_they_still_need_me() {
         let sections = scoped().sections_with(&[], &Rules::default(), day(23));
         let named = [MrKey::new("acme/widgets", 51), MrKey::new("acme/widgets", 41), MrKey::new("acme/widgets", 40)];
-        let ready = sections.with_ready(&named, vec![], "nina", &Rules::default(), day(23));
+        let ready = sections.with_ready(&named, vec![], &"nina".into(), &Rules::default(), day(23));
         assert_eq!(numbers(&ready.ready), [51], "open and someone else's: ready");
         assert!(!numbers(&ready.open).contains(&51), "never listed twice");
         assert_eq!(numbers(&ready.mine), [41], "mine stays mine");
@@ -480,7 +489,7 @@ mod tests {
             ..scoped()
         };
         let sections = queue.sections_with(&[], &Rules::default(), day(23));
-        let ready = sections.with_ready(&[MrKey::new("acme/widgets", 51)], vec![], "nina", &Rules::default(), day(23));
+        let ready = sections.with_ready(&[MrKey::new("acme/widgets", 51)], vec![], &"nina".into(), &Rules::default(), day(23));
         assert_eq!(ready.ready, [] as [QueueMr; 0]);
         assert_eq!(reasons(&ready.other), ["pipeline failed"]);
     }
@@ -492,7 +501,7 @@ mod tests {
         let failing = QueueMr { number: 10, pipeline: Some(PipelineStatus::Failed), ..outside.clone() };
         let unnamed = QueueMr { number: 11, ..outside.clone() };
         let named = [MrKey::new("acme/billing", 9), MrKey::new("acme/billing", 10)];
-        let ready = sections.with_ready(&named, vec![outside, failing, unnamed], "nina", &Rules::default(), day(23));
+        let ready = sections.with_ready(&named, vec![outside, failing, unnamed], &"nina".into(), &Rules::default(), day(23));
         assert_eq!(numbers(&ready.ready), [9], "a failing one waits, an unnamed one never shows");
     }
 

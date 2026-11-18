@@ -1,7 +1,7 @@
 //! The conversations of a place as notes and drafts, and as the diff draws them under a line.
 use super::body::{Fences, Replaced, body_pieces};
 use super::{Look, Piece, lay_out};
-use crate::forge::{Note, ThreadId};
+use crate::forge::{Me, Note, ThreadId};
 use crate::review::{Anchor, Conversation, Place, Review, Side, Spot, Thread};
 use crate::tui::app::{Entry, EntryKind, Open, ReviewInputs};
 use crate::tui::images::Thumbs;
@@ -35,7 +35,7 @@ struct InlineInputs {
     width: usize,
     theme: Theme,
     ages: Vec<String>,
-    me: String,
+    me: Me,
     ascii: bool,
 }
 
@@ -48,7 +48,7 @@ impl InlineLayout {
             width: look.width,
             theme: look.theme,
             ages: shown_ages(&open.review, look.today),
-            me: look.me.to_owned(),
+            me: look.me.clone(),
             ascii: look.ascii,
         };
         if self.inputs.as_ref() != Some(&inputs) {
@@ -205,7 +205,7 @@ fn draft_lines(draft: &crate::review::Draft, replaced: &Replaced, look: Look<'_>
 }
 
 /// Who wrote a note, `you` for me.
-fn author_of(note: &Note, me: &str) -> String {
+fn author_of(note: &Note, me: &Me) -> String {
     if note.written_by(me) { "you".to_owned() } else { note.author.username.clone() }
 }
 

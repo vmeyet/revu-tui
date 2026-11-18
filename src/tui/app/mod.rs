@@ -84,7 +84,7 @@ pub(crate) use write::Publish;
 use crate::diff::fold::FoldState;
 pub(crate) use crate::forge::MrKey;
 use crate::forge::{
-    ApprovalChange, Discussion, Position, ProjectPath, QueueMr, ReactionChange, Readiness, ReviewKind, Sections, Sha, ThreadId,
+    ApprovalChange, Discussion, Identities, Position, ProjectPath, QueueMr, ReactionChange, Readiness, ReviewKind, Sections, Sha, ThreadId,
 };
 use crate::review::{Draft, Review};
 pub(crate) use crate::review::{Entry, EntryKind};
@@ -167,6 +167,11 @@ pub(crate) enum Action {
     RememberShare {
         host: String,
         target: Option<String>,
+    },
+    /// Save `username` as who I am on `host`: its forge corrected the name the config holds.
+    RememberMe {
+        host: String,
+        username: String,
     },
     /// Post a draft of the open review; the answer carries it back with the id the forge gave it.
     SaveDraft {
@@ -435,8 +440,8 @@ pub(crate) enum Incoming {
     /// `cached` answers only paint while the fresh one is on its way.
     Queue {
         scope: Option<ProjectPath>,
-        /// Who the forge says I am: it names me when no login stored my name, as with a token variable.
-        me: String,
+        /// Who each host that answered says I am.
+        me: Identities,
         sections: Sections,
         opened: HashMap<MrKey, DateTime<Utc>>,
         cached: bool,

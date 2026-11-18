@@ -2,7 +2,7 @@
 use super::saves::Saves;
 use super::{Homes, read_cache, run_blocking, write_cache};
 use crate::cache::keys;
-use crate::forge::{Fetched, Forge, Mention, MrKey, ProjectPath, Queue, QueueMr, Sections};
+use crate::forge::{Fetched, Forge, Identities, Mention, MrKey, ProjectPath, Queue, QueueMr, Sections};
 use crate::ready::Source as ReadySource;
 use crate::tui::app::{self, Incoming};
 use anyhow::Result;
@@ -158,13 +158,14 @@ impl Queues {
         let now = Utc::now();
         let parts = std::iter::once(queue).chain(others).map(|q| q.sections_with(&self.watch_labels, &self.rules, now)).collect();
         let sections = Sections::merge(parts);
+        let me = Identities::answered(queue, others);
         let sections = match ready {
-            Some(source) => source.apply(sections, self.homes.forge.host(), &self.homes.others, scope.as_ref(), &queue.me, &self.rules),
+            Some(source) => source.apply(sections, self.homes.forge.host(), &self.homes.others, scope.as_ref(), &me, &self.rules),
             None => sections,
         };
         let sections = Sections { pinned: found.pinned, ..sections }.with_mentions(found.mentions, now);
         let opened = self.saves.opened_at(&sections);
-        Incoming::Queue { scope, me: queue.me.clone(), sections, opened, cached }
+        Incoming::Queue { scope, me, sections, opened, cached }
     }
 }
 
@@ -321,6 +322,23 @@ mod tests {
         assert_eq!(there, sections.all().count() / 2, "the silent host keeps the rows it last had");
         let [Incoming::Failed { what: app::Failure::Host, message }] = follow.as_slice() else { panic!("{follow:?}") };
         assert_eq!(message, "git.acme.test did not answer · showing its last rows");
+    }
+
+    #[tokio::test]
+    async fn each_host_that_answers_says_who_i_am_there() {
+        let (main, there) = (queue_server(wiremock::ResponseTemplate::new(200)).await, wiremock::MockServer::start().await);
+        let renamed = include_str!("../../forge/gitlab/fixtures/queue.json").replace("\"nina\"", "\"nina-gh\"");
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(renamed))
+            .mount(&there)
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let creds = crate::auth::Credentials { host: "github.com".into(), token: "glpat-xxxx".into() };
+        let forge = Forge::GitLab(Client::with_base(&creds, &format!("{}/api/v4/", there.uri())).unwrap());
+        let other = crate::ctx::Home { host: "github.com".into(), forge, cache: Cache::in_dir(dir.path().join("other")) };
+        let queues = queues(Homes { others: vec![other], ..homes_on(&main, &dir.path().join("main")) });
+        let (Incoming::Queue { me, .. }, _) = queues.load(None).await.unwrap() else { panic!("a queue") };
+        assert_eq!(me, Identities::from("nina").with_host("github.com", "nina-gh".into()));
     }
 
     /// A server answering the queue fixture to GraphQL, `todos` to the mentions, and none to what is written to me.

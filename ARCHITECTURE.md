@@ -20,6 +20,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/gitlab/award.rs`, `upload.rs`, `todo.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, mentions read from and marked done in the to-do list, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
+| `forge/identity.rs` | `Me`, my username on one host, compared without case, and `Identities`, one per host of the queue |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
 | `diff/` | Unified diff parsing, which lines are twins (`align.rs`), word highlighting inside them (`words.rs`), change labels (`label.rs`), fold state; `arbitrary.rs` builds diffs for property tests |
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
@@ -69,6 +70,11 @@ Loading the queue:
 3. `Queues::load` adds the other hosts, the pins and the ready command; each part that fails follows the queue as an `Incoming::Failed`.
    It asks `Forge::mentions` alongside, kept in `Sections::mentions`; a host that cannot answer is logged and gives none, and nothing of it is cached.
 4. A queue that fails as a whole keeps the one on screen, its title marked `not refreshed` until one lands.
+5. Each queue says who I am on its host, and `Incoming::Queue` carries the names as `Identities`.
+   `App::me` starts from the config's names (`Ctx::identities`); a fresh answer replaces them, a cached one only fills a host with no name.
+   "Is this mine" asks `App::me` for the name on the MR's or the row's host (`me.on(&key)`, `me.on_row(mr)`), then `Me::is`.
+   A fresh name that differs from a held one goes out as `Action::RememberMe`, and `Config::correct_username` saves it under `[hosts."<host>"]`.
+   The main host's name is never saved when its token came from the environment (`App::token`): it may be another account's.
 
 Handling a key:
 

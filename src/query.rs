@@ -11,7 +11,7 @@
 //! | `size:small`, `size:large` | up to 100 changed lines, or 500 and more |
 //! | `is:failing` | whose pipeline failed or that conflict |
 //! | `is:mine` | I wrote |
-use crate::forge::{PipelineStatus, QueueMr};
+use crate::forge::{Me, PipelineStatus, QueueMr};
 
 /// Up to this many changed lines is a small MR.
 const SMALL: u32 = 100;
@@ -48,10 +48,10 @@ impl Query {
     }
 
     /// The MR passes every term but the free words, which callers match their own way.
-    pub(crate) fn keeps(&self, mr: &QueueMr, me: &str) -> bool {
+    pub(crate) fn keeps(&self, mr: &QueueMr, me: &Me) -> bool {
         let author = |name: &String| {
-            let name = if name == "me" { me.to_lowercase() } else { name.to_lowercase() };
-            mr.author.to_lowercase().contains(&name) || mr.author_name.to_lowercase().contains(&name)
+            let name = name.to_lowercase();
+            (name == "me" && me.is(&mr.author)) || mr.author.to_lowercase().contains(&name) || mr.author_name.to_lowercase().contains(&name)
         };
         let label = |wanted: &String| mr.labels.iter().any(|l| l.to_lowercase().contains(wanted.as_str()));
         let lines = mr.size.map(crate::forge::Size::lines);
@@ -64,7 +64,7 @@ impl Query {
                 Size::Large => lines.is_some_and(|n| n >= LARGE),
             })
             && (!self.failing || mr.conflicts || mr.pipeline == Some(PipelineStatus::Failed))
-            && (!self.mine || mr.author == me)
+            && (!self.mine || me.is(&mr.author))
     }
 
     /// Every free word appears in the title, the author, the project or the branch.
@@ -74,7 +74,7 @@ impl Query {
     }
 
     /// The queue filter: every term, words included.
-    pub(crate) fn matches(&self, mr: &QueueMr, me: &str) -> bool {
+    pub(crate) fn matches(&self, mr: &QueueMr, me: &Me) -> bool {
         self.keeps(mr, me) && self.words_found(mr)
     }
 
@@ -231,7 +231,7 @@ mod tests {
             labels: vec![],
             ..mr(7, "nina", "fix: flaky cache")
         };
-        let keeps = |text: &str, which: &QueueMr| Query::parse(text).unwrap().matches(which, "nina");
+        let keeps = |text: &str, which: &QueueMr| Query::parse(text).unwrap().matches(which, &Me::from("nina"));
         assert!(keeps("@loic slack", &loic) && !keeps("@loic slack", &nina));
         assert!(keeps("@LOIC", &loic), "the display name counts too, case aside");
         assert!(keeps("@me", &nina) && keeps("is:mine", &nina) && !keeps("is:mine", &loic));

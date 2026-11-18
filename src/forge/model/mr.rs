@@ -1,5 +1,6 @@
 //! One MR as the header shows it: its state, pipeline, approvals and how it merges.
 use super::{ProjectPath, Sha};
+use crate::forge::Me;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -290,17 +291,17 @@ pub(crate) struct Approvals {
 impl Approvals {
     /// The approvals once mine, `me`'s, is added or taken back, counted the way the forge will
     /// until its own answer comes; a removal gives back the approval it had taken.
-    pub(crate) fn with_mine(&self, change: ApprovalChange, me: &str) -> Self {
+    pub(crate) fn with_mine(&self, change: ApprovalChange, me: &Me) -> Self {
         let approve = change == ApprovalChange::Approve;
-        let had = self.approved_by.iter().any(|u| u.username == me);
-        let mut approved_by: Vec<User> = self.approved_by.iter().filter(|u| u.username != me).cloned().collect();
+        let had = self.approved_by.iter().any(|u| me.is(&u.username));
+        let mut approved_by: Vec<User> = self.approved_by.iter().filter(|u| !me.is(&u.username)).cloned().collect();
         let approvals_left = match (change, had) {
             (ApprovalChange::Approve, false) => self.approvals_left.saturating_sub(1),
             (ApprovalChange::Unapprove, true) => self.approvals_left + 1,
             _ => self.approvals_left,
         };
         if approve {
-            approved_by.push(User { id: 0, username: me.to_owned(), name: me.to_owned() });
+            approved_by.push(User { id: 0, username: me.to_string(), name: me.to_string() });
         }
         Self { approved: approvals_left == 0, approvals_left, user_has_approved: approve, approved_by, ..self.clone() }
     }
@@ -314,10 +315,10 @@ mod tests {
     fn my_approval_counts_at_once_and_taking_it_back_undoes_it() {
         let lea = User { id: 1, username: "lea".into(), name: "Lea".into() };
         let before = Approvals { approved: false, approvals_left: 1, approved_by: vec![lea], ..Approvals::default() };
-        let mine = before.with_mine(ApprovalChange::Approve, "nina");
+        let mine = before.with_mine(ApprovalChange::Approve, &"nina".into());
         assert_eq!((mine.approved, mine.approvals_left, mine.user_has_approved, mine.approved_by.len()), (true, 0, true, 2));
-        assert_eq!(mine.with_mine(ApprovalChange::Approve, "nina"), mine, "approving twice counts once");
-        assert_eq!(mine.with_mine(ApprovalChange::Unapprove, "nina"), Approvals { user_has_approved: false, ..before });
+        assert_eq!(mine.with_mine(ApprovalChange::Approve, &"nina".into()), mine, "approving twice counts once");
+        assert_eq!(mine.with_mine(ApprovalChange::Unapprove, &"nina".into()), Approvals { user_has_approved: false, ..before });
     }
 
     fn mergeable() -> Mr {

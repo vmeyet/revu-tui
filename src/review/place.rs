@@ -189,10 +189,10 @@ impl Review {
         sorted
     }
 
-    /// Whether `user` wrote a note of the conversation; a draft counts too, since every draft is mine.
-    pub(crate) fn takes_part(&self, conversation: &Conversation, user: &str) -> bool {
+    /// Whether I wrote a note of the conversation; a draft counts too, since every draft is mine.
+    pub(crate) fn takes_part(&self, conversation: &Conversation, me: &crate::forge::Me) -> bool {
         let thread = conversation.thread.as_ref().and_then(|id| self.thread(id));
-        !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.written_by(user)))
+        !conversation.drafts.is_empty() || thread.is_some_and(|t| t.notes.iter().any(|note| note.written_by(me)))
     }
 
     /// Where a conversation hangs: its thread's anchor, or its new draft's.
@@ -418,13 +418,14 @@ mod tests {
     #[test]
     fn i_take_part_in_a_thread_i_wrote_in_or_answered_and_in_my_new_draft() {
         let review = review().with_drafts(vec![Draft::reply("9f2c0aa1d4e5b6c7".into(), "agreed"), Draft::new(None, "one more thing")]);
-        let mine: Vec<Conversation> = review.conversations(&Place::All).into_iter().filter(|c| review.takes_part(c, "nina")).collect();
+        let mine: Vec<Conversation> =
+            review.conversations(&Place::All).into_iter().filter(|c| review.takes_part(c, &"nina".into())).collect();
         let thread = |id: &str, drafts: Vec<usize>| Conversation { thread: Some(id.into()), drafts };
         let expected =
             [thread("9f2c0aa1d4e5b6c7", vec![0]), Conversation { thread: None, drafts: vec![1] }, thread("c0ffee00c0ffee00", vec![])];
         assert_eq!(mine, expected, "my reply, my new draft, the thread I started; not lea's comment on the MR");
-        assert!(review.takes_part(&thread("6a9c1750b2d6e4f0", vec![]), "lea"));
-        assert!(!review.takes_part(&thread("c0ffee00c0ffee00", vec![]), "omar"));
+        assert!(review.takes_part(&thread("6a9c1750b2d6e4f0", vec![]), &"lea".into()));
+        assert!(!review.takes_part(&thread("c0ffee00c0ffee00", vec![]), &"omar".into()));
     }
 
     #[test]

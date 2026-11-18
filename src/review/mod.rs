@@ -246,7 +246,7 @@ impl Review {
 
     /// The MR marked approved by me or not, ahead of the forge's answer.
     /// My approval, `me`'s, added or taken back ahead of the forge's answer, so the header and `M` agree at once.
-    pub(crate) fn with_approved(self, change: crate::forge::ApprovalChange, me: &str) -> Self {
+    pub(crate) fn with_approved(self, change: crate::forge::ApprovalChange, me: &crate::forge::Me) -> Self {
         let approvals = self.mr.approvals.with_mine(change, me);
         Self { mr: Arc::new(Mr { approvals, ..(*self.mr).clone() }), ..self }
     }

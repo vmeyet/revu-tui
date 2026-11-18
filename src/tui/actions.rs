@@ -128,6 +128,11 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     .await
                     .or_warn("remembering the share target");
             }
+            Action::RememberMe { host, username } => {
+                blocking::run(move || crate::config::Config::correct_username(&host, &username))
+                    .await
+                    .or_warn("saving my corrected username");
+            }
             Action::Copy { text, done } => send(copy(&text).await.map_or_else(|e| failed(Failure::Local, &e), |()| Incoming::Done(done))),
             Action::SaveDraft { key, draft } => send(match backend.drafts.save(key.clone(), draft).await {
                 Ok(saved) => saved,

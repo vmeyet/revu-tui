@@ -1,6 +1,6 @@
 //! Loading ahead: the MRs that need me go into the cache before they are opened, so `enter` paints at once.
 use super::{Action, App, MrKey};
-use crate::forge::{QueueMr, Sections};
+use crate::forge::{Identities, QueueMr, Sections};
 use chrono::{DateTime, Utc};
 
 /// Below this many requests left, nothing is loaded ahead: the window is kept for what the reader asks.
@@ -15,8 +15,8 @@ pub(crate) struct Ahead {
 
 /// The MRs worth loading before they are asked for, in the order the reader meets them: ready
 /// ones, then review requests, then mine. What I already approved and the open MR are left out.
-pub(crate) fn plan(sections: &Sections, me: &str, open: Option<&MrKey>, limit: usize) -> Vec<Ahead> {
-    let needs_me = sections.ready.iter().chain(&sections.to_review).filter(|mr| !mr.approved_by.iter().any(|who| who == me));
+pub(crate) fn plan(sections: &Sections, me: &Identities, open: Option<&MrKey>, limit: usize) -> Vec<Ahead> {
+    let needs_me = sections.ready.iter().chain(&sections.to_review).filter(|mr| !mr.approved_by_me(me.on_row(mr)));
     let mut picked: Vec<Ahead> = vec![];
     for mr in needs_me.chain(&sections.mine) {
         let ahead = Ahead::from_mr(mr);
@@ -81,9 +81,9 @@ mod tests {
             mine: vec![mr(4, 40), mr(5, 50)],
             ..Sections::default()
         };
-        assert_eq!(numbers(&plan(&sections, "me", None, 5)), [1, 2, 3, 4, 5]);
-        assert_eq!(numbers(&plan(&sections, "me", None, 3)), [1, 2, 3]);
-        assert_eq!(plan(&sections, "me", None, 0), [] as [Ahead; 0]);
+        assert_eq!(numbers(&plan(&sections, &"me".into(), None, 5)), [1, 2, 3, 4, 5]);
+        assert_eq!(numbers(&plan(&sections, &"me".into(), None, 3)), [1, 2, 3]);
+        assert_eq!(plan(&sections, &"me".into(), None, 0), [] as [Ahead; 0]);
     }
 
     #[test]
@@ -97,13 +97,13 @@ mod tests {
             ..Sections::default()
         };
         let open = mr(3, 30).key();
-        assert_eq!(numbers(&plan(&sections, "me", Some(&open), 5)), [1, 4]);
+        assert_eq!(numbers(&plan(&sections, &"me".into(), Some(&open), 5)), [1, 4]);
     }
 
     #[test]
     fn each_plan_keeps_the_time_the_queue_saw() {
         let sections = Sections { to_review: vec![mr(7, 70)], ..Sections::default() };
-        assert_eq!(plan(&sections, "me", None, 1)[0].updated_at, DateTime::from_timestamp(70, 0).unwrap());
+        assert_eq!(plan(&sections, &"me".into(), None, 1)[0].updated_at, DateTime::from_timestamp(70, 0).unwrap());
     }
 
     fn planned(actions: &[Action]) -> Option<Vec<u64>> {

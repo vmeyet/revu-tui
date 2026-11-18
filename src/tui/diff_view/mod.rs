@@ -165,7 +165,8 @@ pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect, gutter: Gutter)
     let body = if composes_at_foot { above_compose(f, theme, &compose_legend, &app.buffer, body) } else { body };
     let compose_box = gutter.thread_box(body);
     let compose = compose_row.map(|row| (row, usize::from(thread_view::box_height(&app.buffer, compose_box))));
-    let look = thread_view::Look { theme, today, me: &app.me, ascii: app.ascii, width: gutter.thread_width(usize::from(body.width)) };
+    let look =
+        thread_view::Look { theme, today, me: app.me.on(&open.key), ascii: app.ascii, width: gutter.thread_width(usize::from(body.width)) };
     if open.review.reads_threads_in_diff() {
         app.thread_rows.fit(open, look);
     }

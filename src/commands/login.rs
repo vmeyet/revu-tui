@@ -32,13 +32,10 @@ pub async fn run(args: LoginArgs, host_flag: Option<&str>, json: bool) -> Result
 
 /// The first host logged in becomes the default; every host remembers who I am there.
 fn remember(config: &mut Config, host: &str, username: &str) {
-    config.hosts.entry(host.to_owned()).or_default().username = Some(username.to_owned());
     if config.host.is_none() {
         config.host = Some(host.to_owned());
     }
-    if config.host.as_deref() == Some(host) {
-        config.username = Some(username.to_owned());
-    }
+    config.set_username(host, username);
 }
 
 /// Forgets a host: keychain entry, config and cache.

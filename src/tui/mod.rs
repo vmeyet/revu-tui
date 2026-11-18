@@ -58,6 +58,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
     let others = ctx.others();
     let hosts = ctx.hosts(&others);
     let checkout = std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host()));
+    let me = ctx.identities(&others);
     let homes = backend::Homes { forge: ctx.forge.clone(), cache: ctx.cache.clone(), others };
     let setup = backend::Setup {
         fold_globs: ctx.config.review.fold.clone(),
@@ -75,12 +76,13 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
     let settings = Settings {
         theme,
         host: ctx.forge.host().to_owned(),
-        me: ctx.config.username_for(&ctx.credentials.host).unwrap_or_default(),
+        me,
         project: ctx.project.clone(),
         ground,
         triage,
         notify: ctx.config.notify.enabled,
         hosts,
+        token: ctx.source,
         keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
         pictures,
         queue_layout: ctx.config.tui.queue,

@@ -54,9 +54,9 @@ impl App {
             }),
             None => Subject::Mr(Mr {
                 fields: Fields::from_queue(row, self.hosts.kind_of(&key)),
+                mine: self.me.on_row(row).is(&row.author),
                 key,
                 target: row.target_branch.clone(),
-                mine: row.author == self.me,
             }),
         }
     }

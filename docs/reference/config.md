@@ -147,7 +147,7 @@ Tokens never go here: they live in the macOS keychain.
 | Key | Type | Default | Does |
 |---|---|---|---|
 | `forge` | `gitlab` or `github` | from the host name | The forge of a host whose name does not say it. |
-| `username` | text | set by `revu login` | Your name on that host. |
+| `username` | text | set by `revu login` | Your name on that host, read before the top-level one; revu corrects it when the host answers another. |
 
 ## Example
 

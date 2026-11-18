@@ -33,6 +33,9 @@ Each entry says what changed, then where, then how to use it.
 - **An MR the host does not have says which host was asked, why, and how to ask another.**
   In `revu <ref>` and every command that takes an MR, where it printed a bare `HTTP 404`.
   Pass `--host <host>` when the MR lives on another forge than the one of the checkout.
+- **Your own comments, approvals and MRs are yours again after a rename on the forge, and on every host of the queue.**
+  On `e`, `d`, the `you` label, the approval mark and `is:mine`, where the name `revu login` saved decided for every host.
+  The host's answer now wins and is saved to the config under `[hosts."<host>"]`; names are compared without case.
 - **`ctrl-a`, `ctrl-e`, `home` and `end` stay on the cursor's line in the comment box and the share note.**
   In a text of several lines, where they went to the start and the end of the whole text.
 - **The cursor of a box steps over an emoji or an accented letter made of several characters as one.**

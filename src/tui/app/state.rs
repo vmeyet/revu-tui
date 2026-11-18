@@ -1,5 +1,5 @@
 use super::{Action, Brief, ConversationList, Focus, Input, MrKey, Open, Publish, Toast};
-use crate::forge::{ProjectPath, Sections};
+use crate::forge::{Identities, ProjectPath, Sections};
 use crate::tui::theme::Theme;
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeSet, HashMap};
@@ -19,7 +19,9 @@ const SLOW_DOWN: u32 = 5;
 pub(crate) struct Settings {
     pub(crate) theme: Theme,
     pub(crate) host: String,
-    pub(crate) me: String,
+    pub(crate) me: Identities,
+    /// Where the main host's token came from: one from the environment may be another account's, so its name is never saved.
+    pub(crate) token: crate::auth::Source,
     /// The project of the checkout `revu` runs in; `None` outside one or with `--all`.
     pub(crate) project: Option<ProjectPath>,
     /// The terminal's own background, when it said: `:set theme=` tints the new theme from it.
@@ -91,7 +93,9 @@ pub(crate) struct Drawn {
 pub(crate) struct App {
     pub(crate) theme: Theme,
     pub(crate) host: String,
-    pub(crate) me: String,
+    pub(crate) me: Identities,
+    /// Where the main host's token came from: one from the environment may be another account's, so its name is never saved.
+    pub(crate) token: crate::auth::Source,
     pub(crate) focus: Focus,
     /// The checkout's project; the queue shows only it unless `everywhere`.
     pub(crate) project: Option<ProjectPath>,
@@ -292,6 +296,7 @@ impl App {
             ascii: settings.ascii,
             notify: settings.notify,
             hosts: settings.hosts,
+            token: settings.token,
             seen: None,
             queue_view: super::QueueView::default(),
             pins: BTreeSet::new(),

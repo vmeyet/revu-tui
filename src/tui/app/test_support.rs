@@ -51,6 +51,7 @@ pub(super) fn settings() -> Settings {
     Settings {
         notify: true,
         hosts: crate::forge::Hosts::one("gitlab.com", Kind::GitLab),
+        token: crate::auth::Source::Keychain,
         theme: Theme::default(),
         host: "gitlab.com".into(),
         me: "nina".into(),
@@ -546,6 +547,7 @@ pub(super) fn local_mr(hidden: u32, head: &str) -> Mr {
 pub(super) fn local_opened(mr: Mr, files: &[DiffFile]) -> App {
     let mut app = App::new(Settings {
         hosts: crate::forge::Hosts::one("local", Kind::Local),
+        token: crate::auth::Source::Env,
         host: "local".into(),
         me: "widgets".into(),
         ..settings()

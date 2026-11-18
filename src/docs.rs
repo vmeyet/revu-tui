@@ -349,7 +349,7 @@ const SETTINGS: &[Setting] = &[
         key: "username",
         kind: "text",
         default: "set by `revu login`",
-        meaning: "Your name on that host.",
+        meaning: "Your name on that host, read before the top-level one; revu corrects it when the host answers another.",
         example: "\"nina\"",
     },
 ];

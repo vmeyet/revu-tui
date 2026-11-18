@@ -1,5 +1,6 @@
 //! Threads and their notes, suggestions, and my drafts not yet published.
 use super::{Position, Reaction, ThreadId, User};
+use crate::forge::Me;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -37,9 +38,9 @@ pub(crate) struct Note {
 }
 
 impl Note {
-    /// Whether `username` wrote it: only its author edits or deletes a note.
-    pub(crate) fn written_by(&self, username: &str) -> bool {
-        self.author.username == username
+    /// Whether I wrote it: only its author edits or deletes a note.
+    pub(crate) fn written_by(&self, me: &Me) -> bool {
+        me.is(&self.author.username)
     }
 }
 

@@ -126,7 +126,8 @@ impl Client {
         let here_number = worktrees.iter().find(|worktree| worktree.path == self.here).map(Worktree::number);
         let (here, others): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| Some(row.number) == here_number);
         let (ahead, rest): (Vec<_>, Vec<_>) = others.into_iter().partition(|row| row.worktree.as_ref().is_some_and(|w| w.commits > 0));
-        let queue = Queue { me: repo, project: None, review_requested: ahead, authored: here, assigned: vec![], open: rest };
+        let queue =
+            Queue { host: None, me: repo.into(), project: None, review_requested: ahead, authored: here, assigned: vec![], open: rest };
         Ok(Fetched { queue, missing: None })
     }
 

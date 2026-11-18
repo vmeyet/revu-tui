@@ -26,7 +26,7 @@ const KINDS: [&str; 12] = ["feat", "fix", "docs", "refactor", "test", "chore", "
 pub(crate) fn draw(f: &mut Frame<'_>, app: &mut App, area: Rect) {
     let theme = app.theme;
     let scope = app.scope().map_or_else(|| "all".to_owned(), |project| project.to_string());
-    let head = if app.is_local() { format!("Worktrees · {}", app.me) } else { format!("Queue · {scope}") };
+    let head = if app.is_local() { format!("Worktrees · {}", app.me.main()) } else { format!("Queue · {scope}") };
     let view = app.queue_view_label().map(|label| format!(" · {label}")).unwrap_or_default();
     let stale = if app.queue_failed && app.sections.is_some() { " · not refreshed" } else { "" };
     let title = truncate(&format!("{head}{view}{stale}"), area.width.saturating_sub(4) as usize);

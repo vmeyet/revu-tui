@@ -59,7 +59,7 @@ impl App {
         self.composed.push(Action::Read {
             key: open.key.clone(),
             head,
-            waits: triage::waits_state(&open.review, &self.me),
+            waits: triage::waits_state(&open.review, self.me.on(&open.key)),
             files: triage::file_states(&open.review),
         });
     }

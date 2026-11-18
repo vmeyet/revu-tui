@@ -8,6 +8,21 @@ impl Config {
         self.save_to(&Self::path())
     }
 
+    /// Saves `username` over another name the file holds for `host`: the forge renamed me since the login.
+    /// A host the file names nobody on is left alone, and so is a name already right.
+    pub(crate) fn correct_username(host: &str, username: &str) -> Result<()> {
+        Self::correct_username_at(&Self::path(), host, username)
+    }
+
+    fn correct_username_at(path: &Path, host: &str, username: &str) -> Result<()> {
+        let mut config = Self::load_from(path)?;
+        if config.username_for(host).is_none_or(|held| held == username) {
+            return Ok(());
+        }
+        config.set_username(host, username);
+        config.save_to(path)
+    }
+
     /// Rewrites only the keys that changed since the file was read, so the user's comments and layout
     /// stay; a crash mid-write leaves the old file whole.
     fn save_to(&self, path: &Path) -> Result<()> {
@@ -90,6 +105,24 @@ mod tests {
         let path = dir.path().join("config.toml");
         std::fs::write(&path, TYPED).unwrap();
         (dir, path)
+    }
+
+    #[test]
+    fn a_name_the_forge_corrected_is_saved_for_its_host_and_saving_it_again_changes_nothing() {
+        let (_dir, path) = typed_config();
+        Config::correct_username_at(&path, "gitlab.com", "nina-now").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let named = TYPED.replace("username = \"nina\"", "username = \"nina-now\"");
+        assert_eq!(text, named.replace("# the end", "\n[hosts.\"gitlab.com\"]\nusername = \"nina-now\"\n# the end"));
+        Config::correct_username_at(&path, "gitlab.com", "nina-now").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+
+    #[test]
+    fn a_host_the_config_names_nobody_on_is_not_written() {
+        let (_dir, path) = typed_config();
+        Config::correct_username_at(&path, "github.com", "nina-gh").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), TYPED);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use super::{App, Failure, Incoming, Open};
-use crate::forge::{ApprovalChange, Discussion};
+use crate::auth::Source;
+use crate::forge::{ApprovalChange, Discussion, Identities, Renamed};
 use crate::review::{Draft, Review, draft};
 
 impl App {
@@ -22,18 +23,16 @@ impl App {
                 let follow = self.drop_pins(&gone);
                 self.composed.extend(follow);
             }
-            Incoming::Queue { ref me, .. } if self.me.is_empty() && !me.is_empty() => {
-                self.me.clone_from(me);
-                self.apply(incoming);
-            }
-            Incoming::Queue { sections, opened, cached: true, .. } => {
+            Incoming::Queue { me, sections, opened, cached: true, .. } => {
+                self.me = self.me.over(&me);
                 if self.sections.is_none() {
                     self.sections = Some(sections);
                     self.opened = opened;
                     self.queue_settle();
                 }
             }
-            Incoming::Queue { sections, opened, .. } => {
+            Incoming::Queue { me, sections, opened, .. } => {
+                self.correct_me(&me);
                 let folded_header = self.folded_header_here();
                 self.sections = Some(sections);
                 self.opened = opened;
@@ -139,6 +138,18 @@ impl App {
                 self.take_actions()
             })
             .collect()
+    }
+
+    /// The forges said who I am: their names replace the ones held, and one that corrects a held name is saved.
+    /// The main host's is saved only when its token is the keychain's; the other hosts always use theirs.
+    fn correct_me(&mut self, answered: &Identities) {
+        let of_my_account = |renamed: &Renamed| renamed.host.is_some() || self.token == Source::Keychain;
+        let saves = self.me.renamed_by(answered).into_iter().filter(of_my_account).map(|renamed| super::Action::RememberMe {
+            host: renamed.host.unwrap_or_else(|| self.hosts.main.0.clone()),
+            username: renamed.me.to_string(),
+        });
+        self.composed.extend(saves);
+        self.me = answered.over(&self.me);
     }
 
     /// Actions an `Incoming` produced, taken by the loop right after `apply`.

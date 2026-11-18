@@ -228,6 +228,14 @@ impl Config {
         own.or_else(|| (self.host.as_deref() == Some(host)).then(|| self.username.clone()).flatten())
     }
 
+    /// Who I am on `host`, as its forge answered: in its own entry, and in the top-level name when it is the configured host.
+    pub(crate) fn set_username(&mut self, host: &str, username: &str) {
+        self.hosts.entry(host.to_owned()).or_default().username = Some(username.to_owned());
+        if self.host.as_deref() == Some(host) {
+            self.username = Some(username.to_owned());
+        }
+    }
+
     pub(crate) fn path() -> PathBuf {
         dir().join("config.toml")
     }

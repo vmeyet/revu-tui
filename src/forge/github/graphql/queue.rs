@@ -85,7 +85,8 @@ fn queue_from(data: QueueData, project: Option<&ProjectPath>, open: Vec<QueueMr>
         }
     }
     Queue {
-        me: data.viewer.login,
+        host: None,
+        me: data.viewer.login.into(),
         project: project.cloned(),
         review_requested,
         authored: prs(data.authored),
@@ -152,7 +153,7 @@ mod tests {
     fn the_queue_sorts_searches_into_sections_and_skips_non_prs() {
         let queue = queue_from_json(include_str!("../fixtures/queue.json"), None).unwrap();
         let sections = queue.sections(&[]);
-        assert_eq!(queue.me, "nina");
+        assert_eq!(queue.me, "nina".into());
         assert_eq!(numbers(&sections.to_review), [42, 40], "asked again after approving counts as asked");
         assert_eq!(numbers(&sections.done), [39]);
         assert_eq!(numbers(&sections.mine), [41]);
@@ -163,7 +164,7 @@ mod tests {
             (Some(forge::PipelineStatus::Failed), 1, "acme/widgets")
         );
         assert!(sections.done[0].conflicts);
-        assert_eq!(sections.done[0].my_state("nina"), Some(ReviewState::Reviewed));
+        assert_eq!(sections.done[0].my_state(&"nina".into()), Some(ReviewState::Reviewed));
         assert!(sections.mine[0].approved && sections.mine[0].approved_by == ["lea"]);
     }
 

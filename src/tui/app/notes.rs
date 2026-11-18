@@ -3,7 +3,7 @@
 use super::input::target_key;
 use super::pane::Stop;
 use super::{Action, App, Confirm, EntryKind, Input, MrKey, Open};
-use crate::forge::{Note, NoteKind, ThreadId};
+use crate::forge::{Me, Note, NoteKind, ThreadId};
 use crate::review::Thread;
 
 impl App {
@@ -14,7 +14,7 @@ impl App {
         }
         let Some(open) = &self.open else { return vec![] };
         let Some(stop) = self.stop_here() else { return vec![] };
-        match Mine::at(open, &stop, &self.me).and_then(Mine::deletable) {
+        match Mine::at(open, &stop, self.me.on(&open.key)).and_then(Mine::deletable) {
             Ok(mine) => {
                 let (key, thread, note) = (open.key.clone(), mine.thread.id.clone(), Box::new(mine.note().clone()));
                 self.confirm = Some(Confirm::DeleteNote { key, thread, note });
@@ -29,7 +29,7 @@ impl App {
         if self.edit_draft_here() {
             return;
         }
-        let mine = self.open.as_ref().zip(self.stop_here()).map(|(open, stop)| Mine::at(open, &stop, &self.me));
+        let mine = self.open.as_ref().zip(self.stop_here()).map(|(open, stop)| Mine::at(open, &stop, self.me.on(&open.key)));
         match mine {
             Some(Ok(mine)) => {
                 let input = Input::EditNote { thread: mine.thread.id.clone(), note: Box::new(mine.note().clone()) };
@@ -86,7 +86,7 @@ struct Mine<'a> {
 
 impl<'a> Mine<'a> {
     /// The note at `stop` when I wrote it, else why `e` and `d` leave it alone.
-    fn at(open: &'a Open, stop: &Stop, me: &str) -> Result<Self, &'static str> {
+    fn at(open: &'a Open, stop: &Stop, me: &Me) -> Result<Self, &'static str> {
         const NO_NOTE: &str = "no comment here";
         let EntryKind::Note(index) = stop.kind else { return Err(NO_NOTE) };
         let thread = stop.thread.as_ref().and_then(|id| open.review.thread(id)).ok_or(NO_NOTE)?;
@@ -116,7 +116,8 @@ impl<'a> Mine<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::forge::{Note, NoteKind, User};
+    use crate::forge::{Identities, Note, NoteKind, User};
+    use crate::tui::app::Confirm;
     use crate::tui::app::test_support::*;
 
     const LINE_13: Place = Place::Line { file: 0, new: Some(13), old: None };
@@ -139,6 +140,55 @@ mod tests {
 
     fn on_my_only_note() -> App {
         on_note(with_mine(thread_on_line_13("aaa", 1), &[0]), 0)
+    }
+
+    /// The same note on an MR of github.com, where I am `nina-gh`, written by `author`.
+    fn on_a_note_on_github_by(author: &str) -> App {
+        let key = MrKey { host: Some("github.com".into()), ..mr_key() };
+        let mut app = App::new(settings());
+        app.me = Identities::from("nina").with_host("github.com", "nina-gh".into());
+        app.start_on(key.clone());
+        app.apply(Incoming::Review { key: key.clone(), review: Box::new(review()), cached: None });
+        let thread = thread_on_line_13("aaa", 1);
+        let notes = thread.notes.into_iter().map(|note| Note { author: User { username: author.into(), ..note.author }, ..note });
+        app.apply(Incoming::Discussions { key, discussions: vec![Discussion { notes: notes.collect(), ..thread }] });
+        app.open_pane(LINE_13);
+        app
+    }
+
+    #[test]
+    fn my_comment_is_mine_once_the_forge_corrected_a_stale_name() {
+        let mut app = on_my_only_note();
+        app.me = "nina-then".into();
+        press(&mut app, "e");
+        assert_eq!(toast(&app), "not your comment: e and d change only your own");
+        app.apply(queue_answer(None, sections(), false));
+        press(&mut app, "e");
+        assert_eq!(app.input_label(), "edit comment");
+    }
+
+    #[test]
+    fn a_name_in_another_case_is_still_mine() {
+        let mut app = on_my_only_note();
+        app.me = "Nina".into();
+        press(&mut app, "e");
+        assert_eq!(app.input_label(), "edit comment");
+    }
+
+    #[test]
+    fn e_and_d_on_another_host_take_my_name_there() {
+        let mut app = on_a_note_on_github_by("nina-gh");
+        press(&mut app, "d");
+        assert!(matches!(app.confirm, Some(Confirm::DeleteNote { .. })));
+        let mut app = on_a_note_on_github_by("nina");
+        press(&mut app, "e");
+        assert_eq!(toast(&app), "not your comment: e and d change only your own");
+    }
+
+    #[test]
+    fn a_comment_on_another_host_reads_you_under_my_name_there() {
+        let screen = render(&mut on_a_note_on_github_by("nina-gh"), 120, 20);
+        assert!(screen.contains("you ·") && !screen.contains("nina-gh"), "{screen}");
     }
 
     fn toast(app: &App) -> &str {

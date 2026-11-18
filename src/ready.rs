@@ -85,7 +85,7 @@ impl Source {
         main_host: &str,
         others: &[Home],
         scope: Option<&ProjectPath>,
-        me: &str,
+        me: &crate::forge::Identities,
         rules: &Rules,
     ) -> Sections {
         sections.with_ready(&self.named(main_host, others, scope), self.outside.clone(), me, rules, Utc::now())

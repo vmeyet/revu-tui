@@ -424,9 +424,9 @@ fn draw_status(f: &mut Frame<'_>, app: &App, area: Rect) {
         }
         _ => {
             let mut spans = vec![Span::styled(format!(" {}", app.host), muted)];
-            if !app.me.is_empty() {
+            if app.me.main().is_known() {
                 spans.push(dot.clone());
-                spans.push(Span::styled(app.me.clone(), muted));
+                spans.push(Span::styled(app.me.main().to_string(), muted));
             }
             if let Some(reason) = app.selected_reason().filter(|_| app.focus == Focus::Queue) {
                 spans.push(dot.clone());

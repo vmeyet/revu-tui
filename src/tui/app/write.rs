@@ -393,7 +393,7 @@ impl App {
     }
 
     pub(super) fn set_approved(&mut self, key: &MrKey, change: ApprovalChange) {
-        let me = self.me.clone();
+        let me = self.me.on(key).clone();
         self.update_open_of(key, |open| open.relaid(|review| review.with_approved(change, &me)));
     }
 

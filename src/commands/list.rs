@@ -23,8 +23,9 @@ pub async fn run(ctx: &Ctx, args: ListArgs) -> Result<()> {
     parts.extend(other_queues.iter().map(|q| q.sections_with(labels, rules, now)));
     let sections = Sections::merge(parts);
     let queues: Vec<&Queue> = std::iter::once(&queue).chain(&other_queues).collect();
+    let me = crate::forge::Identities::answered(&queue, &other_queues);
     let sections = match ready(ctx, &others, &queues, args.cached).await {
-        Some(source) => source.apply(sections, ctx.forge.host(), &others, ctx.project.as_ref(), &queue.me, rules),
+        Some(source) => source.apply(sections, ctx.forge.host(), &others, ctx.project.as_ref(), &me, rules),
         None => sections,
     };
     if ctx.json {

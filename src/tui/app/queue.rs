@@ -162,7 +162,7 @@ impl App {
     }
 
     pub(super) fn matches_filter(&self, mr: &QueueMr) -> bool {
-        self.filter.is_empty() || crate::query::Query::lenient(&self.filter).matches(mr, &self.me)
+        self.filter.is_empty() || crate::query::Query::lenient(&self.filter).matches(mr, self.me.on_row(mr))
     }
 
     /// `'` then a letter, or a digit: the saved view of that first letter, or that rank, filters
@@ -208,7 +208,8 @@ impl App {
     /// The approval mark, beside the badge: on my MR, the forge would let it merge; on anyone
     /// else's, I approved it. An MR no rule guards counts as approved, so mine also needs an approver.
     pub(crate) fn approved(&self, mr: &QueueMr) -> bool {
-        if mr.author == self.me { mr.approved && !mr.approved_by.is_empty() } else { mr.approved_by.contains(&self.me) }
+        let me = self.me.on_row(mr);
+        if me.is(&mr.author) { mr.approved && !mr.approved_by.is_empty() } else { mr.approved_by_me(me) }
     }
 
     /// The row's host, named only when rows from several hosts share the queue.
@@ -436,7 +437,7 @@ mod tests {
     fn my_mr_carries_the_approval_mark_once_the_forge_would_merge_it() {
         let app = with_queue();
         let mine = queued(41);
-        assert_eq!(mine.author, app.me);
+        assert!(app.me.on_row(&mine).is(&mine.author));
         assert!(!app.approved(&mine), "not approved");
         assert!(app.approved(&QueueMr { approved: true, approved_by: vec!["lea".into()], ..mine.clone() }));
         assert!(!app.approved(&QueueMr { approved: true, ..mine }), "no approval rule and nobody approved");
@@ -494,13 +495,55 @@ mod tests {
         assert!(app.live_toast().unwrap().text.contains("checkout"));
     }
 
+    fn answer_naming_me(me: &str, cached: bool) -> Incoming {
+        Incoming::Queue { scope: None, me: me.into(), sections: sections(), opened: HashMap::new(), cached }
+    }
+
+    fn remembered(app: &mut App) -> Vec<Action> {
+        app.take_actions().into_iter().filter(|action| matches!(action, Action::RememberMe { .. })).collect()
+    }
+
     #[test]
-    fn the_queue_names_me_when_no_login_did() {
-        let mut app = App::new(Settings { me: String::new(), ..settings() });
-        app.apply(Incoming::Queue { scope: None, me: "nina".into(), sections: sections(), opened: HashMap::new(), cached: false });
-        assert_eq!(app.me, "nina");
-        app.apply(Incoming::Queue { scope: None, me: "someone".into(), sections: sections(), opened: HashMap::new(), cached: false });
-        assert_eq!(app.me, "nina", "a stored name is never replaced");
+    fn the_queue_names_me_when_no_login_did_and_saves_nothing() {
+        let mut app = App::new(Settings { me: Identities::default(), ..settings() });
+        app.apply(answer_naming_me("nina", false));
+        assert_eq!((remembered(&mut app), app.me), (vec![], "nina".into()));
+    }
+
+    #[test]
+    fn the_name_of_the_config_holds_until_a_forge_answers_whatever_the_cache_says() {
+        let mut app = App::new(settings());
+        app.apply(answer_naming_me("nina-then", true));
+        assert_eq!(app.me, "nina".into());
+    }
+
+    #[test]
+    fn the_name_the_forge_answers_replaces_a_stale_one_and_is_saved_once() {
+        let mut app = App::new(Settings { me: "nina-then".into(), ..settings() });
+        app.apply(answer_naming_me("nina", false));
+        assert_eq!(app.me, "nina".into());
+        assert_eq!(remembered(&mut app), [Action::RememberMe { host: "gitlab.com".into(), username: "nina".into() }]);
+        app.apply(answer_naming_me("nina", false));
+        assert_eq!(remembered(&mut app), [], "a name that did not change is not saved again");
+    }
+
+    #[test]
+    fn a_token_from_the_environment_names_me_for_the_session_and_saves_only_the_other_hosts() {
+        let me = Identities::from("nina").with_host("github.com", "nina-then".into());
+        let mut app = App::new(Settings { me, token: crate::auth::Source::Env, hosts: two_hosts(), ..settings() });
+        let answered = Identities::from("build-bot").with_host("github.com", "nina-gh".into());
+        app.apply(Incoming::Queue { scope: None, me: answered, sections: sections(), opened: HashMap::new(), cached: false });
+        assert!(app.approved(&QueueMr { approved_by: vec!["build-bot".into()], ..queued(42) }), "the forge's name decides what is mine");
+        assert_eq!(remembered(&mut app), [Action::RememberMe { host: "github.com".into(), username: "nina-gh".into() }]);
+    }
+
+    #[test]
+    fn a_row_of_another_host_is_approved_by_me_under_my_name_there() {
+        let mut app = App::new(Settings { hosts: two_hosts(), ..settings() });
+        app.me = Identities::from("nina").with_host("github.com", "nina-gh".into());
+        let there = QueueMr { host: Some("github.com".into()), approved_by: vec!["nina-gh".into()], ..queued(42) };
+        assert!(app.approved(&there));
+        assert!(!app.approved(&QueueMr { host: None, ..there }), "that name is nobody on the main host");
     }
 
     #[test]

@@ -161,7 +161,8 @@ fn queue_from(asking: Lists<WireMr>, authored: Lists<WireMr>) -> Result<Queue> {
     let user = asking.current_user.context("GraphQL answered without currentUser")?;
     let mine = authored.current_user.context("GraphQL answered without currentUser")?;
     Ok(Queue {
-        me: user.username,
+        host: None,
+        me: user.username.into(),
         project: None,
         review_requested: convert(user.review_requested)?,
         authored: convert(mine.authored)?,
@@ -481,7 +482,7 @@ mod tests {
         assert_eq!(iids(&queue.review_requested), [42, 40]);
         let first = &queue.review_requested[0];
         assert_eq!(first.key(), MrKey::new("acme/widgets", 42));
-        assert_eq!(first.my_state("nina"), Some(ReviewState::Unreviewed));
+        assert_eq!(first.my_state(&"nina".into()), Some(ReviewState::Unreviewed));
         assert_eq!(first.size, Some(Size { additions: 412, deletions: 38, files: 9 }));
         assert_eq!(first.unresolved, 1);
         assert_eq!(first.pipeline, Some(PipelineStatus::Success));

@@ -48,7 +48,7 @@ impl App {
         let Some(sections) = &self.sections else { return vec![] };
         let mut keys = vec![];
         for (name, mrs) in [("READY", &sections.ready), ("TO REVIEW", &sections.to_review)] {
-            let wanted = mrs.iter().filter(|mr| self.matches_filter(mr) && !mr.approved_by.iter().any(|who| who == &self.me)).collect();
+            let wanted = mrs.iter().filter(|mr| self.matches_filter(mr) && !mr.approved_by_me(self.me.on_row(mr))).collect();
             for item in super::stack::group(&self.in_order(name, wanted)) {
                 match item {
                     super::stack::Item::Single(mr) => keys.push(mr.key()),

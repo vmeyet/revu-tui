@@ -4,7 +4,7 @@
 use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::forge::checks::JobState;
-use crate::forge::{MrKey, PipelineStatus, QueueMr, ReviewState, ThreadId};
+use crate::forge::{Me, MrKey, PipelineStatus, QueueMr, ReviewState, ThreadId};
 use crate::review::{Place, Review, Row};
 use chrono::{DateTime, Utc};
 use crossterm::event::KeyEvent;
@@ -74,7 +74,7 @@ pub(crate) struct ThreadRow {
 }
 
 impl Brief {
-    fn of_queue(mr: &QueueMr, sigil: char, me: &str) -> Self {
+    fn of_queue(mr: &QueueMr, sigil: char, me: &Me) -> Self {
         let reviewers = mr.reviewers.iter().map(|r| (r.username.clone(), Some(r.state))).collect();
         Self {
             key: mr.key(),
@@ -93,8 +93,8 @@ impl Brief {
                 approved_by: mr.approved_by.clone(),
                 approvals_left: mr.approvals_left,
                 reviewers,
-                i_approved: mr.approved_by.iter().any(|u| u == me),
-                i_review: mr.reviewers.iter().any(|r| r.username == me),
+                i_approved: mr.approved_by_me(me),
+                i_review: mr.reviewers.iter().any(|r| me.is(&r.username)),
             },
             threads: None,
             deployments: vec![],
@@ -106,7 +106,7 @@ impl Brief {
     }
 
     /// `checks` are the jobs when the pipeline pane already fetched them.
-    fn of_review(key: MrKey, review: &Review, sigil: char, me: &str, checks: Option<&crate::forge::checks::Checks>) -> Self {
+    fn of_review(key: MrKey, review: &Review, sigil: char, me: &Me, checks: Option<&crate::forge::checks::Checks>) -> Self {
         let mr = &review.mr;
         let failed = checks.map_or_else(Vec::new, |c| {
             c.jobs().filter(|j| j.state == JobState::Failed && !j.allowed_to_fail).map(|j| j.name.clone()).collect()
@@ -130,7 +130,7 @@ impl Brief {
                 approvals_left: Some(mr.approvals.approvals_left),
                 reviewers: mr.reviewers.iter().map(|u| (u.username.clone(), None)).collect(),
                 i_approved: mr.approvals.user_has_approved,
-                i_review: mr.reviewers.iter().any(|u| u.username == me),
+                i_review: mr.reviewers.iter().any(|u| me.is(&u.username)),
             },
             selected: (!threads.is_empty()).then_some(0),
             unresolved: threads.len(),
@@ -198,7 +198,7 @@ fn open_threads(review: &Review) -> Vec<ThreadRow> {
 impl App {
     /// `i` in the queue: the cover from what the queue row knows.
     pub(super) fn open_brief_from_queue(&mut self) {
-        self.brief = self.selected_mr().map(|mr| Brief::of_queue(mr, self.hosts.kind_of(&mr.key()).sigil(), &self.me));
+        self.brief = self.selected_mr().map(|mr| Brief::of_queue(mr, self.hosts.kind_of(&mr.key()).sigil(), self.me.on_row(mr)));
     }
 
     /// `i` in the review: the cover with its threads and, once fetched, failed jobs.
@@ -209,7 +209,7 @@ impl App {
             _ => None,
         });
         let sigil = self.hosts.kind_of(&open.key).sigil();
-        let brief = Brief::of_review(open.key.clone(), &open.review, sigil, &self.me, checks);
+        let brief = Brief::of_review(open.key.clone(), &open.review, sigil, self.me.on(&open.key), checks);
         let to_try = open.deployments.as_deref().and_then(crate::forge::Deployment::to_try).cloned();
         self.brief = Some(Brief { deployments: to_try.into_iter().collect(), ..brief });
     }

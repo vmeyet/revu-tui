@@ -149,7 +149,7 @@ pub(crate) fn verdict(answers: &Answers, mr: &QueueMr) -> Result<Verdict, Unavai
 }
 
 /// The last notes of the MR, oldest first, each saying whether I wrote it.
-pub(crate) fn waits_state(review: &Review, me: &str) -> Option<Value> {
+pub(crate) fn waits_state(review: &Review, me: &crate::forge::Me) -> Option<Value> {
     let mut notes: Vec<_> = review.threads.iter().flat_map(|t| t.notes.iter()).filter(|n| !n.system).collect();
     notes.sort_by_key(|n| n.created_at);
     let last: Vec<Value> = notes
@@ -157,9 +157,9 @@ pub(crate) fn waits_state(review: &Review, me: &str) -> Option<Value> {
         .rev()
         .take(LAST_NOTES)
         .rev()
-        .map(|n| json!({"by_reviewer": n.author.username == me, "author": n.author.username, "text": cut(&n.body, 600)}))
+        .map(|n| json!({"by_reviewer": me.is(&n.author.username), "author": n.author.username, "text": cut(&n.body, 600)}))
         .collect();
-    (!last.is_empty()).then(|| json!({"reviewer": me, "mr_author": review.mr.author.username, "last_notes": last}))
+    (!last.is_empty()).then(|| json!({"reviewer": me.as_str(), "mr_author": review.mr.author.username, "last_notes": last}))
 }
 
 /// One state per text file: its path and the start of its changed lines.
@@ -293,7 +293,7 @@ mod tests {
         let files = file_states(&review);
         assert_ne!(files, [] as [(String, Value); 0]);
         assert!(files.iter().all(|(path, state)| state["path"] == path.as_str() && state["change"].as_str().is_some()));
-        if let Some(state) = waits_state(&review, "nina") {
+        if let Some(state) = waits_state(&review, &"nina".into()) {
             assert!(state["last_notes"].as_array().unwrap().len() <= LAST_NOTES);
         }
     }

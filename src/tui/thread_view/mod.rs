@@ -7,6 +7,7 @@ use super::drag::{self, TextRow};
 use super::images::Thumbs;
 use super::theme::Theme;
 use super::ui::{rule_pane, side_pane};
+use crate::forge::Me;
 use crate::review::image::Image;
 use crate::review::{Place, Review};
 use chrono::{DateTime, Utc};
@@ -83,7 +84,7 @@ struct PaneInputs {
     width: usize,
     theme: Theme,
     ages: Vec<String>,
-    me: String,
+    me: Me,
     ascii: bool,
     pictures: u64,
 }
@@ -99,7 +100,7 @@ impl PaneInputs {
             width,
             theme: app.theme,
             ages: shown_ages(&open.review, app.today),
-            me: app.me.clone(),
+            me: app.me.on(&open.key).clone(),
             ascii: app.ascii,
             pictures: app.thumbs.changes(),
         })
@@ -224,7 +225,7 @@ fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
         if index > 0 {
             lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
-        let look = Look { theme, today: app.today, me: &app.me, ascii: app.ascii, width };
+        let look = Look { theme, today: app.today, me: app.me.on(&open.key), ascii: app.ascii, width };
         if open.lists_every_thread() {
             let first = entries.iter().find(|e| e.conversation == index).copied();
             lines.extend(heading(&open.review, conversation, look).into_iter().map(|line| (first, Piece::Text(line))));
@@ -446,7 +447,7 @@ fn title(review: &Review, pane: &Pane, count: usize, here: bool) -> String {
 pub(super) struct Look<'a> {
     pub(super) theme: Theme,
     pub(super) today: DateTime<Utc>,
-    pub(super) me: &'a str,
+    pub(super) me: &'a Me,
     pub(super) ascii: bool,
     pub(super) width: usize,
 }

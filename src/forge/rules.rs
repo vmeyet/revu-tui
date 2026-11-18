@@ -1,7 +1,7 @@
 //! The "needs me" rules: which queue MRs are worth my attention now, and why the others are not.
 //! Plain rules over what the forge already answers: instant, free, and each one says why.
-use super::PipelineStatus;
 use super::queue::{QueueMr, ReviewState};
+use super::{Me, PipelineStatus};
 use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -106,8 +106,8 @@ impl Serialize for Reason {
 /// The first reason that applies to someone else's MR, most decisive first.
 /// "Not ready" holds everywhere; stale and approved enough spare an MR that asks me by name,
 /// since a review request is the one signal nobody sends by accident.
-pub(crate) fn judge(mr: &QueueMr, me: &str, now: DateTime<Utc>, rules: &Rules) -> Option<Reason> {
-    if !rules.enabled || mr.author == me {
+pub(crate) fn judge(mr: &QueueMr, me: &Me, now: DateTime<Utc>, rules: &Rules) -> Option<Reason> {
+    if !rules.enabled || me.is(&mr.author) {
         return None;
     }
     let asks_me = matches!(mr.my_state(me), Some(ReviewState::Unreviewed | ReviewState::ReviewStarted | ReviewState::Unapproved));
@@ -149,8 +149,8 @@ fn approved_enough(mr: &QueueMr) -> Option<Reason> {
 }
 
 /// Enough comments, from people other than the author, and none from me: someone has it in hand.
-fn reviewed_by_others(mr: &QueueMr, me: &str, rules: &Rules) -> Option<Reason> {
-    if mr.commenters.iter().any(|c| c == me) || mr.notes < rules.reviewed_comments {
+fn reviewed_by_others(mr: &QueueMr, me: &Me, rules: &Rules) -> Option<Reason> {
+    if mr.commenters.iter().any(|c| me.is(c)) || mr.notes < rules.reviewed_comments {
         return None;
     }
     let people = mr.commenters.iter().filter(|c| **c != mr.author).count();
@@ -211,7 +211,7 @@ mod tests {
     }
 
     fn reason(mr: &QueueMr) -> Option<String> {
-        judge(mr, "me", now(), &Rules::default()).map(|r| r.to_string())
+        judge(mr, &"me".into(), now(), &Rules::default()).map(|r| r.to_string())
     }
 
     #[test]
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn switched_off_nothing_moves() {
         let draft = QueueMr { draft: true, ..mr() };
-        assert_eq!(judge(&draft, "me", now(), &Rules::disabled()), None);
+        assert_eq!(judge(&draft, &"me".into(), now(), &Rules::disabled()), None);
     }
 
     #[test]

@@ -110,7 +110,7 @@ impl App {
 
     fn mr_candidates(&self, typed: &str) -> Vec<Candidate> {
         let query = Query::lenient(typed);
-        let kept = self.queue_mrs().into_iter().filter(|mr| query.keeps(mr, &self.me)).map(|mr| {
+        let kept = self.queue_mrs().into_iter().filter(|mr| query.keeps(mr, self.me.on_row(mr))).map(|mr| {
             let candidate = Candidate { label: self.row_label(mr), detail: mr.author.clone(), target: Target::Mr(mr.key()) };
             (format!("{} {} {}", candidate.label, mr.author, mr.source_branch), candidate)
         });

@@ -2,7 +2,7 @@
 //! or every conversation of the MR, opened with `T`.
 use super::{Action, App, Focus, Open};
 use crate::act::{self, Act};
-use crate::forge::ThreadId;
+use crate::forge::{Me, ThreadId};
 use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
 use crossterm::event::KeyEvent;
 use std::collections::BTreeSet;
@@ -20,7 +20,7 @@ pub(crate) struct Pane {
     /// Resolved threads the reader unfolded, by id; the others show their first note only.
     pub(crate) unfolded: BTreeSet<ThreadId>,
     /// `m` in the list of every thread: only the conversations this user takes part in.
-    pub(crate) only_with: Option<String>,
+    pub(crate) only_with: Option<Me>,
 }
 
 impl Pane {
@@ -82,7 +82,7 @@ impl Open {
             .review
             .conversations(&pane.place)
             .into_iter()
-            .filter(|conversation| pane.only_with.as_deref().is_none_or(|user| self.review.takes_part(conversation, user)))
+            .filter(|conversation| pane.only_with.as_ref().is_none_or(|me| self.review.takes_part(conversation, me)))
             .collect();
         let entries = entries(&self.review, &conversations, &pane.unfolded);
         let focused = focused(&entries, pane);
@@ -184,8 +184,8 @@ impl App {
 
     /// `m` in the list of every conversation: only those I take part in, or every one again.
     fn toggle_mine(&mut self) {
-        let Some(pane) = self.open.as_ref().and_then(|o| o.pane.clone()) else { return };
-        let only_with = if pane.only_with.is_some() { None } else { Some(self.me.clone()) };
+        let Some((key, pane)) = self.open.as_ref().and_then(|o| Some((&o.key, o.pane.clone()?))) else { return };
+        let only_with = if pane.only_with.is_some() { None } else { Some(self.me.on(key).clone()) };
         self.update_open(|open| open.with_pane(Some(Pane { note: 0, scroll: 0, only_with, ..pane })));
     }
 
@@ -784,7 +784,7 @@ mod tests {
         app.handle_key(code(KeyCode::Enter));
         assert_eq!(app.open.as_ref().unwrap().row(), Some(&Row::Line { file: 0, hunk: 0, index: 1 }));
         press(&mut app, "hl");
-        assert_eq!(app.open.as_ref().unwrap().pane.as_ref().unwrap().only_with.as_deref(), Some("nina"), "kept while the list is open");
+        assert_eq!(app.open.as_ref().unwrap().pane.as_ref().unwrap().only_with, Some(Me::from("nina")), "kept while the list is open");
         let mut actions = press(&mut app, "r");
         actions.extend(type_text(&mut app, "agreed"));
         let [Action::SaveDraft { draft, .. }] = actions.as_slice() else { panic!("{actions:?}") };

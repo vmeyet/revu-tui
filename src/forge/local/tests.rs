@@ -323,7 +323,7 @@ async fn the_queue_sorts_worktrees_here_ahead_and_the_rest_with_their_counts() {
         (branches(&queue.authored), branches(&queue.review_requested), branches(&queue.open)),
         (vec!["work".to_owned()], vec!["further".to_owned()], vec!["same".to_owned()])
     );
-    assert_eq!(queue.me, repo.path().file_name().unwrap().to_str().unwrap());
+    assert_eq!(queue.me.as_str(), repo.path().file_name().unwrap().to_str().unwrap());
     let here = &queue.authored[0];
     let dir = queue.open[0].worktree.as_ref().unwrap().dir.clone();
     assert!(dir.ends_with("behind"), "{}", dir.display());
