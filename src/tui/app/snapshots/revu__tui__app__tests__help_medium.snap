@@ -3,32 +3,32 @@ source: src/tui/app/tests.rs
 expression: "render(&mut app, 100, 30)"
 ---
 ╭ acme/widgets!42 · feat: charge cards at checkout ────────────────────────────────────────────────╮
-│  omar · feat/╭ keys ─────────────────────────────────────────────────────────────╮               │
-│   1 of 2 appr│                                                                   │               │
-│  ◆ 1 on the M│  MOVE                                                             │               │
-│              │        j k  move                                                  │               │
-│ ▎▾ src/pay/ch│        g G  first, last                                           │1 · 1 outdated │
-│     ▾ @@ -12,│      ^d ^u  half a page; space too                                │               │
-│      12  pub │      ^f ^b  a full page; PgDn PgUp too                            │               │
-│  ✓   13 -    │        h l  pane to the left, to the right                        │               │
-│        │ ✓ re│      enter  open, or toggle the fold or the thread                │               │
-│      13 +    │      esc x  close the pane, back to the queue                     │               │
-│      14 +    │  tab S-tab  next, previous file                                   │               │
-│      15      │      ]c [c  next, previous hunk                                   │               │
-│      16      │      ]n [n  next, previous open conversation                      │               │
-│     ▾ @@ -40,│        n N  the same, while no search is on                       │               │
-│      41  fn i│      ]m [m  next, previous MR in the queue                        │               │
-│      42 ~    │                                                                   │               │
-│      43 +    │  QUEUE                                                            │               │
-│      44  }   │          /  filter: words @author !42 ~label                      │               │
-│              │      ' 1-9  a saved view, by letter or rank                       │               │
-│  ▸ Cargo.lock│          *  this repo, or every project                           │ +1 −1  folded │
-│              │          s  next sort order                                       │               │
-│              │          b  pin on top of the queue, or unpin                     │               │
-│              │      zo zc  open, fold the section or stack                       │               │
-│              │          x  mark the mentions of the MR done                      │               │
-│              │                                                                   │               │
-│              ╰────────────────────────────── 1–22 of 76 · j k scroll · esc close ╯               │
+│  omar · feat╭ keys ───────────────────────────────────────────────────────────────╮              │
+│   1 of 2 app│                                                                     │              │
+│  ◆ 1 on the │  MOVE                                                               │              │
+│             │          j k  move                                                  │              │
+│ ▎▾ src/pay/c│          g G  first, last                                           │ · 1 outdated │
+│     ▾ @@ -12│        ^d ^u  half a page; space too                                │              │
+│      12  pub│        ^f ^b  a full page; PgDn PgUp too                            │              │
+│  ✓   13 -   │          h l  pane to the left, to the right                        │              │
+│        │ ✓ r│        enter  open, or toggle the fold or the thread                │              │
+│      13 +   │        esc x  close the pane, back to the queue                     │              │
+│      14 +   │    tab S-tab  next, previous file                                   │              │
+│      15     │        ]c [c  next, previous hunk                                   │              │
+│      16     │        ]n [n  next, previous open conversation                      │              │
+│     ▾ @@ -40│          n N  the same, while no search is on                       │              │
+│      41  fn │        ]m [m  next, previous MR in the queue                        │              │
+│      42 ~   │                                                                     │              │
+│      43 +   │  QUEUE                                                              │              │
+│      44  }  │            /  filter: words @author !42 ~label                      │              │
+│             │        ' 1-9  a saved view, by letter or rank                       │              │
+│  ▸ Cargo.loc│            *  this repo, or every project                           │+1 −1  folded │
+│             │            s  next sort order                                       │              │
+│             │            b  pin on top of the queue, or unpin                     │              │
+│             │        zo zc  open, fold the section or stack                       │              │
+│             │            x  mark the mentions of the MR done                      │              │
+│             │                                                                     │              │
+│             ╰──────────────────────────────── 1–22 of 77 · j k scroll · esc close ╯              │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  gitlab.com · nina · 1 unresolved                                                            ? help

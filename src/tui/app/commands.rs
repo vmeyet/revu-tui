@@ -18,48 +18,53 @@ impl App {
     pub(super) fn handle_palette_key(&mut self, key: KeyEvent) -> Vec<Action> {
         let Some(mut palette) = self.palette.take() else { return vec![] };
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        let plain = !ctrl && !key.modifiers.contains(KeyModifiers::ALT);
+        let commands = palette.mode == Mode::Commands;
         match key.code {
             KeyCode::Esc => return vec![],
-            KeyCode::Backspace if !palette.backspace() => return vec![],
-            KeyCode::Backspace => {}
             KeyCode::Enter => return self.palette_enter(palette),
-            KeyCode::Char('p') if ctrl && palette.mode == Mode::Commands => palette.history_up(),
-            KeyCode::Char('n') if ctrl && palette.mode == Mode::Commands => palette.history_down(),
+            KeyCode::Backspace if plain && !palette.backspace() => return vec![],
+            KeyCode::Backspace if plain => {}
+            // `ctrl-k` opens the palette, so in it the key deletes nothing.
+            KeyCode::Char('k') if ctrl => {}
+            KeyCode::Char('p') if ctrl && commands => palette.history_up(),
+            KeyCode::Char('n') if ctrl && commands => palette.history_down(),
             KeyCode::Char('n') if ctrl => palette.move_by(1, self.palette_candidates(&palette).len()),
             KeyCode::Char('p') if ctrl => palette.move_by(-1, self.palette_candidates(&palette).len()),
-            KeyCode::Char(c) if !ctrl => palette.type_char(c),
-            _ if palette.mode == Mode::Commands => self.command_key(&mut palette, key.code),
+            KeyCode::Up | KeyCode::Down | KeyCode::Tab | KeyCode::BackTab if commands => self.command_key(&mut palette, key.code),
+            KeyCode::Right | KeyCode::End if commands && palette.field().at_end() => {
+                palette.accept(&self.completions_for(palette.input()));
+            }
             KeyCode::Down | KeyCode::Tab => palette.move_by(1, self.palette_candidates(&palette).len()),
             KeyCode::Up | KeyCode::BackTab => palette.move_by(-1, self.palette_candidates(&palette).len()),
-            _ => {}
+            _ => palette.press(key),
         }
         self.palette = Some(palette);
         vec![]
     }
 
     /// ↑ ↓ pick a command from the list, ↑ on an empty line at the top of it recalls the last line, then they walk
-    /// the options of the argument as tab does; → takes the ghost; ^p ^n walk the history from any line, as in a shell.
+    /// the options of the argument as tab does; ^p ^n walk the history from any line, as in a shell.
     fn command_key(&self, palette: &mut Palette, code: KeyCode) {
-        let candidates = self.completions_for(&palette.input);
-        let listed = palette::verbs_for(&palette.input, self.kind()).len();
+        let candidates = self.completions_for(palette.input());
+        let listed = palette::verbs_for(palette.input(), self.kind()).len();
         match code {
             KeyCode::Up | KeyCode::Down if palette.naming_command() || palette.walking_history() => {
                 palette.arrow(Toward::next_if(code == KeyCode::Down), listed);
             }
             KeyCode::Up | KeyCode::Down => palette.complete(&candidates, Toward::next_if(code == KeyCode::Down)),
             KeyCode::Tab | KeyCode::BackTab => palette.complete(&candidates, Toward::next_if(code == KeyCode::Tab)),
-            KeyCode::Right | KeyCode::End => palette.accept(&candidates),
             _ => {}
         }
     }
 
     fn palette_enter(&mut self, mut palette: Palette) -> Vec<Action> {
         if palette.naming_command() {
-            let picked = palette::verbs_for(&palette.input, self.kind()).get(palette.selected).map(|verb| verb.word.to_owned());
+            let picked = palette::verbs_for(palette.input(), self.kind()).get(palette.selected).map(|verb| verb.word);
             if let Some(verb) = picked {
-                palette.input.clone_from(&verb);
-                if palette::parse(&verb).is_err() {
-                    palette.input.push(' ');
+                palette.set_input(verb);
+                if palette::parse(verb).is_err() {
+                    palette.type_char(' ');
                     self.palette = Some(palette);
                     return vec![];
                 }
@@ -97,8 +102,8 @@ impl App {
     /// words; nothing for commands, which complete in place.
     pub(crate) fn palette_candidates(&self, palette: &Palette) -> Vec<Candidate> {
         match palette.mode {
-            Mode::Mrs => self.mr_candidates(&palette.input),
-            Mode::Sessions => self.session_candidates(&palette.input),
+            Mode::Mrs => self.mr_candidates(palette.input()),
+            Mode::Sessions => self.session_candidates(palette.input()),
             Mode::Commands => vec![],
         }
     }
@@ -219,6 +224,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use crate::tui::app::test_support::*;
+    use crate::tui::palette::{Mode, Palette};
 
     fn run_line(app: &mut App, line: &str) -> Vec<Action> {
         press(app, ":");
@@ -267,7 +273,7 @@ mod tests {
         let mut app = with_queue();
         press(&mut app, ":pu");
         app.handle_key(code(KeyCode::Tab));
-        assert_eq!(app.palette.as_ref().unwrap().input, "publish ");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "publish ");
         app.handle_key(code(KeyCode::Esc));
         assert!(app.palette.is_none());
         assert!(app.completions_for("go ").contains(&"!42".to_owned()));
@@ -275,7 +281,7 @@ mod tests {
         run_line(&mut app, "copy");
         press(&mut app, ":");
         app.handle_key(ctrl('p'));
-        assert_eq!(app.palette.as_ref().unwrap().input, "copy", "^p recalls, as in a shell");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "copy", "^p recalls, as in a shell");
     }
 
     #[test]
@@ -285,12 +291,12 @@ mod tests {
         run_line(&mut app, "set theme=nord");
         press(&mut app, ":");
         app.handle_key(code(KeyCode::Up));
-        assert_eq!(app.palette.as_ref().unwrap().input, "set theme=nord");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "set theme=nord");
         app.handle_key(code(KeyCode::Up));
-        assert_eq!(app.palette.as_ref().unwrap().input, "copy");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "copy");
         app.handle_key(code(KeyCode::Down));
         app.handle_key(code(KeyCode::Down));
-        assert_eq!(app.palette.as_ref().unwrap().input, "");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "");
     }
 
     #[test]
@@ -300,7 +306,7 @@ mod tests {
         press(&mut app, ":");
         app.handle_key(code(KeyCode::Down));
         let palette = app.palette.as_ref().unwrap();
-        assert_eq!((palette.input.as_str(), palette.selected), ("", 1));
+        assert_eq!((palette.input(), palette.selected), ("", 1));
     }
 
     #[test]
@@ -309,7 +315,7 @@ mod tests {
         run_line(&mut app, "copy");
         app.handle_key(ctrl_k());
         app.handle_key(code(KeyCode::Up));
-        assert_eq!(app.palette.as_ref().unwrap().input, "");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "");
     }
 
     #[test]
@@ -326,10 +332,91 @@ mod tests {
         assert!(app.palette.is_none() && matches!(actions.as_slice(), [Action::Copy { .. }]), "copy runs at once");
         press(&mut app, ":g");
         app.handle_key(code(KeyCode::Enter));
-        assert_eq!(app.palette.as_ref().map(|p| p.input.as_str()), Some("go "), "go needs an MR: the line waits for it");
+        assert_eq!(app.palette.as_ref().map(Palette::input), Some("go "), "go needs an MR: the line waits for it");
         press(&mut app, "4");
         app.handle_key(code(KeyCode::Down));
-        assert_eq!(app.palette.as_ref().unwrap().input, "go !42 ", "past the verb, ↓ walks the argument's options");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "go !42 ", "past the verb, ↓ walks the argument's options");
+    }
+
+    /// The palette after `line` is typed on commands, then `keys` pressed.
+    fn command_line_after(line: &str, keys: &[KeyEvent]) -> App {
+        let mut app = with_queue();
+        press(&mut app, ":");
+        press(&mut app, line);
+        press_keys(&mut app, keys);
+        app
+    }
+
+    /// The palette's line, with `|` where its cursor is.
+    fn line_with_cursor(app: &App) -> String {
+        let (before, under, after) = app.palette.as_ref().unwrap().field().split();
+        format!("{before}|{under}{after}")
+    }
+
+    #[test]
+    fn left_and_right_move_the_cursor_of_the_palette_by_character() {
+        let left = code(KeyCode::Left);
+        assert_eq!(line_with_cursor(&command_line_after("go !42", &[left, left, code(KeyCode::Right)])), "go !4|2");
+    }
+
+    #[test]
+    fn alt_left_and_alt_right_move_the_cursor_of_the_palette_by_word() {
+        let back = alt(KeyCode::Left);
+        assert_eq!(line_with_cursor(&command_line_after("go !42 now", &[back, back, back, alt(KeyCode::Right)])), "go| !42 now");
+    }
+
+    #[test]
+    fn alt_b_and_alt_f_move_by_word_in_the_palette_and_type_no_letter() {
+        let app = command_line_after("go !42", &[alt(KeyCode::Char('b')), alt(KeyCode::Char('b')), alt(KeyCode::Char('f'))]);
+        assert_eq!(line_with_cursor(&app), "go| !42");
+    }
+
+    #[test]
+    fn a_character_is_typed_where_the_cursor_of_the_palette_is() {
+        assert_eq!(line_with_cursor(&command_line_after("go !2", &[code(KeyCode::Left), key('4')])), "go !4|2");
+    }
+
+    #[test]
+    fn alt_backspace_in_the_palette_deletes_the_word_before_the_cursor() {
+        assert_eq!(line_with_cursor(&command_line_after("go !42 now", &[alt(KeyCode::Left), alt(KeyCode::Backspace)])), "go |now");
+    }
+
+    #[test]
+    fn ctrl_u_in_the_palette_deletes_back_to_the_start_of_the_line() {
+        assert_eq!(line_with_cursor(&command_line_after("go !42", &[alt(KeyCode::Left), ctrl('u')])), "|!42");
+    }
+
+    #[test]
+    fn ctrl_k_in_the_open_palette_keeps_the_line_and_the_mode() {
+        let app = command_line_after("go !42", &[alt(KeyCode::Left), ctrl_k()]);
+        assert_eq!((line_with_cursor(&app).as_str(), app.palette.as_ref().unwrap().mode), ("go |!42", Mode::Commands));
+    }
+
+    #[test]
+    fn right_at_the_end_of_the_line_takes_the_ghost() {
+        assert_eq!(line_with_cursor(&command_line_after("pu", &[code(KeyCode::Right)])), "publish |");
+    }
+
+    #[test]
+    fn right_inside_the_line_moves_the_cursor_and_takes_no_ghost() {
+        assert_eq!(line_with_cursor(&command_line_after("pu", &[code(KeyCode::Left), code(KeyCode::Right)])), "pu|");
+    }
+
+    #[test]
+    fn end_inside_the_line_goes_to_its_end_and_takes_no_ghost() {
+        assert_eq!(line_with_cursor(&command_line_after("pu", &[code(KeyCode::Home), code(KeyCode::End)])), "pu|");
+    }
+
+    #[test]
+    fn backspace_at_the_start_of_a_typed_line_keeps_the_palette_open() {
+        assert_eq!(line_with_cursor(&command_line_after("go", &[code(KeyCode::Home), code(KeyCode::Backspace)])), "|go");
+    }
+
+    #[test]
+    fn ctrl_n_and_ctrl_p_move_the_highlight_in_the_list_of_mrs() {
+        let mut app = with_queue();
+        press_keys(&mut app, &[ctrl_k(), ctrl('n'), ctrl('n'), ctrl('p')]);
+        assert_eq!(app.palette.as_ref().unwrap().selected, 1);
     }
 
     fn palette_labels(app: &App) -> Vec<String> {
@@ -340,7 +427,7 @@ mod tests {
     fn ctrl_k_finds_mrs() {
         let mut app = with_review();
         app.handle_key(ctrl_k());
-        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
+        assert_eq!(app.palette.as_ref().unwrap().mode, Mode::Mrs);
         press(&mut app, "!41");
         assert_eq!(palette_labels(&app), ["!41 fix: flaky cache test"]);
         let actions = app.handle_key(code(KeyCode::Enter));
@@ -366,22 +453,21 @@ mod tests {
         let mut app = with_queue();
         app.handle_key(ctrl_k());
         press(&mut app, ">co");
-        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Commands);
+        assert_eq!(app.palette.as_ref().unwrap().mode, Mode::Commands);
         app.handle_key(code(KeyCode::Tab));
-        assert_eq!(app.palette.as_ref().unwrap().input, "copy ");
+        assert_eq!(app.palette.as_ref().unwrap().input(), "copy ");
         app.handle_key(code(KeyCode::Enter));
         assert!(app.palette.is_none());
         app.handle_key(ctrl_k());
         press(&mut app, ">");
         app.handle_key(code(KeyCode::Backspace));
-        assert_eq!(app.palette.as_ref().unwrap().mode, crate::tui::palette::Mode::Mrs);
+        assert_eq!(app.palette.as_ref().unwrap().mode, Mode::Mrs);
         app.handle_key(code(KeyCode::Backspace));
         assert!(app.palette.is_none(), "a backspace on nothing closes it");
     }
 
     #[test]
     fn command_k_opens_the_palette_on_mrs_and_command_shift_k_on_commands() {
-        use crate::tui::palette::Mode;
         let mut app = with_queue();
         app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::SUPER));
         assert_eq!(app.palette.as_ref().map(|p| p.mode), Some(Mode::Mrs));

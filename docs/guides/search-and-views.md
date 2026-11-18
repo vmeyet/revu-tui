@@ -21,6 +21,12 @@ A command that needs more, like `go`, waits for you to finish the line.
 `ctrl-p` and `ctrl-n` do the same from any line.
 `⌫` on an empty line goes back to MRs, then closes.
 
+The line has a cursor, and what you type goes in where it is.
+`←` `→` move it by character, `⌥←` `⌥→` by word, `home` `end` or `ctrl-a` `ctrl-e` to the ends of the line.
+`⌥⌫` or `ctrl-w` deletes the word before it, `ctrl-u` everything before it.
+`tab` and the grey suggestion complete the end of the line, so they wait until the cursor is back there.
+`→` at the end of the line takes the suggestion.
+
 ## Find in the diff
 
 `/` in the diff finds text anywhere in the MR, not only on screen.

@@ -1,10 +1,10 @@
 //! The one-row input under the panes: what it is for, and what happens to the text on `enter`.
-use super::edit_keys::{adds_a_line, field_after_key};
 use super::{Action, App, Input, MrKey, Open, Post};
 use crate::forge::{Position, ThreadId};
 use crate::review::{Draft, DraftId, Place, Review};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vtui::editor::Edited;
+use vtui::field::adds_a_line;
 
 /// The keys of a box whose `enter` saves: a comment or a reply as a draft, a draft changed, the share note.
 pub(crate) const SAVE_KEYS: &str = "enter save · ⌘enter post · ⌥enter newline";
@@ -75,7 +75,7 @@ impl App {
             KeyCode::Char('s') if ctrl => return self.post_input(),
             KeyCode::Enter if !adds_a_line(key) => return self.submit_input(),
             KeyCode::Char('o') if ctrl => return self.move_to_editor(),
-            _ => self.buffer = field_after_key(std::mem::take(&mut self.buffer), key),
+            _ => self.buffer.press(key),
         }
         vec![]
     }
@@ -352,6 +352,28 @@ mod tests {
         app.handle_key(alt(KeyCode::Char('f')));
         app.handle_key(alt(KeyCode::Backspace));
         assert_eq!(app.buffer.text(), "fix xthe ", "⌥→ and esc-f jump a word on, ⌥⌫ deletes the word before");
+    }
+
+    fn composing(text: &str) -> App {
+        let mut app = with_review();
+        on_line(&mut app);
+        press(&mut app, "c");
+        app.handle_paste(text);
+        app
+    }
+
+    #[test]
+    fn ctrl_a_and_ctrl_e_in_the_compose_box_stay_on_the_cursor_s_line() {
+        let mut app = composing("fix\nthe bug");
+        press_keys(&mut app, &[ctrl('a'), key('x'), ctrl('e'), key('y')]);
+        assert_eq!(app.buffer.text(), "fix\nxthe bugy");
+    }
+
+    #[test]
+    fn ctrl_u_and_ctrl_k_in_the_compose_box_delete_to_the_ends_of_the_cursor_s_line() {
+        let mut app = composing("fix\nthe old bug");
+        press_keys(&mut app, &[alt(KeyCode::Left), ctrl('k'), alt(KeyCode::Left), ctrl('u')]);
+        assert_eq!(app.buffer.text(), "fix\nold ");
     }
 
     #[test]

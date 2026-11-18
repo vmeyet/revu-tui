@@ -4,45 +4,45 @@ expression: "render(&mut app, 160, 45)"
 ---
 ╭ Queue · all ─────────────────────────────╮╭ Review ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │   ── TO REVIEW · 1 ───────────────────── ││                                                                                                                  │
-│ ▎ feat charg╭ keys ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮              │
-│ ▎ omar · !42│                                                                                                                                 │              │
-│             │  MOVE                                                                 COMMENT & PUBLISH                                         │              │
-│   ── MINE · │        j k  move                                                              c  comment on the line, reply on a thread         │              │
-│   fix flaky │        g G  first, last                                                       C  comment on the old side                        │              │
-│   nina · !41│      ^d ^u  half a page; space too                                            V  select lines                                   │              │
-│             │      ^f ^b  a full page; PgDn PgUp too                                        s  suggest a change                               │              │
-│   ── WATCHIN│        h l  pane to the left, to the right                                    E  write in $EDITOR                               │              │
-│   infra: new│      enter  open, or toggle the fold or the thread                      r R e d  on a thread row: reply, resolve, edit, delete  │              │
-│   omar · !35│      esc x  close the pane, back to the queue                         ⌘enter ^s  in the box: post now, no draft                 │              │
-│             │  tab S-tab  next, previous file                                       ⌥enter ^o  in the box: new line, $EDITOR                  │              │
-│   ── ▸ DONE │      ]c [c  next, previous hunk                                        ⌥← ⌥→ ⌥⌫  in the box: word back, on, delete              │              │
-│             │      ]n [n  next, previous open conversation                                esc  drop the selection, leave the box              │              │
-│             │        n N  the same, while no search is on                                   P  publish every draft                            │              │
-│             │      ]m [m  next, previous MR in the queue                                  A M  approve or unapprove, merge mine               │              │
-│             │                                                                               H  mark mine draft or ready                       │              │
-│             │  QUEUE                                                                        Y  share the MR, after a preview                  │              │
-│             │          /  filter: words @author !42 ~label                                                                                    │              │
-│             │      ' 1-9  a saved view, by letter or rank                           THREAD PANE                                               │              │
-│             │          *  this repo, or every project                                     r c  reply, as a draft                              │              │
-│             │          s  next sort order                                                   R  resolve, unresolve                             │              │
-│             │          b  pin on top of the queue, or unpin                                 T  every thread; enter goes to it                 │              │
-│             │      zo zc  open, fold the section or stack                                   m  every thread: only mine, or all                │              │
-│             │          x  mark the mentions of the MR done                                e d  edit, delete my draft or my comment            │              │
-│             │                                                                             S +  apply the suggestion, react                    │              │
-│             │  VIEW                                                                       u U  open, copy the first link                      │              │
-│             │      / n N  find text in the MR, next, previous                                                                                 │              │
-│             │          i  the MR cover page                                         SEARCH & APP                                              │              │
-│             │          D  inline or side by side, diff and prose                         ^k ,  MRs · > commands                               │              │
-│             │        > <  the code after, before, alone                                     :  commands: :go !42, :set theme=nord             │              │
-│             │          t  file tree                                                       o y  open in the browser, copy the link             │              │
-│             │          T  every thread of the MR                                            a  the agent session of the MR or branch          │              │
-│             │          p  pipeline                                                          r  refresh                                        │              │
-│             │          v  prose: the Markdown file rendered, its blocks marked              ?  this help                                      │              │
-│             │         zz  zen: the diff alone, quiet                                     q ^c  quit: twice; q closes a pane first             │              │
-│             │      zt zb  scroll the line to the top, the bottom                                                                              │              │
-│             │        w W  wrap long lines, hide whitespace changes                                                                            │              │
-│             │                                                                                                                                 │              │
-│             ╰──────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 42 · j k scroll · esc close ╯              │
+│ ▎ feat char╭ keys ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮             │
+│ ▎ omar · !4│                                                                                                                                   │             │
+│            │  MOVE                                                                 COMMENT & PUBLISH                                           │             │
+│   ── MINE ·│        j k  move                                                                c  comment on the line, reply on a thread         │             │
+│   fix flaky│        g G  first, last                                                         C  comment on the old side                        │             │
+│   nina · !4│      ^d ^u  half a page; space too                                              V  select lines                                   │             │
+│            │      ^f ^b  a full page; PgDn PgUp too                                          s  suggest a change                               │             │
+│   ── WATCHI│        h l  pane to the left, to the right                                      E  write in $EDITOR                               │             │
+│   infra: ne│      enter  open, or toggle the fold or the thread                        r R e d  on a thread row: reply, resolve, edit, delete  │             │
+│   omar · !3│      esc x  close the pane, back to the queue                           ⌘enter ^s  in the box: post now, no draft                 │             │
+│            │  tab S-tab  next, previous file                                         ⌥enter ^o  in the box: new line, $EDITOR                  │             │
+│   ── ▸ DONE│      ]c [c  next, previous hunk                                          ⌥← ⌥→ ⌥⌫  in the box: word back, on, delete              │             │
+│            │      ]n [n  next, previous open conversation                          ^a ^e ^u ^k  in the box: line start, end, delete to them    │             │
+│            │        n N  the same, while no search is on                                   esc  drop the selection, leave the box              │             │
+│            │      ]m [m  next, previous MR in the queue                                      P  publish every draft                            │             │
+│            │                                                                               A M  approve or unapprove, merge mine               │             │
+│            │  QUEUE                                                                          H  mark mine draft or ready                       │             │
+│            │          /  filter: words @author !42 ~label                                    Y  share the MR, after a preview                  │             │
+│            │      ' 1-9  a saved view, by letter or rank                                                                                       │             │
+│            │          *  this repo, or every project                               THREAD PANE                                                 │             │
+│            │          s  next sort order                                                   r c  reply, as a draft                              │             │
+│            │          b  pin on top of the queue, or unpin                                   R  resolve, unresolve                             │             │
+│            │      zo zc  open, fold the section or stack                                     T  every thread; enter goes to it                 │             │
+│            │          x  mark the mentions of the MR done                                    m  every thread: only mine, or all                │             │
+│            │                                                                               e d  edit, delete my draft or my comment            │             │
+│            │  VIEW                                                                         S +  apply the suggestion, react                    │             │
+│            │      / n N  find text in the MR, next, previous                               u U  open, copy the first link                      │             │
+│            │          i  the MR cover page                                                                                                     │             │
+│            │          D  inline or side by side, diff and prose                    SEARCH & APP                                                │             │
+│            │        > <  the code after, before, alone                                    ^k ,  MRs · > commands                               │             │
+│            │          t  file tree                                                           :  commands: :go !42, :set theme=nord             │             │
+│            │          T  every thread of the MR                                            o y  open in the browser, copy the link             │             │
+│            │          p  pipeline                                                            a  the agent session of the MR or branch          │             │
+│            │          v  prose: the Markdown file rendered, its blocks marked                r  refresh                                        │             │
+│            │         zz  zen: the diff alone, quiet                                          ?  this help                                      │             │
+│            │      zt zb  scroll the line to the top, the bottom                           q ^c  quit: twice; q closes a pane first             │             │
+│            │        w W  wrap long lines, hide whitespace changes                                                                              │             │
+│            │                                                                                                                                   │             │
+│            ╰────────────────────────────────────────────────────────────────────────────────────────────── 1–35 of 42 · j k scroll · esc close ╯             │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 ╰──────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

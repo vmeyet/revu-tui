@@ -3,7 +3,6 @@ mod apply;
 mod brief;
 mod commands;
 mod compact;
-mod edit_keys;
 mod feedback;
 mod inbox;
 mod incoming;

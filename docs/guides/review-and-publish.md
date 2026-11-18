@@ -36,6 +36,8 @@ Side by side, `D`, writes every comment in the right pane.
 Side by side, a new comment written from the diff closes the pane once saved or posted; a reply keeps it open.
 `⌥enter` adds a new line, `↑` and `↓` move between lines.
 `⌥←` and `⌥→` jump a word, `⌥⌫` deletes the word before the cursor.
+`ctrl-a` and `ctrl-e`, or `home` and `end`, go to the start and the end of the cursor's line.
+`ctrl-u` deletes from the start of that line to the cursor, `ctrl-k` from the cursor to its end.
 `ctrl-o` moves the text to `$EDITOR`.
 When the editor exits with an error, as vim does on `:cq`, the text you wrote waits in the box: `enter` saves it.
 `esc` leaves the box and keeps the text for later.

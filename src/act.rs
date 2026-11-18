@@ -449,6 +449,7 @@ const HELP: &[Line] = &[
     line(Group::Comment, "⌘enter ^s", "in the box: post now, no draft"),
     line(Group::Comment, "⌥enter ^o", "in the box: new line, $EDITOR"),
     line(Group::Comment, "⌥← ⌥→ ⌥⌫", "in the box: word back, on, delete"),
+    line(Group::Comment, "^a ^e ^u ^k", "in the box: line start, end, delete to them"),
     line(Group::Comment, "esc", "drop the selection, leave the box"),
     line(Group::Comment, "P", "publish every draft"),
     line(Group::Comment, "A M", "approve or unapprove, merge mine"),

@@ -275,6 +275,14 @@ fn snapshot_palette_in_each_mode() {
     insta::assert_snapshot!("palette_mrs", render(&mut app, 100, 24));
 }
 
+#[test]
+fn snapshot_palette_with_the_cursor_inside_the_line() {
+    let mut app = with_review();
+    press(&mut app, ":go !42");
+    app.handle_key(alt(KeyCode::Left));
+    insta::assert_snapshot!("palette_cursor_inside_the_line", render(&mut app, 100, 24));
+}
+
 const REINDENT: &str = "@@ -1 +1 @@\n-  charge(card);\n+    charge(card);\n";
 
 /// The row of `name`, reindented, in the file tree pane at the right of the screen.

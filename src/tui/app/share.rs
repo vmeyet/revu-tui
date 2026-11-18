@@ -1,10 +1,9 @@
 //! `Y` and `:share`: pick where to post, add an optional note, read the message, then `y` sends it.
 //! Nothing leaves before that `y`; `esc` at any step drops it all.
-use super::edit_keys::{adds_a_line, field_after_key};
 use super::{Action, App, Focus};
 use crate::share::{Fields, Target, render};
 use crossterm::event::{KeyCode, KeyEvent};
-use vtui::field::Field;
+use vtui::field::{Field, adds_a_line};
 
 /// A post being prepared for one MR, on the host it lives on.
 #[derive(Clone, Debug, PartialEq)]
@@ -130,13 +129,14 @@ fn pick_key(targets: Vec<Target>, selected: usize, key: KeyEvent) -> Stage {
 }
 
 /// The note box reads like the compose box: `enter` goes on to the preview, even with no note.
-fn note_key(fields: &Fields, target: Target, note: Field, key: KeyEvent) -> Stage {
+fn note_key(fields: &Fields, target: Target, mut note: Field, key: KeyEvent) -> Stage {
     if key.code == KeyCode::Enter && !adds_a_line(key) {
         let note = note.text().trim().to_owned();
         let message = render(&target.template, fields, &note);
         return Stage::Preview { target, note, message };
     }
-    Stage::Note { target, note: field_after_key(note, key) }
+    note.press(key);
+    Stage::Note { target, note }
 }
 
 fn target_names(targets: &[Target]) -> String {
@@ -252,9 +252,7 @@ mod tests {
     }
 
     fn note_after(app: &mut App, keys: &[KeyEvent]) -> String {
-        for key in keys {
-            app.handle_key(*key);
-        }
+        press_keys(app, keys);
         let Some(ShareStage::Note { note, .. }) = app.sharing.as_ref().map(|s| &s.stage) else { panic!("no note") };
         note.text().to_owned()
     }

@@ -26,6 +26,7 @@ Without `template`, revu uses the one above.
 
 Nothing leaves before that `y`.
 The note box edits like the comment box: `⌥enter` starts a new line, `⌥←` and `⌥→` move by word, `⌥⌫` deletes a word.
+`ctrl-a` and `ctrl-e` go to the ends of the line, `ctrl-u` and `ctrl-k` delete to them.
 `revu share !42 --note "needs a second look"` does the same from the shell; `--dry-run` only prints.
 
 ## Placeholders

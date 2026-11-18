@@ -70,6 +70,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `⌘enter` `^s` | in the box: post now, no draft |
 | `⌥enter` `^o` | in the box: new line, $EDITOR |
 | `⌥←` `⌥→` `⌥⌫` | in the box: word back, on, delete |
+| `^a` `^e` `^u` `^k` | in the box: line start, end, delete to them |
 | `esc` | drop the selection, leave the box |
 | `P` | publish every draft |
 | `A` `M` | approve or unapprove, merge mine |

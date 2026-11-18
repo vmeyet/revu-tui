@@ -228,31 +228,31 @@ mod tests {
         let mut p = typed("pu");
         assert_eq!(p.ghost(&verbs).as_deref(), Some("blish"));
         p.accept(&verbs);
-        assert_eq!(p.input, "publish ");
+        assert_eq!(p.input(), "publish ");
         let mrs = vec!["!42".to_owned(), "!41".to_owned()];
         let mut p = typed("go 4");
         p.complete(&mrs, Toward::Next);
-        assert_eq!(p.input, "go !42 ");
+        assert_eq!(p.input(), "go !42 ");
         assert!(p.hint().unwrap().starts_with("[!42]"));
         p.complete(&mrs, Toward::Next);
-        assert_eq!(p.input, "go !41 ");
+        assert_eq!(p.input(), "go !41 ");
     }
 
     #[test]
     fn the_first_character_picks_the_mode_and_backspace_steps_back() {
         let mut p = Palette::default();
         p.type_char('>');
-        assert_eq!((p.mode, p.input.as_str()), (Mode::Commands, ""));
+        assert_eq!((p.mode, p.input()), (Mode::Commands, ""));
         p.type_char('>');
-        assert_eq!(p.input, ">", "only the first character switches");
+        assert_eq!(p.input(), ">", "only the first character switches");
         assert!(p.backspace() && p.backspace());
         assert_eq!(p.mode, Mode::Mrs, "an empty line steps back to MRs");
         assert!(!p.backspace(), "nothing left: the palette closes");
         p.type_char('/');
-        assert_eq!((p.mode, p.input.as_str()), (Mode::Mrs, "/"), "a slash is typed like any letter");
+        assert_eq!((p.mode, p.input()), (Mode::Mrs, "/"), "a slash is typed like any letter");
         let mut p = Palette::default();
         p.type_char('@');
-        assert_eq!((p.mode, p.input.as_str()), (Mode::Mrs, "@"), "@ ! # ~ narrow MRs, they are no modes");
+        assert_eq!((p.mode, p.input()), (Mode::Mrs, "@"), "@ ! # ~ narrow MRs, they are no modes");
     }
 
     #[test]

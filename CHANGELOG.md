@@ -21,9 +21,19 @@ Each entry says what changed, then where, then how to use it.
 - **A new comment is written in the diff, under its line, beside the right pane too.**
   In the diff of an MR at any width, as zen and a narrow window already did; side by side still writes in the pane.
   Press `c`, `C` or `s` on a line: the box opens under it, and the pane stays as it was.
+- **The search line of `ctrl-k` and `:` has a cursor: go back in what you typed and fix it there.**
+  In the palette, on MRs, commands and sessions; `tab` and the grey suggestion wait until the cursor is back at the end.
+  Press `←` `→` to move by character, `⌥←` `⌥→` by word, `ctrl-a` `ctrl-e` to the ends; `⌥⌫` deletes a word, `ctrl-u` the line's start.
+- **`ctrl-u` and `ctrl-k` delete to the start and the end of the line in the comment box and the share note.**
+  In the box of `c`, `r`, `e` and `s`, and in the note of `Y` and `:share`.
+  Press `ctrl-u` to delete what is before the cursor on its line, `ctrl-k` what is after it.
 
 ### Fixed
 
+- **`ctrl-a`, `ctrl-e`, `home` and `end` stay on the cursor's line in the comment box and the share note.**
+  In a text of several lines, where they went to the start and the end of the whole text.
+- **The cursor of a box steps over an emoji or an accented letter made of several characters as one.**
+  In the comment box and the share note.
 - **The share note takes the editing keys of the comment box: `⌥←` `⌥→` by word, `⌥⌫` deletes a word, `↑` `↓` between lines.**
   In the note box of `Y` and `:share`.
 

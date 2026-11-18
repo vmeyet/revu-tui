@@ -45,6 +45,7 @@ fn one_line(text: &str) -> String {
 mod tests {
     use crate::tui::app::share::Stage as ShareStage;
     use crate::tui::app::test_support::*;
+    use crate::tui::palette::Palette;
 
     #[test]
     fn a_paste_in_the_compose_box_keeps_its_newlines_and_sends_nothing() {
@@ -70,7 +71,16 @@ mod tests {
         let mut app = with_queue();
         app.handle_key(ctrl_k());
         app.handle_paste("go acme/widgets!42\n");
-        assert_eq!(app.palette.as_ref().map(|p| p.input.as_str()), Some("go acme/widgets!42"));
+        assert_eq!(app.palette.as_ref().map(Palette::input), Some("go acme/widgets!42"));
+    }
+
+    #[test]
+    fn a_paste_in_the_palette_lands_where_its_cursor_is() {
+        let mut app = with_queue();
+        press(&mut app, ":go now");
+        app.handle_key(alt(KeyCode::Left));
+        app.handle_paste("!42 ");
+        assert_eq!(app.palette.as_ref().map(|p| p.field().split()), Some(("go !42", "n", "ow")));
     }
 
     #[test]

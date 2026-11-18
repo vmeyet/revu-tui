@@ -39,6 +39,10 @@ pub(super) fn press(app: &mut App, keys: &str) -> Vec<Action> {
     keys.chars().flat_map(|c| app.handle_key(key(c))).collect()
 }
 
+pub(super) fn press_keys(app: &mut App, keys: &[KeyEvent]) -> Vec<Action> {
+    keys.iter().flat_map(|key| app.handle_key(*key)).collect()
+}
+
 pub(super) fn today() -> DateTime<Utc> {
     "2026-09-22T12:00:00Z".parse().unwrap()
 }
