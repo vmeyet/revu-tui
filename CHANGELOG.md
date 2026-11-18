@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.15.0 - 2026-11-18
+
 ### New
 
 - **`e` edits a comment you published.**
