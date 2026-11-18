@@ -143,7 +143,7 @@ The internals:
 
 - **A key**: an `Act` variant, its row in `act.rs` `ROWS` and its line in `HELP`; handle it in the pane's handler in `tui/app/` (`handle_queue_key`, `handle_review_key`, `handle_side_key`); run `UPDATE_DOCS=1 cargo test docs`.
 - **An action with a side effect**: an `Action` variant in `tui/app/mod.rs`, its arm in `tui/actions.rs`, the work in the `Backend` part it concerns, and an `Incoming` variant applied in `tui/app/incoming.rs`.
-- **A change to a published note**: `Forge` takes the `Note`, whose `NoteKind` tells the backend where the forge holds it; `tui/app/notes.rs` decides whether it is mine to change and asks through `Confirm`, and the screen changes only once the forge answered.
+- **A change to a published note**: `Forge` takes the `Note`, whose `NoteKind` tells the backend where the forge holds it; `tui/app/notes.rs` decides whether it is mine to change, a delete asks through `Confirm` and an edit is written as `Input::EditNote`, and the screen changes only once the forge answered.
 - **A forge field**: the field in `forge/model/`, filled by both backends in `forge/gitlab/` and `forge/github/`.
 - **A command**: a variant in `cli.rs`, a module in `commands/` with `run`, an arm in `main.rs`; run `UPDATE_DOCS=1 cargo test docs`.
 - **A config key**: the field in `config/` and a row in `docs::SETTINGS`; a test fails without it.

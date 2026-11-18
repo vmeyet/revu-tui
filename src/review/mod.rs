@@ -196,8 +196,19 @@ impl Review {
 
     /// Note `note` of thread `id` gone, as the forge just said, and the thread with its last note.
     pub(crate) fn without_note(self, id: &ThreadId, note: u64) -> Self {
-        let left = |t: &Thread| Thread { notes: t.notes.iter().filter(|n| t.id != *id || n.id != note).cloned().collect(), ..t.clone() };
-        let threads = self.threads.iter().map(left).filter(|t| !t.notes.is_empty()).collect();
+        self.with_notes_of(id, |n| (n.id != note).then(|| n.clone()))
+    }
+
+    /// Note `note` of thread `id` reading `body`, the text the forge just said it holds.
+    pub(crate) fn with_note_body(self, id: &ThreadId, note: u64, body: &str) -> Self {
+        self.with_notes_of(id, |n| Some(if n.id == note { crate::forge::Note { body: body.to_owned(), ..n.clone() } } else { n.clone() }))
+    }
+
+    /// Thread `id` with each note `change` keeps, as it gives it back; a thread left with no note goes.
+    fn with_notes_of(self, id: &ThreadId, change: impl Fn(&crate::forge::Note) -> Option<crate::forge::Note>) -> Self {
+        let changed =
+            |t: &Thread| if t.id == *id { Thread { notes: t.notes.iter().filter_map(&change).collect(), ..t.clone() } } else { t.clone() };
+        let threads = self.threads.iter().map(changed).filter(|t| !t.notes.is_empty()).collect();
         Self { threads, ..self }
     }
 

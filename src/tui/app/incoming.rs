@@ -80,6 +80,10 @@ impl App {
             Incoming::DraftChanged { key } => self.draft_write_answered(&key),
             Incoming::Published { key, approval, count } => self.apply_published(&key, &approval, count),
             Incoming::Posted { key, to } => self.apply_posted(&key, &to),
+            Incoming::NoteEdited { key, thread, note, body } => {
+                let follow = self.note_edited(&key, thread, note, &body);
+                self.composed.extend(follow);
+            }
             Incoming::NoteDeleted { key, thread, note } => {
                 let follow = self.note_deleted(&key, &thread, note);
                 self.composed.extend(follow);

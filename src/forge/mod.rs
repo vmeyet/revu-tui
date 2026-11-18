@@ -316,6 +316,15 @@ impl Forge {
         }
     }
 
+    /// Replaces the text of `note`, a published one of mine; answers the text the forge now holds.
+    pub(crate) async fn edit_note(&self, key: &MrKey, note: &Note, body: &str) -> Result<String> {
+        match self {
+            Forge::GitLab(client) => client.edit_note(key, note.id, body).await,
+            Forge::GitHub(client) => client.edit_note(key, note, body).await,
+            Forge::Local(_) => local::forge_only(),
+        }
+    }
+
     /// Every draft of mine goes public as one review of `kind`; an error means nothing went public.
     pub(crate) async fn publish(&self, key: &MrKey, kind: ReviewKind) -> Result<Approval> {
         match self {

@@ -421,6 +421,10 @@ impl App {
                 self.warn(message);
             }
             Failure::DeleteNote => self.warn(format!("comment not deleted: {message}")),
+            Failure::EditNote { key, thread, note } => {
+                self.warn(format!("comment not changed: {message} · your text waits in the box"));
+                self.reopen_input(&key, Input::EditNote { thread, note });
+            }
             Failure::Post { key, to } => self.post_failed(&key, &to, &message),
             Failure::Approve => self.warn(message),
             Failure::Checks => self.checks_failed(message),

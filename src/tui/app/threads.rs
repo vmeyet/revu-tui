@@ -76,20 +76,21 @@ impl Open {
     }
 
     /// Whether the diff holds the box of `input`: a new thread wherever its line has a row to hang it under, a
-    /// reply or an edited draft only where threads read in the diff, the pane showing their thread otherwise.
+    /// reply or an edit only where threads read in the diff, the pane showing their thread otherwise.
     fn writes_in_diff(&self, input: &Input) -> bool {
         match input {
             Input::Comment { position } => self.comment_row(position).is_some(),
-            Input::Reply { .. } | Input::EditDraft { .. } => self.review.reads_threads_in_diff(),
+            Input::Reply { .. } | Input::EditDraft { .. } | Input::EditNote { .. } => self.review.reads_threads_in_diff(),
         }
     }
 
     /// The row the text of `input` will land after in the diff: the last row under the line of a new thread and,
-    /// where threads read in the diff, the last row of the thread a reply answers or the row of an edited draft.
+    /// where threads read in the diff, the last row of the thread a reply answers or an edited comment sits in, or
+    /// the row of an edited draft.
     pub(super) fn compose_row(&self, input: &Input) -> Option<usize> {
         match input {
             Input::Comment { position } => self.comment_row(position),
-            Input::Reply { thread } => {
+            Input::Reply { thread } | Input::EditNote { thread, .. } => {
                 let review = self.review.reads_threads_in_diff().then_some(&self.review)?;
                 let (line, conversations, entries) = self.hung_at(review.thread(thread)?.anchor.as_ref()?)?;
                 let last = entries.iter().rposition(|entry| conversations[entry.conversation].thread.as_ref() == Some(thread))?;
@@ -99,10 +100,10 @@ impl Open {
         }
     }
 
-    /// The thread `input` writes in: the one a reply answers, or the one of an edited draft reply.
+    /// The thread `input` writes in: the one a reply answers, or the one of an edited comment or draft reply.
     pub(crate) fn thread_written_in(&self, input: &Input) -> Option<ThreadId> {
         match input {
-            Input::Reply { thread } => Some(thread.clone()),
+            Input::Reply { thread } | Input::EditNote { thread, .. } => Some(thread.clone()),
             Input::EditDraft { draft } => self.review.drafts.iter().find(|d| d.is(*draft)).and_then(|d| d.reply_to.clone()),
             Input::Comment { .. } => None,
         }

@@ -312,9 +312,7 @@ impl App {
                 vec![]
             }
             Act::EditDraft => {
-                if !self.edit_draft_here() {
-                    self.toast("e edits one of your drafts");
-                }
+                self.edit_here();
                 vec![]
             }
             _ => {

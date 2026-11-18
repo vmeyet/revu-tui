@@ -56,11 +56,25 @@ pub(crate) fn status(err: &anyhow::Error) -> Option<StatusCode> {
 
 /// What deleting a comment came to: one the forge no longer has is deleted, and a refusal reads as one.
 pub(super) fn deleted_or_gone(outcome: Result<()>) -> Result<()> {
-    let Err(err) = outcome else { return Ok(()) };
+    match outcome {
+        Err(err) if status(&err) == Some(StatusCode::NOT_FOUND) => Ok(()),
+        other => other.map_err(change_forbidden),
+    }
+}
+
+/// Why the forge did not take the new text of a comment, in words the reader can act on.
+pub(super) fn edit_refused(err: anyhow::Error) -> anyhow::Error {
+    if status(&err) == Some(StatusCode::NOT_FOUND) {
+        return anyhow::anyhow!("the comment is gone from the forge: refresh with r");
+    }
+    change_forbidden(err)
+}
+
+/// A 403 to a change of a comment, with the forge's own reason: a token without the right, or not its author.
+fn change_forbidden(err: anyhow::Error) -> anyhow::Error {
     match err.downcast_ref::<HttpError>() {
-        Some(gone) if gone.status == StatusCode::NOT_FOUND => Ok(()),
-        Some(refused) if refused.status == StatusCode::FORBIDDEN => bail!("the forge does not allow it: {}", refused.message),
-        _ => Err(err),
+        Some(refused) if refused.status == StatusCode::FORBIDDEN => anyhow::anyhow!("the forge does not allow it: {}", refused.message),
+        _ => err,
     }
 }
 
@@ -129,13 +143,17 @@ impl Transport {
     }
 
     pub(super) async fn post_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
-        let response = self.send(Method::POST, path, Some(body)).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("POST {path}: unreadable answer"))
+        self.send_json(Method::POST, path, body).await
     }
 
     pub(super) async fn put_json<T: DeserializeOwned>(&self, path: &str, body: &serde_json::Value) -> Result<T> {
-        let response = self.send(Method::PUT, path, Some(body)).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("PUT {path}: unreadable answer"))
+        self.send_json(Method::PUT, path, body).await
+    }
+
+    /// `body` sent with `method`, and the JSON the forge answers.
+    pub(super) async fn send_json<T: DeserializeOwned>(&self, method: Method, path: &str, body: &serde_json::Value) -> Result<T> {
+        let response = self.send(method.clone(), path, Some(body)).await?;
+        response.json().await.map_err(scrub).with_context(|| format!("{method} {path}: unreadable answer"))
     }
 
     /// A request whose answer body does not matter: `204`s, publishes, approvals.

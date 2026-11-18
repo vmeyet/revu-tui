@@ -192,6 +192,13 @@ pub(crate) enum Action {
         thread: ThreadId,
         note: Box<crate::forge::Note>,
     },
+    /// Give my published `note` of `thread` the text `body`, public at once.
+    EditNote {
+        key: MrKey,
+        thread: ThreadId,
+        note: Box<crate::forge::Note>,
+        body: String,
+    },
     /// `⌘enter`: the text goes public at once, no draft.
     Post {
         key: MrKey,
@@ -341,6 +348,11 @@ pub(crate) enum Input {
     EditDraft {
         draft: crate::review::DraftId,
     },
+    /// My published `note` of `thread`, as it read when the box opened.
+    EditNote {
+        thread: ThreadId,
+        note: Box<crate::forge::Note>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -377,6 +389,12 @@ pub(crate) enum Failure {
     Publish,
     /// The forge kept the published comment.
     DeleteNote,
+    /// The forge kept the text of the published comment; the new one waits in the box.
+    EditNote {
+        key: MrKey,
+        thread: ThreadId,
+        note: Box<crate::forge::Note>,
+    },
     /// The comment stayed off the forge; its text waits in the box.
     Post {
         key: MrKey,
@@ -495,6 +513,13 @@ pub(crate) enum Incoming {
     Posted {
         key: MrKey,
         to: Post,
+    },
+    /// The forge holds `body` as the text of my published comment `note` of `thread`.
+    NoteEdited {
+        key: MrKey,
+        thread: ThreadId,
+        note: Box<crate::forge::Note>,
+        body: String,
     },
     /// The forge deleted my published comment `note` of `thread`.
     NoteDeleted {

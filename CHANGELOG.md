@@ -9,6 +9,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **`e` edits a comment you published.**
+  In the thread pane and on a thread row of the diff, on your own comments and review summaries.
+  Press `e`: the box opens with the comment's text, `enter` publishes the edit at once and `esc` changes nothing.
 - **`d` deletes a comment you published, after a `y`.**
   In the thread pane and on a thread row of the diff; a first comment with replies and a GitHub review summary stay.
   Press `d` on your comment: the question quotes it, `y` deletes it for everyone and any other key cancels.

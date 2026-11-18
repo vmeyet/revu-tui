@@ -1,6 +1,8 @@
-//! My published comments: `d` on one deletes it from the forge, after a `y`.
+//! My published comments: `e` on one edits it in the compose box, `d` deletes it from the forge after a `y`.
+//! Either changes the screen only once the forge answered.
+use super::input::target_key;
 use super::pane::Stop;
-use super::{Action, App, Confirm, EntryKind, MrKey, Open};
+use super::{Action, App, Confirm, EntryKind, Input, MrKey, Open};
 use crate::forge::{Note, NoteKind, ThreadId};
 use crate::review::Thread;
 
@@ -12,14 +14,51 @@ impl App {
         }
         let Some(open) = &self.open else { return vec![] };
         let Some(stop) = self.stop_here() else { return vec![] };
-        match note_to_delete(open, &stop, &self.me) {
-            Ok((thread, note)) => {
-                let (key, thread, note) = (open.key.clone(), thread.id.clone(), Box::new(note.clone()));
+        match Mine::at(open, &stop, &self.me).and_then(Mine::deletable) {
+            Ok(mine) => {
+                let (key, thread, note) = (open.key.clone(), mine.thread.id.clone(), Box::new(mine.note().clone()));
                 self.confirm = Some(Confirm::DeleteNote { key, thread, note });
             }
             Err(reason) => self.toast(reason),
         }
         vec![]
+    }
+
+    /// `e`: my draft under the cursor, or my published comment, opens in the compose box with its text.
+    pub(super) fn edit_here(&mut self) {
+        if self.edit_draft_here() {
+            return;
+        }
+        let mine = self.open.as_ref().zip(self.stop_here()).map(|(open, stop)| Mine::at(open, &stop, &self.me));
+        match mine {
+            Some(Ok(mine)) => {
+                let input = Input::EditNote { thread: mine.thread.id.clone(), note: Box::new(mine.note().clone()) };
+                let body = if self.is_unsent(&input) { String::new() } else { mine.note().body.clone() };
+                self.open_input(input, &body);
+            }
+            Some(Err(reason)) => self.toast(reason),
+            None => self.toast("e edits your draft or your comment"),
+        }
+    }
+
+    /// A finished edit goes to the forge at once, its text waiting under the note until the forge takes it; the
+    /// text the note already has sends nothing.
+    pub(super) fn change_note(&mut self, thread: ThreadId, note: Box<Note>, text: String) -> Vec<Action> {
+        let Some(key) = self.open.as_ref().map(|o| o.key.clone()) else { return vec![] };
+        if text.trim() == note.body.trim() {
+            self.toast("nothing changed");
+            return vec![];
+        }
+        self.unsent.insert(target_key(&Input::EditNote { thread: thread.clone(), note: note.clone() }), text.clone());
+        vec![Action::EditNote { key, thread, note, body: text }]
+    }
+
+    /// The forge took the edit: the note reads as the forge holds it, and the MR is read again.
+    pub(super) fn note_edited(&mut self, key: &MrKey, thread: ThreadId, note: Box<Note>, body: &str) -> Vec<Action> {
+        self.update_open_of(key, |open| open.relaid(|review| review.with_note_body(&thread, note.id, body)));
+        self.unsent.remove(&target_key(&Input::EditNote { thread, note }));
+        self.toast("comment edited");
+        self.reread(key)
     }
 
     /// The forge deleted it: the note leaves the screen, and the MR is read again for what else changed.
@@ -39,23 +78,40 @@ impl App {
     }
 }
 
-/// My published note at `stop`, or why `d` leaves it alone. The first note of a thread stays while it has
-/// replies: no forge says what becomes of them, and they would answer nothing.
-fn note_to_delete<'a>(open: &'a Open, stop: &Stop, me: &str) -> Result<(&'a Thread, &'a Note), &'static str> {
-    const NO_NOTE: &str = "no comment here";
-    let EntryKind::Note(index) = stop.kind else { return Err(NO_NOTE) };
-    let thread = stop.thread.as_ref().and_then(|id| open.review.thread(id)).ok_or(NO_NOTE)?;
-    let note = thread.notes.get(index).ok_or(NO_NOTE)?;
-    if !note.written_by(me) {
-        return Err("not your comment: d deletes only your own");
+/// A published note I wrote: note `index` of `thread`.
+struct Mine<'a> {
+    thread: &'a Thread,
+    index: usize,
+}
+
+impl<'a> Mine<'a> {
+    /// The note at `stop` when I wrote it, else why `e` and `d` leave it alone.
+    fn at(open: &'a Open, stop: &Stop, me: &str) -> Result<Self, &'static str> {
+        const NO_NOTE: &str = "no comment here";
+        let EntryKind::Note(index) = stop.kind else { return Err(NO_NOTE) };
+        let thread = stop.thread.as_ref().and_then(|id| open.review.thread(id)).ok_or(NO_NOTE)?;
+        let note = thread.notes.get(index).ok_or(NO_NOTE)?;
+        if !note.written_by(me) {
+            return Err("not your comment: e and d change only your own");
+        }
+        Ok(Self { thread, index })
     }
-    if note.kind == Some(NoteKind::Summary) {
-        return Err("the forge keeps the summary of a review: it cannot be deleted");
+
+    fn note(&self) -> &'a Note {
+        &self.thread.notes[self.index]
     }
-    if index == 0 && thread.notes.len() > 1 {
-        return Err("this comment has replies: it stays while they answer it");
+
+    /// Itself, or why `d` leaves it alone. The first note of a thread stays while it has replies: no forge says
+    /// what becomes of them, and they would answer nothing.
+    fn deletable(self) -> Result<Self, &'static str> {
+        if self.note().kind == Some(NoteKind::Summary) {
+            return Err("the forge keeps the summary of a review: e edits it");
+        }
+        if self.index == 0 && self.thread.notes.len() > 1 {
+            return Err("this comment has replies: it stays while they answer it");
+        }
+        Ok(self)
     }
-    Ok((thread, note))
 }
 
 #[cfg(test)]
@@ -89,6 +145,90 @@ mod tests {
         &app.live_toast().unwrap().text
     }
 
+    /// The one edit `actions` send, as the forge answers once it holds the new text.
+    fn edited(actions: &[Action]) -> Incoming {
+        let [Action::EditNote { key, thread, note, body }] = actions else { panic!("{actions:?}") };
+        Incoming::NoteEdited { key: key.clone(), thread: thread.clone(), note: note.clone(), body: body.clone() }
+    }
+
+    fn body_of_the_note(app: &App) -> String {
+        app.open.as_ref().unwrap().review.thread(&"aaa".into()).unwrap().notes[0].body.clone()
+    }
+
+    #[test]
+    fn e_on_my_published_comment_opens_the_box_with_its_text_and_enter_publishes_the_edit() {
+        let mut app = on_my_only_note();
+        assert_eq!(press(&mut app, "e"), vec![]);
+        assert_eq!((app.input_label().as_str(), app.buffer.text()), ("edit comment · public on enter", "note 0 of aaa"));
+        press(&mut app, ", fixed");
+        insta::assert_snapshot!("edit_comment_box", render(&mut app, 120, 14));
+        let actions = app.handle_key(code(KeyCode::Enter));
+        let [Action::EditNote { thread, note, body, .. }] = actions.as_slice() else { panic!("{actions:?}") };
+        assert_eq!((thread.as_str(), note.id, body.as_str()), ("aaa", 7000, "note 0 of aaa, fixed"));
+        assert_eq!((body_of_the_note(&app).as_str(), app.draft_count()), ("note 0 of aaa", 0), "no draft, and no guess on screen");
+    }
+
+    #[test]
+    fn an_edit_left_with_esc_or_sent_unchanged_asks_nothing_of_the_forge() {
+        let mut app = on_my_only_note();
+        press(&mut app, "ex");
+        assert_eq!(app.handle_key(code(KeyCode::Esc)), vec![]);
+        let mut app = on_my_only_note();
+        press(&mut app, "e");
+        assert_eq!(app.handle_key(code(KeyCode::Enter)), vec![]);
+        assert_eq!(toast(&app), "nothing changed");
+    }
+
+    #[test]
+    fn e_on_a_comment_of_someone_else_opens_no_box_and_says_why() {
+        let mut app = on_note(thread_on_line_13("aaa", 1), 0);
+        press(&mut app, "e");
+        assert_eq!((app.input.as_ref(), toast(&app)), (None, "not your comment: e and d change only your own"));
+    }
+
+    #[test]
+    fn an_edit_the_forge_took_reads_as_the_forge_holds_it_and_the_mr_is_read_again() {
+        let mut app = on_my_only_note();
+        press(&mut app, "e");
+        let sent = type_text(&mut app, "!");
+        app.apply(edited(&sent));
+        assert_eq!((body_of_the_note(&app).as_str(), toast(&app)), ("note 0 of aaa!", "comment edited"));
+        assert!(app.take_actions().contains(&Action::RefreshMr(mr_key())));
+        press(&mut app, "e");
+        assert_eq!(app.buffer.text(), "note 0 of aaa!", "nothing waits unsent");
+    }
+
+    #[test]
+    fn an_edit_the_forge_refused_keeps_the_old_text_on_screen_and_the_new_one_in_the_box() {
+        let mut app = on_my_only_note();
+        press(&mut app, "e");
+        let sent = type_text(&mut app, "!");
+        let [Action::EditNote { key, thread, note, .. }] = sent.as_slice() else { panic!("{sent:?}") };
+        let what = Failure::EditNote { key: key.clone(), thread: thread.clone(), note: note.clone() };
+        app.apply(Incoming::Failed { what, message: "offline".into() });
+        assert_eq!(toast(&app), "comment not changed: offline · your text waits in the box");
+        assert_eq!((body_of_the_note(&app).as_str(), app.buffer.text()), ("note 0 of aaa", "note 0 of aaa!"));
+        assert!(matches!(app.handle_key(code(KeyCode::Enter)).as_slice(), [Action::EditNote { body, .. }] if body == "note 0 of aaa!"));
+    }
+
+    #[test]
+    fn in_zen_the_edit_box_opens_in_the_diff_under_the_thread() {
+        let mut app = zen_with_threads(vec![with_mine(thread_on_line_13("aaa", 1), &[0])]);
+        press(&mut app, "je");
+        assert_eq!((app.buffer.text(), app.focus, listed_place(&app)), ("note 0 of aaa", Focus::Review, None));
+        assert!(app.compose_row().is_some(), "the diff holds the box");
+    }
+
+    #[test]
+    fn an_edit_finished_in_the_editor_is_published_as_one_typed_in_the_box() {
+        let mut app = on_my_only_note();
+        press(&mut app, "e");
+        let handed = app.handle_key(ctrl('o'));
+        let [Action::Compose { input, .. }] = handed.as_slice() else { panic!("{handed:?}") };
+        app.apply(Incoming::Composed { input: input.clone(), edited: Edited::Done("rewritten".into()) });
+        assert!(matches!(app.take_actions().as_slice(), [Action::EditNote { body, .. }] if body == "rewritten"));
+    }
+
     #[test]
     fn d_on_my_published_comment_asks_first_quoting_it_and_deletes_only_on_y() {
         let mut app = on_my_only_note();
@@ -108,7 +248,7 @@ mod tests {
     fn d_on_a_comment_of_someone_else_asks_nothing_and_says_why() {
         let mut app = on_note(thread_on_line_13("aaa", 1), 0);
         assert_eq!(press(&mut app, "d"), vec![]);
-        assert_eq!((app.confirm.as_ref(), toast(&app)), (None, "not your comment: d deletes only your own"));
+        assert_eq!((app.confirm.as_ref(), toast(&app)), (None, "not your comment: e and d change only your own"));
     }
 
     #[test]
@@ -131,7 +271,7 @@ mod tests {
         thread.notes[0].kind = Some(NoteKind::Summary);
         let mut app = on_note(thread, 0);
         press(&mut app, "d");
-        assert_eq!((app.confirm.as_ref(), toast(&app)), (None, "the forge keeps the summary of a review: it cannot be deleted"));
+        assert_eq!((app.confirm.as_ref(), toast(&app)), (None, "the forge keeps the summary of a review: e edits it"));
     }
 
     #[test]

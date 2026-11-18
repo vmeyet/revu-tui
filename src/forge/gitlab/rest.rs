@@ -244,6 +244,12 @@ impl Client {
         http::deleted_or_gone(self.http.delete(&format!("{}/notes/{id}", mr_path(key))).await)
     }
 
+    /// Replaces the text of one published note; answers the text GitLab now holds.
+    pub(crate) async fn edit_note(&self, key: &MrKey, id: u64, body: &str) -> Result<String> {
+        let path = format!("{}/notes/{id}", mr_path(key));
+        self.http.put_json::<wire::Note>(&path, &json!({"body": body})).await.map(|note| note.body).map_err(http::edit_refused)
+    }
+
     /// Every draft of mine on the MR becomes public at once, as one review; then the approval, when asked.
     pub(crate) async fn publish(&self, key: &MrKey, kind: forge::ReviewKind) -> Result<forge::Approval> {
         self.http.send_empty(Method::POST, &format!("{}/draft_notes/bulk_publish", mr_path(key)), None).await?;
@@ -576,6 +582,29 @@ mod tests {
     async fn a_note_delete_the_forge_forbids_says_so_in_its_words() {
         let refused = answering_a_note_delete(403).await.unwrap_err().to_string();
         assert_eq!(refused, "the forge does not allow it: 403 answered");
+    }
+
+    #[tokio::test]
+    async fn an_edited_note_sends_its_new_text_and_answers_the_text_the_forge_holds() {
+        let server = MockServer::start().await;
+        let held = json!({"id": 503, "body": "nit, fixed", "author": {"id": 2, "username": "nina", "name": "Nina"},
+            "created_at": "2026-09-22T09:50:00Z", "updated_at": "2026-09-22T11:00:00Z"});
+        Mock::given(method("PUT"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/notes/503"))
+            .and(body_partial_json(json!({"body": "nit, fixed"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(held))
+            .expect(1)
+            .mount(&server)
+            .await;
+        assert_eq!(client(&server).edit_note(&key(), 503, "nit, fixed").await.unwrap(), "nit, fixed");
+    }
+
+    #[tokio::test]
+    async fn an_edit_of_a_note_deleted_meanwhile_says_it_is_gone() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT")).respond_with(ResponseTemplate::new(404)).mount(&server).await;
+        let gone = client(&server).edit_note(&key(), 503, "nit").await.unwrap_err().to_string();
+        assert_eq!(gone, "the comment is gone from the forge: refresh with r");
     }
 
     #[tokio::test]

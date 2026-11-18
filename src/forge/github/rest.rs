@@ -8,7 +8,7 @@ use crate::forge::{self, DiffFile, Discussion, FileKind, MrKey, Note, Position, 
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use chrono::{DateTime, Utc};
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -98,6 +98,23 @@ impl PostedComment {
             kind: Some(if resolvable { forge::NoteKind::Inline } else { forge::NoteKind::General }),
         };
         Discussion { id: self.node_id, notes: vec![note] }
+    }
+}
+
+/// The text of a comment as GitHub answers an edit of it.
+#[derive(Deserialize)]
+struct Held {
+    body: String,
+}
+
+/// Where GitHub holds a published comment: line comments and PR comments by repo, a review's summary under its PR.
+fn note_path(key: &MrKey, note: &Note) -> Result<String> {
+    let repo = repo_path(&key.project);
+    match note.kind {
+        Some(forge::NoteKind::Inline) => Ok(format!("{repo}/pulls/comments/{}", note.id)),
+        Some(forge::NoteKind::General) => Ok(format!("{repo}/issues/comments/{}", note.id)),
+        Some(forge::NoteKind::Summary) => Ok(format!("{repo}/pulls/{}/reviews/{}", key.number, note.id)),
+        None => bail!("this comment was read by an older revu: refresh with r first"),
     }
 }
 
@@ -327,13 +344,17 @@ impl Client {
 
     /// Deletes one published comment; one already gone is no error.
     pub(crate) async fn delete_note(&self, key: &MrKey, note: &Note) -> Result<()> {
-        let comments = match note.kind {
-            Some(forge::NoteKind::Inline) => "pulls/comments",
-            Some(forge::NoteKind::General) => "issues/comments",
-            Some(forge::NoteKind::Summary) => bail!("GitHub keeps the summary of a review: it cannot be deleted"),
-            None => bail!("this comment was read by an older revu: refresh with r first"),
-        };
-        http::deleted_or_gone(self.http.delete(&format!("{}/{comments}/{}", repo_path(&key.project), note.id)).await)
+        if note.kind == Some(forge::NoteKind::Summary) {
+            bail!("GitHub keeps the summary of a review: it cannot be deleted");
+        }
+        http::deleted_or_gone(self.http.delete(&note_path(key, note)?).await)
+    }
+
+    /// Replaces the text of one published comment; answers the text GitHub now holds.
+    pub(crate) async fn edit_note(&self, key: &MrKey, note: &Note, body: &str) -> Result<String> {
+        let method = if note.kind == Some(forge::NoteKind::Summary) { Method::PUT } else { Method::PATCH };
+        let held = self.http.send_json::<Held>(method, &note_path(key, note)?, &json!({"body": body})).await;
+        held.map(|held| held.body).map_err(http::edit_refused)
     }
 
     /// An approval is a review of its own. GitHub has no taking it back for the one who gave it.
@@ -414,6 +435,29 @@ mod tests {
         let client = client(&server);
         client.delete_note(&key(), &note(7, forge::NoteKind::Inline)).await.unwrap();
         client.delete_note(&key(), &note(8, forge::NoteKind::General)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn each_kind_of_comment_is_edited_where_github_holds_it() {
+        let server = MockServer::start().await;
+        let held = [
+            ("PATCH", "/repos/acme/widgets/pulls/comments/7", forge::NoteKind::Inline),
+            ("PATCH", "/repos/acme/widgets/issues/comments/7", forge::NoteKind::General),
+            ("PUT", "/repos/acme/widgets/pulls/42/reviews/7", forge::NoteKind::Summary),
+        ];
+        for (verb, held_at, _) in held {
+            Mock::given(method(verb))
+                .and(path(held_at))
+                .and(body_partial_json(json!({"body": "hi"})))
+                .respond_with(ResponseTemplate::new(200).set_body_json(posted(7)))
+                .expect(1)
+                .mount(&server)
+                .await;
+        }
+        let client = client(&server);
+        for (_, _, kind) in held {
+            assert_eq!(client.edit_note(&key(), &note(7, kind), "hi").await.unwrap(), "hi");
+        }
     }
 
     #[tokio::test]
