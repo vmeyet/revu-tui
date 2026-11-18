@@ -1,6 +1,7 @@
 //! One PR read whole, and the calls that change it: readiness and reactions.
 use crate::forge::github::wire::{self, Actor, Label, Nodes, Review, ReviewRequest, user_of};
 use crate::forge::github::{Client, owner_and_name};
+use crate::forge::http::Missing;
 use crate::forge::{self, Approvals, MrKey, Pipeline, ProjectPath, Refs, Sha};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
@@ -169,9 +170,9 @@ impl Client {
     pub(crate) async fn mr(&self, key: &MrKey) -> Result<forge::Mr> {
         let (owner, name) = owner_and_name(&key.project)?;
         let data: MrData = self.graphql(MR, json!({"owner": owner, "name": name, "number": key.number})).await?;
-        let repository = data.repository.with_context(|| format!("{} not found", key.project))?;
+        let repository = data.repository.ok_or_else(|| Missing(format!("{} not found", key.project)))?;
         let plan = repository.merge_plan();
-        let pr = repository.pull_request.with_context(|| format!("{}#{} not found", key.project, key.number))?;
+        let pr = repository.pull_request.ok_or_else(|| Missing(format!("{}#{} not found", key.project, key.number)))?;
         Ok(forge::Mr { merge: plan, ..pr.into_model(&key.project, &data.viewer.login) })
     }
 

@@ -84,6 +84,7 @@ The editing keys of the compose box, the share note and the palette live in vtui
 
 Commands: `main.rs` runs the ones that need no forge (`login`, `update`, `news`, ...) at once.
 The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the `Ctx` to `tui::run`.
+An MR or a project the host does not have fails as `forge::NotFound`, whatever the backend answered; `ctx::with_host_hint` turns it into the message with `auth::HostOrigin`, how the host was chosen: `Ctx::with_host_hint` for every command in `main.rs`, `Backend::with_host_hint` when the TUI opens an MR.
 `revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host and no Jev, and `tui::run` takes it like any other; `a` opens the session of a worktree's branch, `agent::Subject::Branch`, where a forge opens an MR's.
 Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is looked at every 2s while the terminal has focus, and when it comes back.
 

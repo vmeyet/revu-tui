@@ -54,6 +54,23 @@ pub(crate) fn status(err: &anyhow::Error) -> Option<StatusCode> {
     err.downcast_ref::<HttpError>().map(|e| e.status)
 }
 
+/// An answer saying the thing asked is not there, where no status says it: GitHub's GraphQL answers 200 with a `NOT_FOUND` error.
+#[derive(Debug)]
+pub(super) struct Missing(pub(super) String);
+
+impl fmt::Display for Missing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Missing {}
+
+/// Whether the forge said the thing asked is not there: a 404, or a `Missing`.
+pub(super) fn is_missing(err: &anyhow::Error) -> bool {
+    status(err) == Some(StatusCode::NOT_FOUND) || err.downcast_ref::<Missing>().is_some()
+}
+
 /// What deleting a comment came to: one the forge no longer has is deleted, and a refusal reads as one.
 pub(super) fn deleted_or_gone(outcome: Result<()>) -> Result<()> {
     match outcome {

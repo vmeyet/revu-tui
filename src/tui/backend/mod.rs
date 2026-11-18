@@ -13,6 +13,7 @@ pub(super) use saves::MrState;
 use super::app::Incoming;
 use super::lanes::Lanes;
 use crate::ai::typesafe::TypeSafe;
+use crate::auth::HostOrigin;
 use crate::blocking;
 use crate::cache::Cache;
 use crate::forge::{Forge, MrKey};
@@ -62,6 +63,7 @@ pub(super) struct Setup {
     pub(super) checkout: Option<crate::open::Checkout>,
     pub(super) jev: Option<TypeSafe>,
     pub(super) agent: Option<crate::agent::Agent>,
+    pub(super) host_origin: HostOrigin,
 }
 
 #[derive(Clone)]
@@ -75,6 +77,8 @@ pub(super) struct Backend {
     pub(super) files: Files,
     /// The agent whose sessions `a` opens, when `[agent]` is on.
     pub(super) agent: Option<crate::agent::Agent>,
+    /// How the host revu started with was chosen.
+    host_origin: HostOrigin,
     /// Two opens of one MR would each find no session and start one; shared by every clone so they wait.
     session_lanes: Lanes,
 }
@@ -96,10 +100,18 @@ impl Backend {
             ai: Ai { homes: Arc::clone(&homes), jev: setup.jev },
             files: Files { homes: Arc::clone(&homes), open: setup.open, checkout: setup.checkout },
             agent: setup.agent,
+            host_origin: setup.host_origin,
             session_lanes: Lanes::default(),
             saves,
             homes,
         }
+    }
+
+    /// Why `key` did not open, in the words a command says it. An MR of another host is on the host its row
+    /// names, so it gets no hint to ask another.
+    pub(super) fn with_host_hint(&self, key: &MrKey, err: anyhow::Error) -> anyhow::Error {
+        let origin = if self.homes.home_of(key).is_some() { HostOrigin::Named } else { self.host_origin };
+        crate::ctx::with_host_hint(origin, err)
     }
 
     /// The agent session of `subject`, found or started, then on show in tmux or ready for the terminal.
@@ -160,7 +172,53 @@ mod test_support;
 mod tests {
     use super::*;
     use crate::cache::keys;
-    use test_support::homes_in;
+    use crate::tui::app::{Action, Failure};
+    use test_support::{homes_in, homes_on};
+
+    fn backend(homes: Homes, host_origin: HostOrigin) -> Backend {
+        let setup = Setup {
+            fold_globs: vec![],
+            watch_labels: vec![],
+            rules: crate::forge::rules::Rules::default(),
+            ready_command: None,
+            open: crate::config::Open::default(),
+            checkout: None,
+            jev: None,
+            agent: None,
+            host_origin,
+        };
+        Backend::new(homes, setup)
+    }
+
+    /// What the app is told when it opens `key` on `backend`.
+    async fn open_failure(backend: &Backend, key: MrKey) -> String {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        crate::tui::actions::spawn(Action::Open(key.clone()), backend, tx);
+        match rx.recv().await {
+            Some(Incoming::Failed { what: Failure::Open { key: failed }, message }) if failed == key => message,
+            other => panic!("the open should fail: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn opening_an_mr_the_host_of_the_checkout_does_not_have_says_the_host_and_suggests_host() {
+        let (server, dir) = (wiremock::MockServer::start().await, tempfile::tempdir().unwrap());
+        let backend = backend(homes_on(&server, dir.path()), HostOrigin::Checkout);
+        assert_eq!(
+            open_failure(&backend, MrKey::new("acme/widgets", 42)).await,
+            "acme/widgets!42 was not found on 127.0.0.1 (the host of this checkout): pass --host to ask another forge"
+        );
+    }
+
+    #[tokio::test]
+    async fn opening_an_mr_another_host_does_not_have_does_not_suggest_host() {
+        let (server, dir) = (wiremock::MockServer::start().await, tempfile::tempdir().unwrap());
+        let Homes { forge, cache, .. } = homes_on(&server, &dir.path().join("other"));
+        let other = crate::ctx::Home { host: "gl.acme.test".into(), forge, cache };
+        let backend = backend(Homes { others: vec![other], ..homes_in(&dir.path().join("main")) }, HostOrigin::Checkout);
+        let key = MrKey { host: Some("gl.acme.test".into()), ..MrKey::new("acme/widgets", 42) };
+        assert_eq!(open_failure(&backend, key).await, "acme/widgets!42 was not found on 127.0.0.1, or this token cannot see it");
+    }
 
     #[tokio::test]
     async fn run_blocking_runs_the_work_with_the_part_and_hands_back_its_result() {

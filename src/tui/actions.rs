@@ -84,7 +84,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                     None => backend.reviews.open_fresh(key.clone()).await,
                 };
                 let arrived = fresh.is_ok();
-                send(fresh.unwrap_or_else(|e| failed(Failure::Open { key: key.clone() }, &e)));
+                send(fresh.unwrap_or_else(|e| failed(Failure::Open { key: key.clone() }, &backend.with_host_hint(&key, e))));
                 if arrived && painted.is_none() {
                     backend.reviews.resume(&key, &send).await;
                 }

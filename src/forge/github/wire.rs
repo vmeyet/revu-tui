@@ -1,4 +1,5 @@
 //! GitHub's shapes, as REST and GraphQL send them, and their turn into the neutral model.
+use crate::forge::http::Missing;
 use crate::forge::{self, LineRef, PipelineStatus, Position, ProjectPath, QueueMr, Refs, ReviewState, ReviewerState, Side};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
@@ -15,14 +16,19 @@ pub(crate) struct Answer<T> {
 #[derive(Deserialize)]
 struct Message {
     message: String,
+    /// `NOT_FOUND` for a repository or a pull request that is not there, or that the token cannot see.
+    #[serde(default, rename = "type")]
+    kind: Option<String>,
 }
 
 impl<T> Answer<T> {
     pub(super) fn into_data(self) -> Result<T> {
-        if let Some(errors) = self.errors.filter(|e| !e.is_empty()) {
-            bail!("GraphQL: {}", errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join("; "));
+        let Some(errors) = self.errors.filter(|e| !e.is_empty()) else { return self.data.context("GraphQL answered without data") };
+        let said = format!("GraphQL: {}", errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join("; "));
+        if errors.iter().any(|e| e.kind.as_deref() == Some("NOT_FOUND")) {
+            return Err(Missing(said).into());
         }
-        self.data.context("GraphQL answered without data")
+        bail!(said)
     }
 }
 

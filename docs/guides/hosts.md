@@ -28,6 +28,9 @@ Every other host uses the token `revu login` stored for it.
 | Anywhere else | Every host you logged in to, in one queue |
 
 With several hosts in one queue, each row shows its host.
+
+`--host <host>` asks another host for one run: `revu --host gitlab.com 'acme/widgets!42'` from a github.com checkout.
+An MR the host does not have, or that your token cannot see there, fails naming the host that was asked.
 `--all` or `*` shows every project, even inside a checkout.
 
 ## A GitHub Enterprise host

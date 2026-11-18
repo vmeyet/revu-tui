@@ -32,6 +32,27 @@ pub(crate) enum Source {
     Keychain,
 }
 
+/// How the host of a run was chosen, so a failure on it can say why it was asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HostOrigin {
+    /// `--host` or `GITLAB_HOST`.
+    Named,
+    /// The `origin` remote of the checkout.
+    Checkout,
+    /// `host` in the config.
+    Config,
+    /// gitlab.com, when nothing else names a host.
+    Default,
+}
+
+/// What `resolve` found: the host with its token, where the token came from and how the host was chosen.
+#[derive(Debug)]
+pub(crate) struct Login {
+    pub(crate) credentials: Credentials,
+    pub(crate) source: Source,
+    pub(crate) host_origin: HostOrigin,
+}
+
 /// What the resolution looks at around the process: token and host variables, and the host of
 /// the checkout it runs in. A struct, so tests build one without `set_var` or a git repo.
 #[derive(Clone, Default)]
@@ -112,15 +133,15 @@ fn variable_hint(host: &str, kind: Kind) -> String {
 }
 
 /// The host this run is for, with the token its variable gives it (see `Env::token_for`), else its keychain entry.
-pub(crate) fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<(Credentials, Source)> {
+pub(crate) fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<Login> {
     let token_for = |h: &str| env.token_for(h, config, named);
     let has_token = |h: &str| token_for(h).is_some() || store.get(h).ok().flatten().is_some();
-    let host = pick_host(env, config, named, has_token)?;
+    let PickedHost { name: host, origin: host_origin } = pick_host(env, config, named, has_token)?;
     if let Some(token) = token_for(&host) {
-        return Ok((Credentials { host, token: token.clone() }, Source::Env));
+        return Ok(Login { credentials: Credentials { host, token: token.clone() }, source: Source::Env, host_origin });
     }
     match store.get(&host)? {
-        Some(token) => Ok((Credentials { host, token }, Source::Keychain)),
+        Some(token) => Ok(Login { credentials: Credentials { host, token }, source: Source::Keychain, host_origin }),
         None => bail!("no token for {host}: run `revu login {host}`{}", variable_hint(&host, Kind::for_host(&host, config))),
     }
 }
@@ -132,16 +153,22 @@ pub(crate) fn resolve_extra(store: &dyn SecretStore, host: &str) -> Result<Crede
     Ok(Credentials { host: host.to_owned(), token })
 }
 
+/// The host `pick_host` chose, and the rule that gave it.
+#[derive(Debug)]
+pub(crate) struct PickedHost {
+    pub(crate) name: String,
+    pub(crate) origin: HostOrigin,
+}
+
 /// The flag, then `GITLAB_HOST`, then the checkout's own host when `usable` says a token is there
 /// for it, then the configured host, then gitlab.com.
-pub(crate) fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn(&str) -> bool) -> Result<String> {
-    let host = host
-        .map(str::to_owned)
-        .or_else(|| env.host.clone())
-        .or_else(|| env.origin.clone().filter(|origin| usable(origin)))
-        .or_else(|| config.host.clone())
-        .unwrap_or_else(|| DEFAULT_HOST.to_owned());
-    check_host(&host)?;
+pub(crate) fn pick_host(env: &Env, config: &Config, host: Option<&str>, usable: impl Fn(&str) -> bool) -> Result<PickedHost> {
+    let picked = |origin| move |name| PickedHost { name, origin };
+    let named = host.map(str::to_owned).or_else(|| env.host.clone()).map(picked(HostOrigin::Named));
+    let checkout = || env.origin.clone().filter(|origin| usable(origin)).map(picked(HostOrigin::Checkout));
+    let configured = || config.host.clone().map(picked(HostOrigin::Config));
+    let host = named.or_else(checkout).or_else(configured).unwrap_or_else(|| picked(HostOrigin::Default)(DEFAULT_HOST.to_owned()));
+    check_host(&host.name)?;
     Ok(host)
 }
 
@@ -170,7 +197,7 @@ mod tests {
         let store = MemoryStore::default();
         store.set("gitlab.com", "glpat-keychain").unwrap();
         let env = Env { gitlab_token: Some("glpat-env".into()), ..Env::default() };
-        let (creds, source) = resolve(&env, &store, &Config::default(), None).unwrap();
+        let Login { credentials: creds, source, .. } = resolve(&env, &store, &Config::default(), None).unwrap();
         assert_eq!(creds.token, "glpat-env");
         assert_eq!(source, Source::Env);
     }
@@ -180,7 +207,7 @@ mod tests {
         let store = MemoryStore::default();
         store.set("gitlab.example.com", "glpat-xxxx").unwrap();
         let config = Config { host: Some("gitlab.example.com".into()), ..Config::default() };
-        let (creds, source) = resolve(&Env::default(), &store, &config, None).unwrap();
+        let Login { credentials: creds, source, .. } = resolve(&Env::default(), &store, &config, None).unwrap();
         assert_eq!(creds.host, "gitlab.example.com");
         assert_eq!(creds.token, "glpat-xxxx");
         assert_eq!(source, Source::Keychain);
@@ -196,9 +223,9 @@ mod tests {
     fn each_forge_reads_its_own_token_variable() {
         let env = Env { gitlab_token: Some("glpat-env".into()), github_token: Some("ghp_env".into()), ..Env::default() };
         let store = MemoryStore::default();
-        let (github, _) = resolve(&env, &store, &Config::default(), Some("github.com")).unwrap();
+        let Login { credentials: github, .. } = resolve(&env, &store, &Config::default(), Some("github.com")).unwrap();
         assert_eq!(github.token, "ghp_env");
-        let (gitlab, _) = resolve(&env, &store, &Config::default(), Some("gitlab.com")).unwrap();
+        let Login { credentials: gitlab, .. } = resolve(&env, &store, &Config::default(), Some("gitlab.com")).unwrap();
         assert_eq!(gitlab.token, "glpat-env");
         let err = resolve(&Env::default(), &store, &Config::default(), Some("github.com")).unwrap_err().to_string();
         assert!(err.contains("GITHUB_TOKEN") && err.contains("revu login github.com"), "{err}");
@@ -207,7 +234,8 @@ mod tests {
     #[test]
     fn a_token_variable_goes_to_the_host_named_by_the_flag() {
         let env = Env { gitlab_token: Some("glpat-corp".into()), ..Env::default() };
-        let (corp, source) = resolve(&env, &MemoryStore::default(), &Config::default(), Some("gitlab.corp.example")).unwrap();
+        let Login { credentials: corp, source, .. } =
+            resolve(&env, &MemoryStore::default(), &Config::default(), Some("gitlab.corp.example")).unwrap();
         assert_eq!((corp.token.as_str(), source), ("glpat-corp", Source::Env));
     }
 
@@ -227,7 +255,7 @@ mod tests {
         let err = resolve(&env, &store, &config, None).unwrap_err().to_string();
         assert!(err.contains("revu login gl.acme.dev") && err.contains("GITLAB_HOST=gl.acme.dev"), "{err}");
         store.set("gl.acme.dev", "glpat-keychain").unwrap();
-        let (creds, source) = resolve(&env, &store, &config, None).unwrap();
+        let Login { credentials: creds, source, .. } = resolve(&env, &store, &config, None).unwrap();
         assert_eq!((creds.host.as_str(), creds.token.as_str(), source), ("gl.acme.dev", "glpat-keychain", Source::Keychain));
     }
 
@@ -235,7 +263,7 @@ mod tests {
     fn a_token_variable_goes_to_the_host_gitlab_host_names() {
         let config = Config { host: Some("gitlab.com".into()), ..Config::default() };
         let env = Env { gitlab_token: Some("glpat-env".into()), host: Some("gl.acme.dev".into()), ..Env::default() };
-        let (creds, source) = resolve(&env, &MemoryStore::default(), &config, None).unwrap();
+        let Login { credentials: creds, source, .. } = resolve(&env, &MemoryStore::default(), &config, None).unwrap();
         assert_eq!((creds.host.as_str(), source), ("gl.acme.dev", Source::Env));
     }
 
@@ -245,7 +273,7 @@ mod tests {
         let env = Env { gitlab_token: Some("glpat-env".into()), origin: Some("gitlab.com".into()), ..Env::default() };
         let store = MemoryStore::default();
         store.set("gl.acme.dev", "glpat-keychain").unwrap();
-        let (creds, source) = resolve(&env, &store, &config, None).unwrap();
+        let Login { credentials: creds, source, .. } = resolve(&env, &store, &config, None).unwrap();
         assert_eq!((creds.host.as_str(), creds.token.as_str(), source), ("gitlab.com", "glpat-env", Source::Env));
     }
 
@@ -265,9 +293,13 @@ mod tests {
     fn a_checkout_host_other_than_the_default_never_gets_the_token_variable() {
         let env = Env { gitlab_token: Some("glpat-env".into()), origin: Some("gl.acme.dev".into()), ..Env::default() };
         let store = MemoryStore::default();
-        assert_eq!(resolve(&env, &store, &Config::default(), None).unwrap().0.host, "gitlab.com", "no token for the checkout's host");
+        assert_eq!(
+            resolve(&env, &store, &Config::default(), None).unwrap().credentials.host,
+            "gitlab.com",
+            "no token for the checkout's host"
+        );
         store.set("gl.acme.dev", "glpat-keychain").unwrap();
-        let (creds, source) = resolve(&env, &store, &Config::default(), None).unwrap();
+        let Login { credentials: creds, source, .. } = resolve(&env, &store, &Config::default(), None).unwrap();
         assert_eq!((creds.host.as_str(), creds.token.as_str(), source), ("gl.acme.dev", "glpat-keychain", Source::Keychain));
     }
 
@@ -275,7 +307,7 @@ mod tests {
     fn a_github_token_variable_keeps_github_com_when_the_stated_host_is_gitlab() {
         let config = Config { host: Some("gl.acme.dev".into()), ..Config::default() };
         let env = Env { github_token: Some("ghp_xxxx".into()), origin: Some("github.com".into()), ..Env::default() };
-        assert_eq!(resolve(&env, &MemoryStore::default(), &config, None).unwrap().0.host, "github.com");
+        assert_eq!(resolve(&env, &MemoryStore::default(), &config, None).unwrap().credentials.host, "github.com");
     }
 
     #[test]
@@ -283,7 +315,7 @@ mod tests {
         let config =
             Config { hosts: [("git.acme.dev".into(), Host { forge: Some(Kind::GitHub), ..Host::default() })].into(), ..Config::default() };
         let env = Env { github_token: Some("ghp_xxxx".into()), ..Env::default() };
-        assert_eq!(resolve(&env, &MemoryStore::default(), &config, Some("git.acme.dev")).unwrap().0.token, "ghp_xxxx");
+        assert_eq!(resolve(&env, &MemoryStore::default(), &config, Some("git.acme.dev")).unwrap().credentials.token, "ghp_xxxx");
     }
 
     #[test]
@@ -292,10 +324,27 @@ mod tests {
         let config = Config { host: Some("gitlab.com".into()), ..Config::default() };
         let env = Env { origin: Some("github.com".into()), ..Env::default() };
         store.set("gitlab.com", "glpat-xxxx").unwrap();
-        assert_eq!(resolve(&env, &store, &config, None).unwrap().0.host, "gitlab.com", "no GitHub token yet");
+        assert_eq!(resolve(&env, &store, &config, None).unwrap().credentials.host, "gitlab.com", "no GitHub token yet");
         store.set("github.com", "ghp_xxxx").unwrap();
-        assert_eq!(resolve(&env, &store, &config, None).unwrap().0.host, "github.com");
-        assert_eq!(resolve(&env, &store, &config, Some("gitlab.com")).unwrap().0.host, "gitlab.com", "the flag still wins");
+        assert_eq!(resolve(&env, &store, &config, None).unwrap().credentials.host, "github.com");
+        assert_eq!(resolve(&env, &store, &config, Some("gitlab.com")).unwrap().credentials.host, "gitlab.com", "the flag still wins");
+    }
+
+    #[test]
+    fn a_login_says_which_rule_chose_its_host() {
+        let store = MemoryStore::default();
+        for host in ["gitlab.com", "github.com", "gl.acme.dev"] {
+            store.set(host, "glpat-xxxx").unwrap();
+        }
+        let in_checkout = Env { origin: Some("github.com".into()), ..Env::default() };
+        let with_variable = Env { host: Some("gl.acme.dev".into()), ..in_checkout.clone() };
+        let configured = Config { host: Some("gl.acme.dev".into()), ..Config::default() };
+        let origin = |env: &Env, config: &Config, named| resolve(env, &store, config, named).unwrap().host_origin;
+        assert_eq!(origin(&in_checkout, &configured, Some("gitlab.com")), HostOrigin::Named, "--host");
+        assert_eq!(origin(&with_variable, &configured, None), HostOrigin::Named, "GITLAB_HOST");
+        assert_eq!(origin(&in_checkout, &configured, None), HostOrigin::Checkout);
+        assert_eq!(origin(&Env::default(), &configured, None), HostOrigin::Config);
+        assert_eq!(origin(&Env::default(), &Config::default(), None), HostOrigin::Default);
     }
 
     #[test]

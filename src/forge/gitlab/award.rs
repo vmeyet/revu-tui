@@ -1,6 +1,7 @@
 //! Reactions on GitLab notes: its award emoji, read for every note of an MR in one GraphQL query
 //! and changed by the note's GraphQL id, so removing mine needs no award id.
 use super::Client;
+use crate::forge::http::Missing;
 use crate::forge::{Emoji, MrKey, Reaction, ReactionChange, tally};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -122,7 +123,7 @@ impl Client {
             let notes = data(answer)?
                 .project
                 .and_then(|p| p.merge_request)
-                .with_context(|| format!("{}!{} not found", key.project, key.number))?
+                .ok_or_else(|| Missing(format!("{}!{} not found", key.project, key.number)))?
                 .notes;
             for note in &notes.nodes {
                 if let Some(id) = note.rest_id() {

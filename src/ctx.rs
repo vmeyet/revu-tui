@@ -1,8 +1,8 @@
 //! What every command opens first: the forge, the config, the cache and the checkout's project.
-use crate::auth::{self, Credentials, Env, SecretStore, SecurityCli, Source};
+use crate::auth::{self, Credentials, Env, HostOrigin, Login, SecretStore, SecurityCli, Source};
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::forge::{Forge, Kind, Mr, MrKey, ProjectPath, local};
+use crate::forge::{Forge, Kind, Mr, MrKey, NotFound, ProjectPath, local};
 use crate::log::OrWarn as _;
 use anyhow::Result;
 use serde::Serialize;
@@ -13,6 +13,7 @@ pub struct Ctx {
     pub(crate) forge: Forge,
     pub(crate) credentials: Credentials,
     pub(crate) source: Source,
+    pub(crate) host_origin: HostOrigin,
     pub(crate) config: Config,
     pub(crate) cache: Cache,
     pub(crate) json: bool,
@@ -44,6 +45,7 @@ impl Ctx {
             forge: Forge::Local(client),
             credentials: Credentials { host: local::HOST.to_owned(), token: String::new() },
             source: Source::Env,
+            host_origin: HostOrigin::Named,
             config,
             cache: Cache::for_host(local::HOST)?,
             json: false,
@@ -56,12 +58,33 @@ impl Ctx {
         if all { Self { project: None, ..self } } else { self }
     }
 
+    /// `err` saying why this host was asked and how to ask another, when the forge did not find the MR.
+    pub fn with_host_hint(&self, err: anyhow::Error) -> anyhow::Error {
+        with_host_hint(self.host_origin, err)
+    }
+
     pub(crate) fn build(env: &Env, store: &dyn SecretStore, config: Config, host: Option<&str>, json: bool) -> Result<Self> {
-        let (credentials, source) = auth::resolve(env, store, &config, host)?;
+        let Login { credentials, source, host_origin } = auth::resolve(env, store, &config, host)?;
         let cache = Cache::for_host(&credentials.host)?;
         let forge = Forge::connect(Kind::for_host(&credentials.host, &config), &credentials)?;
-        Ok(Self { forge, credentials, source, config, cache, json, project: None })
+        Ok(Self { forge, credentials, source, host_origin, config, cache, json, project: None })
     }
+}
+
+/// `err` in words the reader can act on when it is a `NotFound`: the host asked, why it was, and how to ask
+/// another. A named host gets no such hint, and any other error passes through.
+pub(crate) fn with_host_hint(origin: HostOrigin, err: anyhow::Error) -> anyhow::Error {
+    let missing = match err.downcast::<NotFound>() {
+        Ok(missing) => missing,
+        Err(other) => return other,
+    };
+    let why = match origin {
+        HostOrigin::Named => return anyhow::anyhow!("{missing}, or this token cannot see it"),
+        HostOrigin::Checkout => "the host of this checkout",
+        HostOrigin::Config => "the host in the config",
+        HostOrigin::Default => "the default host",
+    };
+    anyhow::anyhow!("{missing} ({why}): pass --host to ask another forge")
 }
 
 /// Another host I am logged in to, ready for the queue to ask.

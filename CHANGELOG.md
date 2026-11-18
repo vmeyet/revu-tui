@@ -30,6 +30,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **An MR the host does not have says which host was asked, why, and how to ask another.**
+  In `revu <ref>` and every command that takes an MR, where it printed a bare `HTTP 404`.
+  Pass `--host <host>` when the MR lives on another forge than the one of the checkout.
 - **`ctrl-a`, `ctrl-e`, `home` and `end` stay on the cursor's line in the comment box and the share note.**
   In a text of several lines, where they went to the start and the end of the whole text.
 - **The cursor of a box steps over an emoji or an accented letter made of several characters as one.**

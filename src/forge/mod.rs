@@ -69,7 +69,24 @@ impl Kind {
     }
 }
 
-/// A connected forge. Every method takes and returns the neutral model.
+/// The forge does not have what was asked, an MR or its project; it answers the same for one the token cannot see.
+/// Set by the calls that read or post on an MR as a whole: a 404 on a note, a draft or a thread means that one is gone.
+/// `ctx::with_host_hint` adds why this host was asked.
+#[derive(Debug)]
+pub(crate) struct NotFound {
+    /// `acme/widgets!42`, or the project alone.
+    what: String,
+    host: String,
+}
+
+impl std::fmt::Display for NotFound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} was not found on {}", self.what, self.host)
+    }
+}
+
+impl std::error::Error for NotFound {}
+
 /// The hosts a merged queue draws from: the one `revu` started with, and the others. Tells which
 /// forge an MR's host runs, and the short tag its row carries once there is more than one host.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +113,7 @@ impl Hosts {
     }
 }
 
+/// A connected forge. Every method takes and returns the neutral model.
 #[derive(Clone, Debug)]
 pub(crate) enum Forge {
     GitLab(gitlab::Client),
@@ -128,6 +146,16 @@ impl Forge {
             Forge::GitHub(client) => client.host(),
             Forge::Local(_) => local::HOST,
         }
+    }
+
+    /// `answer` to a call about the MR `key`, where the forge saying it is not there becomes a `NotFound` naming it.
+    fn found_mr<T>(&self, key: &MrKey, answer: Result<T>) -> Result<T> {
+        self.found(|| format!("{}{}{}", key.project, self.kind().sigil(), key.number), answer)
+    }
+
+    /// `answer`, where the forge saying `what` is not there becomes a `NotFound` naming it and the host.
+    fn found<T>(&self, what: impl FnOnce() -> String, answer: Result<T>) -> Result<T> {
+        answer.map_err(|err| if http::is_missing(&err) { NotFound { what: what(), host: self.host().to_owned() }.into() } else { err })
     }
 
     pub(crate) async fn me(&self) -> Result<User> {
@@ -166,28 +194,31 @@ impl Forge {
 
     /// The path of a project the user named by its numeric id (`123!42`).
     pub(crate) async fn project_path(&self, id: u64) -> Result<ProjectPath> {
-        match self {
+        let path = match self {
             Forge::GitLab(client) => client.project_path(id).await,
             Forge::GitHub(client) => client.project_path(id).await,
             Forge::Local(_) => local::forge_only(),
-        }
+        };
+        self.found(|| format!("project {id}"), path)
     }
 
     /// The open MR whose source is `branch`, if any.
     pub(crate) async fn mr_for_branch(&self, project: &ProjectPath, branch: &str) -> Result<Option<u64>> {
-        match self {
+        let number = match self {
             Forge::GitLab(client) => client.mr_for_branch(project, branch).await,
             Forge::GitHub(client) => client.mr_for_branch(project, branch).await,
             Forge::Local(_) => Ok(None),
-        }
+        };
+        self.found(|| project.to_string(), number)
     }
 
     pub(crate) async fn mr(&self, key: &MrKey) -> Result<Mr> {
-        match self {
+        let mr = match self {
             Forge::GitLab(client) => client.mr(key).await,
             Forge::GitHub(client) => client.mr(key).await,
             Forge::Local(client) => Box::pin(client.mr(key)).await,
-        }
+        };
+        self.found_mr(key, mr)
     }
 
     /// Requests left and any rate-limit wait, as the last answers said.
@@ -258,28 +289,31 @@ impl Forge {
     }
 
     pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
-        match self {
+        let diffs = match self {
             Forge::GitLab(client) => client.diffs(key).await,
             Forge::GitHub(client) => client.diffs(key).await,
             Forge::Local(client) => Box::pin(client.diffs(key)).await,
-        }
+        };
+        self.found_mr(key, diffs)
     }
 
     pub(crate) async fn discussions(&self, key: &MrKey) -> Result<Vec<Discussion>> {
-        match self {
+        let discussions = match self {
             Forge::GitLab(client) => client.discussions(key).await,
             Forge::GitHub(client) => client.discussions(key).await,
             Forge::Local(_) => Ok(vec![]),
-        }
+        };
+        self.found_mr(key, discussions)
     }
 
     /// My unpublished notes on the MR.
     pub(crate) async fn drafts(&self, key: &MrKey) -> Result<Vec<Draft>> {
-        match self {
+        let drafts = match self {
             Forge::GitLab(client) => client.drafts(key).await,
             Forge::GitHub(client) => client.drafts(key).await,
             Forge::Local(_) => Ok(vec![]),
-        }
+        };
+        self.found_mr(key, drafts)
     }
 
     pub(crate) async fn create_draft(&self, key: &MrKey, draft: &NewDraft) -> Result<Draft> {
@@ -344,11 +378,12 @@ impl Forge {
 
     /// Approves the MR, or takes my approval back.
     pub(crate) async fn approve(&self, key: &MrKey, change: ApprovalChange) -> Result<()> {
-        match self {
+        let approved = match self {
             Forge::GitLab(client) => client.approve(key, change).await,
             Forge::GitHub(client) => client.approve(key, change).await,
             Forge::Local(_) => local::forge_only(),
-        }
+        };
+        self.found_mr(key, approved)
     }
 
     /// Adds my `emoji` to `note`, or takes it off. The note must carry the forge's GraphQL id.
@@ -381,11 +416,12 @@ impl Forge {
 
     /// A public new thread, on a line when `position` is given.
     pub(crate) async fn comment(&self, key: &MrKey, body: &str, position: Option<&Position>) -> Result<Discussion> {
-        match self {
+        let posted = match self {
             Forge::GitLab(client) => client.comment(key, body, position).await,
             Forge::GitHub(client) => client.comment(key, body, position).await,
             Forge::Local(_) => local::forge_only(),
-        }
+        };
+        self.found_mr(key, posted)
     }
 
     /// A public reply at the end of the thread `discussion`.

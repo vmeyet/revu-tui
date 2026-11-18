@@ -68,6 +68,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
         checkout,
         jev: jev(&ctx.config.ai),
+        host_origin: ctx.host_origin,
     };
     let triage = setup.jev.is_some();
     let backend = Backend::new(homes, setup);

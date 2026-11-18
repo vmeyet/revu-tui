@@ -1,6 +1,7 @@
 //! A PR's threads, reviews and comments, read page after page, as discussions and drafts.
 use crate::forge::github::wire::{Actor, Anchor, user_of};
 use crate::forge::github::{Client, owner_and_name};
+use crate::forge::http::Missing;
 use crate::forge::{self, Discussion, Draft, MrKey, Note, NoteKind, Refs, Sha, ThreadId};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -319,7 +320,7 @@ impl Client {
             "threads": after.threads, "reviews": after.reviews, "comments": after.comments,
         });
         let data: ThreadsData = self.graphql(&format!("{THREADS}{COMMENT_FRAGMENTS}"), variables).await?;
-        data.repository.and_then(|r| r.pull_request).with_context(|| format!("{}#{} not found", key.project, key.number))
+        data.repository.and_then(|r| r.pull_request).ok_or_else(|| Missing(format!("{}#{} not found", key.project, key.number)).into())
     }
 
     /// A thread with the comments past its first page.

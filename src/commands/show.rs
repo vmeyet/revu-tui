@@ -153,8 +153,14 @@ fn thread_row(discussion: &Discussion, now: DateTime<Utc>) -> Option<Vec<Cell>> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::{Credentials, HostOrigin, Source};
+    use crate::cache::Cache;
+    use crate::config::Config;
+    use crate::forge::Forge;
     use crate::forge::gitlab::fixture;
     use chrono::TimeZone;
+    use wiremock::matchers::{any, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn mr() -> Mr {
         fixture::mr(
@@ -194,6 +200,85 @@ mod tests {
         assert!(out.contains("1 unresolved · conflicts\n"), "{out}");
         assert!(out.contains("FILES 2\n  src/pay/charge.rs  +2  −1\n  old.rs → new.rs    +0  −0  renamed\n"), "{out}");
         assert!(out.contains("UNRESOLVED 1\n  src/pay/charge.rs:57  "), "{out}");
+    }
+
+    fn ctx(forge: Forge, host_origin: HostOrigin) -> Ctx {
+        Ctx {
+            credentials: Credentials { host: forge.host().to_owned(), token: "ghp_xxxx".into() },
+            forge,
+            source: Source::Keychain,
+            host_origin,
+            config: Config::default(),
+            cache: Cache::in_dir("/nonexistent"),
+            json: false,
+            project: None,
+        }
+    }
+
+    /// github.com without the pull request: GraphQL answers 200 with a `NOT_FOUND` error, REST answers 404.
+    async fn github_without_the_mr(host_origin: HostOrigin) -> (MockServer, Ctx) {
+        let server = MockServer::start().await;
+        let unresolved = serde_json::json!({
+            "data": {"viewer": {"login": "nina"}, "repository": null},
+            "errors": [{"type": "NOT_FOUND", "path": ["repository"], "message": "Could not resolve to a Repository with the name 'acme/widgets'."}],
+        });
+        Mock::given(method("POST")).respond_with(ResponseTemplate::new(200).set_body_json(unresolved)).mount(&server).await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({"message": "Not Found"})))
+            .mount(&server)
+            .await;
+        let credentials = Credentials { host: "github.com".into(), token: "ghp_xxxx".into() };
+        let forge = Forge::GitHub(crate::forge::github::Client::with_base(&credentials, &server.uri()).unwrap());
+        (server, ctx(forge, host_origin))
+    }
+
+    /// A GitLab host that answers every request with `status`.
+    async fn gitlab_answering(status: u16, host_origin: HostOrigin) -> (MockServer, Ctx) {
+        let server = MockServer::start().await;
+        Mock::given(any()).respond_with(ResponseTemplate::new(status)).mount(&server).await;
+        let credentials = Credentials { host: "x".into(), token: "glpat-xxxx".into() };
+        let forge = Forge::GitLab(crate::forge::gitlab::Client::with_base(&credentials, &format!("{}/api/v4/", server.uri())).unwrap());
+        (server, ctx(forge, host_origin))
+    }
+
+    async fn failure(ctx: &Ctx) -> String {
+        let err = fetch(ctx, &MrKey::new("acme/widgets", 42)).await.unwrap_err();
+        ctx.with_host_hint(err).to_string()
+    }
+
+    #[tokio::test]
+    async fn an_mr_not_found_on_the_host_of_the_checkout_names_the_host_and_suggests_host() {
+        let (_server, ctx) = github_without_the_mr(HostOrigin::Checkout).await;
+        assert_eq!(
+            failure(&ctx).await,
+            "acme/widgets#42 was not found on github.com (the host of this checkout): pass --host to ask another forge"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_mr_not_found_on_a_named_host_does_not_suggest_host() {
+        let (_server, ctx) = github_without_the_mr(HostOrigin::Named).await;
+        assert_eq!(failure(&ctx).await, "acme/widgets#42 was not found on github.com, or this token cannot see it");
+    }
+
+    #[tokio::test]
+    async fn an_mr_not_found_on_the_config_or_default_host_says_which_it_is() {
+        for (host_origin, why) in [(HostOrigin::Config, "the host in the config"), (HostOrigin::Default, "the default host")] {
+            let (_server, ctx) = gitlab_answering(404, host_origin).await;
+            assert_eq!(
+                failure(&ctx).await,
+                format!("acme/widgets!42 was not found on 127.0.0.1 ({why}): pass --host to ask another forge")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn another_http_failure_keeps_its_message() {
+        for status in [500, 401] {
+            let (_server, ctx) = gitlab_answering(status, HostOrigin::Checkout).await;
+            let said = failure(&ctx).await;
+            assert!(said.contains(&format!("HTTP {status}")) && !said.contains("--host"), "{said}");
+        }
     }
 
     #[test]
