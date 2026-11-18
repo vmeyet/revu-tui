@@ -12,6 +12,9 @@ Each entry says what changed, then where, then how to use it.
 - **Clicking the notification brings you back to revu.**
   For the macOS notification of an MR that lands in TO REVIEW, once `terminal-notifier` is installed: `brew install terminal-notifier`.
   Click it: your terminal comes in front and, in tmux, revu's session, window and pane are selected.
+- **`revu show --json` says whether the forge would merge the MR.**
+  In the `mr` object, as `merge_verdict`, with the rules of the project applied.
+  Read `ready`, `checking`, or what blocks it: `conflicts`, `behind`, `unresolved_threads`, `not_allowed`, and so on; `unknown` when the forge did not say.
 
 ## 0.15.0 - 2026-11-18
 

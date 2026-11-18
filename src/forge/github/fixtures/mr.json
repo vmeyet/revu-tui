@@ -4,6 +4,7 @@
    "login": "nina"
   },
   "repository": {
+   "viewerPermission": "WRITE",
    "pullRequest": {
     "number": 42,
     "title": "feat: charge cards",
@@ -18,6 +19,7 @@
     "headRefOid": "bbbb",
     "changedFiles": 9,
     "mergeable": "CONFLICTING",
+    "mergeStateStatus": "DIRTY",
     "author": {
      "login": "omar",
      "name": "Omar",

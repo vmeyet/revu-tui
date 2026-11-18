@@ -36,6 +36,9 @@ pub(crate) struct Mr {
     /// How the forge merges it, from its project settings; the confirmation names the method.
     #[serde(default)]
     pub(crate) merge: MergePlan,
+    /// Whether the forge would merge it now; an MR cached before revu read it holds `Unknown`.
+    #[serde(default)]
+    pub(crate) merge_verdict: MergeVerdict,
     /// I wrote it, as the host that holds it knows me: a queue can mix hosts, and names differ on each.
     #[serde(default)]
     pub(crate) mine: bool,
@@ -114,6 +117,34 @@ impl MergeMethod {
             MergeMethod::Rebase => "rebase",
         }
     }
+}
+
+/// What the forge answers to "would you merge this MR now, for me", its project's rules applied.
+/// Stored by its word: a word this revu does not know, like none at all, reads as `Unknown`, which is never ready.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MergeVerdict {
+    Ready,
+    /// The forge has not finished working it out; asked again a moment later, it answers.
+    Checking,
+    Conflicts,
+    /// The source branch misses commits of its target, and the project wants them in first.
+    Behind,
+    /// A pipeline the project requires failed, or never ran.
+    PipelineNotPassed,
+    PipelineRunning,
+    NotApproved,
+    ChangesRequested,
+    UnresolvedThreads,
+    Draft,
+    NotOpen,
+    /// I have no right to merge into the target branch.
+    NotAllowed,
+    /// A rule of the project blocks it: one revu has no word for, or one the forge does not name.
+    Blocked,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 /// The method, and whether the forge deletes the source branch afterwards.
@@ -343,6 +374,7 @@ mod tests {
             labels: vec![],
             approvals: Approvals { approved: true, approved_by: vec![lea], ..Approvals::default() },
             merge: MergePlan::default(),
+            merge_verdict: MergeVerdict::Ready,
             mine: true,
             uncommitted: 0,
             no_diff: None,
@@ -366,6 +398,14 @@ mod tests {
         }
         let running = Mr { pipeline: Some(Pipeline { status: PipelineStatus::Running, web_url: None }), ..mergeable() };
         assert_eq!(running.merge_refusal(), None, "a running pipeline is the forge's call: it may merge when it passes");
+    }
+
+    #[test]
+    fn a_verdict_is_stored_by_its_word_and_a_word_not_known_reads_as_unknown() {
+        let stored = serde_json::to_string(&[MergeVerdict::Ready, MergeVerdict::UnresolvedThreads, MergeVerdict::Unknown]).unwrap();
+        assert_eq!(stored, r#"["ready","unresolved_threads","unknown"]"#);
+        let read: Vec<MergeVerdict> = serde_json::from_str(r#"["behind","in_a_merge_train"]"#).unwrap();
+        assert_eq!(read, [MergeVerdict::Behind, MergeVerdict::Unknown]);
     }
 
     #[test]

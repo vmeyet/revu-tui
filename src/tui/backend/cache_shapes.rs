@@ -2,7 +2,7 @@
 //! and with it the reader's pins, viewed files and drafts.
 use super::MrState;
 use crate::cache::Entry;
-use crate::forge::{Discussion, Draft as HeldDraft, Mr, MrKey, Queue};
+use crate::forge::{Discussion, Draft as HeldDraft, MergeVerdict, Mr, MrKey, Queue};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::BTreeSet;
@@ -17,6 +17,14 @@ fn reads_back<T: DeserializeOwned + Serialize>(json: &str) {
 #[test]
 fn a_cached_mr_reads_back_unchanged() {
     reads_back::<Entry<Mr>>(include_str!("fixtures/mr.json"));
+}
+
+#[test]
+fn an_mr_cached_before_revu_read_the_merge_verdict_still_reads_and_is_not_ready() {
+    let mut older: serde_json::Value = serde_json::from_str(include_str!("fixtures/mr.json")).unwrap();
+    older["value"].as_object_mut().unwrap().remove("merge_verdict");
+    let read: Entry<Mr> = serde_json::from_value(older).unwrap();
+    assert_eq!(read.value.merge_verdict, MergeVerdict::Unknown);
 }
 
 #[test]

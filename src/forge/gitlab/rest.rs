@@ -2,7 +2,7 @@
 use super::Client;
 use super::wire::{self, Approvals, Discussion, DraftNote, NewDraft};
 use crate::forge::checks::{Checks, Found, Job, JobState};
-use crate::forge::http::{self, HttpError};
+use crate::forge::http;
 use crate::forge::{self, DiffFile, MrKey, ProjectPath, ThreadId};
 use anyhow::{Context, Result, anyhow};
 use reqwest::{Method, StatusCode};
@@ -30,7 +30,7 @@ pub(super) fn project_path(project: &ProjectPath) -> String {
     format!("projects/{}", url_encode(project.as_str()))
 }
 
-fn mr_path(key: &MrKey) -> String {
+pub(super) fn mr_path(key: &MrKey) -> String {
     format!("{}/merge_requests/{}", project_path(&key.project), key.number)
 }
 
@@ -283,17 +283,6 @@ impl Client {
     }
 
     /// Approves, or takes my approval back.
-    /// GitLab applies the project's merge method; revu passes the squash and branch choices it
-    /// showed, and `sha` so a push made after the reader looked is refused.
-    pub(crate) async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
-        let body = json!({
-            "sha": head,
-            "squash": plan.method == forge::MergeMethod::Squash,
-            "should_remove_source_branch": plan.remove_branch,
-        });
-        self.http.put_json::<serde_json::Value>(&format!("{}/merge", mr_path(key)), &body).await.map(|_| ()).map_err(merge_refused)
-    }
-
     pub(crate) async fn approve(&self, key: &MrKey, change: forge::ApprovalChange) -> Result<()> {
         let verb = match change {
             forge::ApprovalChange::Approve => "approve",
@@ -313,17 +302,6 @@ fn with_awards(discussion: forge::Discussion, awards: &super::award::Awards) -> 
         })
         .collect();
     forge::Discussion { notes, ..discussion }
-}
-
-/// The answers GitLab gives a merge it will not do, in words the reader can act on.
-fn merge_refused(err: anyhow::Error) -> anyhow::Error {
-    let Some(refused) = err.downcast_ref::<HttpError>() else { return err };
-    match refused.status {
-        StatusCode::CONFLICT => anyhow!("the branch moved since you read it: refresh with r and look at the new commits"),
-        StatusCode::METHOD_NOT_ALLOWED | StatusCode::NOT_ACCEPTABLE => anyhow!("GitLab will not merge it yet: {}", refused.message),
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => anyhow!("you are not allowed to merge into this branch"),
-        _ => err,
-    }
 }
 
 /// GitLab answers 401 to an approval the token owner is not allowed to give (own MR, approval rules).
@@ -394,34 +372,6 @@ mod tests {
         let client = client(&server);
         assert_eq!(client.project_path(7).await.unwrap().as_str(), "acme/widgets");
         assert_eq!(client.mr_for_branch(&"acme/widgets".into(), "feat/checkout").await.unwrap(), Some(42));
-    }
-
-    #[tokio::test]
-    async fn merge_sends_the_head_and_the_choices_shown_and_words_the_refusals() {
-        let server = MockServer::start().await;
-        Mock::given(method("PUT"))
-            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/merge"))
-            .and(body_partial_json(json!({"sha": "bbbb", "squash": true, "should_remove_source_branch": true})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"iid": 42, "state": "merged"})))
-            .mount(&server)
-            .await;
-        Mock::given(method("PUT"))
-            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/43/merge"))
-            .respond_with(ResponseTemplate::new(409).set_body_json(json!({"message": "SHA does not match HEAD of source branch"})))
-            .mount(&server)
-            .await;
-        Mock::given(method("PUT"))
-            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/44/merge"))
-            .respond_with(ResponseTemplate::new(405).set_body_json(json!({"message": "405 Method Not Allowed"})))
-            .mount(&server)
-            .await;
-        let client = client(&server);
-        let plan = forge::MergePlan { method: forge::MergeMethod::Squash, remove_branch: true };
-        client.merge(&key(), "bbbb", plan).await.unwrap();
-        let moved = client.merge(&MrKey::new("acme/widgets", 43), "bbbb", plan).await.unwrap_err().to_string();
-        assert!(moved.contains("the branch moved"), "{moved}");
-        let early = client.merge(&MrKey::new("acme/widgets", 44), "bbbb", plan).await.unwrap_err().to_string();
-        assert_eq!(early, "GitLab will not merge it yet: 405 Method Not Allowed");
     }
 
     #[test]

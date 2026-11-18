@@ -13,11 +13,11 @@ When a boundary or a flow changes, change this page in the same MR.
 | `commands/` | One module per subcommand, each with a `run`; plain output through `render.rs`, JSON through `ctx::emit`; `prompt.rs` asks on the terminal |
 | `ctx.rs` | `Ctx`: forge, credentials, config, cache and the checkout's project, opened once per command |
 | `forge/mod.rs` | `Forge`, one enum over the backends (GitLab, GitHub, local); every method takes and returns the neutral model |
-| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note` and its `NoteKind`, `Draft`), `mention.rs` (`Mention`), `reaction.rs` |
+| `forge/model/` | The neutral model, one file per concern: `ids.rs` (`MrKey`, `ProjectPath`, `Sha`, `ThreadId`), `mr.rs` (`Mr`, pipeline, approvals, merge and its `MergeVerdict`), `diff.rs` (`DiffFile`, `Position`), `discussion.rs` (`Discussion`, `Note` and its `NoteKind`, `Draft`), `mention.rs` (`Mention`), `reaction.rs` |
 | `forge/gitlab/`, `forge/github/` | One backend each: the client in `mod.rs`, calls and wire shapes in `rest.rs` and GraphQL (`graphql.rs` on GitLab, `graphql/` on GitHub), shared shapes and conversion in `wire.rs` |
 | `forge/local/` | The local backend, `revu local`: a worktree's branch read with `git`, in `git.rs`, cut into files by `split.rs`, with no host and no token |
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
-| `forge/gitlab/award.rs`, `upload.rs`, `todo.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, mentions read from and marked done in the to-do list, pictures in GitHub comments |
+| `forge/gitlab/award.rs`, `upload.rs`, `todo.rs`, `merge.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, mentions read from and marked done in the to-do list, the merge and GitLab's verdict on it, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `forge/identity.rs` | `Me`, my username on one host, compared without case, and `Identities`, one per host of the queue |
@@ -176,6 +176,7 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | thread | One discussion, resolvable or not |
 | note | One comment inside a thread |
 | draft | A note not yet published, written locally or held by the forge |
+| merge verdict | What the forge answers to "would you merge this MR now, for me", its project's rules applied; `forge::MergeVerdict` |
 | review | The set of drafts, published together with `P` |
 | viewed | A file the reviewer marked as read; it folds |
 | worktree | One entry of `git worktree list`: on `revu local`, it stands where an MR does |

@@ -16,8 +16,8 @@ pub(crate) use budget::RateLimit;
 pub(crate) use identity::{Identities, Me, Renamed};
 pub(crate) use model::{
     Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, Mention, MentionId,
-    MergeMethod, MergePlan, Mr, MrKey, MrState, NewDraft, Note, NoteKind, Pipeline, PipelineStatus, Position, ProjectPath, Reaction,
-    ReactionChange, Readiness, Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
+    MergeMethod, MergePlan, MergeVerdict, Mr, MrKey, MrState, NewDraft, Note, NoteKind, Pipeline, PipelineStatus, Position, ProjectPath,
+    Reaction, ReactionChange, Readiness, Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
 };
 pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size, WorktreeRow};
 

@@ -12,9 +12,9 @@ const MR: &str = r"
 query Mr($owner: String!, $name: String!, $number: Int!) {
   viewer { login }
   repository(owner: $owner, name: $name) {
-    squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed deleteBranchOnMerge
+    squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed deleteBranchOnMerge viewerPermission
     pullRequest(number: $number) {
-      number title body state isDraft url updatedAt baseRefName headRefName baseRefOid headRefOid changedFiles mergeable
+      number title body state isDraft url updatedAt baseRefName headRefName baseRefOid headRefOid changedFiles mergeable mergeStateStatus
       author { login ... on User { name databaseId } }
       reviewDecision
       reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login name databaseId } } } }
@@ -48,6 +48,8 @@ struct MrRepository {
     rebase_merge_allowed: bool,
     #[serde(default)]
     delete_branch_on_merge: bool,
+    #[serde(default)]
+    viewer_permission: Option<String>,
 }
 
 impl MrRepository {
@@ -81,6 +83,8 @@ struct Pr {
     #[serde(default)]
     mergeable: Option<String>,
     #[serde(default)]
+    merge_state_status: Option<String>,
+    #[serde(default)]
     author: Option<Actor>,
     #[serde(default)]
     review_decision: Option<String>,
@@ -91,6 +95,36 @@ struct Pr {
 }
 
 impl Pr {
+    /// GitHub's `mergeStateStatus` as a verdict. The status leaves out my right to push to the
+    /// repository, so `permission` wins over it. A status missing, or newer than this list, is unknown.
+    fn merge_verdict(&self, permission: Option<&str>) -> forge::MergeVerdict {
+        use forge::MergeVerdict as Verdict;
+        if matches!(permission, Some("READ" | "TRIAGE")) {
+            return Verdict::NotAllowed;
+        }
+        match self.merge_state_status.as_deref().unwrap_or_default() {
+            "CLEAN" | "HAS_HOOKS" | "UNSTABLE" => Verdict::Ready,
+            "UNKNOWN" => Verdict::Checking,
+            "DIRTY" => Verdict::Conflicts,
+            "BEHIND" => Verdict::Behind,
+            "DRAFT" => Verdict::Draft,
+            "BLOCKED" => self.blocked_by(),
+            _ => Verdict::Unknown,
+        }
+    }
+
+    /// GitHub's `BLOCKED` names no reason: the review decision, then the checks, say which one shows.
+    fn blocked_by(&self) -> forge::MergeVerdict {
+        use forge::MergeVerdict as Verdict;
+        match (self.review_decision.as_deref(), wire::pipeline(&self.commits)) {
+            (Some("CHANGES_REQUESTED"), _) => Verdict::ChangesRequested,
+            (Some("REVIEW_REQUIRED"), _) => Verdict::NotApproved,
+            (_, Some(forge::PipelineStatus::Failed)) => Verdict::PipelineNotPassed,
+            (_, Some(forge::PipelineStatus::Running)) => Verdict::PipelineRunning,
+            _ => Verdict::Blocked,
+        }
+    }
+
     fn into_model(self, project: &ProjectPath, me: &str) -> forge::Mr {
         let author = user_of(self.author.clone());
         let approvers: Vec<forge::User> =
@@ -144,6 +178,7 @@ impl Pr {
             labels: self.labels.nodes.into_iter().map(|l| l.name).collect(),
             approvals,
             merge: forge::MergePlan::default(),
+            merge_verdict: forge::MergeVerdict::Unknown,
         }
     }
 }
@@ -171,9 +206,10 @@ impl Client {
         let (owner, name) = owner_and_name(&key.project)?;
         let data: MrData = self.graphql(MR, json!({"owner": owner, "name": name, "number": key.number})).await?;
         let repository = data.repository.ok_or_else(|| Missing(format!("{} not found", key.project)))?;
-        let plan = repository.merge_plan();
+        let merge = repository.merge_plan();
         let pr = repository.pull_request.ok_or_else(|| Missing(format!("{}#{} not found", key.project, key.number)))?;
-        Ok(forge::Mr { merge: plan, ..pr.into_model(&key.project, &data.viewer.login) })
+        let merge_verdict = pr.merge_verdict(repository.viewer_permission.as_deref());
+        Ok(forge::Mr { merge, merge_verdict, ..pr.into_model(&key.project, &data.viewer.login) })
     }
 
     /// Adds my `emoji` to the comment `node`, or takes it off; GitHub needs no reaction id for either.
@@ -244,6 +280,7 @@ mod tests {
             merge_commit_allowed: merge,
             rebase_merge_allowed: rebase,
             delete_branch_on_merge: delete,
+            viewer_permission: None,
         };
         let method = |r: MrRepository| r.merge_plan().method;
         assert_eq!(method(repo(true, true, true, false)), forge::MergeMethod::Squash);
@@ -271,6 +308,82 @@ mod tests {
             !mr.approvals.approved && mr.approvals.approvals_left == 1 && mr.approvals.user_can_approve && !mr.approvals.user_has_approved
         );
         assert_eq!(mr.reviewers.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), ["nina", "lea"]);
+    }
+
+    /// My own PR with green checks and no review asked, as GitHub answers it with `fields` on top, me holding `permission`.
+    async fn my_pr(fields: Value, permission: &str) -> forge::Mr {
+        let mut answer: Value = serde_json::from_str(include_str!("../fixtures/mr.json")).unwrap();
+        answer["data"]["viewer"]["login"] = json!("omar");
+        let repository = &mut answer["data"]["repository"];
+        repository["viewerPermission"] = json!(permission);
+        let pr = repository["pullRequest"].as_object_mut().unwrap();
+        pr.extend(json!({"mergeable": "MERGEABLE", "reviewDecision": null, "latestReviews": {"nodes": []}}).as_object().unwrap().clone());
+        pr.extend(fields.as_object().unwrap().clone());
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(answer))
+            .mount(&server)
+            .await;
+        client(&server).mr(&key()).await.unwrap()
+    }
+
+    fn checks(state: &str) -> Value {
+        json!({"nodes": [{"commit": {"statusCheckRollup": {"state": state}}}]})
+    }
+
+    #[tokio::test]
+    async fn each_merge_state_of_github_reads_as_its_verdict() {
+        let cases: [(&str, forge::MergeVerdict); 8] = [
+            ("CLEAN", forge::MergeVerdict::Ready),
+            ("HAS_HOOKS", forge::MergeVerdict::Ready),
+            ("UNSTABLE", forge::MergeVerdict::Ready),
+            ("UNKNOWN", forge::MergeVerdict::Checking),
+            ("DIRTY", forge::MergeVerdict::Conflicts),
+            ("BEHIND", forge::MergeVerdict::Behind),
+            ("DRAFT", forge::MergeVerdict::Draft),
+            ("BLOCKED", forge::MergeVerdict::Blocked),
+        ];
+        for (state, verdict) in cases {
+            assert_eq!(my_pr(json!({"mergeStateStatus": state}), "WRITE").await.merge_verdict, verdict, "{state}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_merge_state_github_adds_later_is_unknown() {
+        let mr = my_pr(json!({"mergeStateStatus": "QUEUED"}), "WRITE").await;
+        assert_eq!(mr.merge_verdict, forge::MergeVerdict::Unknown);
+    }
+
+    #[tokio::test]
+    async fn a_pr_github_answers_without_a_merge_state_is_unknown() {
+        assert_eq!(my_pr(json!({"mergeStateStatus": null}), "WRITE").await.merge_verdict, forge::MergeVerdict::Unknown);
+    }
+
+    #[tokio::test]
+    async fn a_blocked_pr_names_the_review_answer_behind_it() {
+        let cases = [("CHANGES_REQUESTED", forge::MergeVerdict::ChangesRequested), ("REVIEW_REQUIRED", forge::MergeVerdict::NotApproved)];
+        for (decision, verdict) in cases {
+            let mr = my_pr(json!({"mergeStateStatus": "BLOCKED", "reviewDecision": decision, "commits": checks("FAILURE")}), "WRITE").await;
+            assert_eq!(mr.merge_verdict, verdict, "{decision}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_blocked_pr_with_no_review_asked_names_its_checks() {
+        let cases = [("FAILURE", forge::MergeVerdict::PipelineNotPassed), ("PENDING", forge::MergeVerdict::PipelineRunning)];
+        for (state, verdict) in cases {
+            let mr = my_pr(json!({"mergeStateStatus": "BLOCKED", "commits": checks(state)}), "WRITE").await;
+            assert_eq!(mr.merge_verdict, verdict, "{state}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_pr_in_a_repository_i_only_read_is_not_allowed_though_its_state_is_clean() {
+        for permission in ["READ", "TRIAGE"] {
+            let mr = my_pr(json!({"mergeStateStatus": "CLEAN"}), permission).await;
+            assert_eq!(mr.merge_verdict, forge::MergeVerdict::NotAllowed, "{permission}");
+        }
     }
 
     #[tokio::test]
