@@ -146,10 +146,16 @@ revu refuses, and says why, when the MR is not yours or is no longer open.
 
 ## Merge
 
-`M` merges your own MR once it is approved.
+`M` merges your own MR once the forge says it can merge.
 revu asks first, and names the method: `merge !42 into main (squash)?`.
 `y` merges, any other key cancels.
-revu refuses, and says why, when the MR is not yours, is a draft, has conflicts, has a failed pipeline, or needs more approvals.
+The forge decides, with the rules of the project: revu asks it and does not guess.
+A project that asks for no approval lets you merge without one.
+revu refuses, and says why, when the MR is not yours, or when the forge says it cannot merge yet.
+The forge names a draft, conflicts, a branch behind its target, a pipeline that failed or still runs, or a missing approval.
+It also names changes a reviewer requested, unresolved threads, and a branch you may not merge into.
+For any other rule of the project, revu sends you to the MR's page.
+When the forge is still checking, or did not say, revu says so: press `M` again a moment later.
 The method follows the project: squash when it squashes, a merge commit otherwise.
 If someone pushes after you looked, the forge refuses the merge: press `r` and look at the new commits.
 `revu merge !42` does the same from the shell, and `--yes` skips the question.

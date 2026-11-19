@@ -4,7 +4,7 @@ use crate::cli::MergeArgs;
 use crate::ctx::Ctx;
 use anyhow::{Result, bail};
 
-/// Merges my own approved MR, the way its project merges, after a yes on a terminal.
+/// Merges my own MR once the forge says it can merge, the way its project merges, after a yes on a terminal.
 pub async fn run(ctx: &Ctx, args: MergeArgs) -> Result<()> {
     let key = target::resolve(&ctx.forge, args.mr.as_deref()).await?;
     let mr = ctx.forge.mr(&key).await?;

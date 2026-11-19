@@ -183,6 +183,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_mr_gitlab_calls_mergeable_merges_without_an_approval_or_a_green_pipeline() {
+        let mr = my_mr(json!({"detailed_merge_status": "mergeable"})).await;
+        assert!(mr.approvals.approved_by.is_empty() && mr.pipeline.as_ref().is_some_and(|p| p.status == forge::PipelineStatus::Failed));
+        assert_eq!(mr.merge_refusal(), None, "the project asks for neither");
+    }
+
+    #[tokio::test]
     async fn merge_sends_the_head_and_the_choices_shown_and_words_the_refusals() {
         let server = MockServer::start().await;
         Mock::given(method("PUT"))

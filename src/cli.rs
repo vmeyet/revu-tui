@@ -47,7 +47,7 @@ pub enum Command {
     Comment(CommentArgs),
     /// Approve a merge request (`--undo` takes it back).
     Approve(ApproveArgs),
-    /// Merge your own approved merge request, after a yes (`--yes` skips the question).
+    /// Merge your own merge request once the forge says it can merge, after a yes (`--yes` skips the question).
     Merge(MergeArgs),
     /// Mark your own merge request ready for review (`--undo` makes it a draft again).
     Ready(ReadyArgs),

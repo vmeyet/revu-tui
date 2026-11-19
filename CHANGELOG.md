@@ -16,6 +16,12 @@ Each entry says what changed, then where, then how to use it.
   In the `mr` object, as `merge_verdict`, with the rules of the project applied.
   Read `mergeable`, `checking`, `unknown` when the forge did not say, or a blocker: `conflicts`, `behind`, `pipeline_not_passed`, `pipeline_running`, `not_approved`, `changes_requested`, `unresolved_threads`, `draft`, `not_open`, `not_allowed`, `blocked`.
 
+### Fixed
+
+- **Merging asks the forge whether the MR can merge, and no longer guesses it.**
+  On `M` and `revu merge`, where revu refused an MR with no approval even when its project asked for none.
+  A rule of the project that blocks it is named before the question: unresolved threads, a branch behind its target, no right to merge.
+
 ## 0.15.0 - 2026-11-18
 
 ### New

@@ -86,6 +86,17 @@ Handling a key:
    `Action::Copy` also writes the terminal's clipboard from the loop before its task runs `pbcopy`.
 5. The answer comes back as an `Incoming`, applied like any other.
 
+Merging an MR:
+
+1. Reading one MR, each backend turns the forge's own answer into `Mr::merge_verdict`: GitLab's `detailed_merge_status` and `user.can_merge` in `forge/gitlab/merge.rs`, GitHub's `mergeStateStatus` and `viewerPermission` in `forge/github/graphql/pr.rs`.
+   GitHub's `BLOCKED` names no reason, so its backend takes one from the review decision, then from the checks.
+   A value the backend does not know, or none, is `Unknown`.
+2. `Mr::merge_refusal` decides for `M` (`tui/app/merge.rs`) and `revu merge` alike, in this order: an MR that is not mine is refused, which is revu's own rule; then one that is no longer open; then the verdict decides.
+3. `Mergeable` merges whatever revu's other fields show, and every other verdict refuses in its own words.
+4. `Unknown` always refuses with "the forge did not say": revu never guesses a reason from the fields it holds.
+5. Neither waits nor polls: under `Checking` or `Unknown`, `M` reads my MR again once, alone, with `Action::PollMr`, so the next `M` decides on a fresh verdict.
+6. The rows of the queue hold no verdict: only reading one MR asks for it.
+
 A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/app/paste.rs`) types it whole into the box `App::receiver` (`tui/app/receiver.rs`) says takes the next key, and drops it where no box is open.
 The editing keys of the compose box, the share note and the palette live in vtui: each keeps only its own keys and hands every other one to `Field::press`, or `Palette::press` for the palette.
 

@@ -96,7 +96,7 @@ Approve a merge request (`--undo` takes it back)
 
 ## `revu merge`
 
-Merge your own approved merge request, after a yes (`--yes` skips the question)
+Merge your own merge request once the forge says it can merge, after a yes (`--yes` skips the question)
 
 | Argument | Means |
 |---|---|

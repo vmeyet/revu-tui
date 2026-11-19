@@ -440,6 +440,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_pr_github_calls_unstable_merges_though_a_check_failed() {
+        let mr = my_pr(json!({"mergeStateStatus": "UNSTABLE", "commits": checks("FAILURE")}), "WRITE").await;
+        assert_eq!(mr.pipeline.as_ref().map(|p| p.status), Some(forge::PipelineStatus::Failed));
+        assert_eq!(mr.merge_refusal(), None, "the check that failed is not a required one");
+    }
+
+    #[tokio::test]
     async fn graphql_errors_are_errors() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
