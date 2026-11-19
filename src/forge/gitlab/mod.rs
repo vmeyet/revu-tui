@@ -2,6 +2,7 @@
 //! turn into the neutral model at this edge.
 mod award;
 mod graphql;
+mod merge;
 mod rest;
 mod todo;
 mod upload;

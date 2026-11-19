@@ -53,6 +53,7 @@
       "method": "Squash",
       "remove_branch": true
     },
+    "merge_verdict": "mergeable",
     "mine": true
   },
   "fetched_at": "2026-03-02T10:00:00Z"

@@ -53,12 +53,25 @@ pub(crate) struct Mr {
     pub(crate) force_remove_source_branch: Option<bool>,
     #[serde(default)]
     pub(crate) should_remove_source_branch: Option<bool>,
+    #[serde(default)]
+    pub(crate) detailed_merge_status: Option<String>,
+    /// What I may do on this MR; only the answer for one MR carries it, a list does not.
+    #[serde(default)]
+    pub(crate) user: Option<Rights>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) struct Rights {
+    #[serde(default)]
+    can_merge: Option<bool>,
 }
 
 impl Mr {
     /// The REST answer does not name its project's path; the caller asked by it and knows it.
     pub(crate) fn into_model(self, project: &forge::ProjectPath) -> forge::Mr {
+        let can_merge = self.user.as_ref().and_then(|rights| rights.can_merge);
         forge::Mr {
+            merge_verdict: super::merge::verdict(self.detailed_merge_status.as_deref(), can_merge),
             project: project.clone(),
             number: self.iid,
             title: self.title,

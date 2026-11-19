@@ -5,7 +5,9 @@ mod split;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use super::{Approvals, DiffFile, Fetched, MergePlan, Mr, MrKey, MrState, Queue, QueueMr, Refs, Sha, Size, User, WorktreeRow};
+use super::{
+    Approvals, DiffFile, Fetched, MergePlan, MergeVerdict, Mr, MrKey, MrState, Queue, QueueMr, Refs, Sha, Size, User, WorktreeRow,
+};
 use crate::open::safe_path;
 use anyhow::{Context, Result, bail};
 use git::Worktree;
@@ -250,6 +252,7 @@ fn bare_mr(repo: &str, worktree: &Worktree, target: &Target) -> Result<Mr> {
         labels: vec![],
         approvals: Approvals::default(),
         merge: MergePlan::default(),
+        merge_verdict: MergeVerdict::Unknown,
         mine: false,
         uncommitted: 0,
         no_diff: None,
