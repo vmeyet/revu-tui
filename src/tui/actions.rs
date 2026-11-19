@@ -108,7 +108,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 }
             }
             Action::Notify { title, body } => {
-                if let Err(e) = notify(&title, &body).await {
+                if let Err(e) = notify(&backend.notifier, &title, &body).await {
                     send(failed(Failure::Local, &e));
                 }
             }
@@ -289,16 +289,9 @@ pub(super) fn failed(what: Failure, err: &anyhow::Error) -> Incoming {
     Incoming::Failed { what, message: err.to_string() }
 }
 
-/// The text goes in as arguments, never into the script, so an MR title cannot run AppleScript.
-async fn notify(title: &str, body: &str) -> Result<()> {
-    let status = tokio::process::Command::new("osascript")
-        .args(["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run"])
-        .args([title, body])
-        .stdout(std::process::Stdio::null())
-        .status()
-        .await
-        .context("running osascript")?;
-    anyhow::ensure!(status.success(), "osascript failed");
+async fn notify(notifier: &crate::notify::Notifier, title: &str, body: &str) -> Result<()> {
+    let output = notifier.command(title, body).stdin(std::process::Stdio::null()).output().await.context("running the notifier")?;
+    anyhow::ensure!(output.status.success(), "the notifier failed: {}", String::from_utf8_lossy(&output.stderr).trim());
     Ok(())
 }
 
@@ -327,7 +320,7 @@ mod tests {
     #[test]
     fn the_macos_helpers_are_futures_so_they_never_block_the_runtime() {
         fn future<F: Future<Output = Result<()>>>(_: F) {}
-        future(notify("title", "body"));
+        future(notify(&crate::notify::Notifier::default(), "title", "body"));
         future(open_url("https://gitlab.com"));
         future(copy("text"));
     }

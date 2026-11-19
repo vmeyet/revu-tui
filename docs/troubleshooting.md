@@ -9,6 +9,9 @@ Find your problem in the left column, then apply the fix.
 | `]n` does nothing on AZERTY | Set `[keys] layout = "azerty"` and use `)n`, or see the Option key row |
 | The Option key types nothing | Let Option type characters: in Ghostty `macos-option-as-alt = false`, in iTerm2 set Left Option to Normal |
 | Dragging the mouse copies only the code or the comment | That is revu's own selection; hold shift while dragging (Ghostty, Kitty, WezTerm) or ⌥ (iTerm2, Terminal.app) to select whole screen rows |
+| Clicking the notification does nothing | Install `terminal-notifier` (`brew install terminal-notifier`) and start revu again: a click then brings your terminal in front and, in tmux, switches to revu's session and pane |
+| Notifications from `terminal-notifier` do not show | Run `terminal-notifier -diagnose`, then allow its notifications in System Settings › Notifications |
+| Clicking the notification brings the wrong terminal in front | tmux keeps the terminal that started its server: quit tmux with `tmux kill-server` and start it again from the terminal you use |
 | `revu update` is slow | The first update builds every library; the next ones build only revu |
 | Pictures in comments do not show | Use a terminal that draws pictures, and check `[tui] images` is not `false` |
 | A picture leaves an empty gap over ssh, mosh or tmux | Set `[tui] images = false`: each picture reads as `[image: alt]`, and `U` copies its link |

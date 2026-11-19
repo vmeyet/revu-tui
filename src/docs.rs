@@ -245,7 +245,7 @@ const SETTINGS: &[Setting] = &[
         key: "enabled",
         kind: "true or false",
         default: "true",
-        meaning: "A macOS notification when an MR lands in TO REVIEW.",
+        meaning: "A macOS notification when an MR lands in TO REVIEW; with `terminal-notifier` installed, a click brings revu back.",
         example: "false",
     },
     Setting {

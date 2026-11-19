@@ -64,6 +64,7 @@ pub(super) struct Setup {
     pub(super) jev: Option<TypeSafe>,
     pub(super) agent: Option<crate::agent::Agent>,
     pub(super) host_origin: HostOrigin,
+    pub(super) notifier: crate::notify::Notifier,
 }
 
 #[derive(Clone)]
@@ -79,6 +80,8 @@ pub(super) struct Backend {
     pub(super) agent: Option<crate::agent::Agent>,
     /// How the host revu started with was chosen.
     host_origin: HostOrigin,
+    /// What shows the notification for an MR to review, and brings revu back on a click.
+    pub(super) notifier: crate::notify::Notifier,
     /// Two opens of one MR would each find no session and start one; shared by every clone so they wait.
     session_lanes: Lanes,
 }
@@ -101,6 +104,7 @@ impl Backend {
             files: Files { homes: Arc::clone(&homes), open: setup.open, checkout: setup.checkout },
             agent: setup.agent,
             host_origin: setup.host_origin,
+            notifier: setup.notifier,
             session_lanes: Lanes::default(),
             saves,
             homes,
@@ -186,6 +190,7 @@ mod tests {
             jev: None,
             agent: None,
             host_origin,
+            notifier: crate::notify::Notifier::default(),
         };
         Backend::new(homes, setup)
     }

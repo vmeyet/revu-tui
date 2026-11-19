@@ -99,7 +99,7 @@ Tokens never go here: they live in the macOS keychain.
 
 | Key | Type | Default | Does |
 |---|---|---|---|
-| `enabled` | true or false | true | A macOS notification when an MR lands in TO REVIEW. |
+| `enabled` | true or false | true | A macOS notification when an MR lands in TO REVIEW; with `terminal-notifier` installed, a click brings revu back. |
 
 ## `[usage]`
 

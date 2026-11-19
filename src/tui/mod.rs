@@ -67,6 +67,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<
         ready_command: ctx.config.queue.ready.command.clone(),
         open: ctx.config.open.clone(),
         agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
+        notifier: notifier(),
         checkout,
         jev: jev(&ctx.config.ai),
         host_origin: ctx.host_origin,
@@ -375,6 +376,11 @@ fn jev(ai: &crate::config::Ai) -> Option<TypeSafe> {
     TypeSafe::connect(&key).inspect_err(|e| tracing::warn!("Jev is off: {e}")).ok()
 }
 
+fn notifier() -> crate::notify::Notifier {
+    use crate::agent::Run as _;
+    crate::notify::Notifier::detect(|name| std::env::var(name).ok(), |program| crate::agent::Programs.locate(program))
+}
+
 /// The agent of `[agent]`, when it is switched on, with what this machine says: the home folder, Claude
 /// Code's own folder, whether revu runs in tmux, and the checkout it was started in.
 fn agent(config: &crate::config::Agent, compact_width: u16, checkout: Option<&crate::open::Checkout>) -> Option<crate::agent::Agent> {
@@ -385,7 +391,7 @@ fn agent(config: &crate::config::Agent, compact_width: u16, checkout: Option<&cr
     let machine = crate::agent::Machine {
         claude_home: std::env::var_os("CLAUDE_CONFIG_DIR").map_or_else(|| home.join(".claude"), std::path::PathBuf::from),
         home,
-        tmux: std::env::var_os("TMUX").is_some_and(|socket| !socket.is_empty()),
+        tmux: crate::agent::tmux_socket(|name| std::env::var(name).ok()).is_some(),
         terminal: crate::agent::Terminal::detect(|name| std::env::var(name).ok()),
         compact_width,
         started_in: checkout.map(|checkout| (checkout.project.to_string(), checkout.root.clone())),

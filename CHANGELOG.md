@@ -7,6 +7,12 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### New
+
+- **Clicking the notification brings you back to revu.**
+  For the macOS notification of an MR that lands in TO REVIEW, once `terminal-notifier` is installed: `brew install terminal-notifier`.
+  Click it: your terminal comes in front and, in tmux, revu's session, window and pane are selected.
+
 ## 0.15.0 - 2026-11-18
 
 ### New

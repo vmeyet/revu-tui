@@ -46,6 +46,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `auth/` | Credentials and the keychain through `/usr/bin/security` |
 | `ai/` | Jev (`typesafe.rs`, `triage.rs`, marks on the queue) and where its key comes from |
 | `agent/` | Coding-agent sessions per MR, or per branch on `revu local` (`a`, `subject.rs`): find or start one, show it in tmux or a terminal split |
+| `notify.rs` | The macOS notification for an MR to review: `terminal-notifier`, whose click switches tmux to revu's pane and brings its terminal in front, else `osascript` |
 | `open.rs`, `program.rs`, `share.rs`, `ready.rs` | Programs the user configures: a viewer, a share target, a ready source |
 | `changelog.rs`, `update.rs`, `version.rs` | `CHANGELOG.md` built into the binary, `revu update`, the version label |
 | `docs.rs`, `sources.rs` | Tests only: `docs/reference/` checked against the code, written with `UPDATE_DOCS=1`; the crate's own source files for checks that read them |

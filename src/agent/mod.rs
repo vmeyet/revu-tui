@@ -269,6 +269,11 @@ enum Harness {
     Custom { start: String, open: Option<String> },
 }
 
+/// The socket of the tmux server revu runs in: `TMUX` holds it before its first comma.
+pub(crate) fn tmux_socket(env: impl Fn(&str) -> Option<String>) -> Option<String> {
+    env("TMUX")?.split(',').next().filter(|socket| !socket.is_empty()).map(str::to_owned)
+}
+
 /// What revu learns from the machine at start.
 pub(crate) struct Machine {
     pub(crate) home: PathBuf,
@@ -495,6 +500,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = Cache::in_dir(dir.path());
         (dir, cache)
+    }
+
+    #[test]
+    fn the_tmux_socket_is_what_tmux_writes_before_the_first_comma() {
+        let socket = |value: &str| {
+            let value = value.to_owned();
+            tmux_socket(move |name| (name == "TMUX").then(|| value.clone()))
+        };
+        assert_eq!(socket("/private/tmp/tmux-501/default,1234,2").as_deref(), Some("/private/tmp/tmux-501/default"));
+        assert_eq!(socket(""), None, "an empty TMUX is no tmux");
+        assert_eq!(socket(",1234,2"), None, "a server with no socket is no tmux");
+        assert_eq!(tmux_socket(|_| None), None, "no TMUX is no tmux");
     }
 
     #[test]

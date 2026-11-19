@@ -18,6 +18,7 @@ mod http;
 mod keymap;
 pub mod log;
 mod mrref;
+mod notify;
 mod open;
 mod program;
 mod query;
