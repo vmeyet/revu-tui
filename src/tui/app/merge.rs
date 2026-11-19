@@ -4,12 +4,17 @@ use crate::forge::{MergeVerdict, MrKey};
 
 impl App {
     /// `M`: the question when the MR may merge, else why not.
-    /// A forge still checking is read again at once, so the next `M` decides on its answer.
+    /// My MR the forge gave no answer on yet is read again at once, alone, so the next `M` decides on a fresh verdict.
     pub(super) fn merge_here(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let mr = &open.review.mr;
         if let Some(reason) = mr.merge_refusal() {
-            let read_again = if mr.merge_verdict == MergeVerdict::Checking { vec![Action::RefreshMr(open.key.clone())] } else { vec![] };
+            let read_again = match mr.merge_verdict {
+                MergeVerdict::Checking | MergeVerdict::Unknown if mr.mine => {
+                    vec![Action::PollMr { key: open.key.clone(), head: mr.refs.head.clone() }]
+                }
+                _ => vec![],
+            };
             self.warn(format!("cannot merge: {reason}"));
             return read_again;
         }
@@ -63,9 +68,8 @@ mod tests {
     #[test]
     fn big_m_says_why_it_will_not_merge() {
         type Change = fn(Mr) -> Mr;
-        let cases: [(Change, &str); 3] = [
+        let cases: [(Change, &str); 2] = [
             (|mr| mr, "cannot merge: only your own MRs merge from revu"),
-            (|mr| Mr { mine: true, ..mr }, "cannot merge: it needs 1 more approval"),
             (
                 |mr| Mr { merge_verdict: crate::forge::MergeVerdict::UnresolvedThreads, ..approved_and_mine(mr) },
                 "cannot merge: its threads must be resolved first",
@@ -80,10 +84,19 @@ mod tests {
     }
 
     #[test]
-    fn big_m_on_an_mr_the_forge_is_still_checking_says_to_try_again_and_reads_it_again() {
-        let mut app = with_mr(|mr| Mr { merge_verdict: crate::forge::MergeVerdict::Checking, ..approved_and_mine(mr) });
-        assert_eq!(press(&mut app, "M"), vec![Action::RefreshMr(mr_key())]);
-        assert!(app.confirm.is_none());
-        assert_eq!(app.live_toast().unwrap().text, "cannot merge: the forge is still checking whether it can merge: try again in a moment");
+    fn big_m_on_an_mr_the_forge_gave_no_answer_on_says_so_and_reads_the_mr_alone_again() {
+        let cases = [
+            (crate::forge::MergeVerdict::Checking, "cannot merge: the forge is still checking whether it can merge: try again in a moment"),
+            (
+                crate::forge::MergeVerdict::Unknown,
+                "cannot merge: the forge did not say whether it can merge: try again in a moment, or merge it from its page",
+            ),
+        ];
+        for (merge_verdict, reason) in cases {
+            let mut app = with_mr(|mr| Mr { merge_verdict, ..approved_and_mine(mr) });
+            assert_eq!(press(&mut app, "M"), vec![Action::PollMr { key: mr_key(), head: "bbbb".into() }]);
+            assert!(app.confirm.is_none());
+            assert_eq!(app.live_toast().unwrap().text, reason);
+        }
     }
 }

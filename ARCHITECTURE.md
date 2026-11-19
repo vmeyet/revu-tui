@@ -93,8 +93,8 @@ Merging an MR:
    A value the backend does not know, or none, is `Unknown`.
 2. `Mr::merge_refusal` decides for `M` (`tui/app/merge.rs`) and `revu merge` alike, in this order: an MR that is not mine is refused, which is revu's own rule; then one that is no longer open; then the verdict decides.
 3. `Mergeable` merges whatever revu's other fields show, and every other verdict refuses in its own words.
-4. Only under `Unknown` revu looks at the draft, conflicts, pipeline and approvals it holds to name a reason; with none it still refuses.
-5. Neither waits nor polls: `Checking` says to try again in a moment, and `M` reads the MR again once, so the next `M` decides on a fresh verdict.
+4. `Unknown` always refuses with "the forge did not say": revu never guesses a reason from the fields it holds.
+5. Neither waits nor polls: under `Checking` or `Unknown`, `M` reads my MR again once, alone, with `Action::PollMr`, so the next `M` decides on a fresh verdict.
 6. The rows of the queue hold no verdict: only reading one MR asks for it.
 
 A paste arrives as one `Event::Paste`, not as keys: `App::handle_paste` (`tui/app/paste.rs`) types it whole into the box `App::receiver` (`tui/app/receiver.rs`) says takes the next key, and drops it where no box is open.

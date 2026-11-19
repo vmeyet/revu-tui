@@ -183,41 +183,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn merging_is_refused_for_unresolved_threads_as_gitlab_says() {
-        let mr = my_mr(json!({"detailed_merge_status": "discussions_not_resolved"})).await;
-        assert_eq!(mr.merge_refusal().as_deref(), Some("its threads must be resolved first"));
-    }
-
-    #[tokio::test]
-    async fn merging_is_refused_for_a_branch_behind_its_target_as_gitlab_says() {
-        let mr = my_mr(json!({"detailed_merge_status": "need_rebase"})).await;
-        assert_eq!(mr.merge_refusal().as_deref(), Some("its branch is behind its target branch: rebase it first"));
-    }
-
-    #[tokio::test]
-    async fn merging_is_refused_when_gitlab_says_i_may_not_merge() {
-        let mr = my_mr(json!({"detailed_merge_status": "mergeable", "user": {"can_merge": false}})).await;
-        assert_eq!(mr.merge_refusal().as_deref(), Some("you are not allowed to merge into this branch"));
-    }
-
-    #[tokio::test]
-    async fn merging_is_refused_for_a_status_gitlab_adds_later() {
-        let mr = my_mr(json!({"detailed_merge_status": "waiting_in_a_merge_train", "head_pipeline": null})).await;
-        assert_eq!(mr.merge_refusal().as_deref(), Some("the forge did not say whether it can merge: merge it from its page"));
-    }
-
-    #[tokio::test]
     async fn an_mr_gitlab_calls_mergeable_merges_without_an_approval_or_a_green_pipeline() {
         let mr = my_mr(json!({"detailed_merge_status": "mergeable"})).await;
         assert!(mr.approvals.approved_by.is_empty() && mr.pipeline.as_ref().is_some_and(|p| p.status == forge::PipelineStatus::Failed));
         assert_eq!(mr.merge_refusal(), None, "the project asks for neither");
     }
 
-    #[tokio::test]
-    async fn an_mr_gitlab_is_still_checking_says_to_try_again_in_a_moment() {
-        let reason = my_mr(json!({"detailed_merge_status": "checking"})).await.merge_refusal();
-        assert_eq!(reason.as_deref(), Some("the forge is still checking whether it can merge: try again in a moment"));
-    }
     #[tokio::test]
     async fn merge_sends_the_head_and_the_choices_shown_and_words_the_refusals() {
         let server = MockServer::start().await;

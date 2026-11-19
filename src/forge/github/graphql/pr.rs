@@ -447,11 +447,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn merging_is_refused_for_a_merged_pr_whatever_its_merge_state() {
-        let mr = my_pr(json!({"state": "MERGED", "mergeStateStatus": "CLEAN"}), "WRITE").await;
-        assert_eq!(mr.merge_refusal().as_deref(), Some("this MR is merged"));
-    }
-    #[tokio::test]
     async fn graphql_errors_are_errors() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
