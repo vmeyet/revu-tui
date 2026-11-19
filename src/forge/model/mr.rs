@@ -120,17 +120,17 @@ impl MergeMethod {
 }
 
 /// What the forge answers to "would you merge this MR now, for me", its project's rules applied.
-/// Stored by its word: a word this revu does not know, like none at all, reads as `Unknown`, which is never ready.
+/// Stored by its word: a word this revu does not know, like none at all, reads as `Unknown`, which is never mergeable.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum MergeVerdict {
-    Ready,
+    Mergeable,
     /// The forge has not finished working it out; asked again a moment later, it answers.
     Checking,
     Conflicts,
     /// The source branch misses commits of its target, and the project wants them in first.
     Behind,
-    /// A pipeline the project requires failed, or never ran.
+    /// A pipeline the project requires has not succeeded: it failed, never ran, or still runs.
     PipelineNotPassed,
     PipelineRunning,
     NotApproved,
@@ -374,7 +374,7 @@ mod tests {
             labels: vec![],
             approvals: Approvals { approved: true, approved_by: vec![lea], ..Approvals::default() },
             merge: MergePlan::default(),
-            merge_verdict: MergeVerdict::Ready,
+            merge_verdict: MergeVerdict::Mergeable,
             mine: true,
             uncommitted: 0,
             no_diff: None,
@@ -402,8 +402,8 @@ mod tests {
 
     #[test]
     fn a_verdict_is_stored_by_its_word_and_a_word_not_known_reads_as_unknown() {
-        let stored = serde_json::to_string(&[MergeVerdict::Ready, MergeVerdict::UnresolvedThreads, MergeVerdict::Unknown]).unwrap();
-        assert_eq!(stored, r#"["ready","unresolved_threads","unknown"]"#);
+        let stored = serde_json::to_string(&[MergeVerdict::Mergeable, MergeVerdict::UnresolvedThreads, MergeVerdict::Unknown]).unwrap();
+        assert_eq!(stored, r#"["mergeable","unresolved_threads","unknown"]"#);
         let read: Vec<MergeVerdict> = serde_json::from_str(r#"["behind","in_a_merge_train"]"#).unwrap();
         assert_eq!(read, [MergeVerdict::Behind, MergeVerdict::Unknown]);
     }

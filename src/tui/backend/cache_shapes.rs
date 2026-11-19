@@ -20,7 +20,7 @@ fn a_cached_mr_reads_back_unchanged() {
 }
 
 #[test]
-fn an_mr_cached_before_revu_read_the_merge_verdict_still_reads_and_is_not_ready() {
+fn an_mr_cached_before_revu_read_the_merge_verdict_still_reads_and_is_not_mergeable() {
     let mut older: serde_json::Value = serde_json::from_str(include_str!("fixtures/mr.json")).unwrap();
     older["value"].as_object_mut().unwrap().remove("merge_verdict");
     let read: Entry<Mr> = serde_json::from_value(older).unwrap();

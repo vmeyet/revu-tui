@@ -7,23 +7,31 @@ use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
 
-/// GitLab's `detailed_merge_status` as a verdict. The status is the same for everyone, so my right to
-/// merge comes from `user.can_merge` and wins over it.
-/// A status missing, or newer than this list, is unknown; the old names of renamed ones still read.
+/// GitLab's verdict on merging this MR, for me. The status is the same for everyone, so my right to
+/// merge comes from `user.can_merge` and wins over it, unless the MR is no longer open.
 pub(super) fn verdict(status: Option<&str>, can_merge: Option<bool>) -> MergeVerdict {
-    use MergeVerdict as Verdict;
-    let verdict = match status.unwrap_or_default() {
-        "mergeable" => Verdict::Ready,
-        "checking" | "unchecked" | "preparing" | "approvals_syncing" => Verdict::Checking,
-        "conflict" | "broken_status" => Verdict::Conflicts,
-        "need_rebase" => Verdict::Behind,
-        "ci_must_pass" | "security_policy_pipeline_check" => Verdict::PipelineNotPassed,
-        "ci_still_running" => Verdict::PipelineRunning,
-        "not_approved" => Verdict::NotApproved,
-        "requested_changes" => Verdict::ChangesRequested,
-        "discussions_not_resolved" => Verdict::UnresolvedThreads,
-        "draft_status" => Verdict::Draft,
-        "not_open" => Verdict::NotOpen,
+    match status_verdict(status) {
+        MergeVerdict::NotOpen => MergeVerdict::NotOpen,
+        _ if can_merge == Some(false) => MergeVerdict::NotAllowed,
+        verdict => verdict,
+    }
+}
+
+/// `detailed_merge_status` as a verdict.
+/// A status missing, or newer than this list, is unknown; the old names of renamed ones still read.
+fn status_verdict(status: Option<&str>) -> MergeVerdict {
+    match status.unwrap_or_default() {
+        "mergeable" => MergeVerdict::Mergeable,
+        "checking" | "unchecked" | "preparing" | "approvals_syncing" => MergeVerdict::Checking,
+        "conflict" | "broken_status" => MergeVerdict::Conflicts,
+        "need_rebase" => MergeVerdict::Behind,
+        "ci_must_pass" | "security_policy_pipeline_check" => MergeVerdict::PipelineNotPassed,
+        "ci_still_running" => MergeVerdict::PipelineRunning,
+        "not_approved" => MergeVerdict::NotApproved,
+        "requested_changes" => MergeVerdict::ChangesRequested,
+        "discussions_not_resolved" => MergeVerdict::UnresolvedThreads,
+        "draft_status" => MergeVerdict::Draft,
+        "not_open" => MergeVerdict::NotOpen,
         "merge_request_blocked"
         | "blocked_status"
         | "status_checks_must_pass"
@@ -35,10 +43,9 @@ pub(super) fn verdict(status: Option<&str>, can_merge: Option<bool>) -> MergeVer
         | "locked_paths"
         | "locked_lfs_files"
         | "title_regex"
-        | "commits_status" => Verdict::Blocked,
-        _ => Verdict::Unknown,
-    };
-    if can_merge == Some(false) { Verdict::NotAllowed } else { verdict }
+        | "commits_status" => MergeVerdict::Blocked,
+        _ => MergeVerdict::Unknown,
+    }
 }
 
 impl Client {
@@ -108,9 +115,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn each_merge_status_of_gitlab_reads_as_its_verdict() {
+    async fn the_merge_status_and_my_rights_gitlab_answers_read_as_a_verdict() {
+        let mr = my_mr(json!({"detailed_merge_status": "mergeable", "user": {"can_merge": false}})).await;
+        assert_eq!(mr.merge_verdict, MergeVerdict::NotAllowed);
+    }
+
+    #[test]
+    fn each_merge_status_of_gitlab_reads_as_its_verdict() {
         let cases: [(&str, MergeVerdict); 28] = [
-            ("mergeable", MergeVerdict::Ready),
+            ("mergeable", MergeVerdict::Mergeable),
             ("checking", MergeVerdict::Checking),
             ("unchecked", MergeVerdict::Checking),
             ("preparing", MergeVerdict::Checking),
@@ -139,32 +152,34 @@ mod tests {
             ("title_regex", MergeVerdict::Blocked),
             ("commits_status", MergeVerdict::Blocked),
         ];
-        for (status, verdict) in cases {
-            assert_eq!(my_mr(json!({"detailed_merge_status": status})).await.merge_verdict, verdict, "{status}");
+        for (status, expected) in cases {
+            assert_eq!(verdict(Some(status), Some(true)), expected, "{status}");
         }
     }
 
-    #[tokio::test]
-    async fn a_merge_status_gitlab_adds_later_is_unknown() {
-        let mr = my_mr(json!({"detailed_merge_status": "waiting_in_a_merge_train"})).await;
-        assert_eq!(mr.merge_verdict, MergeVerdict::Unknown);
+    #[test]
+    fn a_merge_status_gitlab_adds_later_is_unknown() {
+        assert_eq!(verdict(Some("waiting_in_a_merge_train"), Some(true)), MergeVerdict::Unknown);
     }
 
-    #[tokio::test]
-    async fn an_mr_gitlab_answers_without_a_merge_status_is_unknown() {
-        assert_eq!(my_mr(json!({})).await.merge_verdict, MergeVerdict::Unknown);
+    #[test]
+    fn an_mr_gitlab_answers_without_a_merge_status_is_unknown() {
+        assert_eq!(verdict(None, Some(true)), MergeVerdict::Unknown);
     }
 
-    #[tokio::test]
-    async fn an_mr_i_may_not_merge_is_not_allowed_though_its_status_is_mergeable() {
-        let mr = my_mr(json!({"detailed_merge_status": "mergeable", "user": {"can_merge": false}})).await;
-        assert_eq!(mr.merge_verdict, MergeVerdict::NotAllowed);
+    #[test]
+    fn an_mr_i_may_not_merge_is_not_allowed_though_its_status_is_mergeable() {
+        assert_eq!(verdict(Some("mergeable"), Some(false)), MergeVerdict::NotAllowed);
     }
 
-    #[tokio::test]
-    async fn an_mr_gitlab_answers_without_my_rights_keeps_its_status() {
-        let mr = my_mr(json!({"detailed_merge_status": "mergeable", "user": null})).await;
-        assert_eq!(mr.merge_verdict, MergeVerdict::Ready);
+    #[test]
+    fn an_mr_no_longer_open_is_not_open_though_i_may_not_merge_it() {
+        assert_eq!(verdict(Some("not_open"), Some(false)), MergeVerdict::NotOpen);
+    }
+
+    #[test]
+    fn an_mr_gitlab_answers_without_my_rights_keeps_its_status() {
+        assert_eq!(verdict(Some("mergeable"), None), MergeVerdict::Mergeable);
     }
 
     #[tokio::test]
