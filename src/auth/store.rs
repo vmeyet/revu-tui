@@ -4,6 +4,8 @@ use std::process::{Command, Stdio};
 
 pub(crate) trait SecretStore {
     fn get(&self, account: &str) -> Result<Option<String>>;
+    /// Whether a secret is kept for `account`, without reading it.
+    fn has(&self, account: &str) -> Result<bool>;
     fn set(&self, account: &str, secret: &str) -> Result<()>;
     fn delete(&self, account: &str) -> Result<()>;
 }
@@ -40,6 +42,16 @@ impl SecretStore for SecurityCli {
             bail!("keychain read failed: {}", String::from_utf8_lossy(&output.stderr).trim());
         }
         Ok(Some(String::from_utf8(output.stdout)?.trim_end().to_owned()))
+    }
+
+    /// Without `-w` or `-g`, `security` prints the item's attributes only: the secret is not read, so no unlock is asked.
+    fn has(&self, account: &str) -> Result<bool> {
+        let output = self.command("find-generic-password", account).output().context("running security")?;
+        match output.status.code() {
+            Some(0) => Ok(true),
+            Some(NOT_FOUND) => Ok(false),
+            _ => bail!("keychain lookup failed: {}", String::from_utf8_lossy(&output.stderr).trim()),
+        }
     }
 
     /// Written through `security -i` with hex data: the secret never appears in argv,
@@ -93,6 +105,10 @@ pub(crate) struct MemoryStore {
 impl SecretStore for MemoryStore {
     fn get(&self, account: &str) -> Result<Option<String>> {
         Ok(self.items.lock().unwrap().get(account).cloned())
+    }
+
+    fn has(&self, account: &str) -> Result<bool> {
+        Ok(self.items.lock().unwrap().contains_key(account))
     }
 
     fn set(&self, account: &str, secret: &str) -> Result<()> {

@@ -324,7 +324,23 @@ impl QueueMr {
 impl Queue {
     /// The key of every MR the forge listed, all of them open.
     pub(crate) fn listed(&self) -> impl Iterator<Item = MrKey> + '_ {
-        self.review_requested.iter().chain(&self.authored).chain(&self.assigned).chain(&self.open).map(QueueMr::key)
+        self.lists().map(QueueMr::key)
+    }
+
+    /// The queue of `scope` as `cache` last held it.
+    pub(crate) fn cached(cache: &crate::cache::Cache, scope: Option<&ProjectPath>) -> Option<Self> {
+        cache.read_entry(&crate::cache::keys::queue(scope)).map(|entry: crate::cache::Entry<Self>| entry.value)
+    }
+
+    /// Every MR the forge listed, once each, in the order of its lists.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the ctrl-k finder lists the other space with it next"))]
+    pub(crate) fn rows(&self) -> Vec<QueueMr> {
+        let mut seen = HashSet::new();
+        self.lists().filter(|mr| seen.insert(mr.key())).cloned().collect()
+    }
+
+    fn lists(&self) -> impl Iterator<Item = &QueueMr> {
+        self.review_requested.iter().chain(&self.authored).chain(&self.assigned).chain(&self.open)
     }
 
     /// The queue and every row marked as coming from `host`, so opening one reaches the right forge.
@@ -426,6 +442,14 @@ mod tests {
         let queue = scoped();
         let open = queue.open.into_iter().map(&change).collect();
         Queue { open, ..scoped() }.sections_with(&[], &Rules::default(), day(23))
+    }
+
+    #[test]
+    fn rows_list_an_mr_in_two_lists_once() {
+        let queue = queue();
+        assert_ne!(queue.authored, [], "the fixture needs MRs of mine to list twice");
+        let twice = Queue { open: queue.open.iter().chain(&queue.authored).cloned().collect(), ..queue.clone() };
+        assert_eq!(numbers(&twice.rows()), numbers(&queue.rows()));
     }
 
     #[test]
