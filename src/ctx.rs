@@ -142,7 +142,7 @@ impl Home {
     }
 
     pub(crate) fn cached(&self) -> Option<crate::forge::Queue> {
-        self.cache.read_entry(&crate::cache::keys::queue(None)).map(|e: crate::cache::Entry<crate::forge::Queue>| e.value)
+        crate::forge::Queue::cached(&self.cache, None)
     }
 }
 

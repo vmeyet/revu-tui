@@ -91,7 +91,7 @@ impl Queues {
         if self.is_local() {
             return None;
         }
-        let queue: Queue = self.homes.cache.read_entry(&keys::queue(scope.as_ref()))?.value;
+        let queue = Queue::cached(&self.homes.cache, scope.as_ref())?;
         let others: Vec<Queue> =
             if scope.is_none() { self.homes.others.iter().filter_map(crate::ctx::Home::cached).collect() } else { vec![] };
         let ready = self.cached_ready(scope.as_ref());
