@@ -248,6 +248,8 @@ pub(crate) struct App {
     /// False once the terminal said it lost focus: a local diff stops looking until it comes back.
     pub(crate) terminal_focused: bool,
     pub(crate) should_quit: bool,
+    /// `:local` or `:forge`, asked for; the loop takes it and opens that side.
+    pub(super) switch: Option<super::Space>,
     pub(crate) started: Instant,
     /// Set by the event loop each time it wakes, so nothing below reads the clock.
     pub(crate) now: Instant,
@@ -361,6 +363,7 @@ impl App {
             poll: Poll::default(),
             terminal_focused: true,
             should_quit: false,
+            switch: None,
             started: now,
             now,
             today: Utc::now(),

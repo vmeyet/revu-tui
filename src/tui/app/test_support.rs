@@ -167,6 +167,11 @@ pub(super) fn on_line(app: &mut App) {
     assert!(matches!(app.open.as_ref().unwrap().row(), Some(Row::Line { .. })));
 }
 
+/// The text of the toast on screen.
+pub(super) fn toast(app: &App) -> &str {
+    &app.live_toast().unwrap().text
+}
+
 pub(super) fn type_text(app: &mut App, text: &str) -> Vec<Action> {
     press(app, text);
     app.handle_key(code(KeyCode::Enter))

@@ -26,7 +26,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `syntax/` | Syntax colours from tree-sitter grammars, loaded on first use |
 | `act.rs` | Every action in one table: name, default keys, palette verb, panes, usage group; the lines of the `?` help in a table beside it |
 | `keymap.rs` | The user's `[keys]` on top of the defaults |
-| `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out |
+| `tui/mod.rs` | The event loop: terminal events, answers and ticks in, frames out; one session after another as `:local` and `:forge` switch space |
 | `tui/app/` | `App`, the pure state machine: keys in, `Action`s out, `Incoming` answers applied |
 | `tui/actions.rs` | The action runner: one task per `Action`, answers sent back as `Incoming` |
 | `tui/backend/mod.rs` | `Backend`: the parts behind the runner, one per concern, and `Homes`, each host's forge and cache |
@@ -105,6 +105,16 @@ The others get a `Ctx`, call `Forge` and print; `revu` and `revu <ref>` hand the
 An MR or a project the host does not have fails as `forge::NotFound`, whatever the backend answered; `ctx::with_host_hint` turns it into the message with `auth::HostOrigin`, how the host was chosen: `Ctx::with_host_hint` for every command in `main.rs`, `Backend::with_host_hint` when the TUI opens an MR.
 `revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host and no Jev, and `tui::run` takes it like any other; `a` opens the session of a worktree's branch, `agent::Subject::Branch`, where a forge opens an MR's.
 Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is looked at every 2s while the terminal has focus, and when it comes back.
+
+Switching space, `:local` and `:forge`:
+
+1. `tui::run` asks the terminal once (`TerminalAnswers`), builds a `Session` (its `App`, `Backend` and answer channel) from the `Ctx`, and enters the screen.
+2. The command sets `App::switch`; `event_loop` ends on it and hands the `Space` back, the screen still entered.
+3. The loop toasts what it opens and draws that frame, then `open_space` opens the other `Ctx` through `ctx::Launch`, the `--host`, `--all` and local target the command line gave: the forge as `revu` does, the worktrees as `revu local` does, on the one revu runs in.
+4. Keys typed meanwhile are dropped, so none reaches a screen the reader did not see.
+5. The new `Session` replaces the old one and says which space it reads, unless it starts on a toast of its own; tasks of the old one still finish, their answers dropped.
+6. A space that does not open, no login or no repository, leaves the old session as it was, its channel kept, and toasts why.
+7. No loop runs between two sessions: opening the next one may block, as startup does.
 
 ## Boundaries
 
@@ -191,6 +201,7 @@ The words users see are also in [`docs/concepts.md`](docs/concepts.md).
 | review | The set of drafts, published together with `P` |
 | viewed | A file the reviewer marked as read; it folds |
 | worktree | One entry of `git worktree list`: on `revu local`, it stands where an MR does |
+| space | What a session reads: the forge, or the worktrees of the checkout; `:local` and `:forge` switch it; `tui::app::Space` |
 | target | What a local diff compares against, its merge base with `HEAD` being where the diff starts; `B` changes it |
 | pin | An MR kept on top of the queue, in `PINNED`, until it is merged or closed |
 | mention | Someone wrote my name, or to me, on an MR and I have not answered; a GitLab to-do item of kind `mentioned` or `directly_addressed`; `forge::Mention` |

@@ -36,6 +36,7 @@ mod share;
 mod stack;
 mod state;
 mod sticky;
+mod switch;
 mod taps;
 #[cfg(test)]
 mod test_support;
@@ -76,6 +77,7 @@ pub(crate) use session::SessionPick;
 pub(crate) use share::{Sharing, Stage as ShareStage};
 pub(crate) use state::{App, Drawn, Settings};
 pub(crate) use sticky::{MIN_HEIGHT as STICKY_MIN_HEIGHT, StickyRows, settle as settle_with_sticky, sticky_rows};
+pub(crate) use switch::Space;
 pub(crate) use taps::{Tap, TapSpot};
 pub(crate) use tree::Tree;
 pub(crate) use triage::Mark;

@@ -53,8 +53,8 @@ impl App {
         }
     }
 
-    /// Adds the time read since the clock last counted to the screen on show; called by `tick`.
-    pub(super) fn count_time(&mut self) {
+    /// Adds the time read since the clock last counted to the screen on show; called by `tick`, and as a session ends.
+    pub(crate) fn count_time(&mut self) {
         let read = self.usage.clock.count(self.now);
         self.spend(read);
     }

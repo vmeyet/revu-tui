@@ -28,11 +28,12 @@ use crate::ai;
 use crate::ai::typesafe::TypeSafe;
 use crate::blocking;
 use crate::cache::Cache;
-use crate::ctx::Ctx;
+use crate::ctx::{Ctx, Launch, LocalHere};
+use crate::forge::MrKey;
 use crate::log::OrWarn as _;
 use actions::{failed, spawn};
 use anyhow::Result;
-use app::{Action, App, Failure, Incoming, Input, Settings};
+use app::{Action, App, Failure, Incoming, Input, Settings, Space};
 use backend::Backend;
 use chrono::Utc;
 use crossterm::event::{Event, EventStream, KeyEventKind};
@@ -46,93 +47,168 @@ use vtui::screen::Screen;
 const IDLE_TICK: Duration = Duration::from_secs(1);
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out; on `start` in zen when given.
-pub(crate) async fn run(ctx: Ctx, start: Option<crate::forge::MrKey>) -> Result<()> {
-    let theme = match ctx.config.tui.theme.as_deref() {
-        Some(name) => theme::Theme::named(name)
-            .ok_or_else(|| anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", ")))?,
-        None => theme::Theme::default(),
-    };
-    let ground = vtui::ground::ask();
-    let pictures = if ctx.config.tui.images.unwrap_or(true) { images::ask_terminal() } else { None };
-    let theme = ground.map_or(theme, |ground| theme.with_ground(ground));
-    let others = ctx.others();
-    let hosts = ctx.hosts(&others);
-    let checkout = std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host()));
-    let me = ctx.identities(&others);
-    let homes = backend::Homes { forge: ctx.forge.clone(), cache: ctx.cache.clone(), others };
-    let setup = backend::Setup {
-        fold_globs: ctx.config.review.fold.clone(),
-        watch_labels: ctx.config.queue.watch_labels.clone(),
-        rules: ctx.config.queue.rules.clone(),
-        ready_command: ctx.config.queue.ready.command.clone(),
-        open: ctx.config.open.clone(),
-        agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
-        notifier: notifier(),
-        checkout,
-        jev: jev(&ctx.config.ai),
-        host_origin: ctx.host_origin,
-    };
-    let triage = setup.jev.is_some();
-    let backend = Backend::new(homes, setup);
-    let settings = Settings {
-        theme,
-        host: ctx.forge.host().to_owned(),
-        me,
-        project: ctx.project.clone(),
-        ground,
-        triage,
-        notify: ctx.config.notify.enabled,
-        hosts,
-        token: ctx.source,
-        keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
-        pictures,
-        queue_layout: ctx.config.tui.queue,
-        zen_width: ctx.config.tui.zen_width,
-        widths: ctx.config.tui.widths(),
-        tap_bar: ctx.config.tui.tap_bar,
-        views: ctx.config.queue.views.clone().into_iter().collect(),
-        share: crate::share::targets(&ctx.config.share),
-        last_share: crate::share::last_share(&Cache::shared()),
-        prefetch: ctx.config.queue.prefetch,
-        ascii: ctx.config.tui.ascii,
-        reactions: crate::reactions::read(&Cache::shared()),
-        quit_confirm: ctx.config.keys.quit_confirm,
-        usage: ctx.config.usage.enabled.then(crate::usage::Tally::default),
-        whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
-        ignored_settings: crate::config::warnings(),
-        agent: backend.agent.is_some(),
-    };
-    let mut app = App::new(settings);
-    let first = match start {
-        Some(key) => app.start_on(key),
-        None => app.start(),
-    };
+/// `launch` opens the other space again when `:local` or `:forge` asks.
+pub(crate) async fn run(ctx: Ctx, start: Option<MrKey>, launch: Launch) -> Result<()> {
+    let answers = TerminalAnswers::ask(&ctx.config);
+    let session = Session::start(&ctx, start, &answers)?;
     tokio::spawn({
-        let backend = backend.clone();
+        let backend = session.backend.clone();
         async move { backend.homes.prune_daily().await }
     });
     let (mut terminal, screen) = Screen::enter();
-    let outcome = event_loop(&mut terminal, &screen, &mut app, &backend, first).await;
+    let outcome = Box::pin(run_sessions(&mut terminal, &screen, session, &answers, &launch)).await;
     screen.leave();
     outcome
 }
 
-async fn event_loop(
+/// What the terminal answered once at start, kept for every session after it.
+struct TerminalAnswers {
+    ground: Option<u32>,
+    pictures: Option<ratatui_image::picker::Picker>,
+}
+
+impl TerminalAnswers {
+    fn ask(config: &crate::config::Config) -> Self {
+        let ground = vtui::ground::ask();
+        let pictures = if config.tui.images.unwrap_or(true) { images::ask_terminal() } else { None };
+        Self { ground, pictures }
+    }
+}
+
+/// One space's app, the backend it runs on, and the channel the answers of its tasks come back on.
+struct Session {
+    app: App,
+    backend: Backend,
+    tx: mpsc::UnboundedSender<Incoming>,
+    rx: mpsc::UnboundedReceiver<Incoming>,
+}
+
+/// Sessions one after another, as `:local` and `:forge` ask, until the reader quits; a space that does not open
+/// leaves the session on screen as it was.
+async fn run_sessions(
     terminal: &mut ratatui::DefaultTerminal,
     screen: &Screen,
-    app: &mut App,
-    backend: &Backend,
-    first: Vec<Action>,
+    mut session: Session,
+    answers: &TerminalAnswers,
+    launch: &Launch,
 ) -> Result<()> {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Incoming>();
+    while let Some(space) = event_loop(terminal, screen, &mut session).await? {
+        session.app.opening(space);
+        terminal.draw(|f| ui::draw(f, &mut session.app))?;
+        let opened = open_space(space, answers, launch).await;
+        drop_typed_ahead()?;
+        session = match opened {
+            Ok(mut next) => {
+                next.app.switched();
+                next
+            }
+            Err(err) => {
+                wake(&mut session.app);
+                session.app.switch_failed(space, &format!("{err:#}"));
+                session
+            }
+        };
+    }
+    Ok(())
+}
+
+/// The session `:local` or `:forge` asked for, opened as `revu local` and `revu` open theirs.
+async fn open_space(space: Space, answers: &TerminalAnswers, launch: &Launch) -> Result<Session> {
+    match space {
+        Space::Local => {
+            let LocalHere { ctx, here } = launch.local().await?;
+            Session::start(&ctx, Some(here), answers)
+        }
+        Space::Forge => Session::start(&launch.forge()?, None, answers),
+    }
+}
+
+/// Keys typed while the screen stood still were aimed at a screen that is gone: none of them reaches the next loop.
+fn drop_typed_ahead() -> std::io::Result<()> {
+    while crossterm::event::poll(Duration::ZERO)? {
+        crossterm::event::read()?;
+    }
+    Ok(())
+}
+
+impl Session {
+    /// The app over `ctx`, its first actions already sent.
+    fn start(ctx: &Ctx, start: Option<MrKey>, answers: &TerminalAnswers) -> Result<Self> {
+        let theme = match ctx.config.tui.theme.as_deref() {
+            Some(name) => theme::Theme::named(name).ok_or_else(|| {
+                anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", "))
+            })?,
+            None => theme::Theme::default(),
+        };
+        let theme = answers.ground.map_or(theme, |ground| theme.with_ground(ground));
+        let others = ctx.others();
+        let hosts = ctx.hosts(&others);
+        let checkout = std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host()));
+        let me = ctx.identities(&others);
+        let homes = backend::Homes { forge: ctx.forge.clone(), cache: ctx.cache.clone(), others };
+        let setup = backend::Setup {
+            fold_globs: ctx.config.review.fold.clone(),
+            watch_labels: ctx.config.queue.watch_labels.clone(),
+            rules: ctx.config.queue.rules.clone(),
+            ready_command: ctx.config.queue.ready.command.clone(),
+            open: ctx.config.open.clone(),
+            agent: agent(&ctx.config.agent, ctx.config.tui.widths().compact, checkout.as_ref()),
+            notifier: notifier(),
+            checkout,
+            jev: jev(&ctx.config.ai),
+            host_origin: ctx.host_origin,
+        };
+        let triage = setup.jev.is_some();
+        let backend = Backend::new(homes, setup);
+        let settings = Settings {
+            theme,
+            host: ctx.forge.host().to_owned(),
+            me,
+            project: ctx.project.clone(),
+            ground: answers.ground,
+            triage,
+            notify: ctx.config.notify.enabled,
+            hosts,
+            token: ctx.source,
+            keymap: crate::keymap::Keymap::new(&ctx.config.keys)?,
+            pictures: answers.pictures.clone(),
+            queue_layout: ctx.config.tui.queue,
+            zen_width: ctx.config.tui.zen_width,
+            widths: ctx.config.tui.widths(),
+            tap_bar: ctx.config.tui.tap_bar,
+            views: ctx.config.queue.views.clone().into_iter().collect(),
+            share: crate::share::targets(&ctx.config.share),
+            last_share: crate::share::last_share(&Cache::shared()),
+            prefetch: ctx.config.queue.prefetch,
+            ascii: ctx.config.tui.ascii,
+            reactions: crate::reactions::read(&Cache::shared()),
+            quit_confirm: ctx.config.keys.quit_confirm,
+            usage: ctx.config.usage.enabled.then(crate::usage::Tally::default),
+            whats_new: whats_new(&Cache::shared(), crate::changelog::Changelog::embedded()?),
+            ignored_settings: crate::config::warnings(),
+            agent: backend.agent.is_some(),
+        };
+        let mut app = App::new(settings);
+        let first = match start {
+            Some(key) => app.start_on(key),
+            None => app.start(),
+        };
+        let (tx, rx) = mpsc::unbounded_channel::<Incoming>();
+        for action in first {
+            spawn(action, &backend, tx.clone());
+        }
+        Ok(Self { app, backend, tx, rx })
+    }
+}
+
+/// Runs `session` until the reader quits, `None`, or asks for the other side.
+async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, session: &mut Session) -> Result<Option<Space>> {
+    let Session { app, backend, tx, rx } = session;
     let mut keys = Keys::new();
     let mut shown = Shown::default();
     let mut ticked = Instant::now();
     let mut flushed = Instant::now();
-    for action in first {
-        spawn(action, backend, tx.clone());
-    }
-    while !app.should_quit {
+    while !app.session_over() {
         if flushed.elapsed() >= USAGE_FLUSH {
             flushed = Instant::now();
             if let Some(counts) = app.take_usage() {
@@ -194,11 +270,11 @@ async fn event_loop(
             shown.forget();
         }
     }
-    app.tick();
+    app.count_time();
     if let Some(counts) = app.take_usage() {
         save_usage(counts).await;
     }
-    Ok(())
+    Ok(app.take_switch())
 }
 
 /// What is new since the last start. This start is remembered at once, so the next one has nothing to say again.

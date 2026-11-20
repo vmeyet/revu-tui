@@ -4,7 +4,7 @@ use crate::cache::Cache;
 use crate::config::Config;
 use crate::forge::{Forge, Identities, Kind, Me, Mr, MrKey, NotFound, ProjectPath, local};
 use crate::log::OrWarn as _;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::Serialize;
 
 /// Everything a command needs, opened once from the config, the environment and the keychain.
@@ -21,6 +21,38 @@ pub struct Ctx {
     pub(crate) project: Option<ProjectPath>,
 }
 
+/// How the command line asked revu to start, so the TUI opens the forge or the worktrees again the same way.
+#[derive(Debug)]
+pub(crate) struct Launch {
+    /// `--host`.
+    pub(crate) host: Option<String>,
+    /// `--all`.
+    pub(crate) all: bool,
+    /// `revu local <target>`: what a local diff compares against.
+    pub(crate) target: Option<String>,
+}
+
+impl Launch {
+    /// The forge as `revu` opens it.
+    pub(crate) fn forge(&self) -> Result<Ctx> {
+        Ok(Ctx::open(self.host.as_deref(), false)?.everywhere(self.all))
+    }
+
+    /// The repository of the current folder as `revu local` opens it, and the worktree revu runs in.
+    pub(crate) async fn local(&self) -> Result<LocalHere> {
+        let dir = std::env::current_dir().context("reading the current folder")?;
+        let client = local::Client::open(&dir, self.target.as_deref()).await?;
+        let here = client.here_key().await?;
+        Ok(LocalHere { ctx: Ctx::local(client)?, here })
+    }
+}
+
+/// The repository revu runs in, opened as `revu local` does, and the worktree it runs in.
+pub(crate) struct LocalHere {
+    pub(crate) ctx: Ctx,
+    pub(crate) here: MrKey,
+}
+
 impl Ctx {
     /// Reads the config, finds the token and the checkout's project.
     pub fn open(host: Option<&str>, json: bool) -> Result<Self> {
@@ -32,7 +64,7 @@ impl Ctx {
     }
 
     /// `revu local`: no token, no other host, no Jev and nothing that only makes sense on a forge.
-    pub(crate) fn local(client: local::Client) -> Result<Self> {
+    fn local(client: local::Client) -> Result<Self> {
         let mut config = Config::load()?;
         config.host = None;
         config.hosts.clear();
