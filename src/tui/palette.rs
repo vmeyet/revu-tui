@@ -148,9 +148,8 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "target" if rest.is_empty() => Err(":target needs a branch, like main".into()),
         "target" => Ok(Command::Target(rest.to_owned())),
         "title" => Title::parse(rest).map(Command::Title).ok_or_else(|| ":title needs the new title".into()),
-        word if let Some(space) = Space::from_word(word) => Ok(Command::Switch(space)),
         "quit" | "q" | "exit" => Ok(Command::Quit),
-        unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
+        word => Space::from_word(word).map(Command::Switch).ok_or_else(|| unknown_verb(word, act::verbs().map(|verb| verb.word))),
     }
 }
 
