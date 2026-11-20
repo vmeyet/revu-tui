@@ -88,8 +88,26 @@ impl Mr {
         Some(reason)
     }
 
-    /// Why I may not mark this MR a draft or ready from revu, or `None` when I may: it is mine and open.
-    pub(crate) fn draft_refusal(&self) -> Option<String> {
+    /// Why I may not change this MR from revu, its readiness or its title, or `None` when I may.
+    pub(crate) fn change_refusal(&self) -> Option<String> {
+        Standing { mine: self.mine, state: self.state }.change_refusal()
+    }
+
+    pub(crate) fn readiness(&self) -> Readiness {
+        if self.draft { Readiness::Draft } else { Readiness::Ready }
+    }
+}
+
+/// Whose an MR is and whether it is open: what decides if revu may change it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Standing {
+    pub(crate) mine: bool,
+    pub(crate) state: MrState,
+}
+
+impl Standing {
+    /// Why I may not change the MR from revu, or `None` when I may: it is mine and open.
+    pub(crate) fn change_refusal(self) -> Option<String> {
         match () {
             () if !self.mine => Some("it is not yours".to_owned()),
             () if self.state != MrState::Open => Some(format!("this MR is {}", self.state.word())),
@@ -311,6 +329,21 @@ pub(crate) enum ApprovalChange {
     Unapprove,
 }
 
+/// The title an MR takes from revu: trimmed, never empty.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Title(String);
+
+impl Title {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
+        let text = text.trim();
+        (!text.is_empty()).then(|| Self(text.to_owned()))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Whether an MR is a draft or ready for review.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Readiness {
@@ -463,11 +496,17 @@ mod tests {
     }
 
     #[test]
-    fn only_my_open_mrs_turn_draft_or_ready() {
-        assert_eq!(mergeable().draft_refusal(), None);
-        assert_eq!(Mr { draft: true, ..mergeable() }.draft_refusal(), None);
-        assert_eq!(Mr { mine: false, ..mergeable() }.draft_refusal().as_deref(), Some("it is not yours"));
-        assert_eq!(Mr { state: MrState::Closed, ..mergeable() }.draft_refusal().as_deref(), Some("this MR is closed"));
+    fn only_my_open_mrs_change_from_revu() {
+        assert_eq!(mergeable().change_refusal(), None);
+        assert_eq!(Mr { draft: true, ..mergeable() }.change_refusal(), None);
+        assert_eq!(Mr { mine: false, ..mergeable() }.change_refusal().as_deref(), Some("it is not yours"));
+        assert_eq!(Mr { state: MrState::Closed, ..mergeable() }.change_refusal().as_deref(), Some("this MR is closed"));
+    }
+
+    #[test]
+    fn a_title_is_trimmed_and_never_empty() {
+        assert_eq!(Title::parse("  Count the widgets ").unwrap().as_str(), "Count the widgets");
+        assert_eq!(Title::parse(" \t "), None);
     }
 
     #[test]

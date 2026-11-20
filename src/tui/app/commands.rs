@@ -21,8 +21,17 @@ impl App {
         let plain = !ctrl && !key.modifiers.contains(KeyModifiers::ALT);
         let commands = palette.mode == Mode::Commands;
         match key.code {
-            KeyCode::Esc => return vec![],
-            KeyCode::Enter => return self.palette_enter(palette),
+            KeyCode::Esc => {
+                self.title_target = None;
+                return vec![];
+            }
+            KeyCode::Enter => {
+                let actions = self.palette_enter(palette);
+                if self.palette.is_none() {
+                    self.title_target = None;
+                }
+                return actions;
+            }
             KeyCode::Backspace if plain && !palette.backspace() => return vec![],
             KeyCode::Backspace if plain => {}
             // `ctrl-k` opens the palette, so in it the key deletes nothing.
@@ -168,6 +177,7 @@ impl App {
                 vec![]
             }
             Command::Target(target) => self.change_local(crate::forge::local::Change::Target(target)),
+            Command::Title(title) => self.set_title(title),
             Command::Quit => {
                 self.should_quit = true;
                 vec![]

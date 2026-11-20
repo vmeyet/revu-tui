@@ -17,7 +17,7 @@ pub(crate) use identity::{Identities, Me, Renamed};
 pub(crate) use model::{
     Applicable, Approval, ApprovalChange, Approvals, Deployment, DiffFile, Discussion, Draft, Emoji, FileKind, LineRef, Mention, MentionId,
     MergeMethod, MergePlan, MergeVerdict, Mr, MrKey, MrState, NewDraft, Note, NoteKind, Pipeline, PipelineStatus, Position, ProjectPath,
-    Reaction, ReactionChange, Readiness, Refs, ReviewKind, Sha, Side, Suggestion, ThreadId, User, tally, toggled,
+    Reaction, ReactionChange, Readiness, Refs, ReviewKind, Sha, Side, Standing, Suggestion, ThreadId, Title, User, tally, toggled,
 };
 pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sections, Size, WorktreeRow};
 
@@ -50,6 +50,14 @@ impl Kind {
         match self {
             Kind::GitLab | Kind::Local => '!',
             Kind::GitHub => '#',
+        }
+    }
+
+    /// `title` as the reader edits it: without the draft marker GitLab writes in it.
+    pub(crate) fn bare_title(self, title: &str) -> &str {
+        match self {
+            Kind::GitLab => gitlab::bare_title(title),
+            Kind::GitHub | Kind::Local => title,
         }
     }
 
@@ -98,6 +106,11 @@ pub(crate) struct Hosts {
 }
 
 impl Hosts {
+    /// How a toast names `key`: `!42`, or `#42` on GitHub.
+    pub(crate) fn reference(&self, key: &MrKey) -> String {
+        format!("{}{}", self.kind_of(key).sigil(), key.number)
+    }
+
     #[cfg(test)]
     pub(crate) fn one(host: &str, kind: Kind) -> Self {
         Self { main: (host.to_owned(), kind), others: vec![] }
@@ -414,6 +427,16 @@ impl Forge {
             Forge::GitHub(client) => client.set_readiness(key, readiness).await,
             Forge::Local(_) => local::forge_only(),
         }
+    }
+
+    /// Gives the MR a new title; it stays a draft, or ready, as `readiness` says.
+    pub(crate) async fn set_title(&self, key: &MrKey, title: &Title, readiness: Readiness) -> Result<()> {
+        let changed = match self {
+            Forge::GitLab(client) => client.set_title(key, title, readiness).await,
+            Forge::GitHub(client) => client.set_title(key, title).await,
+            Forge::Local(_) => local::forge_only(),
+        };
+        self.found_mr(key, changed)
     }
 
     /// A public new thread, on a line when `position` is given.

@@ -23,18 +23,18 @@ expression: "render(&mut app, 160, 45)"
 │                          │        h l  pane to the left, to the right                  b  pin on top of the queue, or unpin      │                           │
 │                          │      enter  open, or toggle the fold or the thread      zo zc  open, fold the section or stack        │                           │
 │                          │      esc x  close the pane, back to the queue               x  mark the mentions of the MR done       │                           │
-│                          │  tab S-tab  next, previous file                                                                       │                           │
-│                          │      ]c [c  next, previous hunk                         SEARCH & APP                                  │                           │
-│                          │      ]n [n  next, previous open conversation             ^k ,  MRs · > commands                       │                           │
-│                          │        n N  the same, while no search is on                 :  commands: :go !42, :set theme=nord     │                           │
-│                          │      ]m [m  next, previous MR in the queue                o y  open in the browser, copy the link     │                           │
+│                          │  tab S-tab  next, previous file                             e  change the title of your MR            │                           │
+│                          │      ]c [c  next, previous hunk                                                                       │                           │
+│                          │      ]n [n  next, previous open conversation            SEARCH & APP                                  │                           │
+│                          │        n N  the same, while no search is on              ^k ,  MRs · > commands                       │                           │
+│                          │      ]m [m  next, previous MR in the queue                  :  commands: :go !42, :set theme=nord     │                           │
+│                          │                                                           o y  open in the browser, copy the link     │                           │
 │                          │                                                             a  the agent session of the MR or branch  │                           │
 │                          │                                                             r  refresh                                │                           │
 │                          │                                                             ?  this help                              │                           │
 │                          │                                                          q ^c  quit: twice; q closes a pane first     │                           │
 │                          │                                                                                                       │                           │
 │                          ╰────────────────────────────────────────────────────────────────────────────── ? every key · esc close ╯                           │
-│                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │
 │                                          ││                                                                                                                  │

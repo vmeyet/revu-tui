@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn every_forge_key_does_nothing_in_the_queue() {
-        for key in ["Y", "o", "y", "i", "*"] {
+        for key in ["Y", "o", "y", "i", "*", "e"] {
             let mut app = local_app();
             app.focus = Focus::Queue;
             assert_eq!(press(&mut app, key), vec![], "{key}");

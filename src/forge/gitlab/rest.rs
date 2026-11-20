@@ -267,6 +267,12 @@ impl Client {
         self.http.put_json::<Discussion>(&path, &json!({"resolved": resolved})).await.map(|_| ())
     }
 
+    /// Gives the MR a new title, with the draft marker its `readiness` needs.
+    pub(crate) async fn set_title(&self, key: &MrKey, title: &forge::Title, readiness: forge::Readiness) -> Result<()> {
+        let title = super::title::keeping(title, readiness);
+        self.http.put_json::<serde_json::Value>(&mr_path(key), &json!({"title": title})).await.map(|_| ())
+    }
+
     /// A public new thread, on a line when `position` is given.
     pub(crate) async fn comment(&self, key: &MrKey, body: &str, position: Option<&forge::Position>) -> Result<forge::Discussion> {
         let payload = match position {
@@ -570,6 +576,20 @@ mod tests {
         Mock::given(method("POST")).and(path(format!("{base}/approve"))).respond_with(ResponseTemplate::new(401)).mount(&server).await;
         let approval = client(&server).publish(&key(), forge::ReviewKind::Approve).await.unwrap();
         assert_eq!(approval, forge::Approval::Refused("you cannot approve this MR (own MR or approval rules)".into()));
+    }
+
+    #[tokio::test]
+    async fn a_draft_retitled_without_its_marker_stays_a_draft() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42"))
+            .and(body_partial_json(json!({"title": "Draft: Count the widgets"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(mr_json()))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let title = forge::Title::parse("Count the widgets").unwrap();
+        client(&server).set_title(&key(), &title, forge::Readiness::Draft).await.unwrap();
     }
 
     #[tokio::test]

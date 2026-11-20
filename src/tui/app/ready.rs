@@ -6,18 +6,18 @@ impl App {
     /// `H`: the other state for my open MR, else why not.
     pub(super) fn toggle_draft(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
-        let mr = &open.review.mr;
-        if let Some(reason) = mr.draft_refusal() {
-            self.warn(format!("cannot change {}{}: {reason}", self.hosts.kind_of(&open.key).sigil(), mr.number));
+        let (key, mr) = (open.key.clone(), &open.review.mr);
+        let readiness = if mr.draft { Readiness::Ready } else { Readiness::Draft };
+        if let Some(reason) = mr.change_refusal() {
+            self.cannot_change(&key, &reason);
             return vec![];
         }
-        let readiness = if mr.draft { Readiness::Ready } else { Readiness::Draft };
-        vec![Action::SetReadiness { key: open.key.clone(), readiness }]
+        vec![Action::SetReadiness { key, readiness }]
     }
 
     /// The forge took it: say which state it is in now, and read the MR and the queue again.
     pub(super) fn readiness_set(&mut self, key: &MrKey, readiness: Readiness) -> Vec<Action> {
-        self.toast(format!("{}{} is {}", self.hosts.kind_of(key).sigil(), key.number, readiness.described()));
+        self.toast(format!("{} is {}", self.hosts.reference(key), readiness.described()));
         self.reread(key)
     }
 }

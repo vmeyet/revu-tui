@@ -44,6 +44,7 @@ mod tests;
 mod threads;
 #[cfg(test)]
 mod timing;
+mod title;
 mod tree;
 mod triage;
 mod usage;
@@ -85,6 +86,7 @@ use crate::diff::fold::FoldState;
 pub(crate) use crate::forge::MrKey;
 use crate::forge::{
     ApprovalChange, Discussion, Identities, Position, ProjectPath, QueueMr, ReactionChange, Readiness, ReviewKind, Sections, Sha, ThreadId,
+    Title,
 };
 use crate::review::{Draft, Review};
 pub(crate) use crate::review::{Entry, EntryKind};
@@ -269,6 +271,12 @@ pub(crate) enum Action {
         key: MrKey,
         readiness: Readiness,
     },
+    /// Give my MR a new title, keeping it a draft or ready as `readiness` says.
+    SetTitle {
+        key: MrKey,
+        title: Title,
+        readiness: Readiness,
+    },
     /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
     Apply {
         key: MrKey,
@@ -422,6 +430,10 @@ pub(crate) enum Failure {
     Merge,
     /// The MR kept its draft state.
     SetReadiness,
+    /// The MR kept its title.
+    SetTitle {
+        key: MrKey,
+    },
     /// The reaction did not reach the forge; its count goes back.
     React {
         thread: ThreadId,
@@ -549,6 +561,10 @@ pub(crate) enum Incoming {
     ReadinessSet {
         key: MrKey,
         readiness: Readiness,
+    },
+    /// The MR has its new title.
+    TitleSet {
+        key: MrKey,
     },
     /// The suggestion is a commit on `branch` now.
     Applied {

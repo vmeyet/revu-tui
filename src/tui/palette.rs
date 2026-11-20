@@ -3,7 +3,7 @@
 //! `query`), `>` runs commands. `:` opens it on commands, with fuzzy tab completion, a ghost
 //! suggestion and history.
 use crate::act::{self, Act, Verb};
-use crate::forge::{Kind, MrKey};
+use crate::forge::{Kind, MrKey, Title};
 use vtui::palette::typed::{Setting, TypedLine, Typing, unknown_verb};
 
 /// What the palette searches, from the first character typed.
@@ -84,6 +84,8 @@ pub(crate) enum Command {
     News,
     /// `:target main`: a local diff compares against this.
     Target(String),
+    /// `:title Count the widgets`: a new title for my MR under the cursor.
+    Title(Title),
     Quit,
 }
 
@@ -103,6 +105,7 @@ impl Command {
             Self::Session => Act::SessionCommand,
             Self::News => Act::NewsCommand,
             Self::Target(_) => Act::TargetCommand,
+            Self::Title(_) => Act::TitleCommand,
             Self::Quit => Act::QuitCommand,
         }
     }
@@ -137,6 +140,7 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "news" => Ok(Command::News),
         "target" if rest.is_empty() => Err(":target needs a branch, like main".into()),
         "target" => Ok(Command::Target(rest.to_owned())),
+        "title" => Title::parse(rest).map(Command::Title).ok_or_else(|| ":title needs the new title".into()),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
     }
@@ -197,6 +201,7 @@ mod tests {
         assert_eq!(parse("view old"), Ok(Command::View("old".into())));
         assert_eq!(parse("v src/a.rs:42"), Ok(Command::View("src/a.rs:42".into())));
         assert_eq!(parse("view"), Ok(Command::View(String::new())));
+        assert_eq!(parse("title Count the widgets"), Ok(Command::Title(Title::parse("Count the widgets").unwrap())));
     }
 
     #[test]
@@ -211,6 +216,7 @@ mod tests {
         assert_eq!(parse("go"), Err(":go needs an MR, like !42".into()));
         assert!(parse("aprove").unwrap_err().contains("did you mean :approve"));
         assert_eq!(parse("set theme"), Err(":set needs key=value, e.g. theme=nord".into()));
+        assert_eq!(parse("title   "), Err(":title needs the new title".into()));
     }
 
     #[test]

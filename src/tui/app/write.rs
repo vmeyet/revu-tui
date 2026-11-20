@@ -433,6 +433,7 @@ impl App {
             Failure::Merge => self.warn(format!("not merged: {message}")),
             Failure::Mention => self.warn(format!("mention not marked done: {message}")),
             Failure::SetReadiness => self.warn(format!("not changed: {message}")),
+            Failure::SetTitle { key } => self.warn(format!("title of {} not changed: {message}", self.hosts.reference(&key))),
             Failure::React { thread, index, emoji, change } => self.react_failed(&thread, index, emoji, change, &message),
             Failure::Queue
             | Failure::QueuePart

@@ -224,6 +224,8 @@ pub(crate) struct App {
     pub(crate) help: Option<vtui::help::Help>,
     pub(crate) palette: Option<crate::tui::palette::Palette>,
     pub(crate) palette_history: Vec<String>,
+    /// The MR `e` offered a new title for, while the palette is open: `enter` sends it there, wherever the cursor went.
+    pub(crate) title_target: Option<super::title::TitleTarget>,
     pub(crate) ground: Option<u32>,
     /// Jev ranks the queue and the files: on with `[ai.typesafe]` and a key, off after `:ai off` or a failure until `:ai on`.
     pub(crate) triage: bool,
@@ -346,6 +348,7 @@ impl App {
             help: None,
             palette: None,
             palette_history: vec![],
+            title_target: None,
             ground: settings.ground,
             triage_configured: settings.triage,
             triage: settings.triage,

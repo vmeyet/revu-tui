@@ -43,6 +43,11 @@ impl App {
         self.toast = Some(Toast::warning(text.into(), self.now));
     }
 
+    /// Says why revu leaves the MR `key` as it is.
+    pub(super) fn cannot_change(&mut self, key: &super::MrKey, reason: &str) {
+        self.warn(format!("cannot change {}: {reason}", self.hosts.reference(key)));
+    }
+
     pub(crate) fn live_toast(&self) -> Option<&Toast> {
         self.toast.as_ref().filter(|t| t.live(self.now))
     }
