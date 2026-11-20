@@ -12,6 +12,9 @@ Each entry says what changed, then where, then how to use it.
 - **`:local` and `:forge` switch between your worktrees and the forge without leaving revu.**
   In the palette: `:local` on the forge's queue, `:forge` on `revu local`.
   Type `:local` to review the worktrees of the checkout revu runs in, and `:forge` to go back to your queue.
+- **The `ctrl-k` finder also lists the other space.**
+  On the forge after your MRs: the worktrees of the checkout, marked `local`; on `revu local`: your last queue, marked `forge`.
+  Pick one: revu switches space and opens it.
 - **`e` gives your MR a new title.**
   In the queue, on your own open MRs; `:title` does the same for the MR under the cursor.
   Press `e`: the palette opens on `:title` and the current title, edit it and press `enter`.

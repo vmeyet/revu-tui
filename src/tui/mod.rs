@@ -33,7 +33,7 @@ use crate::forge::MrKey;
 use crate::log::OrWarn as _;
 use actions::{failed, spawn};
 use anyhow::Result;
-use app::{Action, App, Failure, Incoming, Input, Settings, Space};
+use app::{Action, App, Failure, Incoming, Input, Settings, Space, Switch};
 use backend::Backend;
 use chrono::Utc;
 use crossterm::event::{Event, EventStream, KeyEventKind};
@@ -50,7 +50,7 @@ const IDLE_TICK: Duration = Duration::from_secs(1);
 /// `launch` opens the other space again when `:local` or `:forge` asks.
 pub(crate) async fn run(ctx: Ctx, start: Option<MrKey>, launch: Launch) -> Result<()> {
     let answers = TerminalAnswers::ask(&ctx.config);
-    let session = Session::start(&ctx, start, &answers)?;
+    let session = Session::start(&ctx, start, &answers, &launch)?;
     tokio::spawn({
         let backend = session.backend.clone();
         async move { backend.homes.prune_daily().await }
@@ -92,10 +92,11 @@ async fn run_sessions(
     answers: &TerminalAnswers,
     launch: &Launch,
 ) -> Result<()> {
-    while let Some(space) = event_loop(terminal, screen, &mut session).await? {
+    while let Some(switch) = event_loop(terminal, screen, &mut session).await? {
+        let space = switch.to;
         session.app.opening(space);
         terminal.draw(|f| ui::draw(f, &mut session.app))?;
-        let opened = open_space(space, answers, launch).await;
+        let opened = open_space(switch, answers, launch).await;
         drop_typed_ahead()?;
         session = match opened {
             Ok(mut next) => {
@@ -112,14 +113,15 @@ async fn run_sessions(
     Ok(())
 }
 
-/// The session `:local` or `:forge` asked for, opened as `revu local` and `revu` open theirs.
-async fn open_space(space: Space, answers: &TerminalAnswers, launch: &Launch) -> Result<Session> {
-    match space {
+/// The session `:local` or `:forge` asked for, opened as `revu local` and `revu` open theirs, on the MR the palette
+/// picked when it did.
+async fn open_space(switch: Switch, answers: &TerminalAnswers, launch: &Launch) -> Result<Session> {
+    match switch.to {
         Space::Local => {
             let LocalHere { ctx, here } = launch.local().await?;
-            Session::start(&ctx, Some(here), answers)
+            Session::start(&ctx, Some(switch.open.unwrap_or(here)), answers, launch)
         }
-        Space::Forge => Session::start(&launch.forge()?, None, answers),
+        Space::Forge => Session::start(&launch.forge()?, switch.open, answers, launch),
     }
 }
 
@@ -133,7 +135,7 @@ fn drop_typed_ahead() -> std::io::Result<()> {
 
 impl Session {
     /// The app over `ctx`, its first actions already sent.
-    fn start(ctx: &Ctx, start: Option<MrKey>, answers: &TerminalAnswers) -> Result<Self> {
+    fn start(ctx: &Ctx, start: Option<MrKey>, answers: &TerminalAnswers, launch: &Launch) -> Result<Self> {
         let theme = match ctx.config.tui.theme.as_deref() {
             Some(name) => theme::Theme::named(name).ok_or_else(|| {
                 anyhow::anyhow!("config `tui.theme = \"{name}\"` is not a theme (try {})", theme::Theme::NAMES.join(", "))
@@ -144,6 +146,8 @@ impl Session {
         let others = ctx.others();
         let hosts = ctx.hosts(&others);
         let checkout = std::env::current_dir().ok().and_then(|dir| crate::open::Checkout::find(&dir, ctx.forge.host()));
+        let space = if ctx.forge.kind() == crate::forge::Kind::Local { Space::Local } else { Space::Forge };
+        let other_space = backend::OtherSpace::for_session(space, checkout.as_ref().map(|c| c.root.clone()), launch);
         let me = ctx.identities(&others);
         let homes = backend::Homes { forge: ctx.forge.clone(), cache: ctx.cache.clone(), others };
         let setup = backend::Setup {
@@ -157,6 +161,7 @@ impl Session {
             checkout,
             jev: jev(&ctx.config.ai),
             host_origin: ctx.host_origin,
+            other_space,
         };
         let triage = setup.jev.is_some();
         let backend = Backend::new(homes, setup);
@@ -201,8 +206,8 @@ impl Session {
     }
 }
 
-/// Runs `session` until the reader quits, `None`, or asks for the other side.
-async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, session: &mut Session) -> Result<Option<Space>> {
+/// Runs `session` until the reader quits, `None`, or asks for the other space.
+async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, session: &mut Session) -> Result<Option<Switch>> {
     let Session { app, backend, tx, rx } = session;
     let mut keys = Keys::new();
     let mut shown = Shown::default();

@@ -1,6 +1,6 @@
 //! The palette: MRs, the open MR's files, or commands, typed instead of walked to.
 use super::{Action, App, Focus};
-use crate::forge::MrKey;
+use crate::forge::{MrKey, QueueMr};
 use crate::query::Query;
 use crate::tui::palette::{self, Candidate, Command, Mode, Palette, Slot, Target};
 use crate::tui::theme::Theme;
@@ -8,6 +8,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use vtui::fuzzy;
 use vtui::palette::MAX_SHOWN;
 use vtui::toward::Toward;
+
+/// Rows of the other space an empty line always shows, so a long queue never hides them.
+const OTHER_SPACE_SLOTS: usize = 3;
 
 impl App {
     /// `ctrl-k` and `⌘k` open it on MRs, `:` and `⌘⇧k` on commands.
@@ -102,6 +105,11 @@ impl App {
                 self.count("palette_mr");
                 self.open_key(key)
             }
+            Some(Target::OtherSpace(key)) => {
+                self.count("palette_mr");
+                self.switch_space(self.space().other(), Some(key));
+                vec![]
+            }
             Some(Target::Session(index)) => self.pick_session(index),
             None => vec![],
         }
@@ -117,16 +125,34 @@ impl App {
         }
     }
 
+    /// This space's MRs, then the other space's, each marked with the word that switches to it. Typed words rank both
+    /// together; on an empty line a few of the other space's keep their place below a long queue.
     fn mr_candidates(&self, typed: &str) -> Vec<Candidate> {
         let query = Query::lenient(typed);
-        let kept = self.queue_mrs().into_iter().filter(|mr| query.keeps(mr, self.me.on_row(mr))).map(|mr| {
-            let candidate = Candidate { label: self.row_label(mr), detail: mr.author.clone(), target: Target::Mr(mr.key()) };
-            (format!("{} {} {}", candidate.label, mr.author, mr.source_branch), candidate)
-        });
+        let here = self
+            .queue_mrs()
+            .into_iter()
+            .filter(|mr| query.keeps(mr, self.me.on_row(mr)))
+            .map(|mr| (mr, Candidate { label: self.row_label(mr), detail: mr.author.clone(), target: Target::Mr(mr.key()) }));
+        let other = self.space().other().word();
+        let elsewhere: Vec<_> = self
+            .other_rows
+            .iter()
+            .flat_map(|rows| {
+                rows.mrs.iter().filter(|mr| query.keeps(mr, &rows.me)).map(move |mr| {
+                    (mr, Candidate { label: mr.label(rows.kind), detail: other.to_owned(), target: Target::OtherSpace(mr.key()) })
+                })
+            })
+            .collect();
         let words = query.words.join(" ");
-        let ranked: Vec<Candidate> =
-            if words.is_empty() { kept.map(|(_, c)| c).collect() } else { fuzzy::rank(&words, kept).into_iter().map(|(_, c)| c).collect() };
-        ranked.into_iter().take(MAX_SHOWN).collect()
+        let shown: Vec<Candidate> = if words.is_empty() {
+            let kept_here = MAX_SHOWN - elsewhere.len().min(OTHER_SPACE_SLOTS);
+            here.take(kept_here).chain(elsewhere).map(|(_, c)| c).collect()
+        } else {
+            let searched = here.chain(elsewhere).map(|(mr, c)| (format!("{} {} {}", c.label, mr.author, mr.source_branch), c));
+            fuzzy::rank(&words, searched).into_iter().map(|(_, c)| c).collect()
+        };
+        shown.into_iter().take(MAX_SHOWN).collect()
     }
 
     /// What the token under the cursor completes to, for tab and the ghost text.
@@ -179,7 +205,7 @@ impl App {
             Command::Target(target) => self.change_local(crate::forge::local::Change::Target(target)),
             Command::Title(title) => self.set_title(title),
             Command::Switch(space) => {
-                self.switch_space(space);
+                self.switch_space(space, None);
                 vec![]
             }
             Command::Quit => {
@@ -204,7 +230,7 @@ impl App {
             return Some(MrKey::new(crate::forge::ProjectPath::parse(project)?, number.parse().ok()?));
         }
         let number: u64 = reference.trim_start_matches(['!', '#']).parse().ok()?;
-        self.queue_mrs().into_iter().find(|mr| mr.number == number).map(crate::forge::QueueMr::key)
+        self.queue_mrs().into_iter().find(|mr| mr.number == number).map(QueueMr::key)
     }
 
     /// The page of the line under the cursor in an open MR, else of the MR selected in the queue.
@@ -230,7 +256,7 @@ impl App {
     }
 
     /// Every MR the queue holds, whatever the filter and the folded sections.
-    fn queue_mrs(&self) -> Vec<&crate::forge::QueueMr> {
+    fn queue_mrs(&self) -> Vec<&QueueMr> {
         self.sections.iter().flat_map(crate::forge::Sections::all).collect()
     }
 }

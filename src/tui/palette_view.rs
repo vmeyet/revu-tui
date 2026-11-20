@@ -27,6 +27,7 @@ fn list_lines(app: &App, palette: &Palette, room: usize) -> Vec<Line<'static>> {
         .map(|candidate| {
             let (icon, colour) = match candidate.target {
                 Target::Mr(_) => ("◆", theme.accent),
+                Target::OtherSpace(_) => ("◇", theme.muted),
                 Target::Session(Some(_)) => ("●", theme.accent),
                 Target::Session(None) => ("+", theme.muted),
             };

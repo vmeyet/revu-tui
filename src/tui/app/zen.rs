@@ -112,10 +112,9 @@ impl App {
         format!("‹  {label}  ·  {}/{of}  ›", at + 1)
     }
 
-    /// `!42 title`; a worktree has no number to read.
+    /// `!42 title`, or `#42 title` for an MR on GitHub.
     pub(super) fn row_label(&self, mr: &crate::forge::QueueMr) -> String {
-        let key = mr.key();
-        if key.is_local() { mr.title.clone() } else { format!("{}{} {}", self.hosts.kind_of(&key).sigil(), mr.number, mr.title) }
+        mr.label(self.hosts.kind_of(&mr.key()))
     }
 
     pub(super) fn queue_mr(&self, key: &MrKey) -> Option<&crate::forge::QueueMr> {

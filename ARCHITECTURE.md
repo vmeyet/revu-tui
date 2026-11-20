@@ -33,6 +33,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `tui/backend/saves.rs`, `queue.rs`, `reviews.rs` | What the reader keeps (`state.json`, pins, queue view); the queue of every host; opening an MR and loading ahead |
 | `tui/backend/drafts.rs`, `tui/lanes.rs` | Draft writes and publishing; one lane per MR so they run one at a time |
 | `tui/backend/ai.rs`, `files.rs`, `prune.rs` | Jev's marks; files at a commit and pictures; the daily cache prune |
+| `tui/backend/other_space.rs` | What the palette lists of the other space: the worktrees from the forge, the forge's cached queue from the worktrees |
 | `tui/backend/cache_shapes.rs` | Tests only: one fixture per type written to the cache, so a change that stops reading an older file fails (the cache would drop it, and the reader's pins, viewed files and drafts with it); a new cached type adds its fixture here |
 | `tui/ui.rs`, `tui/*_view.rs` | Drawing: layout in `ui.rs`, one view module per pane or modal |
 | `tui/diff_view/` | The review pane: the visible window of rows in `mod.rs`, then one file per part: the header, row kinds, painted lines, side by side, wrapping, the anchor column, drag selection |
@@ -106,15 +107,21 @@ An MR or a project the host does not have fails as `forge::NotFound`, whatever t
 `revu local` runs before any login: `Ctx::local` holds the local backend, no token, no other host and no Jev, and `tui::run` takes it like any other; `a` opens the session of a worktree's branch, `agent::Subject::Branch`, where a forge opens an MR's.
 Its queue is the worktree screen, `App::worktree_rows` over the lists `local::Client::queue` fills; the cursor's worktree opens as the cursor lands on it, and an open one is looked at every 2s while the terminal has focus, and when it comes back.
 
-Switching space, `:local` and `:forge`:
+Switching space, `:local`, `:forge` and the palette:
 
 1. `tui::run` asks the terminal once (`TerminalAnswers`), builds a `Session` (its `App`, `Backend` and answer channel) from the `Ctx`, and enters the screen.
-2. The command sets `App::switch`; `event_loop` ends on it and hands the `Space` back, the screen still entered.
+2. The command sets `App::switch`; `event_loop` ends on it and hands the `Switch` back, the screen still entered.
 3. The loop toasts what it opens and draws that frame, then `open_space` opens the other `Ctx` through `ctx::Launch`, the `--host`, `--all` and local target the command line gave: the forge as `revu` does, the worktrees as `revu local` does, on the one revu runs in.
 4. Keys typed meanwhile are dropped, so none reaches a screen the reader did not see.
 5. The new `Session` replaces the old one and says which space it reads, unless it starts on a toast of its own; tasks of the old one still finish, their answers dropped.
 6. A space that does not open, no login or no repository, leaves the old session as it was, its channel kept, and toasts why.
 7. No loop runs between two sessions: opening the next one may block, as startup does.
+8. The palette on MRs also lists the other space: opening it sends `Action::FindOtherSpace`, unless one is still on its way, and `backend::OtherSpace` answers with `Incoming::OtherSpace`.
+   From the forge in a checkout, its worktrees from `git worktree list` alone (`local::worktrees`); outside one, nothing.
+   From the worktrees, the queue `revu` would show, read from its host's cache: the host is picked once a session as `auth::resolve` picks it, the keychain only asked whether it holds a token (`SecretStore::has`), so no token is read and no network asked.
+   Typed words rank both spaces together; an empty line keeps a few rows for the other space.
+   A space it cannot read is logged and lists nothing.
+9. Picking one of those rows sets `App::switch` with the MR in it, `Switch::open`, and the next session starts on it.
 
 ## Boundaries
 
@@ -148,6 +155,7 @@ State shared between tasks, and why:
 | `forge::budget::Budget` (atomics) | Every clone of a client shares the rate limit, so the loop shows what the tasks saw |
 | GitLab `Client::me: Arc<OnceCell<String>>` | The reader's username is asked once and shared by every clone of the client |
 | GitHub `Client::downloads: Arc<Downloads>` | Read only: the picture client is shared so the forge client stays cheap to clone |
+| `OtherSpace::Forge::found: Arc<OnceCell<_>>` | Every clone of the backend reads the forge's cached queue from where the first palette found it, once a session |
 | `TypeSafe::slots: Arc<Semaphore>` | At most 8 Jev requests run at once, across every task that asks |
 | `log` subscriber: `Mutex<File>` | Every task writes the one log file |
 | `OnceLock` in `syntax`, `review`; `LazyLock` in `act`, `version` | Grammars, hunk colours, the default keys and the version label are built once, on first use |

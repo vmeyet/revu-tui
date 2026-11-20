@@ -3,11 +3,13 @@
 mod ai;
 mod drafts;
 mod files;
+mod other_space;
 mod prune;
 mod queue;
 mod reviews;
 mod saves;
 
+pub(super) use other_space::OtherSpace;
 pub(super) use saves::MrState;
 
 use super::app::Incoming;
@@ -65,6 +67,7 @@ pub(super) struct Setup {
     pub(super) agent: Option<crate::agent::Agent>,
     pub(super) host_origin: HostOrigin,
     pub(super) notifier: crate::notify::Notifier,
+    pub(super) other_space: Option<OtherSpace>,
 }
 
 #[derive(Clone)]
@@ -82,6 +85,8 @@ pub(super) struct Backend {
     host_origin: HostOrigin,
     /// What shows the notification for an MR to review, and brings revu back on a click.
     pub(super) notifier: crate::notify::Notifier,
+    /// Where the palette finds the MRs of the other space.
+    pub(super) other_space: Option<OtherSpace>,
     /// Two opens of one MR would each find no session and start one; shared by every clone so they wait.
     session_lanes: Lanes,
 }
@@ -105,6 +110,7 @@ impl Backend {
             agent: setup.agent,
             host_origin: setup.host_origin,
             notifier: setup.notifier,
+            other_space: setup.other_space,
             session_lanes: Lanes::default(),
             saves,
             homes,
@@ -191,6 +197,7 @@ mod tests {
             agent: None,
             host_origin,
             notifier: crate::notify::Notifier::default(),
+            other_space: None,
         };
         Backend::new(homes, setup)
     }

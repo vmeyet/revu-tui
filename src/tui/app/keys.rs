@@ -3,6 +3,7 @@ use super::{Action, App, Focus};
 use crate::act::{self, Act, Pane};
 use crate::review::Row;
 use crate::tui::help;
+use crate::tui::palette::Mode;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use vtui::help::Help;
@@ -91,9 +92,8 @@ impl App {
             return vec![];
         }
         if let Some(mode) = palette_key(key) {
-            self.did(if mode == crate::tui::palette::Mode::Commands { Act::Palette } else { Act::Jump });
-            self.open_palette(mode);
-            return vec![];
+            self.did(if mode == Mode::Commands { Act::Palette } else { Act::Jump });
+            return self.palette_on(mode);
         }
         if let Some(actions) = self.handle_anywhere(key) {
             return actions;
@@ -115,8 +115,8 @@ impl App {
         let act = act::act_in(Pane::Anywhere, key)?;
         self.did(act);
         let actions = match act {
-            Act::Palette => self.palette_on(crate::tui::palette::Mode::Commands),
-            Act::Jump => self.palette_on(crate::tui::palette::Mode::Mrs),
+            Act::Palette => self.palette_on(Mode::Commands),
+            Act::Jump => self.palette_on(Mode::Mrs),
             Act::Quit if closes_a_pane => {
                 self.key_did = Some(Act::ClosePane);
                 self.handle_side_key(KeyEvent::from(KeyCode::Esc))
@@ -141,9 +141,14 @@ impl App {
         Some(actions)
     }
 
-    fn palette_on(&mut self, mode: crate::tui::palette::Mode) -> Vec<Action> {
+    /// On MRs it also lists the other space's, found again each time since worktrees come and go.
+    fn palette_on(&mut self, mode: Mode) -> Vec<Action> {
         self.open_palette(mode);
-        vec![]
+        if mode != Mode::Mrs || self.finding_other {
+            return vec![];
+        }
+        self.finding_other = true;
+        vec![Action::FindOtherSpace]
     }
 
     /// The first key of a two-key default, where the focused pane reads it as one.
@@ -509,7 +514,7 @@ pub(super) fn full_page(area: Rect) -> isize {
 }
 
 /// `ctrl-k` and `⌘k` open the palette on MRs; `⌘⇧k`, where the terminal tells it apart, on commands.
-fn palette_key(key: KeyEvent) -> Option<crate::tui::palette::Mode> {
+fn palette_key(key: KeyEvent) -> Option<Mode> {
     use crate::tui::palette::Mode;
     let k = matches!(key.code, KeyCode::Char('k' | 'K'));
     let command = key.modifiers.contains(KeyModifiers::SUPER);
