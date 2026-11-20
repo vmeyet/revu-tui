@@ -18,7 +18,7 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
     tokio::spawn(async move {
         let send = |incoming: Incoming| {
             log_failure(&incoming);
-            #[expect(clippy::let_underscore_must_use, reason = "the loop drops its receiver only when revu quits")]
+            #[expect(clippy::let_underscore_must_use, reason = "the loop drops its receiver only when revu quits or switches side")]
             let _ = tx.send(incoming);
         };
         match action {

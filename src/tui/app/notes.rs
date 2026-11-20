@@ -191,10 +191,6 @@ mod tests {
         assert!(screen.contains("you ·") && !screen.contains("nina-gh"), "{screen}");
     }
 
-    fn toast(app: &App) -> &str {
-        &app.live_toast().unwrap().text
-    }
-
     /// The one edit `actions` send, as the forge answers once it holds the new text.
     fn edited(actions: &[Action]) -> Incoming {
         let [Action::EditNote { key, thread, note, body }] = actions else { panic!("{actions:?}") };

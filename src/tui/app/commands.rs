@@ -178,6 +178,10 @@ impl App {
             }
             Command::Target(target) => self.change_local(crate::forge::local::Change::Target(target)),
             Command::Title(title) => self.set_title(title),
+            Command::Switch(side) => {
+                self.switch_side(side);
+                vec![]
+            }
             Command::Quit => {
                 self.should_quit = true;
                 vec![]

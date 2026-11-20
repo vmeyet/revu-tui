@@ -4,6 +4,7 @@
 //! suggestion and history.
 use crate::act::{self, Act, Verb};
 use crate::forge::{Kind, MrKey, Title};
+use crate::tui::app::Side;
 use vtui::palette::typed::{Setting, TypedLine, Typing, unknown_verb};
 
 /// What the palette searches, from the first character typed.
@@ -86,6 +87,8 @@ pub(crate) enum Command {
     Target(String),
     /// `:title Count the widgets`: a new title for my MR under the cursor.
     Title(Title),
+    /// `:local` and `:forge`: the other side, in the same screen.
+    Switch(Side),
     Quit,
 }
 
@@ -106,6 +109,8 @@ impl Command {
             Self::News => Act::NewsCommand,
             Self::Target(_) => Act::TargetCommand,
             Self::Title(_) => Act::TitleCommand,
+            Self::Switch(Side::Local) => Act::LocalCommand,
+            Self::Switch(Side::Forge) => Act::ForgeCommand,
             Self::Quit => Act::QuitCommand,
         }
     }
@@ -141,6 +146,8 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "target" if rest.is_empty() => Err(":target needs a branch, like main".into()),
         "target" => Ok(Command::Target(rest.to_owned())),
         "title" => Title::parse(rest).map(Command::Title).ok_or_else(|| ":title needs the new title".into()),
+        "local" => Ok(Command::Switch(Side::Local)),
+        "forge" => Ok(Command::Switch(Side::Forge)),
         "quit" | "q" | "exit" => Ok(Command::Quit),
         unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
     }

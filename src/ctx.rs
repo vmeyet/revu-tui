@@ -4,7 +4,7 @@ use crate::cache::Cache;
 use crate::config::Config;
 use crate::forge::{Forge, Identities, Kind, Me, Mr, MrKey, NotFound, ProjectPath, local};
 use crate::log::OrWarn as _;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::Serialize;
 
 /// Everything a command needs, opened once from the config, the environment and the keychain.
@@ -21,6 +21,26 @@ pub struct Ctx {
     pub(crate) project: Option<ProjectPath>,
 }
 
+/// `--host` and `--all` as the command line gave them, so the TUI's `:forge` opens the forge the same way.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ForgeArgs {
+    pub(crate) host: Option<String>,
+    pub(crate) all: bool,
+}
+
+impl ForgeArgs {
+    /// The forge as `revu` opens it with these flags.
+    pub(crate) fn open(&self) -> Result<Ctx> {
+        Ok(Ctx::open(self.host.as_deref(), false)?.everywhere(self.all))
+    }
+}
+
+/// The repository revu runs in, opened as `revu local` does, and the worktree it runs in.
+pub(crate) struct LocalHere {
+    pub(crate) ctx: Ctx,
+    pub(crate) here: MrKey,
+}
+
 impl Ctx {
     /// Reads the config, finds the token and the checkout's project.
     pub fn open(host: Option<&str>, json: bool) -> Result<Self> {
@@ -31,8 +51,16 @@ impl Ctx {
         Ok(Self { project, ..ctx })
     }
 
+    /// `revu local` in the folder revu runs in, comparing against `target`.
+    pub(crate) async fn local_here(target: Option<&str>) -> Result<LocalHere> {
+        let dir = std::env::current_dir().context("reading the current folder")?;
+        let client = local::Client::open(&dir, target).await?;
+        let here = client.here_key().await?;
+        Ok(LocalHere { ctx: Self::local(client)?, here })
+    }
+
     /// `revu local`: no token, no other host, no Jev and nothing that only makes sense on a forge.
-    pub(crate) fn local(client: local::Client) -> Result<Self> {
+    fn local(client: local::Client) -> Result<Self> {
         let mut config = Config::load()?;
         config.host = None;
         config.hosts.clear();

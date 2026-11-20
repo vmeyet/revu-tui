@@ -29,7 +29,7 @@ async fn run(cli: Cli) -> Result<()> {
         Some(Command::Usage(args)) => return commands::usage::run(&args, cli.json),
         Some(Command::News(args)) => return commands::news::run(&args, cli.json),
         Some(Command::Ai(args)) => return commands::ai::run(args, cli.json),
-        Some(Command::Local(args)) => return commands::local::run(args).await,
+        Some(Command::Local(args)) => return commands::local::run(args, cli.host, cli.all).await,
         Some(Command::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "revu", &mut std::io::stdout());
             return Ok(());
@@ -37,7 +37,7 @@ async fn run(cli: Cli) -> Result<()> {
         _ => {}
     }
     let ctx = Ctx::open(cli.host.as_deref(), cli.json)?.everywhere(cli.all);
-    let Some(command) = cli.command else { return commands::tui::run(ctx, cli.mr).await };
+    let Some(command) = cli.command else { return commands::tui::run(ctx, cli.mr, cli.host, cli.all).await };
     run_on_forge(&ctx, command).await.map_err(|err| ctx.with_host_hint(err))
 }
 
