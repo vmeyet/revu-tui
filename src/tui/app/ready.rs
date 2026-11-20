@@ -7,7 +7,7 @@ impl App {
     pub(super) fn toggle_draft(&mut self) -> Vec<Action> {
         let Some(open) = &self.open else { return vec![] };
         let mr = &open.review.mr;
-        if let Some(reason) = mr.draft_refusal() {
+        if let Some(reason) = mr.change_refusal() {
             self.warn(format!("cannot change {}{}: {reason}", self.hosts.kind_of(&open.key).sigil(), mr.number));
             return vec![];
         }

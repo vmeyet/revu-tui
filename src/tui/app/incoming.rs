@@ -108,6 +108,10 @@ impl App {
                 let follow = self.readiness_set(&key, readiness);
                 self.composed.extend(follow);
             }
+            Incoming::TitleSet { key } => {
+                let follow = self.title_set(&key);
+                self.composed.extend(follow);
+            }
             Incoming::Approved { key, change } => {
                 self.set_approved(&key, change);
                 self.toast(match change {

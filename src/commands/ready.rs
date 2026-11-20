@@ -9,7 +9,7 @@ pub async fn run(ctx: &Ctx, args: ReadyArgs) -> Result<()> {
     let key = target::resolve(&ctx.forge, args.mr.as_deref()).await?;
     let mr = ctx.forge.mr(&key).await?;
     let name = format!("{}{}", ctx.forge.kind().sigil(), key.number);
-    if let Some(reason) = mr.draft_refusal() {
+    if let Some(reason) = mr.change_refusal() {
         bail!("cannot change {name}: {reason}");
     }
     let readiness = if args.undo { Readiness::Draft } else { Readiness::Ready };

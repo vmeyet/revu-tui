@@ -168,6 +168,7 @@ impl App {
                 vec![]
             }
             Command::Target(target) => self.change_local(crate::forge::local::Change::Target(target)),
+            Command::Title(title) => self.set_title(title),
             Command::Quit => {
                 self.should_quit = true;
                 vec![]

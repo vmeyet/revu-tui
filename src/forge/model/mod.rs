@@ -14,6 +14,6 @@ pub(crate) use ids::{MrKey, ProjectPath, Sha, ThreadId};
 pub(crate) use mention::{Mention, MentionId};
 pub(crate) use mr::{
     Approval, ApprovalChange, Approvals, Deployment, MergeMethod, MergePlan, MergeVerdict, Mr, MrState, Pipeline, PipelineStatus,
-    Readiness, Refs, ReviewKind, User,
+    Readiness, Refs, ReviewKind, Title, User,
 };
 pub(crate) use reaction::{Emoji, Reaction, ReactionChange, tally, toggled};

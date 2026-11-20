@@ -357,6 +357,11 @@ impl Client {
         held.map(|held| held.body).map_err(http::edit_refused)
     }
 
+    pub(crate) async fn set_title(&self, key: &MrKey, title: &forge::Title) -> Result<()> {
+        let path = format!("{}/pulls/{}", repo_path(&key.project), key.number);
+        self.http.send_json::<serde_json::Value>(Method::PATCH, &path, &json!({"title": title.as_str()})).await.map(|_| ())
+    }
+
     /// An approval is a review of its own. GitHub has no taking it back for the one who gave it.
     /// GitHub deletes the branch itself when the repo says so; `sha` refuses a push made after the reader looked.
     pub(crate) async fn merge(&self, key: &MrKey, head: &str, plan: forge::MergePlan) -> Result<()> {
@@ -466,6 +471,19 @@ mod tests {
         let refused = client(&server).delete_note(&key(), &note(9, forge::NoteKind::Summary)).await.unwrap_err().to_string();
         assert_eq!(refused, "GitHub keeps the summary of a review: it cannot be deleted");
         assert_eq!(server.received_requests().await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_new_title_is_patched_on_the_pr() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/repos/acme/widgets/pulls/42"))
+            .and(body_partial_json(json!({"title": "Count the widgets"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"number": 42, "title": "Count the widgets"})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        client(&server).set_title(&key(), &forge::Title::parse("Count the widgets").unwrap()).await.unwrap();
     }
 
     #[tokio::test]

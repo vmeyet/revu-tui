@@ -33,6 +33,7 @@ A key like `]n` is two keys in a row: `]`, then `n`.
 | `b` | pin on top of the queue, or unpin |
 | `zo` `zc` | open, fold the section or stack |
 | `x` | mark the mentions of the MR done |
+| `e` | change the title of your MR |
 
 ## View
 
@@ -174,3 +175,4 @@ A bound key adds to the default key, it does not replace it.
 | `help` | `?` |
 | `quit` | `q` |
 | `mention_done` | `x` |
+| `edit_title` | `e` |

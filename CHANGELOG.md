@@ -9,6 +9,9 @@ Each entry says what changed, then where, then how to use it.
 
 ### New
 
+- **`e` gives your MR a new title.**
+  In the queue, on your own open MRs; `:title` does the same for the MR under the cursor.
+  Press `e`: the palette opens on `:title` and the current title, edit it and press `enter`.
 - **Clicking the notification brings you back to revu.**
   For the macOS notification of an MR that lands in TO REVIEW, once `terminal-notifier` is installed: `brew install terminal-notifier`.
   Click it: your terminal comes in front and, in tmux, revu's session, window and pane are selected.
