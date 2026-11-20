@@ -271,10 +271,11 @@ pub(crate) enum Action {
         key: MrKey,
         readiness: Readiness,
     },
-    /// Give my MR a new title.
+    /// Give my MR a new title, keeping it a draft or ready as `readiness` says.
     SetTitle {
         key: MrKey,
         title: Title,
+        readiness: Readiness,
     },
     /// Commit `suggestion` on the MR's branch `branch`; asked only after the reader said yes.
     Apply {
@@ -430,7 +431,9 @@ pub(crate) enum Failure {
     /// The MR kept its draft state.
     SetReadiness,
     /// The MR kept its title.
-    SetTitle,
+    SetTitle {
+        key: MrKey,
+    },
     /// The reaction did not reach the forge; its count goes back.
     React {
         thread: ThreadId,

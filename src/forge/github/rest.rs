@@ -357,6 +357,7 @@ impl Client {
         held.map(|held| held.body).map_err(http::edit_refused)
     }
 
+    /// Gives the PR a new title; GitHub keeps its draft state apart, so the title carries none.
     pub(crate) async fn set_title(&self, key: &MrKey, title: &forge::Title) -> Result<()> {
         let path = format!("{}/pulls/{}", repo_path(&key.project), key.number);
         self.http.send_json::<serde_json::Value>(Method::PATCH, &path, &json!({"title": title.as_str()})).await.map(|_| ())

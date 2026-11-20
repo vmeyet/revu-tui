@@ -88,8 +88,26 @@ impl Mr {
         Some(reason)
     }
 
-    /// Why I may not change this MR from revu, its readiness or its title, or `None` when I may: it is mine and open.
+    /// Why I may not change this MR from revu, its readiness or its title, or `None` when I may.
     pub(crate) fn change_refusal(&self) -> Option<String> {
+        Standing { mine: self.mine, state: self.state }.change_refusal()
+    }
+
+    pub(crate) fn readiness(&self) -> Readiness {
+        if self.draft { Readiness::Draft } else { Readiness::Ready }
+    }
+}
+
+/// Whose an MR is and whether it is open: what decides if revu may change it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Standing {
+    pub(crate) mine: bool,
+    pub(crate) state: MrState,
+}
+
+impl Standing {
+    /// Why I may not change the MR from revu, or `None` when I may: it is mine and open.
+    pub(crate) fn change_refusal(self) -> Option<String> {
         match () {
             () if !self.mine => Some("it is not yours".to_owned()),
             () if self.state != MrState::Open => Some(format!("this MR is {}", self.state.word())),

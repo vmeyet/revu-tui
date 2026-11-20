@@ -191,9 +191,12 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
                 let outcome = backend.homes.forge_of(&key).set_readiness(&key, readiness).await;
                 send(outcome.map_or_else(|e| failed(Failure::SetReadiness, &e), |()| Incoming::ReadinessSet { key, readiness }));
             }
-            Action::SetTitle { key, title } => {
-                let outcome = backend.homes.forge_of(&key).set_title(&key, &title).await;
-                send(outcome.map_or_else(|e| failed(Failure::SetTitle, &e), |()| Incoming::TitleSet { key }));
+            Action::SetTitle { key, title, readiness } => {
+                let outcome = backend.homes.forge_of(&key).set_title(&key, &title, readiness).await;
+                send(match outcome {
+                    Ok(()) => Incoming::TitleSet { key },
+                    Err(e) => failed(Failure::SetTitle { key }, &e),
+                });
             }
             Action::Apply { key, branch, suggestion } => {
                 let outcome = backend.homes.forge_of(&key).apply(&key, &branch, &suggestion).await;

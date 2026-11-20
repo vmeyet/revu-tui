@@ -4,10 +4,12 @@ mod award;
 mod graphql;
 mod merge;
 mod rest;
+mod title;
 mod todo;
 mod upload;
 mod wire;
 
+pub(crate) use title::bare_title;
 #[cfg(test)]
 pub(crate) use wire::fixture;
 

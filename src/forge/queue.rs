@@ -1,6 +1,6 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
 use super::rules::{self, Reason, Rules};
-use super::{Identities, Me, Mention, MrKey, MrState, PipelineStatus, ProjectPath};
+use super::{Identities, Me, Mention, MrKey, MrState, PipelineStatus, ProjectPath, Readiness, Standing};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -259,6 +259,15 @@ impl Sections {
 }
 
 impl QueueMr {
+    /// Why I may not change this row's MR from revu; the queue holds only MRs that were open when it was read.
+    pub(crate) fn change_refusal(&self, me: &Me) -> Option<String> {
+        Standing { mine: me.is(&self.author), state: MrState::Open }.change_refusal()
+    }
+
+    pub(crate) fn readiness(&self) -> Readiness {
+        if self.draft { Readiness::Draft } else { Readiness::Ready }
+    }
+
     /// A queue row for an MR fetched on its own, as the ready command names MRs outside my lists.
     /// What only a list answers (comments, sizes, threads) is left empty; `None` once it is closed.
     pub(crate) fn from_mr(mr: &super::Mr, host: Option<String>) -> Option<Self> {

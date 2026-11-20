@@ -267,9 +267,10 @@ impl Client {
         self.http.put_json::<Discussion>(&path, &json!({"resolved": resolved})).await.map(|_| ())
     }
 
-    /// Gives the MR a new title; a draft stays one only while the title keeps its `Draft:` prefix.
-    pub(crate) async fn set_title(&self, key: &MrKey, title: &forge::Title) -> Result<()> {
-        self.http.put_json::<serde_json::Value>(&mr_path(key), &json!({"title": title.as_str()})).await.map(|_| ())
+    /// Gives the MR a new title, with the draft marker its `readiness` needs.
+    pub(crate) async fn set_title(&self, key: &MrKey, title: &forge::Title, readiness: forge::Readiness) -> Result<()> {
+        let title = super::title::keeping(title, readiness);
+        self.http.put_json::<serde_json::Value>(&mr_path(key), &json!({"title": title})).await.map(|_| ())
     }
 
     /// A public new thread, on a line when `position` is given.
@@ -578,16 +579,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_new_title_is_put_on_the_mr() {
+    async fn a_draft_retitled_without_its_marker_stays_a_draft() {
         let server = MockServer::start().await;
         Mock::given(method("PUT"))
             .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42"))
-            .and(body_partial_json(json!({"title": "Count the widgets"})))
+            .and(body_partial_json(json!({"title": "Draft: Count the widgets"})))
             .respond_with(ResponseTemplate::new(200).set_body_json(mr_json()))
             .expect(1)
             .mount(&server)
             .await;
-        client(&server).set_title(&key(), &forge::Title::parse("Count the widgets").unwrap()).await.unwrap();
+        let title = forge::Title::parse("Count the widgets").unwrap();
+        client(&server).set_title(&key(), &title, forge::Readiness::Draft).await.unwrap();
     }
 
     #[tokio::test]
