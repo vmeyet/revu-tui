@@ -1,6 +1,6 @@
 //! The MRs waiting on me, as every forge answers them, and how they sort into the sidebar.
 use super::rules::{self, Reason, Rules};
-use super::{Identities, Me, Mention, MrKey, MrState, PipelineStatus, ProjectPath, Readiness, Standing};
+use super::{Identities, Kind, Me, Mention, MrKey, MrState, PipelineStatus, ProjectPath, Readiness, Standing};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -319,6 +319,11 @@ impl QueueMr {
     pub(crate) fn key(&self) -> MrKey {
         MrKey { host: self.host.clone(), ..MrKey::new(self.project.clone(), self.number) }
     }
+
+    /// `!42 title` on a forge of `kind`; a worktree has no number to read.
+    pub(crate) fn label(&self, kind: Kind) -> String {
+        if self.key().is_local() { self.title.clone() } else { format!("{}{} {}", kind.sigil(), self.number, self.title) }
+    }
 }
 
 impl Queue {
@@ -333,7 +338,6 @@ impl Queue {
     }
 
     /// Every MR the forge listed, once each, in the order of its lists.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the ctrl-k finder lists the other space with it next"))]
     pub(crate) fn rows(&self) -> Vec<QueueMr> {
         let mut seen = HashSet::new();
         self.lists().filter(|mr| seen.insert(mr.key())).cloned().collect()

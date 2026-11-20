@@ -248,8 +248,12 @@ pub(crate) struct App {
     /// False once the terminal said it lost focus: a local diff stops looking until it comes back.
     pub(crate) terminal_focused: bool,
     pub(crate) should_quit: bool,
-    /// `:local` or `:forge`, asked for; the loop takes it and opens that side.
-    pub(super) switch: Option<super::Space>,
+    /// `:local` or `:forge`, or a pick in the palette, asked for; the loop takes it and opens that space.
+    pub(super) switch: Option<super::Switch>,
+    /// What the palette lists of the other space, as last found when it opened on MRs.
+    pub(super) other_rows: Option<super::OtherRows>,
+    /// A search for the other space is on its way: the palette opened again meanwhile waits for its answer.
+    pub(super) finding_other: bool,
     pub(crate) started: Instant,
     /// Set by the event loop each time it wakes, so nothing below reads the clock.
     pub(crate) now: Instant,
@@ -364,6 +368,8 @@ impl App {
             terminal_focused: true,
             should_quit: false,
             switch: None,
+            other_rows: None,
+            finding_other: false,
             started: now,
             now,
             today: Utc::now(),

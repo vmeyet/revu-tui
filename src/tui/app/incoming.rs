@@ -71,6 +71,10 @@ impl App {
                 }
             }
             Incoming::Done(text) => self.toast(text),
+            Incoming::OtherSpace(rows) => {
+                self.other_rows = rows;
+                self.finding_other = false;
+            }
             Incoming::File { key, path, sha, text } => self.apply_file(&key, path, &sha, &text),
             Incoming::DraftSaved { key, draft, id, body } => {
                 let follow = self.apply_draft_saved(&key, &draft, id, &body);

@@ -250,6 +250,13 @@ pub(super) fn spawn(action: Action, backend: &Backend, tx: mpsc::UnboundedSender
             Action::ChangeLocal { key, change } => {
                 send(backend.reviews.change_local(key, change).await.unwrap_or_else(|e| failed(Failure::Local, &e)));
             }
+            Action::FindOtherSpace => {
+                let rows = match &backend.other_space {
+                    Some(other) => other.rows().await,
+                    None => None,
+                };
+                send(Incoming::OtherSpace(rows));
+            }
             Action::Compose { .. } => unreachable!("the loop runs the editor itself"),
         }
     });

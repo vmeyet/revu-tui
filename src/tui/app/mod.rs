@@ -77,7 +77,7 @@ pub(crate) use session::SessionPick;
 pub(crate) use share::{Sharing, Stage as ShareStage};
 pub(crate) use state::{App, Drawn, Settings};
 pub(crate) use sticky::{MIN_HEIGHT as STICKY_MIN_HEIGHT, StickyRows, settle as settle_with_sticky, sticky_rows};
-pub(crate) use switch::Space;
+pub(crate) use switch::{OtherRows, Space, Switch};
 pub(crate) use taps::{Tap, TapSpot};
 pub(crate) use tree::Tree;
 pub(crate) use triage::Mark;
@@ -329,6 +329,8 @@ pub(crate) enum Action {
         key: MrKey,
         change: crate::forge::local::Change,
     },
+    /// The palette opened on MRs: what the other space holds, to list it too.
+    FindOtherSpace,
     /// Run by the event loop itself, never a background task: the editor takes the terminal.
     Compose {
         input: Input,
@@ -505,6 +507,8 @@ pub(crate) enum Incoming {
         discussions: Vec<Discussion>,
     },
     Done(String),
+    /// The MRs of the other space, for the palette; `None` when it lists none.
+    OtherSpace(Option<OtherRows>),
     /// A file read whole at commit `sha`, split into lines, for the context around its hunks.
     File {
         key: MrKey,

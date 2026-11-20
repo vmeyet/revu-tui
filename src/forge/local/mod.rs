@@ -178,7 +178,6 @@ impl Client {
 
 /// The worktrees of the repository `dir` is in, keyed and named as `Client::queue` keys and names them, from
 /// `git worktree list` alone: nothing is counted, so no git runs per worktree.
-#[cfg_attr(not(test), expect(dead_code, reason = "the ctrl-k finder lists the other space with it next"))]
 pub(crate) async fn worktrees(dir: &Path) -> Result<Queue> {
     let git::Listing { repo, worktrees } = listing(&git::toplevel(dir).await?).await?;
     let open = worktrees.iter().map(|worktree| queue_row(&bare_mr(&repo, worktree, &"")?)).collect::<Result<_>>()?;

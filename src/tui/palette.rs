@@ -44,6 +44,8 @@ impl Mode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Target {
     Mr(MrKey),
+    /// An MR of the other space: picking it switches space and opens it.
+    OtherSpace(MrKey),
     /// An agent session, by its index in the list `a` found; `None` for a new one.
     Session(Option<usize>),
 }
@@ -52,7 +54,7 @@ pub(crate) enum Target {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Candidate {
     pub(crate) label: String,
-    /// Dim text after the label: the author of an MR.
+    /// Dim text after the label: the author of an MR, or the space of an MR of the other one.
     pub(crate) detail: String,
     pub(crate) target: Target,
 }
@@ -146,10 +148,8 @@ pub(crate) fn parse(line: &str) -> Result<Command, String> {
         "target" if rest.is_empty() => Err(":target needs a branch, like main".into()),
         "target" => Ok(Command::Target(rest.to_owned())),
         "title" => Title::parse(rest).map(Command::Title).ok_or_else(|| ":title needs the new title".into()),
-        "local" => Ok(Command::Switch(Space::Local)),
-        "forge" => Ok(Command::Switch(Space::Forge)),
         "quit" | "q" | "exit" => Ok(Command::Quit),
-        unknown => Err(unknown_verb(unknown, act::verbs().map(|verb| verb.word))),
+        word => Space::from_word(word).map(Command::Switch).ok_or_else(|| unknown_verb(word, act::verbs().map(|verb| verb.word))),
     }
 }
 

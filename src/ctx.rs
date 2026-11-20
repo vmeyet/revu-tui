@@ -22,7 +22,7 @@ pub struct Ctx {
 }
 
 /// How the command line asked revu to start, so the TUI opens the forge or the worktrees again the same way.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Launch {
     /// `--host`.
     pub(crate) host: Option<String>,
@@ -38,6 +38,14 @@ impl Launch {
         Ok(Ctx::open(self.host.as_deref(), false)?.everywhere(self.all))
     }
 
+    /// The host `forge` opens and the project its queue shows, found without reading a token, so a local session can
+    /// read that queue from the cache.
+    pub(crate) fn forge_queue(&self, env: &Env, store: &dyn SecretStore, config: &Config) -> Result<ForgeQueue> {
+        let host = auth::login_host(env, store, config, self.host.as_deref())?.name;
+        let project = if self.all { None } else { project_here(&host) };
+        Ok(ForgeQueue { kind: Kind::for_host(&host, config), host, project })
+    }
+
     /// The repository of the current folder as `revu local` opens it, and the worktree revu runs in.
     pub(crate) async fn local(&self) -> Result<LocalHere> {
         let dir = std::env::current_dir().context("reading the current folder")?;
@@ -45,6 +53,18 @@ impl Launch {
         let here = client.here_key().await?;
         Ok(LocalHere { ctx: Ctx::local(client)?, here })
     }
+}
+
+/// Where `revu` reads its queue: the host and its forge, and the project of the checkout unless `--all`.
+pub(crate) struct ForgeQueue {
+    pub(crate) host: String,
+    pub(crate) kind: Kind,
+    pub(crate) project: Option<ProjectPath>,
+}
+
+/// The project of the checkout revu runs in, on `host`.
+fn project_here(host: &str) -> Option<ProjectPath> {
+    std::env::current_dir().ok().and_then(|dir| crate::mrref::checkout_project(&dir, host))
 }
 
 /// The repository revu runs in, opened as `revu local` does, and the worktree it runs in.
@@ -59,8 +79,7 @@ impl Ctx {
         let config = Config::load()?;
         let store = SecurityCli::new(auth::SERVICE);
         let ctx = Self::build(&Env::from_process(), &store, config, host, json)?;
-        let project = std::env::current_dir().ok().and_then(|dir| crate::mrref::checkout_project(&dir, &ctx.credentials.host));
-        Ok(Self { project, ..ctx })
+        Ok(Self { project: project_here(&ctx.credentials.host), ..ctx })
     }
 
     /// `revu local`: no token, no other host, no Jev and nothing that only makes sense on a forge.
