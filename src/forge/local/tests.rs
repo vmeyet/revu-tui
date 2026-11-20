@@ -464,3 +464,19 @@ fn a_worktree_list_leaves_out_bare_and_prunable_entries() {
     assert_eq!(listing.repo, "widgets");
     assert_eq!(listing.worktrees.iter().map(Worktree::label).collect::<Vec<_>>(), ["feat/x", "abcdef1"]);
 }
+
+#[tokio::test]
+async fn the_bare_listing_keys_and_names_worktrees_as_the_queue_does() {
+    let repo = Repo::new();
+    let linked = repo.path().join("linked");
+    repo.git(&["worktree", "add", "-q", "-b", "other", linked.to_str().unwrap()]);
+    let (client, _) = repo.open().await;
+    let named = |queue: &Queue| {
+        let mut named: Vec<(MrKey, String)> = queue.rows().into_iter().map(|row| (row.key(), row.title)).collect();
+        named.sort_by_key(|(key, _)| key.number);
+        named
+    };
+    let (listed, full) = (worktrees(&linked).await.unwrap(), client.queue().await.unwrap().queue);
+    assert_eq!(named(&listed), named(&full));
+    assert_eq!(listed.me, full.me);
+}

@@ -171,16 +171,29 @@ impl Client {
         find(&self.listing().await?.worktrees, key).cloned()
     }
 
-    /// What `git worktree list` says, without the git folder a submodule's list names, the folder revu ran in always among it.
     async fn listing(&self) -> Result<git::Listing> {
-        let git::Listing { repo, worktrees } = git::listing(&self.here).await?;
-        let git_folder = git::common_dir(&self.here).await?;
-        let mut worktrees: Vec<Worktree> = worktrees.into_iter().filter(|worktree| worktree.path != git_folder).collect();
-        if !worktrees.iter().any(|worktree| worktree.path == self.here) {
-            worktrees.push(git::worktree_at(&self.here).await?);
-        }
-        Ok(git::Listing { repo, worktrees })
+        listing(&self.here).await
     }
+}
+
+/// The worktrees of the repository `dir` is in, keyed and named as `Client::queue` keys and names them, from
+/// `git worktree list` alone: nothing is counted, so no git runs per worktree.
+#[cfg_attr(not(test), expect(dead_code, reason = "the ctrl-k finder lists the other space with it next"))]
+pub(crate) async fn worktrees(dir: &Path) -> Result<Queue> {
+    let git::Listing { repo, worktrees } = listing(&git::toplevel(dir).await?).await?;
+    let open = worktrees.iter().map(|worktree| queue_row(&bare_mr(&repo, worktree, &"")?)).collect::<Result<_>>()?;
+    Ok(Queue { host: None, me: repo.into(), project: None, review_requested: vec![], authored: vec![], assigned: vec![], open })
+}
+
+/// What `git worktree list` says, without the git folder a submodule's list names, the folder `here` always among it.
+async fn listing(here: &Path) -> Result<git::Listing> {
+    let git::Listing { repo, worktrees } = git::listing(here).await?;
+    let git_folder = git::common_dir(here).await?;
+    let mut worktrees: Vec<Worktree> = worktrees.into_iter().filter(|worktree| worktree.path != git_folder).collect();
+    if !worktrees.iter().any(|worktree| worktree.path == here) {
+        worktrees.push(git::worktree_at(here).await?);
+    }
+    Ok(git::Listing { repo, worktrees })
 }
 
 /// What fails on a local diff: the keys that reach it are hidden, so only a stray call gets here.
@@ -228,7 +241,7 @@ async fn mr_of(repo: &str, worktree: &Worktree, choice: &Choice) -> Result<Mr> {
 }
 
 /// What needs no git to say: its names, at its `HEAD`, as nothing ahead of anything.
-fn bare_mr(repo: &str, worktree: &Worktree, target: &Target) -> Result<Mr> {
+fn bare_mr(repo: &str, worktree: &Worktree, target: &impl std::fmt::Display) -> Result<Mr> {
     let key = key_of(worktree)?;
     let head = worktree.head.clone();
     let label = worktree.label();
@@ -272,13 +285,17 @@ async fn row(repo: &str, worktree: &Worktree, committed: &Choice) -> Result<Queu
     } else {
         tokio::try_join!(git::commits_between(&worktree.path, base, head), git::size_between(&worktree.path, base, head))?
     };
-    let row = QueueMr::from_mr(&mr, Some(HOST.to_owned())).context("a worktree is always open")?;
     Ok(QueueMr {
-        title: mr.source_branch.clone(),
         size: Some(size),
         worktree: Some(WorktreeRow { commits, uncommitted: mr.uncommitted, no_diff: mr.no_diff.clone(), dir: worktree.path.clone() }),
-        ..row
+        ..queue_row(&mr)?
     })
+}
+
+/// A worktree's row, titled by its branch: the queue's sections already name the repository.
+fn queue_row(mr: &Mr) -> Result<QueueMr> {
+    let row = QueueMr::from_mr(mr, Some(HOST.to_owned())).context("a worktree is always open")?;
+    Ok(QueueMr { title: mr.source_branch.clone(), ..row })
 }
 
 async fn uncommitted_work(worktree: &Worktree, base: &Sha) -> Result<(String, Vec<git::Untracked>)> {
