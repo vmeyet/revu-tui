@@ -134,16 +134,20 @@ fn variable_hint(host: &str, kind: Kind) -> String {
 
 /// The host this run is for, with the token its variable gives it (see `Env::token_for`), else its keychain entry.
 pub(crate) fn resolve(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<Login> {
-    let token_for = |h: &str| env.token_for(h, config, named);
-    let has_token = |h: &str| token_for(h).is_some() || store.get(h).ok().flatten().is_some();
-    let PickedHost { name: host, origin: host_origin } = pick_host(env, config, named, has_token)?;
-    if let Some(token) = token_for(&host) {
+    let PickedHost { name: host, origin: host_origin } = login_host(env, store, config, named)?;
+    if let Some(token) = env.token_for(&host, config, named) {
         return Ok(Login { credentials: Credentials { host, token: token.clone() }, source: Source::Env, host_origin });
     }
     match store.get(&host)? {
         Some(token) => Ok(Login { credentials: Credentials { host, token }, source: Source::Keychain, host_origin }),
         None => bail!("no token for {host}: run `revu login {host}`{}", variable_hint(&host, Kind::for_host(&host, config))),
     }
+}
+
+/// The host `resolve` logs in to, picked without reading a token from the keychain: it is only asked whether it holds one.
+pub(crate) fn login_host(env: &Env, store: &dyn SecretStore, config: &Config, named: Option<&str>) -> Result<PickedHost> {
+    let has_token = |h: &str| env.token_for(h, config, named).is_some() || store.has(h).unwrap_or(false);
+    pick_host(env, config, named, has_token)
 }
 
 /// An extra host the config lists: its keychain entry only, since a token variable goes to one host.
@@ -328,6 +332,22 @@ mod tests {
         store.set("github.com", "ghp_xxxx").unwrap();
         assert_eq!(resolve(&env, &store, &config, None).unwrap().credentials.host, "github.com");
         assert_eq!(resolve(&env, &store, &config, Some("gitlab.com")).unwrap().credentials.host, "gitlab.com", "the flag still wins");
+    }
+
+    #[test]
+    fn the_host_picked_without_a_token_is_the_one_resolve_logs_in_to() {
+        let store = MemoryStore::default();
+        let config = Config { host: Some("gitlab.com".into()), ..Config::default() };
+        let env = Env { origin: Some("github.com".into()), ..Env::default() };
+        store.set("gitlab.com", "glpat-xxxx").unwrap();
+        let same = |store: &MemoryStore| {
+            let picked = login_host(&env, store, &config, None).unwrap().name;
+            assert_eq!(picked, resolve(&env, store, &config, None).unwrap().credentials.host);
+            picked
+        };
+        assert_eq!(same(&store), "gitlab.com");
+        store.set("github.com", "ghp_xxxx").unwrap();
+        assert_eq!(same(&store), "github.com");
     }
 
     #[test]
