@@ -249,7 +249,7 @@ pub(crate) struct App {
     pub(crate) terminal_focused: bool,
     pub(crate) should_quit: bool,
     /// `:local` or `:forge`, asked for; the loop takes it and opens that side.
-    pub(crate) switch: Option<super::Side>,
+    pub(super) switch: Option<super::Space>,
     pub(crate) started: Instant,
     /// Set by the event loop each time it wakes, so nothing below reads the clock.
     pub(crate) now: Instant,

@@ -178,8 +178,8 @@ impl App {
             }
             Command::Target(target) => self.change_local(crate::forge::local::Change::Target(target)),
             Command::Title(title) => self.set_title(title),
-            Command::Switch(side) => {
-                self.switch_side(side);
+            Command::Switch(space) => {
+                self.switch_space(space);
                 vec![]
             }
             Command::Quit => {

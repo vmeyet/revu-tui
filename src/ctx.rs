@@ -21,17 +21,29 @@ pub struct Ctx {
     pub(crate) project: Option<ProjectPath>,
 }
 
-/// `--host` and `--all` as the command line gave them, so the TUI's `:forge` opens the forge the same way.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct ForgeArgs {
+/// How the command line asked revu to start, so the TUI opens the forge or the worktrees again the same way.
+#[derive(Debug)]
+pub(crate) struct Launch {
+    /// `--host`.
     pub(crate) host: Option<String>,
+    /// `--all`.
     pub(crate) all: bool,
+    /// `revu local <target>`: what a local diff compares against.
+    pub(crate) target: Option<String>,
 }
 
-impl ForgeArgs {
-    /// The forge as `revu` opens it with these flags.
-    pub(crate) fn open(&self) -> Result<Ctx> {
+impl Launch {
+    /// The forge as `revu` opens it.
+    pub(crate) fn forge(&self) -> Result<Ctx> {
         Ok(Ctx::open(self.host.as_deref(), false)?.everywhere(self.all))
+    }
+
+    /// The repository of the current folder as `revu local` opens it, and the worktree revu runs in.
+    pub(crate) async fn local(&self) -> Result<LocalHere> {
+        let dir = std::env::current_dir().context("reading the current folder")?;
+        let client = local::Client::open(&dir, self.target.as_deref()).await?;
+        let here = client.here_key().await?;
+        Ok(LocalHere { ctx: Ctx::local(client)?, here })
     }
 }
 
@@ -49,14 +61,6 @@ impl Ctx {
         let ctx = Self::build(&Env::from_process(), &store, config, host, json)?;
         let project = std::env::current_dir().ok().and_then(|dir| crate::mrref::checkout_project(&dir, &ctx.credentials.host));
         Ok(Self { project, ..ctx })
-    }
-
-    /// `revu local` in the folder revu runs in, comparing against `target`.
-    pub(crate) async fn local_here(target: Option<&str>) -> Result<LocalHere> {
-        let dir = std::env::current_dir().context("reading the current folder")?;
-        let client = local::Client::open(&dir, target).await?;
-        let here = client.here_key().await?;
-        Ok(LocalHere { ctx: Self::local(client)?, here })
     }
 
     /// `revu local`: no token, no other host, no Jev and nothing that only makes sense on a forge.

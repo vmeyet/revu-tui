@@ -36,8 +36,8 @@ async fn run(cli: Cli) -> Result<()> {
         }
         _ => {}
     }
+    let Some(command) = cli.command else { return commands::tui::run(cli.host, cli.all, cli.mr).await };
     let ctx = Ctx::open(cli.host.as_deref(), cli.json)?.everywhere(cli.all);
-    let Some(command) = cli.command else { return commands::tui::run(ctx, cli.mr, cli.host, cli.all).await };
     run_on_forge(&ctx, command).await.map_err(|err| ctx.with_host_hint(err))
 }
 

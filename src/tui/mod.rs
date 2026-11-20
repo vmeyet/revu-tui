@@ -28,12 +28,12 @@ use crate::ai;
 use crate::ai::typesafe::TypeSafe;
 use crate::blocking;
 use crate::cache::Cache;
-use crate::ctx::{Ctx, ForgeArgs, LocalHere};
+use crate::ctx::{Ctx, Launch, LocalHere};
 use crate::forge::MrKey;
 use crate::log::OrWarn as _;
 use actions::{failed, spawn};
 use anyhow::Result;
-use app::{Action, App, Failure, Incoming, Input, Settings, Side};
+use app::{Action, App, Failure, Incoming, Input, Settings, Space};
 use backend::Backend;
 use chrono::Utc;
 use crossterm::event::{Event, EventStream, KeyEventKind};
@@ -47,8 +47,8 @@ use vtui::screen::Screen;
 const IDLE_TICK: Duration = Duration::from_secs(1);
 
 /// Runs the review TUI until the user quits, restoring the terminal on the way out; on `start` in zen when given.
-/// `forge_args` are the flags `:forge` opens the forge with.
-pub(crate) async fn run(ctx: Ctx, start: Option<MrKey>, forge_args: ForgeArgs) -> Result<()> {
+/// `launch` opens the other space again when `:local` or `:forge` asks.
+pub(crate) async fn run(ctx: Ctx, start: Option<MrKey>, launch: Launch) -> Result<()> {
     let answers = TerminalAnswers::ask(&ctx.config);
     let session = Session::start(&ctx, start, &answers)?;
     tokio::spawn({
@@ -56,7 +56,7 @@ pub(crate) async fn run(ctx: Ctx, start: Option<MrKey>, forge_args: ForgeArgs) -
         async move { backend.homes.prune_daily().await }
     });
     let (mut terminal, screen) = Screen::enter();
-    let outcome = Box::pin(run_sessions(&mut terminal, &screen, session, &answers, &forge_args)).await;
+    let outcome = Box::pin(run_sessions(&mut terminal, &screen, session, &answers, &launch)).await;
     screen.leave();
     outcome
 }
@@ -75,7 +75,7 @@ impl TerminalAnswers {
     }
 }
 
-/// One side's app, the backend it runs on, and the channel the answers of its tasks come back on.
+/// One space's app, the backend it runs on, and the channel the answers of its tasks come back on.
 struct Session {
     app: App,
     backend: Backend,
@@ -83,23 +83,28 @@ struct Session {
     rx: mpsc::UnboundedReceiver<Incoming>,
 }
 
-/// Sessions one after another, as `:local` and `:forge` ask, until the reader quits; a side that does not open
+/// Sessions one after another, as `:local` and `:forge` ask, until the reader quits; a space that does not open
 /// leaves the session on screen as it was.
 async fn run_sessions(
     terminal: &mut ratatui::DefaultTerminal,
     screen: &Screen,
     mut session: Session,
     answers: &TerminalAnswers,
-    forge_args: &ForgeArgs,
+    launch: &Launch,
 ) -> Result<()> {
-    while let Some(side) = event_loop(terminal, screen, &mut session).await? {
-        session = match open_side(side, answers, forge_args).await {
+    while let Some(space) = event_loop(terminal, screen, &mut session).await? {
+        session.app.opening(space);
+        terminal.draw(|f| ui::draw(f, &mut session.app))?;
+        let opened = open_space(space, answers, launch).await;
+        drop_typed_ahead()?;
+        session = match opened {
             Ok(mut next) => {
                 next.app.switched();
                 next
             }
             Err(err) => {
-                session.app.switch_failed(side, &format!("{err:#}"));
+                wake(&mut session.app);
+                session.app.switch_failed(space, &format!("{err:#}"));
                 session
             }
         };
@@ -108,14 +113,22 @@ async fn run_sessions(
 }
 
 /// The session `:local` or `:forge` asked for, opened as `revu local` and `revu` open theirs.
-async fn open_side(side: Side, answers: &TerminalAnswers, forge_args: &ForgeArgs) -> Result<Session> {
-    match side {
-        Side::Local => {
-            let LocalHere { ctx, here } = Ctx::local_here(None).await?;
+async fn open_space(space: Space, answers: &TerminalAnswers, launch: &Launch) -> Result<Session> {
+    match space {
+        Space::Local => {
+            let LocalHere { ctx, here } = launch.local().await?;
             Session::start(&ctx, Some(here), answers)
         }
-        Side::Forge => Session::start(&forge_args.open()?, None, answers),
+        Space::Forge => Session::start(&launch.forge()?, None, answers),
     }
+}
+
+/// Keys typed while the screen stood still were aimed at a screen that is gone: none of them reaches the next loop.
+fn drop_typed_ahead() -> std::io::Result<()> {
+    while crossterm::event::poll(Duration::ZERO)? {
+        crossterm::event::read()?;
+    }
+    Ok(())
 }
 
 impl Session {
@@ -189,13 +202,13 @@ impl Session {
 }
 
 /// Runs `session` until the reader quits, `None`, or asks for the other side.
-async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, session: &mut Session) -> Result<Option<Side>> {
+async fn event_loop(terminal: &mut ratatui::DefaultTerminal, screen: &Screen, session: &mut Session) -> Result<Option<Space>> {
     let Session { app, backend, tx, rx } = session;
     let mut keys = Keys::new();
     let mut shown = Shown::default();
     let mut ticked = Instant::now();
     let mut flushed = Instant::now();
-    while !app.should_quit && app.switch.is_none() {
+    while !app.session_over() {
         if flushed.elapsed() >= USAGE_FLUSH {
             flushed = Instant::now();
             if let Some(counts) = app.take_usage() {
