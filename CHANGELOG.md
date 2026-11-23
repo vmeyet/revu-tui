@@ -7,6 +7,8 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+## 0.16.0 - 2026-11-23
+
 ### New
 
 - **`:local` and `:forge` switch between your worktrees and the forge without leaving revu.**
