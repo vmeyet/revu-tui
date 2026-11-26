@@ -176,17 +176,16 @@ fn written(line: Line<'static>, raw: &str, links: Vec<Anchor>) -> Piece {
     Piece::Written { line, raw: raw.to_owned(), links }
 }
 
-/// Where a markdown link points as written: a web address or a path on the forge's host.
+/// Where a markdown link points: a web address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct LinkUrl(String);
 
 impl LinkUrl {
-    /// A link revu can open: `http(s)://…` or an absolute `/path`; a relative path, an `#anchor`
-    /// or a `mailto:` would open the wrong page, so they stay text.
+    /// A link revu can open: `http(s)://…`; mrk keeps no other target but `mailto:` and `file:`,
+    /// which would open the wrong thing, so they stay text.
     fn parse(url: &str) -> Option<Self> {
         let web = url.starts_with("http://") || url.starts_with("https://");
-        let path = url.starts_with('/') && !url.starts_with("//");
-        (web || path).then(|| Self(url.to_owned()))
+        web.then(|| Self(url.to_owned()))
     }
 
     pub(super) fn as_str(&self) -> &str {
@@ -331,9 +330,9 @@ mod tests {
     }
 
     #[test]
-    fn only_a_web_address_or_an_absolute_path_clicks() {
-        let body = "[a](docs/x.md) [b](#top) [c](mailto:nina@x) [e](/acme/widgets)";
-        assert_eq!(clicks(body, 80), [(0, 6, "e".into(), "/acme/widgets".into())]);
+    fn only_a_web_address_clicks() {
+        let body = "[a](docs/x.md) [b](#top) [c](mailto:nina@x) [e](/acme/widgets) [f](https://x/f)";
+        assert_eq!(clicks(body, 120), [(0, 36, "f".into(), "https://x/f".into())]);
     }
 
     #[test]
