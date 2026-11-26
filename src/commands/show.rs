@@ -159,7 +159,7 @@ mod tests {
     use crate::forge::Forge;
     use crate::forge::gitlab::fixture;
     use chrono::TimeZone;
-    use wiremock::matchers::{any, method};
+    use wiremock::matchers::{any, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn mr() -> Mr {
@@ -232,12 +232,16 @@ mod tests {
         (server, ctx(forge, host_origin))
     }
 
+    fn gitlab_on(server: &MockServer) -> Forge {
+        let credentials = Credentials { host: "gitlab.com".into(), token: "glpat-xxxx".into() };
+        Forge::GitLab(crate::forge::gitlab::Client::with_base(&credentials, &format!("{}/api/v4/", server.uri())).unwrap())
+    }
+
     /// A GitLab host that answers every request with `status`.
     async fn gitlab_answering(status: u16, host_origin: HostOrigin) -> (MockServer, Ctx) {
         let server = MockServer::start().await;
         Mock::given(any()).respond_with(ResponseTemplate::new(status)).mount(&server).await;
-        let credentials = Credentials { host: "x".into(), token: "glpat-xxxx".into() };
-        let forge = Forge::GitLab(crate::forge::gitlab::Client::with_base(&credentials, &format!("{}/api/v4/", server.uri())).unwrap());
+        let forge = gitlab_on(&server);
         (server, ctx(forge, host_origin))
     }
 
@@ -279,6 +283,41 @@ mod tests {
             let said = failure(&ctx).await;
             assert!(said.contains(&format!("HTTP {status}")) && !said.contains("--host"), "{said}");
         }
+    }
+
+    /// What `revu show` prints of an MR whose title, author, branch, file path and comment the forge answers through `mark`.
+    async fn shown_through_gitlab(mark: fn(&str) -> String) -> String {
+        let server = MockServer::start().await;
+        let mr = serde_json::json!({"id": 1042, "iid": 42, "project_id": 7, "title": mark("feat: charge cards"), "state": "opened", "draft": false,
+            "author": {"id": 5, "username": mark("omar"), "name": "Omar"}, "source_branch": mark("feat/checkout"), "target_branch": "main",
+            "web_url": "https://gitlab.com/acme/widgets/-/merge_requests/42", "updated_at": "2026-09-22T10:00:00Z", "sha": "bbbb",
+            "diff_refs": {"base_sha": "aaaa", "head_sha": "bbbb", "start_sha": "aaaa"}});
+        let diffs = serde_json::json!([{"diff": "@@ -1 +1 @@\n-a\n+b\n", "old_path": mark("src/pay.rs"), "new_path": mark("src/pay.rs")}]);
+        let note = serde_json::json!({"id": 502, "body": mark("Should this retry?"), "author": {"id": 3, "username": mark("lea"), "name": "Léa"},
+            "created_at": "2026-09-22T10:05:00Z", "updated_at": "2026-09-22T10:05:00Z", "system": false, "resolvable": true, "resolved": false});
+        let discussions = serde_json::json!([{"id": "9f2c", "individual_note": false, "notes": [note]}]);
+        let mr_path = "/api/v4/projects/acme%2Fwidgets/merge_requests/42";
+        for (at, answer) in
+            [("", mr), ("/diffs", diffs), ("/discussions", discussions), ("/approvals", serde_json::json!({"approved": false}))]
+        {
+            let answered = ResponseTemplate::new(200).set_body_json(answer);
+            Mock::given(method("GET")).and(path(format!("{mr_path}{at}"))).respond_with(answered).mount(&server).await;
+        }
+        let forge = gitlab_on(&server);
+        let cache = tempfile::tempdir().unwrap();
+        let ctx = Ctx { cache: Cache::in_dir(cache.path()), ..ctx(forge, HostOrigin::Named) };
+        let (mr, diffs, discussions) = fetch(&ctx, &MrKey::new("acme/widgets", 42)).await.unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap();
+        text(Kind::GitLab, &mr, &diffs, &discussions, Theme::plain(), now)
+    }
+
+    #[tokio::test]
+    async fn forge_text_carrying_escapes_bidi_and_invisible_characters_prints_as_its_clean_text_and_keeps_the_columns() {
+        let hostile = |text: &str| {
+            let (head, tail) = text.split_at(2);
+            format!("\x1b{head}\u{9b}\u{202e}\u{2066}\u{200b}{tail}\u{2069}\u{e0041}\x07\r")
+        };
+        assert_eq!(shown_through_gitlab(hostile).await, shown_through_gitlab(str::to_owned).await);
     }
 
     #[test]

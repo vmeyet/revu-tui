@@ -140,7 +140,7 @@ impl Transport {
 
     pub(crate) async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let response = self.send(Method::GET, path, None).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
+        decoded(response).await.with_context(|| format!("GET {path}: unreadable answer"))
     }
 
     pub(super) async fn get_text(&self, path: &str) -> Result<String> {
@@ -170,7 +170,7 @@ impl Transport {
     /// `body` sent with `method`, and the JSON the forge answers.
     pub(super) async fn send_json<T: DeserializeOwned>(&self, method: Method, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(method.clone(), path, Some(body)).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("{method} {path}: unreadable answer"))
+        decoded(response).await.with_context(|| format!("{method} {path}: unreadable answer"))
     }
 
     /// A request whose answer body does not matter: `204`s, publishes, approvals.
@@ -190,7 +190,7 @@ impl Transport {
         loop {
             let response = self.send_to(Method::GET, url, None, None).await?;
             let next = response.headers().get("link").and_then(|h| h.to_str().ok()).and_then(next_link).map(str::to_owned);
-            let page: Vec<T> = response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable page"))?;
+            let page: Vec<T> = decoded(response).await.with_context(|| format!("GET {path}: unreadable page"))?;
             items.extend(page);
             match next {
                 Some(link) => url = same_origin(&self.base, Url::parse(&link).with_context(|| format!("bad link {link:?}"))?)?,
@@ -269,7 +269,11 @@ impl Transport {
     async fn refusal(&self, response: Response, method: &Method, url: &Url) -> HttpError {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        HttpError { request: format!("{method} {}", url.path()), status, message: (self.flavor.error_message)(&body) }
+        HttpError {
+            request: format!("{method} {}", url.path()),
+            status,
+            message: crate::sanitize::text(&(self.flavor.error_message)(&body)),
+        }
     }
 
     /// `Retry-After` in seconds; else a minute for a secondary limit with requests left, whose reset
@@ -315,6 +319,12 @@ fn next_link(header: &str) -> Option<&str> {
         let end = part.find('>')?;
         part.get(start..end)
     })
+}
+
+/// A JSON answer as `T`, its text cleaned for the terminal (`crate::sanitize`).
+async fn decoded<T: DeserializeOwned>(response: Response) -> Result<T> {
+    let body = response.bytes().await.map_err(scrub)?;
+    Ok(crate::sanitize::json(&body)?)
 }
 
 /// reqwest errors carry the URL, never the header, but the chain is cut here anyway so nothing
@@ -414,6 +424,15 @@ mod tests {
             .await;
         assert_eq!(transport(&format!("{}/api/", server.uri())).get_text("user").await.unwrap(), "nina");
         assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn the_forges_error_message_reaches_the_reader_without_escapes_or_bidi_controls() {
+        let server = MockServer::start().await;
+        let said = "\x1b]0;owned\x07Not \u{202e}Found\x1b[2J";
+        Mock::given(method("GET")).respond_with(ResponseTemplate::new(404).set_body_string(said)).mount(&server).await;
+        let err = transport(&format!("{}/api/", server.uri())).get::<serde_json::Value>("user").await.unwrap_err();
+        assert_eq!(err.to_string(), "GET /api/user: HTTP 404 ]0;ownedNot Found[2J");
     }
 
     #[tokio::test]

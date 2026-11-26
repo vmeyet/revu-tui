@@ -98,5 +98,8 @@ Fixtures are invented: `acme/widgets!42`, user `nina`, token `glpat-xxxx`.
 - No token in config, cache, logs, fixtures or `Debug` output; `Credentials` prints `<redacted>`.
 - AI keys follow the same rules: keychain or environment only, never the config.
 - The cache holds MR content, so it is private to the user (`ARCHITECTURE.md` § Caching); `revu logout` wipes it.
+- Forge text is untrusted and the terminal is an interpreter: `forge::http` cleans every string of a JSON answer and every error body with `sanitize` (mrk's rules, tabs and newlines kept), so escapes, C1 controls, bidi overrides and isolates, zero-width spaces and tag characters never reach the model.
+  The clipboard gets that clean text too: a copied `U+202E` is the trojan-source trick.
+  A new way to read the forge decodes through `sanitize::json`, never `response.json()`.
 - No telemetry and no crash reporting.
 - The repo may go public: no real host other than `gitlab.com` and `github.com`, no real project path, id or MR title, no work email in commits.

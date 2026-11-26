@@ -19,6 +19,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
 | `forge/gitlab/award.rs`, `upload.rs`, `todo.rs`, `merge.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, mentions read from and marked done in the to-do list, the merge and GitLab's verdict on it, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
+| `sanitize.rs` | Forge text made safe to show: every string of a forge's JSON answer and error body, cleaned with mrk's `sanitize` as the transport decodes it |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `forge/identity.rs` | `Me`, my username on one host, compared without case, and `Identities`, one per host of the queue |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
@@ -60,7 +61,7 @@ When a boundary or a flow changes, change this page in the same MR.
 Reading an MR:
 
 1. A backend in `forge/<backend>/` fetches the MR, its diffs, its discussions and the reader's drafts.
-2. The backend turns the forge's JSON into the neutral model; nothing outside it sees the JSON.
+2. `forge::http` decodes the answer through `sanitize::json`, which drops from every string the characters a terminal interprets or that disguise text; the backend turns that JSON into the neutral model, and nothing outside it sees the JSON.
 3. `Reviews::build` makes a `Review` and adds what the cache remembers for this MR: folds, viewed files, side by side.
 4. The runner sends `Incoming::Review`; `App::apply` puts it in the state, and the last cursor spot follows as `Incoming::Resume`.
 5. `ui::draw` renders the state on each frame; heavy derived values are rebuilt only when their inputs change (`tui/app/kept.rs`).
@@ -132,6 +133,9 @@ Switching space, `:local`, `:forge` and the palette:
 - The one exception is `App::new`, which reads the clock once to set `now` and `today` before the loop takes over.
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `vtui::screen::Screen::lend`, with the key stream paused.
 - Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands, which ask through `commands/prompt.rs`: `revu login` takes a token from `glab`, `gh` or stdin.
+- Forge text is cleaned once, where `forge::http` decodes it (`sanitize.rs`); the views, `revu show`, the clipboard and the links revu prints use the model as it is and never clean it again.
+  A file at a commit (`Forge::file`) is not JSON and stays byte for byte: ratatui drops its control characters when it draws.
+  `revu local` reads the reader's own checkout with `git`, not through `forge::http`, so its branches, paths and diffs are not cleaned.
 - Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments) and Jev's client.
 
 ## Concurrency

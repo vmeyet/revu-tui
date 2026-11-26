@@ -26,6 +26,7 @@ mod reactions;
 mod ready;
 mod render;
 mod review;
+mod sanitize;
 mod share;
 #[cfg(test)]
 mod sources;
