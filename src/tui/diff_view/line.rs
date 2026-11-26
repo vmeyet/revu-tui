@@ -113,7 +113,7 @@ fn text_spans<'a>(
     });
     let dots = "·".repeat(trailing);
     let marked_end = (changed && trailing > 0).then_some((dots.as_str(), base.fg(theme.warn)));
-    fit(pieces.chain(marked_end), room)
+    fit(pieces.chain(marked_end), room, theme)
 }
 
 /// The item of `sorted` whose range holds byte `at`, its ranges in order and never overlapping.
@@ -159,19 +159,14 @@ pub(super) fn pair_spans<'a>(
         }
     }
     let mut spans = vec![Span::styled(gutter.numbers(old.old, new.new), faint), Span::styled("~", Style::default().fg(theme.warn))];
-    spans.extend(fit(styled, width.saturating_sub(gutter.width() + 1)));
+    spans.extend(fit(styled, width.saturating_sub(gutter.width() + 1), theme));
     spans
 }
 
 /// `text`, found at byte `at` of its line, cut wherever a syntax token starts or stops.
 pub(in crate::tui) fn coloured<'t>(text: &'t str, at: usize, code: &[(Range<usize>, Token)], theme: Theme) -> Vec<(&'t str, Style)> {
-    let end = at + text.len();
-    let mut edges: Vec<usize> = code.iter().flat_map(|(r, _)| [r.start, r.end]).filter(|&e| at < e && e < end).map(|e| e - at).collect();
-    edges.extend([0, text.len()]);
-    edges.retain(|&edge| text.is_char_boundary(edge));
-    edges.sort_unstable();
-    edges.dedup();
-    edges.windows(2).map(|w| (&text[w[0]..w[1]], with_syntax(Style::default(), code, at + w[0], theme))).collect()
+    let ranges: Vec<Range<usize>> = code.iter().map(|(range, _)| range.clone()).collect();
+    pieces(text, at, &ranges).map(|(from, piece)| (piece, with_syntax(Style::default(), code, from, theme))).collect()
 }
 
 /// A line that changed only in whitespace, under `W`: read as context, both numbers, a `≈` for a sign.
@@ -209,11 +204,11 @@ pub(super) fn with_quiet_sign(mut spans: Vec<Span<'_>>, theme: Theme) -> Vec<Spa
     spans
 }
 
-/// Styled pieces laid end to end, tabs made visible, cut to `room` columns.
-fn fit<'a, 't>(parts: impl IntoIterator<Item = (&'t str, Style)>, room: usize) -> Vec<Span<'a>> {
+/// Styled pieces laid end to end, the marker of a hidden character in the warning colour, tabs made visible, cut to `room` columns.
+fn fit<'a, 't>(parts: impl IntoIterator<Item = (&'t str, Style)>, room: usize, theme: Theme) -> Vec<Span<'a>> {
     let mut spans = vec![];
     let mut used = 0;
-    for (text, style) in parts {
+    for (text, style) in with_markers(parts.into_iter().collect(), theme) {
         if used >= room {
             break;
         }
@@ -222,6 +217,37 @@ fn fit<'a, 't>(parts: impl IntoIterator<Item = (&'t str, Style)>, room: usize) -
         spans.push(Span::styled(cut, style));
     }
     spans
+}
+
+/// `parts` cut wherever a marker `sanitize::code` wrote starts or stops, found on the line they make together, so a
+/// marker that syntax or a changed word splits is still one warning.
+pub(in crate::tui) fn with_markers(parts: Vec<(&str, Style)>, theme: Theme) -> Vec<(&str, Style)> {
+    if !parts.iter().any(|(text, _)| text.contains('⟨')) {
+        return parts;
+    }
+    let line: String = parts.iter().map(|(text, _)| *text).collect();
+    let markers = crate::sanitize::markers(&line);
+    let mut at = 0;
+    let mut cut = Vec::with_capacity(parts.len() + 2 * markers.len());
+    for (text, style) in parts {
+        cut.extend(pieces(text, at, &markers).map(|(from, piece)| {
+            let warned = covering(&markers, |range| range, from).is_some();
+            (piece, if warned { style.fg(theme.warn) } else { style })
+        }));
+        at += text.len();
+    }
+    cut
+}
+
+/// `text`, found at byte `at` of its line, cut wherever one of `ranges` starts or stops; each piece with the line byte it starts at.
+fn pieces<'t>(text: &'t str, at: usize, ranges: &[Range<usize>]) -> impl Iterator<Item = (usize, &'t str)> {
+    let end = at + text.len();
+    let mut edges: Vec<usize> = ranges.iter().flat_map(|r| [r.start, r.end]).filter(|&e| at < e && e < end).map(|e| e - at).collect();
+    edges.extend([0, text.len()]);
+    edges.retain(|&edge| text.is_char_boundary(edge));
+    edges.sort_unstable();
+    edges.dedup();
+    (0..edges.len().saturating_sub(1)).map(move |i| (at + edges[i], &text[edges[i]..edges[i + 1]]))
 }
 
 #[cfg(test)]
@@ -320,6 +346,31 @@ mod tests {
         let ranges = [2..4, 6..7];
         let inside: Vec<usize> = (0..8).filter(|&at| covering(&ranges, |range| range, at).is_some()).collect();
         assert_eq!(inside, [2, 3, 6]);
+    }
+
+    #[test]
+    fn a_hidden_character_shows_as_a_warning_marker_at_its_column_after_wide_characters() {
+        let code = crate::sanitize::code("@@ -1 +1 @@\n+let 日本 = 1;\u{202e} // \u{2066}x\n");
+        let hunk = &diff::parse(&code)[0];
+        let theme = Theme::named("tokyonight").unwrap();
+        let spans = line_spans(&hunk.lines[0], &[(0..3, Token::Keyword)], false, Gutter::Both, 60, theme);
+        let text = spans_text(&spans);
+        assert_eq!(text.trim_end(), "        1 +let 日本 = 1;⟨U+202E⟩ // ⟨U+2066⟩x");
+        assert_eq!(text.width(), 60, "the marker counts its own columns, so the fill still ends at the edge");
+        let column = |marker: &str| text[..text.find(marker).unwrap()].width();
+        assert_eq!((column("⟨U+202E⟩"), column("⟨U+2066⟩")), (24, 36), "日本 takes two columns each");
+        let warned: Vec<&str> = spans.iter().filter(|s| s.style.fg == Some(theme.warn)).map(|s| s.content.as_ref()).collect();
+        assert_eq!(warned, ["⟨U+202E⟩", "⟨U+2066⟩"]);
+    }
+
+    #[test]
+    fn a_marker_split_by_a_changed_word_is_still_one_warning() {
+        let code = crate::sanitize::code("@@ -1 +1 @@\n-a = 1;\n+a = 1;\u{202e}\n");
+        let hunk = diff::words::mark(&diff::parse(&code)[0]);
+        let theme = Theme::named("tokyonight").unwrap();
+        let spans = pair_spans(&hunk.lines[0], &hunk.lines[1], &[], false, Gutter::Both, 60, theme);
+        let warned: String = spans[2..].iter().filter(|s| s.style.fg == Some(theme.warn)).map(|s| s.content.as_ref()).collect();
+        assert_eq!(warned, "⟨U+202E⟩");
     }
 
     #[test]

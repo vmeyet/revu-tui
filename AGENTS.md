@@ -98,5 +98,16 @@ Fixtures are invented: `acme/widgets!42`, user `nina`, token `glpat-xxxx`.
 - No token in config, cache, logs, fixtures or `Debug` output; `Credentials` prints `<redacted>`.
 - AI keys follow the same rules: keychain or environment only, never the config.
 - The cache holds MR content, so it is private to the user (`ARCHITECTURE.md` § Caching); `revu logout` wipes it.
+- Forge text is untrusted and the terminal is an interpreter: `forge::http` cleans every string of a JSON answer and every error body with `sanitize` (mrk's rules, tabs and newlines kept), so escapes, C1 controls, bidi overrides and isolates, zero-width spaces and tag characters never reach the model.
+  The clipboard gets that clean text too: a copied `U+202E` is the trojan-source trick.
+  A new way to read the forge decodes through `sanitize::json`, never `response.json()`.
+- Code shown for review is the exception: in a diff, a file at a commit and `revu local`'s diffs, `sanitize::code` writes each character mrk would remove as a marker, `⟨U+202E⟩`, painted in the warning colour.
+  The rule is one for every such character, escapes and controls included; tabs and newlines stay, and a CR ending a line is a line ending.
+  The marker is text on the line: widths count it, line numbers do not move, and a copy carries it, so a hidden character is never pasted unseen.
+  A `⟨` that starts what reads as a marker is written as `⟨U+27E8⟩`, so every marker is a real one and `sanitize::unmarked` gives the code back.
+  A ```` ```suggestion ```` block is code too: the forge commits it as written, so its lines get markers in any forge string, and `Transport` sends every suggestion block with its markers turned back into their characters (`sanitize::outgoing`).
+  Comments, titles, names and paths keep losing those characters: they are text to read, not code to review.
+  A new forge field holding code decodes through `Transport::get_all_with_code`; a new file read passes `Forge::file`.
+- A cache file holding forge text has `cache::keys::FORGE_TEXT` in its name; bump it when that text is cleaned another way, so older files are fetched again instead of shown.
 - No telemetry and no crash reporting.
 - The repo may go public: no real host other than `gitlab.com` and `github.com`, no real project path, id or MR title, no work email in commits.

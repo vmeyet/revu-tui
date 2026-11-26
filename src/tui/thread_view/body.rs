@@ -4,7 +4,7 @@ use crate::diff::LineKind;
 use crate::review::Review;
 use crate::review::image::{self, Image};
 use crate::syntax::{self, Language};
-use crate::tui::diff_view::{coloured, paint};
+use crate::tui::diff_view::{coloured, paint, with_markers};
 use crate::tui::prose::{self, Linked, Links};
 use crate::tui::theme::Theme;
 use mrk::link::LinkBase;
@@ -170,7 +170,8 @@ fn code_lines(
     let spans = language.map(|language| syntax::highlight(language, &texts.join("\n"))).unwrap_or_default();
     let line = |(index, text): (usize, &&str)| {
         let tokens = spans.get(index).map_or(&[][..], Vec::as_slice);
-        let parts = coloured(text, 0, tokens, theme).into_iter().map(|(part, style)| Span::styled(part.to_owned(), base.patch(style)));
+        let parts = with_markers(coloured(text, 0, tokens, theme), theme);
+        let parts = parts.into_iter().map(|(part, style)| Span::styled(part.to_owned(), base.patch(style)));
         Line::from(std::iter::once(sign.clone()).chain(parts).collect::<Vec<_>>())
     };
     texts.iter().enumerate().map(line).collect()
@@ -432,6 +433,14 @@ mod tests {
         let (sign, comment) = (style_of(&lines[1], "+ "), style_of(&lines[1], "# cents"));
         assert_eq!((sign.fg, sign.bg), (Some(theme.success), theme.added_fill));
         assert_eq!((comment.fg, comment.bg), (Some(theme.syntax.comment), theme.added_fill));
+    }
+
+    #[test]
+    fn a_hidden_character_in_a_suggestion_shows_as_a_warning_marker() {
+        let lines = kept_lines("```suggestion:-0+0\nreturn ok⟨U+202E⟩\n```", "billing/charge.py", &["return ok"]);
+        assert_eq!(text(&lines), ["- return ok", "+ return ok⟨U+202E⟩"]);
+        let warned: String = lines[1].spans.iter().filter(|s| s.style.fg == Some(tokyonight().warn)).map(|s| s.content.as_ref()).collect();
+        assert_eq!(warned, "⟨U+202E⟩");
     }
 
     #[test]

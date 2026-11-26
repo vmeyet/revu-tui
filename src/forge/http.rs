@@ -140,7 +140,7 @@ impl Transport {
 
     pub(crate) async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let response = self.send(Method::GET, path, None).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable answer"))
+        decoded(response, None).await.with_context(|| format!("GET {path}: unreadable answer"))
     }
 
     pub(super) async fn get_text(&self, path: &str) -> Result<String> {
@@ -170,7 +170,7 @@ impl Transport {
     /// `body` sent with `method`, and the JSON the forge answers.
     pub(super) async fn send_json<T: DeserializeOwned>(&self, method: Method, path: &str, body: &serde_json::Value) -> Result<T> {
         let response = self.send(method.clone(), path, Some(body)).await?;
-        response.json().await.map_err(scrub).with_context(|| format!("{method} {path}: unreadable answer"))
+        decoded(response, None).await.with_context(|| format!("{method} {path}: unreadable answer"))
     }
 
     /// A request whose answer body does not matter: `204`s, publishes, approvals.
@@ -184,13 +184,22 @@ impl Transport {
 
     /// Every page of a list, following `Link: rel="next"` until it stops.
     pub(super) async fn get_all<T: DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
+        self.pages(path, None).await
+    }
+
+    /// `get_all`, the strings of the fields named `code_field` kept as code shown for review (`sanitize::code`).
+    pub(super) async fn get_all_with_code<T: DeserializeOwned>(&self, path: &str, code_field: &str) -> Result<Vec<T>> {
+        self.pages(path, Some(code_field)).await
+    }
+
+    async fn pages<T: DeserializeOwned>(&self, path: &str, code_field: Option<&str>) -> Result<Vec<T>> {
         let mut url = self.url(path)?;
         url.query_pairs_mut().append_pair("per_page", PAGE_SIZE);
         let mut items = Vec::new();
         loop {
             let response = self.send_to(Method::GET, url, None, None).await?;
             let next = response.headers().get("link").and_then(|h| h.to_str().ok()).and_then(next_link).map(str::to_owned);
-            let page: Vec<T> = response.json().await.map_err(scrub).with_context(|| format!("GET {path}: unreadable page"))?;
+            let page: Vec<T> = decoded(response, code_field).await.with_context(|| format!("GET {path}: unreadable page"))?;
             items.extend(page);
             match next {
                 Some(link) => url = same_origin(&self.base, Url::parse(&link).with_context(|| format!("bad link {link:?}"))?)?,
@@ -224,7 +233,7 @@ impl Transport {
     async fn send_once(&self, method: Method, url: Url, body: Option<&serde_json::Value>, accept: Option<&str>) -> Result<Response> {
         let request = self.client.request(method, url);
         let request = match body {
-            Some(json) => request.json(json),
+            Some(json) => request.json(&crate::sanitize::outgoing(json)),
             None => request,
         };
         let request = match accept {
@@ -269,7 +278,11 @@ impl Transport {
     async fn refusal(&self, response: Response, method: &Method, url: &Url) -> HttpError {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        HttpError { request: format!("{method} {}", url.path()), status, message: (self.flavor.error_message)(&body) }
+        HttpError {
+            request: format!("{method} {}", url.path()),
+            status,
+            message: crate::sanitize::text(&(self.flavor.error_message)(&body)),
+        }
     }
 
     /// `Retry-After` in seconds; else a minute for a secondary limit with requests left, whose reset
@@ -317,6 +330,12 @@ fn next_link(header: &str) -> Option<&str> {
     })
 }
 
+/// A JSON answer as `T`, its text cleaned for the terminal (`crate::sanitize`), the fields named `code_field` as code.
+async fn decoded<T: DeserializeOwned>(response: Response, code_field: Option<&str>) -> Result<T> {
+    let body = response.bytes().await.map_err(scrub)?;
+    Ok(crate::sanitize::json(&body, code_field)?)
+}
+
 /// reqwest errors carry the URL, never the header, but the chain is cut here anyway so nothing
 /// above the transport can leak a request. A timeout says so, which the cut chain would hide.
 pub(super) fn scrub(err: reqwest::Error) -> anyhow::Error {
@@ -328,7 +347,7 @@ pub(super) fn scrub(err: reqwest::Error) -> anyhow::Error {
 mod tests {
     use super::*;
     use reqwest::header::HeaderValue;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     static PLAIN: Flavor = Flavor {
@@ -414,6 +433,29 @@ mod tests {
             .await;
         assert_eq!(transport(&format!("{}/api/", server.uri())).get_text("user").await.unwrap(), "nina");
         assert_eq!(server.received_requests().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn the_forges_error_message_reaches_the_reader_without_escapes_or_bidi_controls() {
+        let server = MockServer::start().await;
+        let said = "\x1b]0;owned\x07Not \u{202e}Found\x1b[2J";
+        Mock::given(method("GET")).respond_with(ResponseTemplate::new(404).set_body_string(said)).mount(&server).await;
+        let err = transport(&format!("{}/api/", server.uri())).get::<serde_json::Value>("user").await.unwrap_err();
+        assert_eq!(err.to_string(), "GET /api/user: HTTP 404 ]0;ownedNot Found[2J");
+    }
+
+    #[tokio::test]
+    async fn a_suggestion_sent_with_markers_reaches_the_forge_with_the_characters_they_stand_for() {
+        let server = MockServer::start().await;
+        let sent = serde_json::json!({"body": "```suggestion:-0+0\nif ok\u{202e} {\n```"});
+        Mock::given(method("POST"))
+            .and(body_json(&sent))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let shown = serde_json::json!({"body": "```suggestion:-0+0\nif ok⟨U+202E⟩ {\n```"});
+        transport(&format!("{}/api/", server.uri())).post_json::<serde_json::Value>("notes", &shown).await.unwrap();
     }
 
     #[tokio::test]

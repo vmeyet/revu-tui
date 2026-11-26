@@ -9,6 +9,10 @@ Each entry says what changed, then where, then how to use it.
 
 ### Fixed
 
+- **Text from the forge can no longer hide characters or send escape sequences to your terminal.**
+  In titles, comments, names, branches, file paths and the forge's errors, on screen, in `revu show` and `revu diff`, and in what you copy.
+- **A hidden character in the code under review shows as a marker like `⟨U+202E⟩` instead of vanishing.**
+  In diffs, files at a commit, suggestions and `revu local`, in the warning colour, and in what you copy, so a trojan-source trick cannot hide.
 - **Mermaid diagrams drawn as text read cleaner: flowchart, sequence, state, class and ER, their labels without HTML tags.**
   In a Markdown file shown as prose.
 

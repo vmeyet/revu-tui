@@ -247,6 +247,19 @@ async fn the_head_is_the_real_one_until_uncommitted_work_shows() {
 }
 
 #[tokio::test]
+async fn a_hidden_character_in_local_work_shows_as_a_marker_in_its_diff_and_its_file() {
+    let repo = Repo::new();
+    repo.write("a.txt", "one\nif admin\u{202e} {\u{2066}\n");
+    repo.commit("hide");
+    let (client, key) = repo.open().await;
+    let [file] = client.diffs(&key).await.unwrap().try_into().unwrap();
+    assert!(file.diff.contains("\n+if admin⟨U+202E⟩ {⟨U+2066⟩\n"), "{}", file.diff);
+    let head = client.mr(&key).await.unwrap().refs.head;
+    let forge = crate::forge::Forge::Local(client);
+    assert_eq!(forge.file(&key, "a.txt", &head).await.unwrap(), "one\nif admin⟨U+202E⟩ {⟨U+2066⟩\n");
+}
+
+#[tokio::test]
 async fn a_file_comes_from_its_commit_or_from_the_disk_at_the_uncommitted_head() {
     let repo = Repo::new();
     let (client, key) = repo.open().await;

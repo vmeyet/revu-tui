@@ -248,8 +248,11 @@ impl Client {
         let path = contents_path(&key.project, &suggestion.path);
         let file: Contents = self.http.get(&format!("{path}?ref={}", encode(branch))).await?;
         let text = decode(&file.content)?;
-        let proposal =
-            crate::review::suggestion::Proposal { above: suggestion.above, below: suggestion.below, text: suggestion.text.clone() };
+        let proposal = crate::review::suggestion::Proposal {
+            above: suggestion.above,
+            below: suggestion.below,
+            text: crate::sanitize::unmarked(&suggestion.text),
+        };
         let changed = crate::review::suggestion::apply_to(&text, suggestion.line, &proposal)?;
         let body = json!({
             "message": format!("Apply suggestion to {}", suggestion.path),
@@ -322,7 +325,8 @@ impl Client {
     }
 
     pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
-        let files: Vec<File> = self.http.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
+        let files: Vec<File> =
+            self.http.get_all_with_code(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number), "patch").await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
@@ -547,6 +551,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_hidden_character_in_a_patch_shows_as_a_marker() {
+        let server = MockServer::start().await;
+        let file =
+            json!([{"filename": "a.rs", "status": "modified", "changes": 2, "patch": "@@ -1 +1 @@\n-ok\n+if admin\u{2066} {\u{202e}"}]);
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/pulls/42/files"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(file))
+            .mount(&server)
+            .await;
+        let files = client(&server).diffs(&key()).await.unwrap();
+        assert_eq!(files[0].diff, "@@ -1 +1 @@\n-ok\n+if admin⟨U+2066⟩ {⟨U+202E⟩\n");
+    }
+
+    #[tokio::test]
     async fn a_line_comment_goes_on_the_head_commit_and_a_plain_one_on_the_conversation() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
@@ -738,6 +756,27 @@ mod tests {
             .mount(&server)
             .await;
         client(&server).apply(&key(), "fix/#123-login", &suggestion()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_suggestion_holding_a_marker_commits_the_character_it_stands_for() {
+        let server = MockServer::start().await;
+        repo_and_pull(&server, true, "acme/widgets").await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/src/a.rs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"content": "YQpiCmMK", "sha": "blob1"})))
+            .mount(&server)
+            .await;
+        let committed = base64::engine::general_purpose::STANDARD.encode("a\nB\u{202e}\nc\n");
+        Mock::given(method("PUT"))
+            .and(path("/repos/acme/widgets/contents/src/a.rs"))
+            .and(body_partial_json(json!({"content": committed})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"commit": {"sha": "c0ffee"}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let marked = forge::Suggestion { text: "B⟨U+202E⟩".into(), ..suggestion() };
+        client(&server).apply(&key(), "main", &marked).await.unwrap();
     }
 
     #[tokio::test]

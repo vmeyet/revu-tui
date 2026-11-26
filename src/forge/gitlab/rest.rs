@@ -207,7 +207,7 @@ impl Client {
     }
 
     pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
-        let files: Vec<wire::DiffFile> = self.http.get_all(&format!("{}/diffs", mr_path(key))).await?;
+        let files: Vec<wire::DiffFile> = self.http.get_all_with_code(&format!("{}/diffs", mr_path(key)), "diff").await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
@@ -472,6 +472,20 @@ mod tests {
         let files = client(&server).diffs(&key()).await.unwrap();
         assert_eq!(files.iter().map(|f| f.new_path.as_str()).collect::<Vec<_>>(), ["f1", "f2"]);
         assert_eq!(files[0].change, forge::FileKind::Added);
+    }
+
+    #[tokio::test]
+    async fn a_hidden_character_in_a_diff_shows_as_a_marker_and_the_path_is_cleaned() {
+        let server = MockServer::start().await;
+        let file =
+            json!([{"diff": "@@ -1 +1 @@\n-ok\n+if admin\u{202e} {\u{2066}\n", "old_path": "a\u{202e}.rs", "new_path": "a\u{202e}.rs"}]);
+        Mock::given(method("GET"))
+            .and(path("/api/v4/projects/acme%2Fwidgets/merge_requests/42/diffs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(file))
+            .mount(&server)
+            .await;
+        let files = client(&server).diffs(&key()).await.unwrap();
+        assert_eq!((files[0].diff.as_str(), files[0].new_path.as_str()), ("@@ -1 +1 @@\n-ok\n+if admin⟨U+202E⟩ {⟨U+2066⟩\n", "a.rs"));
     }
 
     fn draft_json(id: u64) -> serde_json::Value {

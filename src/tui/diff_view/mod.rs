@@ -18,7 +18,7 @@ use anchors::{Anchors, focused_range};
 pub(super) use header::pipeline_glyph;
 use header::{deployment_link, header_lines, local_header, local_zen_header, mr_ref, nothing_ahead, pipeline_link, title_link, zen_header};
 use line::number;
-pub(super) use line::{coloured, paint};
+pub(super) use line::{coloured, paint, with_markers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
