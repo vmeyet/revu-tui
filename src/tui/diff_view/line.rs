@@ -221,7 +221,7 @@ fn fit<'a, 't>(parts: impl IntoIterator<Item = (&'t str, Style)>, room: usize, t
 
 /// `parts` cut wherever a marker `sanitize::code` wrote starts or stops, found on the line they make together, so a
 /// marker that syntax or a changed word splits is still one warning.
-fn with_markers(parts: Vec<(&str, Style)>, theme: Theme) -> Vec<(&str, Style)> {
+pub(in crate::tui) fn with_markers(parts: Vec<(&str, Style)>, theme: Theme) -> Vec<(&str, Style)> {
     if !parts.iter().any(|(text, _)| text.contains('⟨')) {
         return parts;
     }

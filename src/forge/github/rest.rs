@@ -248,8 +248,11 @@ impl Client {
         let path = contents_path(&key.project, &suggestion.path);
         let file: Contents = self.http.get(&format!("{path}?ref={}", encode(branch))).await?;
         let text = decode(&file.content)?;
-        let proposal =
-            crate::review::suggestion::Proposal { above: suggestion.above, below: suggestion.below, text: suggestion.text.clone() };
+        let proposal = crate::review::suggestion::Proposal {
+            above: suggestion.above,
+            below: suggestion.below,
+            text: crate::sanitize::unmarked(&suggestion.text),
+        };
         let changed = crate::review::suggestion::apply_to(&text, suggestion.line, &proposal)?;
         let body = json!({
             "message": format!("Apply suggestion to {}", suggestion.path),
@@ -753,6 +756,27 @@ mod tests {
             .mount(&server)
             .await;
         client(&server).apply(&key(), "fix/#123-login", &suggestion()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_suggestion_holding_a_marker_commits_the_character_it_stands_for() {
+        let server = MockServer::start().await;
+        repo_and_pull(&server, true, "acme/widgets").await;
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/contents/src/a.rs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"content": "YQpiCmMK", "sha": "blob1"})))
+            .mount(&server)
+            .await;
+        let committed = base64::engine::general_purpose::STANDARD.encode("a\nB\u{202e}\nc\n");
+        Mock::given(method("PUT"))
+            .and(path("/repos/acme/widgets/contents/src/a.rs"))
+            .and(body_partial_json(json!({"content": committed})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"commit": {"sha": "c0ffee"}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let marked = forge::Suggestion { text: "B⟨U+202E⟩".into(), ..suggestion() };
+        client(&server).apply(&key(), "main", &marked).await.unwrap();
     }
 
     #[tokio::test]

@@ -19,7 +19,7 @@ When a boundary or a flow changes, change this page in the same MR.
 | `forge/github/graphql/` | GitHub's GraphQL calls, one file per concern: `queue.rs`, `pr.rs` (one PR, readiness, reactions), `threads.rs` (read page after page), `drafts.rs` (the pending review and replies) |
 | `forge/gitlab/award.rs`, `upload.rs`, `todo.rs`, `merge.rs`, `forge/github/attachment.rs` | GitLab reactions (award emoji), pictures GitLab notes hold as uploads, mentions read from and marked done in the to-do list, the merge and GitLab's verdict on it, pictures in GitHub comments |
 | `forge/http.rs`, `http.rs` | The shared transport: the token goes to one host (and GitHub's web host for attachments), no redirects, TLS on rustls and ring |
-| `sanitize.rs` | Forge text made safe to show: every string of a forge's JSON answer and error body, cleaned with mrk's `sanitize` as the transport decodes it; code shown for review keeps its hidden characters as markers (`code`, `markers`) |
+| `sanitize.rs` | Forge text made safe to show: every string of a forge's JSON answer and error body, cleaned with mrk's `sanitize` as the transport decodes it; code shown for review keeps its hidden characters as markers (`code`, `markers`, `unmarked`), and a suggestion revu sends gets them back (`outgoing`) |
 | `forge/queue.rs`, `rules.rs`, `checks.rs`, `budget.rs`, `image.rs` | The queue and its sections, the "needs me" rules, CI runs, the rate limit, pictures in notes |
 | `forge/identity.rs` | `Me`, my username on one host, compared without case, and `Identities`, one per host of the queue |
 | `review/` | `Review`: the value the TUI edits; `file.rs` (hunks and syntax colours), `rows.rs` (the pane in reading order), folds, drafts, where threads hang |
@@ -134,7 +134,8 @@ Switching space, `:local`, `:forge` and the palette:
 - A program that takes the terminal (`$EDITOR`, the `^v` viewer, an agent session) runs from the loop through `vtui::screen::Screen::lend`, with the key stream paused.
 - Secrets are read only in `auth/`, `ai/` and the `login` and `ai` commands, which ask through `commands/prompt.rs`: `revu login` takes a token from `glab`, `gh` or stdin.
 - Forge text is cleaned once, where `forge::http` decodes it (`sanitize.rs`); the views, `revu show`, the clipboard and the links revu prints use the model as it is and never clean it again.
-  Code shown for review keeps its hidden characters as markers: the diff fields (`Transport::get_all_with_code`), a file at a commit (`Forge::file`, every backend) and `revu local`'s diffs (`local::split`); `diff_view::line` paints each marker in the warning colour.
+  Code shown for review keeps its hidden characters as markers: the diff fields (`Transport::get_all_with_code`), a file at a commit (`Forge::file`, every backend), `revu local`'s diffs (`local::split`) and the suggestion blocks of any string (`review::suggestion::rewrite`); `diff_view::line` paints each marker in the warning colour.
+  What revu sends goes through `sanitize::outgoing`, which turns the markers of a suggestion block back into their characters, so a suggestion written over marked lines commits the code it shows.
   `revu local` cleans its branches, paths and repository name like forge text.
 - Secrets are sent only by `forge::http` (to the forge's API host, and its web host for GitHub attachments) and Jev's client.
 

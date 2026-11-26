@@ -2,12 +2,15 @@
 //! `forge::http` decodes every JSON answer through `json` and every error body through `text`, so the model holds no
 //! character a terminal, a pager or a clipboard could be fooled by, and everything above it draws and copies it as is.
 //! Code shown for review goes through `code` instead: a hidden character there is what the reviewer must see.
+//! What revu sends goes through `outgoing`, so a suggestion reaches the forge as the code it stands for.
+use crate::review::suggestion;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::ops::Range;
 
 const MARKER_OPEN: &str = "⟨U+";
 const MARKER_CLOSE: &str = "⟩";
+const MARKER_START: char = '⟨';
 
 /// `raw` without the characters mrk removes (`mrk::sanitize`): escape sequences, C0 and C1 controls, DEL, bidi marks,
 /// overrides and isolates, zero-width spaces, tag characters. Joiners stay, emoji and some scripts need them.
@@ -20,21 +23,40 @@ pub(crate) fn text(raw: &str) -> String {
 /// zero-width space in reviewed code is the trojan-source trick (CVE-2021-42574), so it shows instead of vanishing.
 /// Escapes and other controls show the same way, harmless once written as text; a CR ending a line is a line ending.
 /// The marker is plain text on the line, so widths, copies and line numbers count it like any other text.
+/// A `⟨` that starts what reads as a marker is written as one too, so every marker on a line is a real one and
+/// `unmarked` gives the code back.
 pub(crate) fn code(raw: &str) -> String {
+    if !raw.contains(['\r', MARKER_START]) && text(raw) == raw {
+        return raw.to_owned();
+    }
     let mut shown = String::with_capacity(raw.len());
-    let mut characters = raw.chars().peekable();
-    while let Some(character) = characters.next() {
-        let ends_line = character == '\r' && characters.peek().is_none_or(|next| *next == '\n');
-        if ends_line {
-            continue;
-        }
-        if is_hidden(character) {
-            shown.push_str(&format!("{MARKER_OPEN}{:04X}{MARKER_CLOSE}", u32::from(character)));
-        } else {
-            shown.push(character);
+    for (at, character) in raw.char_indices() {
+        let rest = &raw[at..];
+        let ends_line = character == '\r' && matches!(rest.as_bytes().get(1), None | Some(b'\n'));
+        let is_marked = is_hidden(character) || (character == MARKER_START && marker_length(rest).is_some());
+        match (ends_line, is_marked) {
+            (true, _) => {}
+            (false, true) => shown.push_str(&format!("{MARKER_OPEN}{:04X}{MARKER_CLOSE}", u32::from(character))),
+            (false, false) => shown.push(character),
         }
     }
     shown
+}
+
+/// `shown` code with each marker `code` wrote back to the character it stands for.
+pub(crate) fn unmarked(shown: &str) -> String {
+    let mut raw = String::with_capacity(shown.len());
+    let mut at = 0;
+    for marker in markers(shown) {
+        raw.push_str(&shown[at..marker.start]);
+        match marked_character(&shown[marker.clone()]) {
+            Some(character) => raw.push(character),
+            None => raw.push_str(&shown[marker.clone()]),
+        }
+        at = marker.end;
+    }
+    raw.push_str(&shown[at..]);
+    raw
 }
 
 /// Whether mrk's rules remove or replace `character`; tabs and newlines lay code out, so they stay.
@@ -52,37 +74,57 @@ fn is_hidden(character: char) -> bool {
 
 /// The byte ranges of `line` that `code` wrote as markers, in order, so a view can paint them as a warning.
 pub(crate) fn markers(line: &str) -> Vec<Range<usize>> {
-    line.match_indices(MARKER_OPEN)
-        .filter_map(|(start, _)| {
-            let digits = &line[start + MARKER_OPEN.len()..];
-            let digits = &digits[..digits.find(MARKER_CLOSE)?];
-            let is_code_point = (4..=6).contains(&digits.len()) && digits.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_lowercase());
-            is_code_point.then(|| start..start + MARKER_OPEN.len() + digits.len() + MARKER_CLOSE.len())
-        })
-        .collect()
+    line.match_indices(MARKER_OPEN).filter_map(|(start, _)| marker_length(&line[start..]).map(|length| start..start + length)).collect()
 }
 
-/// `bytes` decoded as JSON, every string in it through `text`, except the strings of the fields named `code_field`,
-/// which hold code shown for review and go through `code`; keys are never shown, so they stay.
+/// The length in bytes of the marker `text` starts with: four to six upper-case hex digits between `⟨U+` and `⟩`.
+fn marker_length(text: &str) -> Option<usize> {
+    let after_open = text.strip_prefix(MARKER_OPEN)?;
+    let digits = after_open.bytes().take_while(|b| b.is_ascii_digit() || (b'A'..=b'F').contains(b)).count();
+    let is_marker = (4..=6).contains(&digits) && after_open[digits..].starts_with(MARKER_CLOSE);
+    is_marker.then(|| MARKER_OPEN.len() + digits + MARKER_CLOSE.len())
+}
+
+/// The character a marker stands for, when `code` would have written it.
+fn marked_character(marker: &str) -> Option<char> {
+    let digits = marker.strip_prefix(MARKER_OPEN)?.strip_suffix(MARKER_CLOSE)?;
+    let character = char::from_u32(u32::from_str_radix(digits, 16).ok()?)?;
+    (is_hidden(character) || character == MARKER_START).then_some(character)
+}
+
+/// `bytes` decoded as JSON, every string in it through `text`, except code shown for review, which goes through
+/// `code`: the strings of the fields named `code_field`, and the lines of a suggestion block in any string, which the
+/// forge commits as written. Keys are never shown, so they stay.
 pub(crate) fn json<T: DeserializeOwned>(bytes: &[u8], code_field: Option<&str>) -> serde_json::Result<T> {
-    serde_json::from_value(cleaned(serde_json::from_slice(bytes)?, code_field))
+    let clean = |field: Option<&str>, raw: &str| match field {
+        Some(field) if code_field == Some(field) => code(raw),
+        _ => suggestion::rewrite(raw, code, text),
+    };
+    serde_json::from_value(strings_changed(serde_json::from_slice(bytes)?, None, &clean))
 }
 
-fn cleaned(value: Value, code_field: Option<&str>) -> Value {
+/// `body` as the forge must get it: in a suggestion block, each marker back to its character, since the forge
+/// commits the block as written.
+pub(crate) fn outgoing(body: &Value) -> Value {
+    strings_changed(body.clone(), None, &|_, shown| suggestion::rewrite(shown, unmarked, str::to_owned))
+}
+
+/// `value` with each string through `change`, given the name of the field holding it, if any.
+fn strings_changed(value: Value, field: Option<&str>, change: &impl Fn(Option<&str>, &str) -> String) -> Value {
     match value {
-        Value::String(raw) => Value::String(text(&raw)),
-        Value::Array(items) => Value::Array(items.into_iter().map(|item| cleaned(item, code_field)).collect()),
-        Value::Object(fields) => Value::Object(fields.into_iter().map(|(key, value)| field(key, value, code_field)).collect()),
+        Value::String(raw) => Value::String(change(field, &raw)),
+        Value::Array(items) => Value::Array(items.into_iter().map(|item| strings_changed(item, None, change)).collect()),
+        Value::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(key, value)| {
+                    let value = strings_changed(value, Some(&key), change);
+                    (key, value)
+                })
+                .collect(),
+        ),
         other => other,
     }
-}
-
-fn field(key: String, value: Value, code_field: Option<&str>) -> (String, Value) {
-    let value = match value {
-        Value::String(raw) if code_field == Some(key.as_str()) => Value::String(code(&raw)),
-        other => cleaned(other, code_field),
-    };
-    (key, value)
 }
 
 #[cfg(test)]
@@ -154,10 +196,18 @@ mod tests {
     }
 
     #[test]
-    fn code_run_twice_changes_nothing() {
-        let once = code("a\u{202e}b\x1b");
-        assert_eq!(code(&once), once);
-        assert_eq!(text(&once), once, "a marker is plain text to `text` too");
+    fn unmarked_gives_back_the_code_a_marker_lookalike_included() {
+        let raw = "if admin\u{202e} {\x1b \"⟨U+202E⟩\" ⟨U+12⟩ ⟨\n";
+        let shown = code(raw);
+        assert_eq!(shown, "if admin⟨U+202E⟩ {⟨U+001B⟩ \"⟨U+27E8⟩U+202E⟩\" ⟨U+12⟩ ⟨\n", "a written marker would read as a hidden character");
+        assert_eq!(unmarked(&shown), raw);
+        assert_eq!(unmarked("⟨U+0041⟩"), "⟨U+0041⟩", "only what `code` writes is read back");
+    }
+
+    #[test]
+    fn a_marker_is_plain_text_to_text() {
+        let shown = code("a\u{202e}b\x1b");
+        assert_eq!(text(&shown), shown);
     }
 
     #[test]
@@ -179,5 +229,21 @@ mod tests {
         let raw = br#"[{"path": "a\u202e.rs", "diff": "+if ok\u202e {\u001b"}]"#;
         let files: Vec<File> = json(raw, Some("diff")).unwrap();
         assert_eq!(files, [File { path: "a.rs".into(), diff: "+if ok⟨U+202E⟩ {⟨U+001B⟩".into() }]);
+    }
+
+    #[test]
+    fn json_marks_the_lines_of_a_suggestion_block_the_forge_would_commit() {
+        let raw = br#"{"id": 1, "labels": [], "body": "Nit\u202e:\r\n```suggestion:-0+0\r\nif ok\u202e {\r\n```\r\nthen\u202e"}"#;
+        let note: Note = json(raw, None).unwrap();
+        assert_eq!(note.body, "Nit:\n```suggestion:-0+0\nif ok⟨U+202E⟩ {\n```\nthen");
+    }
+
+    #[test]
+    fn outgoing_gives_a_suggestion_block_back_its_characters_and_leaves_the_rest() {
+        let shown = "keep ⟨U+202E⟩\n```suggestion:-0+0\nif ok⟨U+202E⟩ {\n```\nkeep ⟨U+202E⟩";
+        let body = serde_json::json!({"body": shown, "position": {"line": 3}});
+        let sent = outgoing(&body);
+        assert_eq!(sent["body"], "keep ⟨U+202E⟩\n```suggestion:-0+0\nif ok\u{202e} {\n```\nkeep ⟨U+202E⟩");
+        assert_eq!(sent["position"], body["position"]);
     }
 }

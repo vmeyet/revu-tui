@@ -233,7 +233,7 @@ impl Transport {
     async fn send_once(&self, method: Method, url: Url, body: Option<&serde_json::Value>, accept: Option<&str>) -> Result<Response> {
         let request = self.client.request(method, url);
         let request = match body {
-            Some(json) => request.json(json),
+            Some(json) => request.json(&crate::sanitize::outgoing(json)),
             None => request,
         };
         let request = match accept {
@@ -347,7 +347,7 @@ pub(super) fn scrub(err: reqwest::Error) -> anyhow::Error {
 mod tests {
     use super::*;
     use reqwest::header::HeaderValue;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     static PLAIN: Flavor = Flavor {
@@ -442,6 +442,20 @@ mod tests {
         Mock::given(method("GET")).respond_with(ResponseTemplate::new(404).set_body_string(said)).mount(&server).await;
         let err = transport(&format!("{}/api/", server.uri())).get::<serde_json::Value>("user").await.unwrap_err();
         assert_eq!(err.to_string(), "GET /api/user: HTTP 404 ]0;ownedNot Found[2J");
+    }
+
+    #[tokio::test]
+    async fn a_suggestion_sent_with_markers_reaches_the_forge_with_the_characters_they_stand_for() {
+        let server = MockServer::start().await;
+        let sent = serde_json::json!({"body": "```suggestion:-0+0\nif ok\u{202e} {\n```"});
+        Mock::given(method("POST"))
+            .and(body_json(&sent))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let shown = serde_json::json!({"body": "```suggestion:-0+0\nif ok⟨U+202E⟩ {\n```"});
+        transport(&format!("{}/api/", server.uri())).post_json::<serde_json::Value>("notes", &shown).await.unwrap();
     }
 
     #[tokio::test]

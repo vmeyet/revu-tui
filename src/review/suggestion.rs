@@ -2,6 +2,9 @@
 //! selected lines, read back from a note, and applied to a file.
 use anyhow::{Result, bail};
 
+const OPENER: &str = "```suggestion";
+const CLOSER: &str = "```";
+
 /// `lines` are the selected diff lines as shown, sign included; the block replaces them all.
 pub(crate) fn prefill(lines: &[&str]) -> String {
     let below = lines.len().saturating_sub(1);
@@ -21,10 +24,35 @@ pub(crate) struct Proposal {
 /// The first suggestion block of `body`, if it has one.
 pub(crate) fn parse(body: &str) -> Option<Proposal> {
     let mut lines = body.lines();
-    let opener = lines.by_ref().find(|l| l.trim_start().starts_with("```suggestion"))?;
-    let (above, below) = span(opener.trim_start().trim_start_matches("```suggestion"));
-    let text: Vec<&str> = lines.take_while(|l| l.trim_start() != "```").collect();
+    let opener = lines.by_ref().find(|l| opens(l))?;
+    let (above, below) = span(opener.trim_start().trim_start_matches(OPENER));
+    let text: Vec<&str> = lines.take_while(|l| !closes(l)).collect();
     Some(Proposal { above, below, text: text.join("\n") })
+}
+
+/// `body` with each line inside a suggestion block through `code` and every other line, fences included, through
+/// `text`; each line goes with its line end.
+pub(crate) fn rewrite(body: &str, code: impl Fn(&str) -> String, text: impl Fn(&str) -> String) -> String {
+    if !body.contains(OPENER) {
+        return text(body);
+    }
+    let mut rewritten = String::with_capacity(body.len());
+    let mut inside = false;
+    for line in body.split_inclusive('\n') {
+        let content = line.trim_end_matches(['\n', '\r']);
+        let is_code = inside && !closes(content);
+        inside = if inside { is_code } else { opens(content) };
+        rewritten.push_str(&if is_code { code(line) } else { text(line) });
+    }
+    rewritten
+}
+
+fn opens(line: &str) -> bool {
+    line.trim_start().starts_with(OPENER)
+}
+
+fn closes(line: &str) -> bool {
+    line.trim_start() == CLOSER
 }
 
 /// `:-2+1` → (2, 1); anything else reads as the anchored line alone.
