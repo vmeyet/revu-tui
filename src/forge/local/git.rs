@@ -21,9 +21,9 @@ pub(super) struct Worktree {
 }
 
 impl Worktree {
-    /// Its branch, or the short sha of a detached `HEAD`.
+    /// Its branch, cleaned for the terminal (`sanitize::text`), or the short sha of a detached `HEAD`.
     pub(super) fn label(&self) -> String {
-        self.branch.clone().unwrap_or_else(|| crate::version::short(self.head.as_str()).to_owned())
+        self.branch.as_deref().map_or_else(|| crate::version::short(self.head.as_str()).to_owned(), crate::sanitize::text)
     }
 
     /// Why git has nothing to read here at all: its folder is gone, or it has no commit yet. Any other failure is a failure.
@@ -66,7 +66,7 @@ pub(super) async fn listing(dir: &Path) -> Result<Listing> {
 pub(super) fn parse_listing(output: &str) -> Listing {
     let records: Vec<Vec<&str>> = output.split("\0\0").map(|record| record.split('\0').collect()).collect();
     let main = records.first().and_then(|record| record.first()).and_then(|line| line.strip_prefix("worktree "));
-    let repo = main.map(|path| folder_of(Path::new(path)).trim_end_matches(".git").to_owned()).unwrap_or_default();
+    let repo = main.map(|path| crate::sanitize::text(folder_of(Path::new(path)).trim_end_matches(".git"))).unwrap_or_default();
     Listing { repo, worktrees: records.iter().filter_map(|record| parse_worktree(record)).collect() }
 }
 

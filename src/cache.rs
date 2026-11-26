@@ -289,14 +289,23 @@ fn root() -> PathBuf {
 pub(crate) mod keys {
     use crate::forge::{MrKey, ProjectPath, Sha};
 
+    /// In the name of every file holding forge text, bumped when revu cleans that text another way (`sanitize`), so
+    /// a file written before is never read and the forge is asked again: files without it hold the forge's raw strings.
+    const FORGE_TEXT: &str = "v2";
+
+    /// `name` as a file holding forge text names itself.
+    fn forge_text(name: &str) -> String {
+        format!("{name}.{FORGE_TEXT}")
+    }
+
     /// One file per scope, so switching between a repo and every project never shows the other list.
     pub(crate) fn queue(project: Option<&ProjectPath>) -> String {
-        scoped("queue", project)
+        scoped(&forge_text("queue"), project)
     }
 
     /// The ready command's last output for a scope, and the MRs it named outside my lists.
     pub(crate) fn ready(project: Option<&ProjectPath>) -> String {
-        scoped("ready", project)
+        scoped(&forge_text("ready"), project)
     }
 
     /// How the queue of one scope is sorted and grouped, next to its list.
@@ -351,15 +360,15 @@ pub(crate) mod keys {
     }
 
     pub(crate) fn mr(key: &MrKey) -> String {
-        format!("{}/mr.json", dir(key))
+        format!("{}/{}.json", dir(key), forge_text("mr"))
     }
 
     pub(crate) fn diffs(key: &MrKey, head: &Sha) -> String {
-        format!("{}/diffs.{head}.json", dir(key))
+        format!("{}/{}.{head}.json", dir(key), forge_text("diffs"))
     }
 
     pub(crate) fn discussions(key: &MrKey) -> String {
-        format!("{}/discussions.json", dir(key))
+        format!("{}/{}.json", dir(key), forge_text("discussions"))
     }
 
     /// A downloaded picture, by the link a note gave; hashed, since the link holds slashes and queries.
@@ -398,7 +407,7 @@ pub(crate) mod keys {
 
     /// A file at one commit, named by a hash of its path so no path from the forge becomes a directory.
     pub(crate) fn file(key: &MrKey, sha: &Sha, path: &str) -> String {
-        format!("{}/files/{sha}/{}.json", dir(key), sha1_smol::Sha1::from(path.as_bytes()).digest())
+        format!("{}/{}/{sha}/{}.json", dir(key), forge_text("files"), sha1_smol::Sha1::from(path.as_bytes()).digest())
     }
 }
 
@@ -631,13 +640,26 @@ mod tests {
 
     #[test]
     fn keys_are_stable() {
-        assert_eq!(keys::discussions(&key()), "mr/acme+widgets/42/discussions.json");
+        assert_eq!(keys::discussions(&key()), "mr/acme+widgets/42/discussions.v2.json");
+        assert_eq!(keys::diffs(&key(), &"bbbb".into()), "mr/acme+widgets/42/diffs.v2.bbbb.json");
+        assert!(keys::file(&key(), &"bbbb".into(), "a.rs").starts_with("mr/acme+widgets/42/files.v2/bbbb/"));
+        assert_eq!(keys::ready(None), "ready.v2.json");
+        assert_eq!(keys::state(&key()), "mr/acme+widgets/42/state.json", "what the reader keeps outlives a change of forge text");
+    }
+
+    #[test]
+    fn forge_text_cached_before_it_was_cleaned_is_never_read() {
+        let (_dir, cache) = cache();
+        cache.write("mr/acme+widgets/42/discussions.json", &vec!["fix the \u{202e}gub"]).unwrap();
+        cache.write("queue.json", &"raw").unwrap();
+        assert_eq!(cache.read::<Vec<String>>(&keys::discussions(&key())), None);
+        assert_eq!(cache.read::<String>(&keys::queue(None)), None);
     }
 
     #[test]
     fn queue_keys_differ_per_scope() {
-        assert_eq!(keys::queue(None), "queue.json");
-        assert_eq!(keys::queue(Some(&"acme/sub/widgets".into())), "queue.acme+sub+widgets.json");
+        assert_eq!(keys::queue(None), "queue.v2.json");
+        assert_eq!(keys::queue(Some(&"acme/sub/widgets".into())), "queue.v2.acme+sub+widgets.json");
         assert_eq!(keys::pins(None), "pins.json");
         assert_eq!(keys::pins(Some(&"acme/widgets".into())), "pins.acme+widgets.json");
     }

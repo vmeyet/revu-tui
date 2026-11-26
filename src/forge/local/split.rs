@@ -1,6 +1,7 @@
 //! `git diff --raw -p -z` cut into one `DiffFile` per path: the raw records name the paths and kinds, the patch that
 //! follows holds the bodies in the same order.
 use super::super::{DiffFile, FileKind};
+use crate::sanitize;
 
 /// So the user's config cannot change what `git diff` prints.
 pub(super) const DIFF_FLAGS: [&str; 7] =
@@ -58,7 +59,7 @@ pub(super) fn new_file(path: &str, patch: &str) -> DiffFile {
 fn file(old_path: &str, new_path: &str, change: FileKind, body: String) -> DiffFile {
     let too_large = body.lines().count() > MAX_LINES;
     let diff = if too_large { String::new() } else { body };
-    DiffFile { diff, old_path: old_path.to_owned(), new_path: new_path.to_owned(), change, too_large }
+    DiffFile { diff: sanitize::code(&diff), old_path: sanitize::text(old_path), new_path: sanitize::text(new_path), change, too_large }
 }
 
 /// The raw records at the head of `output`, and the patch after them.

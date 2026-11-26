@@ -322,7 +322,8 @@ impl Client {
     }
 
     pub(crate) async fn diffs(&self, key: &MrKey) -> Result<Vec<DiffFile>> {
-        let files: Vec<File> = self.http.get_all(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number)).await?;
+        let files: Vec<File> =
+            self.http.get_all_with_code(&format!("{}/pulls/{}/files", repo_path(&key.project), key.number), "patch").await?;
         Ok(files.into_iter().map(DiffFile::from).collect())
     }
 
@@ -544,6 +545,20 @@ mod tests {
         );
         assert!(!files[3].too_large && files[3].diff.is_empty(), "a binary file has no patch and no changes counted");
         assert!(files[4].too_large);
+    }
+
+    #[tokio::test]
+    async fn a_hidden_character_in_a_patch_shows_as_a_marker() {
+        let server = MockServer::start().await;
+        let file =
+            json!([{"filename": "a.rs", "status": "modified", "changes": 2, "patch": "@@ -1 +1 @@\n-ok\n+if admin\u{2066} {\u{202e}"}]);
+        Mock::given(method("GET"))
+            .and(path("/repos/acme/widgets/pulls/42/files"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(file))
+            .mount(&server)
+            .await;
+        let files = client(&server).diffs(&key()).await.unwrap();
+        assert_eq!(files[0].diff, "@@ -1 +1 @@\n-ok\n+if admin⟨U+2066⟩ {⟨U+202E⟩\n");
     }
 
     #[tokio::test]

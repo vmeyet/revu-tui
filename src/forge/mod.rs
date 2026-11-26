@@ -258,13 +258,15 @@ impl Forge {
         }
     }
 
-    /// The whole file `path` at commit `sha`, for the context around a hunk.
+    /// The whole file `path` at commit `sha`, for the context around a hunk; code shown for review, so its hidden
+    /// characters show as markers (`sanitize::code`).
     pub(crate) async fn file(&self, key: &MrKey, path: &str, sha: &Sha) -> Result<String> {
-        match self {
+        let raw = match self {
             Forge::GitLab(client) => client.file(&key.project, path, sha.as_str()).await,
             Forge::GitHub(client) => client.file(&key.project, path, sha.as_str()).await,
             Forge::Local(client) => Box::pin(client.file(key, path, sha)).await,
-        }
+        };
+        Ok(crate::sanitize::code(&raw?))
     }
 
     /// The bytes of a picture a note of `key` points at, `url` as the note wrote it. Links off
