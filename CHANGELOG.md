@@ -7,6 +7,16 @@ Each entry says what changed, then where, then how to use it.
 
 ## Unreleased
 
+### Fixed
+
+- **Mermaid diagrams drawn as text read cleaner: flowchart, sequence, state, class and ER, their labels without HTML tags.**
+  In a Markdown file shown as prose.
+
+### Removed
+
+- **Pie, gantt, mindmap, timeline and the other Mermaid kinds show as their source.**
+  In a Markdown file shown as prose, until mrk draws them as text.
+
 ## 0.16.0 - 2026-11-23
 
 ### New

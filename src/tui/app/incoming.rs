@@ -178,12 +178,12 @@ impl App {
         let current = self.open.take_if(|o| o.key == key);
         let fresh_open = current.is_none();
         let pushed = current.as_ref().is_some_and(|o| o.review.mr.refs.head != review.mr.refs.head);
-        let next = match current {
-            Some(open) => {
-                let carried = carry_over(&open.review, review);
-                open.with_review(carried)
-            }
-            None => Open::new(key.clone(), review),
+        let next = if let Some(open) = current {
+            let carried = carry_over(&open.review, review);
+            open.with_review(carried)
+        } else {
+            let link_base = self.link_base(&key, &review.mr);
+            Open::new(key.clone(), review, link_base)
         };
         self.count_viewed(&key, &next.review);
         self.open = Some(Open { cached: cached.map(|age| (self.now, age)), look_failed: None, ..next });

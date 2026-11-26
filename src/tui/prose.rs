@@ -1,14 +1,16 @@
 //! Markdown drawn by mrk: a file block by block, each block marked same, added, removed or changed, and a note's text.
 use super::prose_view::Rows;
 use super::theme::Theme;
-use mrk::diff::BlockChange;
+use mrk::diff::SectionChange;
 use mrk::document::{self, Block, Rgb, Settings};
-use mrk::markdown::SourceBlock;
+use mrk::link::LinkBase;
+use mrk::markdown::Section;
 use mrk::theme::{Appearance, Palette};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::convert::identity;
 use std::ops::Range;
+use std::sync::Arc;
 
 /// The bar and the space after it.
 pub(super) const GUTTER: usize = 2;
@@ -32,7 +34,7 @@ pub(crate) fn render(old: &str, new: &str, width: usize, beside: bool, theme: Th
     let layout = if beside { Layout::Beside { half: width.saturating_sub(GAP) / 2 } } else { Layout::Inline };
     let settings = settings(theme, layout.side_width(width).saturating_sub(GUTTER));
     let look = Look { theme, palette: settings.theme.palette };
-    let changes = mrk::diff::blocks(old, new, &settings);
+    let changes = mrk::diff::sections(old, new, &settings);
     Rows { folded: rows(&changes, false, layout, &look), unfolded: rows(&changes, true, layout, &look) }
 }
 
@@ -58,42 +60,45 @@ pub(crate) fn settings(theme: Theme, width: usize) -> Settings {
     let preset = PRESETS.iter().find(|(revu, _)| *revu == theme.name).and_then(|(_, mrk)| mrk::theme::find(mrk));
     let base = preset.unwrap_or_else(|| mrk::theme::default_for(appearance(theme.base)));
     let own = |colour: Color, fallback: Rgb| rgb(colour).unwrap_or(fallback);
-    let palette = Palette {
-        accent: own(theme.accent, base.palette.accent),
-        link: own(theme.link, base.palette.link),
-        code: own(theme.code, base.palette.code),
-        muted: own(theme.muted, base.palette.muted),
-        subtle: own(theme.faded, base.palette.subtle),
-        surface: own(theme.surface, base.palette.surface),
-        success: own(theme.success, base.palette.success),
-        warning: own(theme.warn, base.palette.warning),
-        caution: own(theme.danger, base.palette.caution),
-        ..base.palette
-    };
-    Settings { width, theme: mrk::theme::Theme { palette, ..base }, cell: None, hyperlinks: false, jumbo_title: None }
+    let mut palette = base.palette;
+    palette.accent = own(theme.accent, palette.accent);
+    palette.link = own(theme.link, palette.link);
+    palette.code = own(theme.code, palette.code);
+    palette.muted = own(theme.muted, palette.muted);
+    palette.subtle = own(theme.faded, palette.subtle);
+    palette.surface = own(theme.surface, palette.surface);
+    palette.success = own(theme.success, palette.success);
+    palette.warning = own(theme.warn, palette.warning);
+    palette.caution = own(theme.danger, palette.caution);
+    let mut settings = Settings::default();
+    settings.width = width;
+    settings.theme = base;
+    settings.theme.palette = palette;
+    settings
 }
 
 /// One span of Markdown as mrk draws it, and the target it links to.
 pub(super) struct Linked {
     pub(super) span: Span<'static>,
-    pub(super) link: Option<String>,
+    pub(super) link: Option<Arc<str>>,
 }
 
-/// Whether a link shows its text alone, in a pane where it clicks, or its target after it.
+/// Whether a link shows its text alone, in a pane where it clicks, a relative one resolved against the base, or its target after it.
 #[derive(Clone, Copy)]
-pub(super) enum Links {
-    Clickable,
+pub(super) enum Links<'a> {
+    Clickable(Option<&'a LinkBase>),
     Printed,
 }
 
 /// `text` as mrk draws it `width` columns wide, row by row, in revu's colours.
-pub(super) fn markdown(text: &str, width: usize, links: Links, theme: Theme) -> Vec<Vec<Linked>> {
-    let settings = Settings { hyperlinks: matches!(links, Links::Clickable), ..settings(theme, width) };
+pub(super) fn markdown(text: &str, width: usize, links: Links<'_>, theme: Theme) -> Vec<Vec<Linked>> {
+    let mut settings = settings(theme, width);
+    if let Links::Clickable(link_base) = links {
+        settings.hyperlinks = true;
+        settings.link_base = link_base.cloned();
+    }
     let colour = settings.theme.palette.text;
-    let lines = mrk::markdown::render(text, &settings).blocks.into_iter().flat_map(|block| match block {
-        Block::Lines(lines) | Block::DoubleHeight(lines) => lines,
-        Block::Picture(_) => vec![],
-    });
+    let lines = mrk::markdown::render(text, &settings).blocks.into_iter().flat_map(|block| block.lines().to_vec());
     let linked = |span: document::Span| Linked { span: Span::styled(span.text, style(span.style, colour)), link: span.link };
     lines.map(|line| line.spans.into_iter().map(linked).collect()).collect()
 }
@@ -108,14 +113,19 @@ impl Look {
     /// A removed word struck through in `danger`, on the removed word fill when the ground is known.
     fn removed_word(&self) -> impl Fn(document::Style) -> document::Style {
         let (fg, fill) = (self.palette.caution, self.theme.removed_word.and_then(rgb));
-        move |style| document::Style { fg: Some(fg), bg: fill.or(style.bg), strike: true, ..style }
+        move |style| on_fill(style.with_fg(fg).strike(), fill)
     }
 
     /// An added word underlined in `success`, on the added word fill when the ground is known.
     fn added_word(&self) -> impl Fn(document::Style) -> document::Style {
         let (fg, fill) = (self.palette.success, self.theme.added_word.and_then(rgb));
-        move |style| document::Style { fg: Some(fg), bg: fill.or(style.bg), underline: true, ..style }
+        move |style| on_fill(style.with_fg(fg).underline(), fill)
     }
+}
+
+/// `style` on the `fill` colour when there is one, else on its own ground.
+fn on_fill(style: document::Style, fill: Option<Rgb>) -> document::Style {
+    fill.map_or(style, |fill| style.on(fill))
 }
 
 /// One block after its bar; a same block has none.
@@ -131,9 +141,9 @@ enum Shown {
     Folded(usize),
 }
 
-fn rows(changes: &[BlockChange], unfolded: bool, layout: Layout, look: &Look) -> Vec<Line<'static>> {
+fn rows(changes: &[SectionChange], unfolded: bool, layout: Layout, look: &Look) -> Vec<Line<'static>> {
     let changed = changes.iter().any(|change| !is_same(change));
-    let shown = |change: &BlockChange| shown(change, changed, layout, look);
+    let shown = |change: &SectionChange| shown(change, changed, layout, look);
     let all = changes.chunk_by(|a, b| is_same(a) && is_same(b)).flat_map(|run| match run {
         [first, .., last] if is_same(first) && changed && !unfolded && run.len() > FOLD_FROM => {
             [shown(first), vec![Shown::Folded(run.len() - 2)], shown(last)].into_iter().flatten().collect::<Vec<_>>()
@@ -144,12 +154,12 @@ fn rows(changes: &[BlockChange], unfolded: bool, layout: Layout, look: &Look) ->
     drawn.join(&Line::default())
 }
 
-fn is_same(change: &BlockChange) -> bool {
-    matches!(change, BlockChange::Same { .. })
+fn is_same(change: &SectionChange) -> bool {
+    matches!(change, SectionChange::Same { .. })
 }
 
 /// A change as the blocks it shows, in one column or side by side.
-fn shown(change: &BlockChange, changed: bool, layout: Layout, look: &Look) -> Vec<Shown> {
+fn shown(change: &SectionChange, changed: bool, layout: Layout, look: &Look) -> Vec<Shown> {
     let (old, new) = sides(change, changed, look);
     match layout {
         Layout::Beside { half } => vec![Shown::Beside { old, new, half }],
@@ -158,45 +168,47 @@ fn shown(change: &BlockChange, changed: bool, layout: Layout, look: &Look) -> Ve
 }
 
 /// The block of each side, none on the side it is missing from; same blocks fade only when something else changed.
-fn sides(change: &BlockChange, changed: bool, look: &Look) -> (Option<Marked>, Option<Marked>) {
+/// A kind of change a later mrk adds shows on neither side.
+fn sides(change: &SectionChange, changed: bool, look: &Look) -> (Option<Marked>, Option<Marked>) {
     let (added, removed, faded) = (Some(look.theme.success), Some(look.theme.danger), Some(look.palette.subtle));
     match change {
-        BlockChange::Same { old, new } => {
+        SectionChange::Same { old, new } => {
             let faded = faded.filter(|_| changed);
             (Some(marked_same(old, faded)), Some(marked_same(new, faded)))
         }
-        BlockChange::Added(block) => (None, Some(Marked { bar: added, lines: marked(block, None, &[], identity) })),
-        BlockChange::Removed(block) => (Some(Marked { bar: removed, lines: marked(block, faded, &[], identity) }), None),
-        BlockChange::Changed { old, new, old_words, new_words } => (
+        SectionChange::Added(block) => (None, Some(Marked { bar: added, lines: marked(block, None, &[], identity) })),
+        SectionChange::Removed(block) => (Some(Marked { bar: removed, lines: marked(block, faded, &[], identity) }), None),
+        SectionChange::Changed { old, new, old_words, new_words } => (
             Some(Marked { bar: removed, lines: marked(old, faded, old_words, look.removed_word()) }),
             Some(Marked { bar: added, lines: marked(new, None, new_words, look.added_word()) }),
         ),
+        _ => (None, None),
     }
 }
 
 /// In one column a same block shows once, and a change that only adds words shows its new side alone.
-fn shows_old_inline(change: &BlockChange) -> bool {
+fn shows_old_inline(change: &SectionChange) -> bool {
     match change {
-        BlockChange::Same { .. } => false,
-        BlockChange::Changed { old_words, new_words, .. } => !old_words.is_empty() || new_words.is_empty(),
-        BlockChange::Added(_) | BlockChange::Removed(_) => true,
+        SectionChange::Same { .. } => false,
+        SectionChange::Changed { old_words, new_words, .. } => !old_words.is_empty() || new_words.is_empty(),
+        _ => true,
     }
 }
 
-fn marked_same(block: &SourceBlock, faded: Option<Rgb>) -> Marked {
+fn marked_same(block: &Section, faded: Option<Rgb>) -> Marked {
     Marked { bar: None, lines: marked(block, faded, &[], identity) }
 }
 
 /// The block's lines, all in the `faded` colour when given, then its `words` restyled.
 fn marked(
-    block: &SourceBlock,
+    block: &Section,
     faded: Option<Rgb>,
     words: &[Range<usize>],
     restyle: impl Fn(document::Style) -> document::Style,
 ) -> Vec<document::Line> {
-    let text: Vec<document::Line> = block.blocks.iter().flat_map(text_lines).cloned().collect();
+    let text: Vec<document::Line> = block.blocks.iter().flat_map(Block::lines).cloned().collect();
     let text = match faded {
-        Some(colour) => document::highlight(&text, &[WHOLE], |style| document::Style { fg: Some(colour), ..style }),
+        Some(colour) => document::highlight(&text, &[WHOLE], |style| style.with_fg(colour)),
         None => text,
     };
     let lit = if words.is_empty() { text } else { document::highlight(&text, words, restyle) };
@@ -205,18 +217,10 @@ fn marked(
         .blocks
         .iter()
         .flat_map(|part| match part {
-            Block::Lines(lines) | Block::DoubleHeight(lines) => lit.by_ref().take(lines.len()).collect(),
             Block::Picture(picture) => vec![document::Line::new(vec![document::Span::plain(format!("[picture: {}]", picture.alt))])],
+            _ => lit.by_ref().take(part.lines().len()).collect(),
         })
         .collect()
-}
-
-/// The text of one part of a block, what mrk's word ranges count over; a picture has none.
-fn text_lines(part: &Block) -> &[document::Line] {
-    match part {
-        Block::Lines(lines) | Block::DoubleHeight(lines) => lines,
-        Block::Picture(_) => &[],
-    }
 }
 
 fn drawn(shown: Shown, look: &Look) -> Vec<Line<'static>> {
@@ -300,16 +304,16 @@ mod tests {
         Theme::named("tokyonight").unwrap()
     }
 
-    fn source(text: &str) -> Vec<SourceBlock> {
-        mrk::markdown::render_blocks(text, &settings(theme(), 40))
+    fn source(text: &str) -> Vec<Section> {
+        mrk::markdown::render_sections(text, &settings(theme(), 40))
     }
 
-    fn block(text: &str) -> SourceBlock {
+    fn block(text: &str) -> Section {
         source(text).remove(0)
     }
 
-    fn same_block(text: &str) -> BlockChange {
-        BlockChange::Same { old: block(text), new: block(text) }
+    fn same_block(text: &str) -> SectionChange {
+        SectionChange::Same { old: block(text), new: block(text) }
     }
 
     /// Each row as its bar and text, trailing spaces cut.
@@ -372,7 +376,7 @@ mod tests {
     #[test]
     fn added_and_removed_blocks_carry_their_bar_and_a_removed_one_fades() {
         let rows =
-            rows(&[BlockChange::Added(block("New line.")), BlockChange::Removed(block("Old line."))], false, Layout::Inline, &look());
+            rows(&[SectionChange::Added(block("New line.")), SectionChange::Removed(block("Old line."))], false, Layout::Inline, &look());
         assert_eq!(plain(&rows), ["▎ New line.", "", "▎ Old line."]);
         assert_eq!(rows[0].spans[0].style.fg, Some(theme().success));
         assert_eq!(rows[2].spans[0].style.fg, Some(theme().danger));
@@ -381,8 +385,12 @@ mod tests {
 
     #[test]
     fn a_changed_block_strikes_its_old_words_and_underlines_its_new_ones() {
-        let change =
-            BlockChange::Changed { old: block("Pay by card."), new: block("Pay by cash."), old_words: vec![7..11], new_words: vec![7..11] };
+        let change = SectionChange::Changed {
+            old: block("Pay by card."),
+            new: block("Pay by cash."),
+            old_words: vec![7..11],
+            new_words: vec![7..11],
+        };
         let rows = rows(&[change], false, Layout::Inline, &look());
         assert_eq!(plain(&rows), ["▎ Pay by card.", "", "▎ Pay by cash."]);
         let (old, new) = (span(&rows, "card"), span(&rows, "cash"));
@@ -393,14 +401,14 @@ mod tests {
 
     #[test]
     fn a_change_that_only_adds_words_shows_its_new_side_alone() {
-        let change = BlockChange::Changed { old: block("Pay."), new: block("Pay now."), old_words: vec![], new_words: vec![3..7] };
+        let change = SectionChange::Changed { old: block("Pay."), new: block("Pay now."), old_words: vec![], new_words: vec![3..7] };
         assert_eq!(plain(&rows(&[change], false, Layout::Inline, &look())), ["▎ Pay now."]);
     }
 
     #[test]
     fn a_long_unchanged_run_folds_to_its_ends_unless_unfolded() {
-        let mut changes: Vec<BlockChange> = ["One.", "Two.", "Three.", "Four.", "Five."].into_iter().map(same_block).collect();
-        changes.push(BlockChange::Added(block("Six.")));
+        let mut changes: Vec<SectionChange> = ["One.", "Two.", "Three.", "Four.", "Five."].into_iter().map(same_block).collect();
+        changes.push(SectionChange::Added(block("Six.")));
         assert_eq!(
             plain(&rows(&changes, false, Layout::Inline, &look())),
             ["  One.", "", "  ··· 3 unchanged blocks", "", "  Five.", "", "▎ Six."]
@@ -417,9 +425,9 @@ mod tests {
     fn side_by_side_puts_old_left_and_new_right_and_pads_the_shorter_side() {
         let long = "Pay by card or by bank transfer, whichever comes first.";
         let changes = [
-            BlockChange::Removed(block("Old.")),
-            BlockChange::Changed { old: block(long), new: block("Pay by cash."), old_words: vec![7..11], new_words: vec![7..11] },
-            BlockChange::Added(block("New.")),
+            SectionChange::Removed(block("Old.")),
+            SectionChange::Changed { old: block(long), new: block("Pay by cash."), old_words: vec![7..11], new_words: vec![7..11] },
+            SectionChange::Added(block("New.")),
         ];
         let rows = rows(&changes, false, Layout::Beside { half: 42 }, &look());
         let right = |text: &str| format!("{}{text}", " ".repeat(43));
@@ -452,7 +460,7 @@ mod tests {
     #[test]
     fn styles_keep_every_modifier_and_drop_the_text_colour() {
         let text = Rgb(1, 2, 3);
-        let mrk = document::Style { fg: Some(Rgb(9, 9, 9)), bg: Some(text), bold: true, strike: true, ..document::Style::default() };
+        let mrk = document::Style::fg(Rgb(9, 9, 9)).on(text).bold().strike();
         let expected =
             Style::default().fg(Color::Rgb(9, 9, 9)).bg(Color::Rgb(1, 2, 3)).add_modifier(Modifier::BOLD | Modifier::CROSSED_OUT);
         assert_eq!(style(mrk, text), expected);

@@ -1,10 +1,11 @@
 //! The right pane: the conversations of one place, opened from a marked line and following the cursor,
 //! or every conversation of the MR, opened with `T`.
-use super::{Action, App, Focus, Open};
+use super::{Action, App, Focus, MrKey, Open};
 use crate::act::{self, Act};
-use crate::forge::{Me, ThreadId};
+use crate::forge::{Me, Mr, ThreadId};
 use crate::review::{Conversation, Entry, EntryKind, Mark, Markers, Place, Review, Row, Spot};
 use crossterm::event::KeyEvent;
+use mrk::link::LinkBase;
 use std::collections::BTreeSet;
 use vtui::toward::Toward;
 
@@ -372,6 +373,12 @@ impl App {
     /// The page a browser opens for `url` as a note of the open MR wrote it.
     pub(crate) fn web_url(&self, open: &Open, url: &str) -> String {
         crate::forge::image::web_url(open.key.host.as_deref().unwrap_or(&self.host), &open.key.project, url)
+    }
+
+    /// Where the relative links in the notes of the MR at `key` lead: built once, when it opens.
+    pub(super) fn link_base(&self, key: &MrKey, mr: &Mr) -> Option<LinkBase> {
+        let project_url = format!("https://{}/{}", self.host_of(key), key.project);
+        self.hosts.kind_of(key).link_base(&mr.web_url, &project_url)
     }
 
     /// The focused thread's page on the forge.

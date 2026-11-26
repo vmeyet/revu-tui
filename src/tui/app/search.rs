@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn a_hit_in_a_file_the_review_lacks_leaves_the_open_mr_as_it_was() {
-        let open = Open::new(fixture::key(), crate::review::tests::review());
+        let open = Open::new(fixture::key(), crate::review::tests::review(), None);
         assert_eq!(open.clone().revealing(Hit { file: 99, hunk: None, line: None }), open);
     }
 
