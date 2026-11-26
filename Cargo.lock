@@ -1783,9 +1783,9 @@ dependencies = [
 
 [[package]]
 name = "mrk-cli"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0fbd171368e6b4e366b223ca4e69c0d208138fd1e58b153fc73c9a95cad7aaa"
+checksum = "9fe4005d9d293c0ef20833bb6eb637f08768a951757c80082bcbf8b62d56df24"
 dependencies = [
  "comrak",
  "mermaid-rs-renderer",
