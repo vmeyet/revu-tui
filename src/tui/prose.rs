@@ -94,10 +94,7 @@ pub(super) fn markdown(text: &str, width: usize, links: Links, theme: Theme) -> 
     let mut settings = settings(theme, width);
     settings.hyperlinks = matches!(links, Links::Clickable);
     let colour = settings.theme.palette.text;
-    let lines = mrk::markdown::render(text, &settings).blocks.into_iter().flat_map(|block| match block {
-        Block::Lines(lines) | Block::DoubleHeight(lines) => lines,
-        _ => vec![],
-    });
+    let lines = mrk::markdown::render(text, &settings).blocks.into_iter().flat_map(|block| block.lines().to_vec());
     let linked = |span: document::Span| Linked { span: Span::styled(span.text, style(span.style, colour)), link: span.link };
     lines.map(|line| line.spans.into_iter().map(linked).collect()).collect()
 }
@@ -190,7 +187,6 @@ fn shows_old_inline(change: &SectionChange) -> bool {
     match change {
         SectionChange::Same { .. } => false,
         SectionChange::Changed { old_words, new_words, .. } => !old_words.is_empty() || new_words.is_empty(),
-        SectionChange::Added(_) | SectionChange::Removed(_) => true,
         _ => true,
     }
 }
@@ -217,9 +213,8 @@ fn marked(
         .blocks
         .iter()
         .flat_map(|part| match part {
-            Block::Lines(lines) | Block::DoubleHeight(lines) => lit.by_ref().take(lines.len()).collect(),
             Block::Picture(picture) => vec![document::Line::new(vec![document::Span::plain(format!("[picture: {}]", picture.alt))])],
-            _ => vec![],
+            _ => lit.by_ref().take(part.lines().len()).collect(),
         })
         .collect()
 }
