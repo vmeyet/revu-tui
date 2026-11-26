@@ -2,6 +2,7 @@ use super::{Action, App, MrKey};
 use crate::diff::fold::FoldState;
 use crate::forge::{Kind, LineRef, Sha};
 use crate::review::{Draft, Review, Row, Side};
+use mrk::link::LinkBase;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use vtui::toward::Toward;
@@ -32,10 +33,12 @@ pub(crate) struct Open {
     pub(crate) deployments: Option<Vec<crate::forge::Deployment>>,
     /// Why the last look at a local diff failed: what shows may be stale, so the header says so until a look works.
     pub(crate) look_failed: Option<String>,
+    /// Where the relative links in its notes lead; `None` leaves them as text.
+    pub(crate) link_base: Option<LinkBase>,
 }
 
 impl Open {
-    pub(crate) fn new(key: MrKey, review: Review) -> Self {
+    pub(crate) fn new(key: MrKey, review: Review, link_base: Option<LinkBase>) -> Self {
         let rows = review.rows();
         let selected = first_selectable(&rows);
         Self {
@@ -53,6 +56,7 @@ impl Open {
             sticky_file: None,
             deployments: None,
             look_failed: None,
+            link_base,
         }
     }
 

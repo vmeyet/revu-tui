@@ -3,6 +3,7 @@ use super::prose_view::Rows;
 use super::theme::Theme;
 use mrk::diff::SectionChange;
 use mrk::document::{self, Block, Rgb, Settings};
+use mrk::link::LinkBase;
 use mrk::markdown::Section;
 use mrk::theme::{Appearance, Palette};
 use ratatui::style::{Color, Modifier, Style};
@@ -82,17 +83,20 @@ pub(super) struct Linked {
     pub(super) link: Option<Arc<str>>,
 }
 
-/// Whether a link shows its text alone, in a pane where it clicks, or its target after it.
+/// Whether a link shows its text alone, in a pane where it clicks, a relative one resolved against the base, or its target after it.
 #[derive(Clone, Copy)]
-pub(super) enum Links {
-    Clickable,
+pub(super) enum Links<'a> {
+    Clickable(Option<&'a LinkBase>),
     Printed,
 }
 
 /// `text` as mrk draws it `width` columns wide, row by row, in revu's colours.
-pub(super) fn markdown(text: &str, width: usize, links: Links, theme: Theme) -> Vec<Vec<Linked>> {
+pub(super) fn markdown(text: &str, width: usize, links: Links<'_>, theme: Theme) -> Vec<Vec<Linked>> {
     let mut settings = settings(theme, width);
-    settings.hyperlinks = matches!(links, Links::Clickable);
+    if let Links::Clickable(link_base) = links {
+        settings.hyperlinks = true;
+        settings.link_base = link_base.cloned();
+    }
     let colour = settings.theme.palette.text;
     let lines = mrk::markdown::render(text, &settings).blocks.into_iter().flat_map(|block| block.lines().to_vec());
     let linked = |span: document::Span| Linked { span: Span::styled(span.text, style(span.style, colour)), link: span.link };

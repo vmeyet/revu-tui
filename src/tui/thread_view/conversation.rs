@@ -200,7 +200,7 @@ fn draft_lines(draft: &crate::review::Draft, replaced: &Replaced, look: Look<'_>
         Span::styled("you", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {state} ◇"), Style::default().fg(colour)),
     ]))];
-    lines.extend(body_pieces(&draft.body, &Fences::Coloured(replaced), look.width, theme));
+    lines.extend(body_pieces(&draft.body, &Fences::Coloured { replaced, link_base: look.link_base }, look.width, theme));
     lines
 }
 
@@ -219,14 +219,14 @@ pub(in crate::tui) fn shown_ages(review: &Review, today: DateTime<Utc>) -> Vec<S
 }
 
 fn note_lines(note: &Note, replaced: &Replaced, look: Look<'_>) -> Vec<Piece> {
-    let Look { theme, today, me, ascii, width } = look;
+    let Look { theme, today, me, ascii, width, link_base } = look;
     let author = author_of(note, me);
     let age = note_age(note, today);
     let mut lines = vec![Piece::Text(Line::from(vec![
         Span::styled(author.clone(), Style::default().fg(theme.user(&author)).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" · {age}"), Style::default().fg(theme.muted)),
     ]))];
-    lines.extend(body_pieces(&note.body, &Fences::Coloured(replaced), width, theme));
+    lines.extend(body_pieces(&note.body, &Fences::Coloured { replaced, link_base }, width, theme));
     if !note.reactions.is_empty() {
         lines.push(Piece::Text(reactions_line(&note.reactions, theme, ascii)));
     }

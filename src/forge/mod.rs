@@ -24,6 +24,7 @@ pub(crate) use queue::{Fetched, Queue, QueueMr, ReviewState, ReviewerState, Sect
 use crate::auth::Credentials;
 use crate::config::Config;
 use anyhow::{Context, Result};
+use mrk::link::LinkBase;
 use serde::{Deserialize, Serialize};
 
 /// Which forge a host runs.
@@ -76,6 +77,18 @@ impl Kind {
             Kind::GitHub => github::line_url(web_url, path, line),
             Kind::Local => web_url.to_owned(),
         }
+    }
+
+    /// Where the relative links of a note on the MR at `mr_url` lead, as the forge's page reads them:
+    /// GitLab writes uploads relative to `project_url`, any other `/path` relative to the host.
+    pub(crate) fn link_base(self, mr_url: &str, project_url: &str) -> Option<LinkBase> {
+        let page = LinkBase::new(mr_url);
+        let base = match self {
+            Kind::GitLab => page.and_then(|base| base.rooted_at("/uploads/", project_url)),
+            Kind::GitHub => page,
+            Kind::Local => return None,
+        };
+        base.inspect_err(|error| tracing::warn!("relative links of {mr_url} stay text: {error}")).ok()
     }
 }
 
@@ -463,6 +476,16 @@ impl Forge {
 mod tests {
     use super::*;
     use crate::config::Host;
+
+    #[test]
+    fn only_gitlab_roots_uploads_under_the_project_and_a_bad_page_gives_no_base() {
+        let (pr, project) = ("https://github.com/acme/gadgets/pull/7", "https://github.com/acme/gadgets");
+        assert_eq!(Kind::GitHub.link_base(pr, project), LinkBase::new(pr).ok());
+        assert_ne!(Kind::GitLab.link_base(pr, project), LinkBase::new(pr).ok());
+        assert_eq!(Kind::GitLab.link_base("", project), None);
+        assert_eq!(Kind::GitLab.link_base("https://gitlab.com/a/-/merge_requests/1", "javascript:x"), None);
+        assert_eq!(Kind::Local.link_base(pr, project), None);
+    }
 
     #[test]
     fn a_connected_forge_never_prints_its_token() {

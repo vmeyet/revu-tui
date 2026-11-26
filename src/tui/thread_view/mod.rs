@@ -12,6 +12,7 @@ use crate::review::image::Image;
 use crate::review::{Place, Review};
 use chrono::{DateTime, Utc};
 use conversation::{conversation_lines, heading};
+use mrk::link::LinkBase;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Modifier, Style};
@@ -225,7 +226,7 @@ fn lay_out_pane(app: &App, width: usize) -> Option<Laid> {
         if index > 0 {
             lines.push((None, Piece::Text(Line::from(Span::styled("─".repeat(width), Style::default().fg(theme.border))))));
         }
-        let look = Look { theme, today: app.today, me: app.me.on(&open.key), ascii: app.ascii, width };
+        let look = Look { theme, today: app.today, me: app.me.on(&open.key), ascii: app.ascii, width, link_base: open.link_base.as_ref() };
         if open.lists_every_thread() {
             let first = entries.iter().find(|e| e.conversation == index).copied();
             lines.extend(heading(&open.review, conversation, look).into_iter().map(|line| (first, Piece::Text(line))));
@@ -265,7 +266,7 @@ fn at_cursor(open: &Open, pane: &Pane) -> bool {
 fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl Fn(&str) -> String) -> Vec<(Line<'static>, Vec<Mark>)> {
     let image = match piece {
         Piece::Text(line) => return wrap(line, width).into_iter().map(|l| (l, vec![])).collect(),
-        Piece::Written { line, raw, links } => return written_rows(line, &raw, &links, width, web),
+        Piece::Written { line, raw, links } => return written_rows(line, &raw, &links, width),
         Piece::Picture(image) => image,
     };
     let cols = u16::try_from(width).unwrap_or(u16::MAX);
@@ -285,19 +286,13 @@ fn lay_out(piece: Piece, thumbs: &Thumbs, width: usize, theme: Theme, web: &impl
 
 /// A body line wrapped to `width`, each row with the bytes of `raw` under its cells and the part
 /// of each link it shows.
-fn written_rows(
-    line: Line<'static>,
-    raw: &str,
-    links: &[Anchor],
-    width: usize,
-    web: &impl Fn(&str) -> String,
-) -> Vec<(Line<'static>, Vec<Mark>)> {
+fn written_rows(line: Line<'static>, raw: &str, links: &[Anchor], width: usize) -> Vec<(Line<'static>, Vec<Mark>)> {
     let drawn: String = line.spans.iter().map(|span| span.content.as_ref()).collect();
     let cells = drag::aligned(&drawn, raw);
     let rows = wrap(line, width).into_iter().scan(0, |start, row| {
         let end = (*start + row.width()).min(cells.len());
         let written = Mark::Written { raw: raw.to_owned(), cells: cells[*start..end].to_vec() };
-        let shown = links.iter().filter_map(|link| link_in_row(&row, *start..end, link, web));
+        let shown = links.iter().filter_map(|link| link_in_row(&row, *start..end, link));
         let marks = std::iter::once(written).chain(shown).collect();
         *start = end;
         Some((row, marks))
@@ -306,7 +301,7 @@ fn written_rows(
 }
 
 /// The part of `link` a row covering the line's cells `row_cells` shows, if any.
-fn link_in_row(row: &Line<'_>, row_cells: Range<usize>, link: &Anchor, web: &impl Fn(&str) -> String) -> Option<Mark> {
+fn link_in_row(row: &Line<'_>, row_cells: Range<usize>, link: &Anchor) -> Option<Mark> {
     let shown = link.cells.start.max(row_cells.start)..link.cells.end.min(row_cells.end);
     if shown.is_empty() {
         return None;
@@ -314,7 +309,7 @@ fn link_in_row(row: &Line<'_>, row_cells: Range<usize>, link: &Anchor, web: &imp
     let (from, to) = (shown.start - row_cells.start, shown.end - row_cells.start);
     let drawn: String = row.spans.iter().map(|span| span.content.as_ref()).collect();
     let text = drag::text_on_cells(&drawn, from..to).to_owned();
-    Some(Mark::Link { column: u16::try_from(from).ok()?, text, url: web(link.url.as_str()) })
+    Some(Mark::Link { column: u16::try_from(from).ok()?, text, url: link.url.as_str().to_owned() })
 }
 
 /// How a picture reads where it cannot be drawn.
@@ -450,6 +445,8 @@ pub(super) struct Look<'a> {
     pub(super) me: &'a Me,
     pub(super) ascii: bool,
     pub(super) width: usize,
+    /// Where a note's relative links lead; `None` leaves them as text.
+    pub(super) link_base: Option<&'a LinkBase>,
 }
 
 /// A line cut at word boundaries to `width`, styles kept; a word longer than the width is cut.

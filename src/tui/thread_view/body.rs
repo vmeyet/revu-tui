@@ -7,6 +7,7 @@ use crate::syntax::{self, Language};
 use crate::tui::diff_view::{coloured, paint};
 use crate::tui::prose::{self, Linked, Links};
 use crate::tui::theme::Theme;
+use mrk::link::LinkBase;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use std::ops::Range;
@@ -45,8 +46,8 @@ pub(super) enum Fences<'a> {
     /// a suggestion as its `+` lines only. Nothing clicks there, so a link's target follows its text.
     Plain,
     /// In the thread pane, whose rows are kept: code in syntax colours, a suggestion over what it
-    /// replaces, and links drawn as their text, which clicks.
-    Coloured(&'a Replaced),
+    /// replaces, and links drawn as their text, which clicks; a relative one resolved against `link_base`.
+    Coloured { replaced: &'a Replaced, link_base: Option<&'a LinkBase> },
 }
 
 /// A stretch of a body: Markdown for mrk, or what revu draws itself, a fenced block or a picture.
@@ -96,7 +97,10 @@ fn segments(body: &str) -> Vec<Segment<'_>> {
 fn markdown(lines: &[String], width: usize, fences: &Fences<'_>, theme: Theme) -> Vec<Piece> {
     // The forges show each line break of a comment, so each line ends in a hard break.
     let text = lines.iter().map(|line| format!("{line}  ")).collect::<Vec<_>>().join("\n");
-    let shown = if matches!(fences, Fences::Coloured(_)) { Links::Clickable } else { Links::Printed };
+    let shown = match fences {
+        Fences::Coloured { link_base, .. } => Links::Clickable(*link_base),
+        Fences::Plain => Links::Printed,
+    };
     let rows = prose::markdown(&text, width, shown, theme);
     rows.into_iter()
         .map(|row| {
@@ -134,7 +138,7 @@ fn fence_pieces(tag: &str, block: &[&str], fences: &Fences<'_>, theme: Theme) ->
     let written_all = |lines: Vec<Line<'static>>| lines.into_iter().zip(block).map(|(line, raw)| written(line, raw, vec![]));
     let (replaced, file_language, named) = match fences {
         Fences::Plain => (&[][..], None, None),
-        Fences::Coloured(replaced) => {
+        Fences::Coloured { replaced, .. } => {
             let named = tag.split_whitespace().next().and_then(|name| syntax::language_named(name, &syntax::LANGUAGES));
             (replaced.lines.as_slice(), replaced.language, named)
         }
@@ -176,7 +180,7 @@ fn written(line: Line<'static>, raw: &str, links: Vec<Anchor>) -> Piece {
     Piece::Written { line, raw: raw.to_owned(), links }
 }
 
-/// Where a markdown link points: a web address.
+/// Where a markdown link points: a web address, a relative target already resolved against the MR's page.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct LinkUrl(String);
 
@@ -225,7 +229,11 @@ mod tests {
 
     /// A body as the thread pane draws it `width` columns wide, where links click.
     fn in_thread(body: &str, width: usize) -> Vec<Piece> {
-        body_pieces(body, &Fences::Coloured(&Replaced::default()), width, tokyonight())
+        in_thread_resolved(body, width, None)
+    }
+
+    fn in_thread_resolved(body: &str, width: usize, link_base: Option<&LinkBase>) -> Vec<Piece> {
+        body_pieces(body, &Fences::Coloured { replaced: &Replaced::default(), link_base }, width, tokyonight())
     }
 
     fn style_of(line: &Line<'_>, content: &str) -> Style {
@@ -284,8 +292,12 @@ mod tests {
     /// Each link a body clicks through to as the thread pane lays it out `width` wide:
     /// its row, its column, the text it covers and its url.
     fn clicks(body: &str, width: usize) -> Vec<(usize, u16, String, String)> {
-        let rows = in_thread(body, width).into_iter().flat_map(|piece| match piece {
-            Piece::Written { line, raw, links } => written_rows(line, &raw, &links, width, &str::to_owned),
+        clicks_resolved(body, width, None)
+    }
+
+    fn clicks_resolved(body: &str, width: usize, link_base: Option<&LinkBase>) -> Vec<(usize, u16, String, String)> {
+        let rows = in_thread_resolved(body, width, link_base).into_iter().flat_map(|piece| match piece {
+            Piece::Written { line, raw, links } => written_rows(line, &raw, &links, width),
             Piece::Text(_) | Piece::Picture(_) => vec![],
         });
         let marks = rows.enumerate().flat_map(|(at, (_, marks))| marks.into_iter().map(move |mark| (at, mark)));
@@ -335,11 +347,36 @@ mod tests {
         assert_eq!(clicks(body, 120), [(0, 36, "f".into(), "https://x/f".into())]);
     }
 
+    /// The base of a note on `acme/widgets!42` on gitlab.com.
+    fn gitlab() -> LinkBase {
+        crate::forge::Kind::GitLab
+            .link_base("https://gitlab.com/acme/widgets/-/merge_requests/42", "https://gitlab.com/acme/widgets")
+            .unwrap()
+    }
+
+    #[test]
+    fn a_gitlab_upload_clicks_through_under_its_project() {
+        let upload = "https://gitlab.com/acme/widgets/uploads/ab12/report.pdf".to_owned();
+        assert_eq!(clicks_resolved("[report](/uploads/ab12/report.pdf)", 80, Some(&gitlab())), [(0, 0, "report".into(), upload)]);
+    }
+
+    #[test]
+    fn another_path_on_the_forge_clicks_through_under_its_host() {
+        let page = "https://gitlab.com/acme/other".to_owned();
+        assert_eq!(clicks_resolved("[other](/acme/other)", 80, Some(&gitlab())), [(0, 0, "other".into(), page)]);
+    }
+
+    #[test]
+    fn a_hostile_target_never_clicks_even_with_a_base() {
+        let body = "[a](javascript:alert(1)) [b](data:text/html,x) [c](mailto:nina@x)";
+        assert_eq!(clicks_resolved(body, 120, Some(&gitlab())), []);
+    }
+
     #[test]
     fn a_drag_over_a_row_copies_its_drawn_letters() {
         let pieces = in_thread("a **bold** _it_ ~~gone~~", 80);
         let [Piece::Written { line, raw, links }] = pieces.as_slice() else { panic!("one written line") };
-        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, links, 80, &str::to_owned).remove(0).1.pop() else {
+        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, links, 80).remove(0).1.pop() else {
             panic!("a written row")
         };
         let copied: String = cells.into_iter().map(|bytes| &raw[bytes]).collect();
@@ -350,7 +387,7 @@ mod tests {
     fn a_suggestion_reads_as_a_small_diff() {
         let body = "Try this:\n```suggestion:-0+0\nlet client = Client::default();\n```\nthanks";
         let replaced = Replaced { lines: vec!["let client = Client::new();".to_owned()], language: None };
-        let lines = text(&texts(body_pieces(body, &Fences::Coloured(&replaced), 80, Theme::default())));
+        let lines = text(&texts(body_pieces(body, &Fences::Coloured { replaced: &replaced, link_base: None }, 80, Theme::default())));
         assert_eq!(lines, ["Try this:", "- let client = Client::new();", "+ let client = Client::default();", "thanks"]);
         assert_eq!(text(&body_lines("```rust\nlet x = 1;\n```", 80, Theme::default())), ["  let x = 1;"], "other fences stay code");
     }
@@ -361,7 +398,7 @@ mod tests {
             lines: replaced.iter().map(|line| (*line).to_owned()).collect(),
             language: syntax::language_for(path, &syntax::LANGUAGES),
         };
-        texts(body_pieces(body, &Fences::Coloured(&replaced), 80, tokyonight()))
+        texts(body_pieces(body, &Fences::Coloured { replaced: &replaced, link_base: None }, 80, tokyonight()))
     }
 
     #[test]
@@ -412,9 +449,7 @@ mod tests {
         let pieces = in_thread("```ts\n\tconst x = 1;\n```", 80);
         let [Piece::Written { line, raw, .. }] = pieces.as_slice() else { panic!("one written line") };
         assert_eq!(raw, "\tconst x = 1;");
-        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, &[], 80, &str::to_owned).remove(0).1.pop() else {
-            panic!("a written row")
-        };
+        let Some(Mark::Written { cells, .. }) = written_rows(line.clone(), raw, &[], 80).remove(0).1.pop() else { panic!("a written row") };
         assert_eq!(cells.last(), Some(&(12..13)), "the last cell copies the last byte");
     }
 

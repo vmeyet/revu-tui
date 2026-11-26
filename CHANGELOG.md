@@ -16,8 +16,6 @@ Each entry says what changed, then where, then how to use it.
 
 - **Pie, gantt, mindmap, timeline and the other Mermaid kinds show as their source.**
   In a Markdown file shown as prose, until mrk draws them as text.
-- **A link to a path on the forge, like an attachment under `/uploads/`, no longer clicks; its target shows after its text.**
-  In the thread pane.
 
 ## 0.16.0 - 2026-11-23
 
