@@ -5,7 +5,7 @@ Every change you can see or use, newest first.
 
 Each entry says what changed, then where, then how to use it.
 
-## Unreleased
+## 0.17.0 - 2026-11-27
 
 ### Fixed
 
